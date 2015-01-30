@@ -232,6 +232,200 @@ const char *print_loglevel(int value)
 }
 
 static
+int ctf_text_write_with_format(struct bt_stream_pos *ppos,
+		const char *format, struct definition_struct *fields)
+{
+	/* parse state */
+	enum parse_state {
+		PS_CHARACTER,		/* normal character */
+		//PS_FLAGS,		/* flags */
+		//PS_WIDTH,		/* width */
+		//PS_PRECISION,		/* precision */
+		PS_SPECIFIER,		/* specifier character */
+	} parse_state = PS_CHARACTER;
+
+	struct ctf_text_stream_pos *pos =
+		container_of(ppos, struct ctf_text_stream_pos, parent);
+	unsigned int cur_field_index = 0;
+	const char *pcur = format;
+	char cur = *pcur;
+	int ret;
+
+	while (cur != '\0') {
+		switch (parse_state) {
+		case PS_CHARACTER:
+			if (cur == '%') {
+				// TODO: handle flags, width, precision
+				// parse_state = PS_FLAGS;
+				parse_state = PS_SPECIFIER;
+			} else {
+				fputc(cur, pos->fp);
+			}
+			break;
+
+		case PS_SPECIFIER:
+			switch (cur) {
+			case 'd':
+			case 'i':
+			case 'u':
+			case 'o':
+			case 'x':
+			case 'X':
+			case 'p':
+			case 'z':
+			case 'f':
+			case 'F':
+			case 'e':
+			case 'E':
+			case 'g':
+			case 'G':
+			case 's':
+			case '@':
+			{
+				struct bt_definition *field =
+					g_ptr_array_index(fields->fields, cur_field_index);
+
+				cur_field_index++;
+
+				/* specifier */
+				switch (cur) {
+				case 'd':
+				case 'i':
+				case 'u':
+				case 'o':
+				case 'x':
+				case 'X':
+				case 'p':
+				case 'z':
+				{
+					/* integer*/
+					struct definition_integer *integer =
+						container_of(field, struct definition_integer, p);
+					const struct declaration_integer *integer_decl =
+						integer->declaration;
+					int is_signed = integer_decl->signedness;
+
+					switch (cur) {
+					case 'd':
+					case 'i':
+						fprintf(pos->fp, "%" PRId64,
+							integer->value._signed);
+						break;
+
+					case 'u':
+					case 'z':
+						fprintf(pos->fp, "%" PRIu64,
+							integer->value._unsigned);
+						break;
+
+					case 'o':
+					{
+						uint64_t v;
+
+						if (!is_signed)
+							v = integer->value._unsigned;
+						else
+							v = (uint64_t) integer->value._signed;
+
+						fprintf(pos->fp, "%" PRIo64, v);
+						break;
+					}
+
+					case 'x':
+					case 'X':
+					case 'p':
+					{
+						uint64_t v;
+
+						if (!is_signed) {
+							v = integer->value._unsigned;
+						} else {
+							/* round length to the nearest nibble */
+							uint8_t rounded_len = ((integer_decl->len + 3) & ~0x3);
+
+							v = (uint64_t) integer->value._signed;
+							v &= ((uint64_t) 1 << rounded_len) - 1;
+						}
+
+						fprintf(pos->fp,
+							(cur == 'X' ? "%" PRIX64 : "%" PRIx64),
+							v);
+						break;
+					}
+					}
+					break;
+				}
+
+				case 'f':
+				case 'F':
+				case 'e':
+				case 'E':
+				case 'g':
+				case 'G':
+				{
+					/* floating point number */
+					char spec[] = "%#";
+
+					spec[1] = cur;
+
+					struct definition_float *floating_point =
+						container_of(field, struct definition_float, p);
+
+					fprintf(pos->fp, spec, floating_point->value);
+					break;
+				}
+
+				case 's':
+				{
+					/* string */
+
+					// TODO: handle array text also
+					struct definition_string *string =
+						container_of(field, struct definition_string, p);
+
+					assert(string->value != NULL);
+
+					fprintf(pos->fp, "%s", string->value);
+					break;
+				}
+
+				case '@':
+				{
+					/* generic format */
+					int field_nr_saved = pos->field_nr;
+
+					pos->field_nr = 0;
+					ret = generic_rw(ppos, field);
+
+					if (ret) {
+						return -EINVAL;
+					}
+
+					pos->field_nr = field_nr_saved;
+					break;
+				}
+				}
+				break;
+			}
+
+			case '%':
+				/* escaped '%' */
+				fputc(cur, pos->fp);
+				break;
+			}
+
+			parse_state = PS_CHARACTER;
+			break;
+		}
+
+		pcur++;
+		cur = *pcur;
+	}
+
+	return 0;
+}
+
+static
 int ctf_text_write_event(struct bt_stream_pos *ppos, struct ctf_stream_definition *stream)
 			 
 {
@@ -512,13 +706,24 @@ int ctf_text_write_event(struct bt_stream_pos *ppos, struct ctf_stream_definitio
 		set_field_names_print(pos, ITEM_SCOPE);
 		if (pos->print_names)
 			fprintf(pos->fp, " event.fields =");
-		field_nr_saved = pos->field_nr;
-		pos->field_nr = 0;
-		set_field_names_print(pos, ITEM_PAYLOAD);
-		ret = generic_rw(ppos, &event->event_fields->p);
-		if (ret)
-			goto error;
-		pos->field_nr = field_nr_saved;
+
+		if (!CTF_EVENT_FIELD_IS_SET(event_class, format)) {
+			field_nr_saved = pos->field_nr;
+			pos->field_nr = 0;
+			set_field_names_print(pos, ITEM_PAYLOAD);
+			ret = generic_rw(ppos, &event->event_fields->p);
+			if (ret)
+				goto error;
+			pos->field_nr = field_nr_saved;
+		} else {
+			const char *format = g_quark_to_string(event_class->format);
+
+			ret = ctf_text_write_with_format(ppos, format, event->event_fields);
+
+			if (ret) {
+				goto error;
+			}
+		}
 	}
 	/* newline */
 	fprintf(pos->fp, "\n");

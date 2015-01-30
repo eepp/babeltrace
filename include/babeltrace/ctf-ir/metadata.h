@@ -288,6 +288,7 @@ struct ctf_event_declaration {
 	uint64_t stream_id;
 	int loglevel;
 	GQuark model_emf_uri;
+	GQuark format;
 
 	enum {					/* Fields populated mask */
 		CTF_EVENT_name	=		(1 << 0),
@@ -295,6 +296,7 @@ struct ctf_event_declaration {
 		CTF_EVENT_stream_id = 		(1 << 2),
 		CTF_EVENT_loglevel =		(1 << 4),
 		CTF_EVENT_model_emf_uri =	(1 << 5),
+		CTF_EVENT_format =		(1 << 6),
 	} field_mask;
 };
 

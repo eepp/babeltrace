@@ -1829,6 +1829,24 @@ int ctf_event_declaration_visit(FILE *fd, int depth, struct ctf_node *node, stru
 			event->model_emf_uri = g_quark_from_string(right);
 			g_free(right);
 			CTF_EVENT_SET_FIELD(event, model_emf_uri);
+		} else if (!strcmp(left, "format")) {
+			char *right;
+
+			if (CTF_EVENT_FIELD_IS_SET(event, format)) {
+				fprintf(fd, "[error] %s: format already declared in event declaration\n", __func__);
+				ret = -EPERM;
+				goto error;
+			}
+			right = concatenate_unary_strings(&node->u.ctf_expression.right);
+			if (!right) {
+				fprintf(fd, "[error] %s: unexpected unary expression for event format\n", __func__);
+				ret = -EINVAL;
+				goto error;
+			}
+			// TODO: unescape control characters from the resulting string
+			event->format = g_quark_from_string(right);
+			g_free(right);
+			CTF_EVENT_SET_FIELD(event, format);
 		} else {
 			fprintf(fd, "[warning] %s: attribute \"%s\" is unknown in event declaration.\n", __func__, left);
 			/* Fall-through after warning */

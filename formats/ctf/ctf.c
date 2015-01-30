@@ -1218,6 +1218,182 @@ int ctf_trace_metadata_stream_read(struct ctf_trace *td, FILE **fp,
 }
 
 static
+int ctf_validate_event_format_strings(FILE *stderr,
+		struct ctf_event_declaration *event_decl)
+{
+	/* parse state */
+	enum parse_state {
+		PS_CHARACTER,		/* normal character */
+		//PS_FLAGS,		/* flags */
+		//PS_WIDTH,		/* width */
+		//PS_PRECISION,		/* precision */
+		PS_SPECIFIER,		/* specifier character */
+	} parse_state = PS_CHARACTER;
+
+	if (!CTF_EVENT_FIELD_IS_SET(event_decl, format)) {
+		return 0;
+	}
+
+	printf_verbose("CTF validation of format strings (stream %" PRIu64 ", event %" PRIu64 ")...\n",
+		event_decl->stream_id, event_decl->id);
+
+	struct declaration_struct *fields_decl = event_decl->fields_decl;
+	GArray *fields = fields_decl->fields;
+	unsigned int cur_field_index = 0;
+	const char *format = g_quark_to_string(event_decl->format);
+	const char *pcur = format;
+	char c = *pcur;
+
+	while (c != '\0') {
+		switch (parse_state) {
+		case PS_CHARACTER:
+			if (c == '%') {
+				// TODO: handle flags, width, precision
+				// parse_state = PS_FLAGS;
+				parse_state = PS_SPECIFIER;
+			}
+			break;
+
+		case PS_SPECIFIER:
+			/* skip escaped '%' */
+			if (c == '%') {
+				parse_state = PS_CHARACTER;
+				break;
+			}
+
+			/* too many specifiers? */
+			if (cur_field_index == fields->len) {
+				fprintf(stderr, "[error] stream %" PRIu64 ": event %" PRIu64 ": format string: too many specifiers\n",
+					event_decl->stream_id,
+					event_decl->id);
+				return -EINVAL;
+			}
+
+			struct declaration_field field =
+				g_array_index(fields, struct declaration_field, cur_field_index);
+
+			cur_field_index++;
+
+			enum ctf_type_id type_id = field.declaration->id;
+			const char *name = g_quark_to_string(field.name);
+
+			switch (c) {
+			case 'd':
+			case 'i':
+			case 'u':
+			case 'o':
+			case 'x':
+			case 'X':
+			case 'p':
+			case 'z':
+				if (type_id != CTF_TYPE_INTEGER) {
+					fprintf(stderr, "[error] stream %" PRIu64 ": event %" PRIu64 ": format string: expecting integer for field \"%s\"\n",
+						event_decl->stream_id,
+						event_decl->id, name);
+					return -EINVAL;
+				}
+				break;
+
+			case 'f':
+			case 'F':
+			case 'e':
+			case 'E':
+			case 'g':
+			case 'G':
+				if (type_id != CTF_TYPE_FLOAT) {
+					fprintf(stderr, "[error] stream %" PRIu64 ": event %" PRIu64 ": format string: expecting floating point number for field \"%s\"\n",
+						event_decl->stream_id,
+						event_decl->id, name);
+					return -EINVAL;
+				}
+				break;
+
+			case 's':
+				// TODO: check for array text also
+				if (type_id != CTF_TYPE_STRING) {
+					fprintf(stderr, "[error] stream %" PRIu64 ": event %" PRIu64 ": format string: expecting string for field \"%s\"\n",
+						event_decl->stream_id,
+						event_decl->id, name);
+					return -EINVAL;
+				}
+				break;
+
+			case '@':
+				/* always valid */
+				break;
+
+			default:
+				fprintf(stderr, "[error] stream %" PRIu64 ": event %" PRIu64 ": format string: invalid specifier: \"%%%c\"\n",
+					event_decl->stream_id,
+					event_decl->id, c);
+				return -EINVAL;
+			}
+
+			parse_state = PS_CHARACTER;
+			break;
+		}
+
+		pcur++;
+		c = *pcur;
+	}
+
+	/* not enough specifiers? */
+	if (cur_field_index != fields->len) {
+		fprintf(stderr, "[error] stream %" PRIu64 ": event %" PRIu64 ": format string: not enough specifiers (got %u, expecting %u)\n",
+			event_decl->stream_id, event_decl->id,
+			cur_field_index, fields->len);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static
+int ctf_validate_stream_format_strings(FILE *stderr,
+		struct ctf_stream_declaration *stream_decl)
+{
+	unsigned int x;
+	int ret;
+
+	for (x = 0; x < stream_decl->events_by_id->len; ++x) {
+		struct ctf_event_declaration *event_decl =
+			g_ptr_array_index(stream_decl->events_by_id, x);
+
+		if (event_decl != NULL) {
+			ret = ctf_validate_event_format_strings(stderr, event_decl);
+
+			if (ret) {
+				return ret;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static
+int ctf_validate_trace_format_strings(FILE *stderr, struct ctf_trace *td)
+{
+	unsigned int x;
+	int ret;
+
+	for (x = 0; x < td->streams->len; ++x) {
+		struct ctf_stream_declaration *stream_decl =
+			g_ptr_array_index(td->streams, x);
+
+		if (stream_decl != NULL) {
+			ret = ctf_validate_stream_format_strings(stderr, stream_decl);
+
+			if (ret) {
+				return ret;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static
 int ctf_trace_metadata_read(struct ctf_trace *td, FILE *metadata_fp,
 		struct ctf_scanner *scanner, int append)
 {
@@ -1303,6 +1479,12 @@ int ctf_trace_metadata_read(struct ctf_trace *td, FILE *metadata_fp,
 			td, td->byte_order);
 	if (ret) {
 		fprintf(stderr, "[error] Error in CTF metadata constructor %d\n", ret);
+		goto end;
+	}
+	ret = ctf_validate_trace_format_strings(stderr, td);
+	if (ret) {
+		fprintf(stderr, "[error] Error in validation of CTF format strings: %d\n",
+			ret);
 		goto end;
 	}
 end:
