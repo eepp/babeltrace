@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <glib.h>
 #include <babeltrace/list.h>
+#include <babeltrace/ctf-ir/trace.h>
 
 // the parameter name (of the reentrant 'yyparse' function)
 // data is a pointer to a 'SParserParam' structure
@@ -74,7 +75,7 @@ struct ctf_node {
 	struct bt_list_head tmp_head;
 	unsigned int lineno;
 	/*
-	 * We mark nodes visited in the generate-io-struct phase (last
+	 * We mark nodes visited in the generate-ir phase (last
 	 * phase). We only mark the 1-depth level nodes as visited
 	 * (never the root node, and not their sub-nodes). This allows
 	 * skipping already visited nodes when doing incremental
@@ -311,8 +312,9 @@ int ctf_visitor_semantic_check(FILE *fd, int depth, struct ctf_node *node);
 BT_HIDDEN
 int ctf_visitor_parent_links(FILE *fd, int depth, struct ctf_node *node);
 BT_HIDDEN
-int ctf_visitor_construct_metadata(FILE *fd, int depth, struct ctf_node *node,
-			struct ctf_trace *trace, int byte_order);
+int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
+		struct bt_ctf_trace *trace);
+
 BT_HIDDEN
 int ctf_destroy_metadata(struct ctf_trace *trace);
 

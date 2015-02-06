@@ -69,15 +69,15 @@ int main(int argc, char **argv)
 	}
 	trace = malloc(sizeof(*trace));
 	memset(trace, 0, sizeof(*trace));
-	ret = ctf_visitor_construct_metadata(stderr, 0, &scanner->ast->root,
+	/*ret = ctf_visitor_construct_metadata(stderr, 0, &scanner->ast->root,
 			trace, BYTE_ORDER);
 	if (ret) {
 		fprintf(stderr, "Error in CTF metadata constructor %d\n", ret);
 		goto free_trace;
-	}
+	}*/
 free_trace:
 	free(trace);
 end:
 	ctf_scanner_free(scanner);
 	return ret;
-} 
+}
