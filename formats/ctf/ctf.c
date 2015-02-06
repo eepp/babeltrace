@@ -48,6 +48,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+#include <babeltrace/ctf-ir/trace.h>
+
 #include "metadata/ctf-scanner.h"
 #include "metadata/ctf-parser.h"
 #include "metadata/ctf-ast.h"
@@ -1316,12 +1318,26 @@ int ctf_trace_metadata_read(struct ctf_trace *td, FILE *metadata_fp,
 		fprintf(stderr, "[error] Error in CTF semantic validation %d\n", ret);
 		goto end;
 	}
-	ret = ctf_visitor_construct_metadata(stderr, 0, &scanner->ast->root,
-			td, td->byte_order);
-	if (ret) {
-		fprintf(stderr, "[error] Error in CTF metadata constructor %d\n", ret);
+
+	struct bt_ctf_trace *trace = bt_ctf_trace_create();
+
+	if (!trace) {
+		fprintf(stderr, "[error] Cannot create trace IR\n");
+		ret = -ENOMEM;
 		goto end;
 	}
+
+	ret = ctf_visitor_generate_ir(stderr, &scanner->ast->root, trace);
+
+	if (ret) {
+		fprintf(stderr, "[error] Error in AST -> IR phase (%d)\n", ret);
+		goto end;
+	}
+
+	puts("AST -> IR phase passed successfully, and now we're about to SEGFAULT!");
+
+	// FIXME: remove this once we actually use the thing
+	bt_ctf_trace_put(trace);
 end:
 	if (fp) {
 		closeret = fclose(fp);
