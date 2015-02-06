@@ -16,7 +16,8 @@ libctf_parser_la_CFLAGS = $(AM_CFLAGS) -include ctf-scanner-symbols.h
 libctf_ast_la_SOURCES = ctf-visitor-xml.c \
 		ctf-visitor-parent-links.c \
 		ctf-visitor-semantic-validator.c \
-		ctf-visitor-generate-io-struct.c
+		ctf-visitor-generate-io-struct.c \
+		ctf-visitor-generate-ir.c
 
 libctf_ast_la_LIBADD = \
 	$(top_builddir)/lib/libbabeltrace.la
