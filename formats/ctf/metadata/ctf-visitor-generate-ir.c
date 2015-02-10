@@ -3462,10 +3462,6 @@ int visit_clock(FILE *efd, struct ctf_node *clock_node,
 		goto error;
 	}
 
-	bt_ctf_clock_put(clock);
-
-	return 0;
-
 error:
 	if (clock) {
 		bt_ctf_clock_put(clock);
