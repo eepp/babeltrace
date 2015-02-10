@@ -3419,7 +3419,7 @@ int visit_clock(FILE *efd, struct ctf_node *clock_node,
 
 	int set = 0;
 
-	/* visit clocks first */
+	/* visit clocks first since any early integer can be mapped to one */
 	bt_list_for_each_entry(entry_node, &clock_node->u.clock.declaration_list, siblings) {
 		ret = visit_clock_entry(efd, entry_node, clock, &set);
 
@@ -3461,6 +3461,8 @@ int visit_clock(FILE *efd, struct ctf_node *clock_node,
 			__func__);
 		goto error;
 	}
+
+	bt_ctf_clock_put(clock);
 
 	return 0;
 
