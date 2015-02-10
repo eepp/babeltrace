@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <assert.h>
 #include <glib.h>
 #include <inttypes.h>
@@ -3074,6 +3075,50 @@ error:
 }
 
 static
+int uuid_string_to_bytes(FILE *efd, char *uuid_str, unsigned char *uuid)
+{
+	if (strlen(uuid_str) != 36) {
+		goto error;
+	}
+
+	int x = 0, at = 0;
+
+	while (x < 36) {
+		char nib1 = uuid_str[x];
+		char nib0 = uuid_str[x + 1];
+		char nibnext = uuid_str[x + 2];
+
+		if (x == 8 || x == 13 || x == 18 || x == 23) {
+			if (nib1 != '-') {
+				goto error;
+			} else {
+				x++;
+				continue;
+			}
+		}
+
+		if (!isxdigit(nib1) || !isxdigit(nib0)) {
+			goto error;
+		}
+
+		unsigned int hex;
+
+		uuid_str[x + 2] = '\0';
+		sscanf(&uuid_str[x], "%x", &hex);
+		uuid_str[x + 2] = nibnext;
+		uuid[at++] = (unsigned char) hex;
+		x += 2;
+	}
+
+	return 0;
+
+error:
+	fprintf(efd, "[error] %s: malformed UUID string: \"%s\"\n",
+		__func__, uuid_str);
+	return -EINVAL;
+}
+
+static
 int visit_clock_entry(FILE *efd, struct ctf_node *entry_node,
 		struct bt_ctf_clock *clock, int* set)
 {
@@ -3114,6 +3159,7 @@ int visit_clock_entry(FILE *efd, struct ctf_node *entry_node,
 			if (ret) {
 				fprintf(efd, "[error] %s: cannot set clock's name\n",
 					__func__);
+				g_free(right);
 				goto error;
 			}
 
@@ -3139,14 +3185,23 @@ int visit_clock_entry(FILE *efd, struct ctf_node *entry_node,
 				goto error;
 			}
 
-			// FIXME: convert UUID string to UUID bytes here
-			//        ... or perhaps in bt_ctf_clock_set_uuid()?
-			unsigned char uuid[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+			unsigned char uuid[16];
+
+			ret = uuid_string_to_bytes(efd, right, uuid);
+
+			if (ret) {
+				fprintf(efd, "[error] %s: invalid clock UUID\n",
+					__func__);
+				g_free(right);
+				goto error;
+			}
+
 			ret = bt_ctf_clock_set_uuid(clock, uuid);
 
 			if (ret) {
 				fprintf(efd, "[error] %s: cannot set clock's UUID\n",
 					__func__);
+				g_free(right);
 				goto error;
 			}
 
@@ -3177,6 +3232,7 @@ int visit_clock_entry(FILE *efd, struct ctf_node *entry_node,
 			if (ret) {
 				fprintf(efd, "[error] %s: cannot set clock's description\n",
 					__func__);
+				g_free(right);
 				goto error;
 			}
 
@@ -3335,7 +3391,6 @@ error:
 
 	default:
 		return -EPERM;
-	/* TODO: declaration specifier should be added. */
 	}
 
 	return ret;
@@ -3364,6 +3419,7 @@ int visit_clock(FILE *efd, struct ctf_node *clock_node,
 
 	int set = 0;
 
+	/* visit clocks first */
 	bt_list_for_each_entry(entry_node, &clock_node->u.clock.declaration_list, siblings) {
 		ret = visit_clock_entry(efd, entry_node, clock, &set);
 
