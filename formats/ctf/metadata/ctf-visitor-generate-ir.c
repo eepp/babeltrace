@@ -68,6 +68,109 @@
 #define _bt_list_first_entry(ptr, type, member)	\
 	bt_list_entry((ptr)->next, type, member)
 
+struct ctx_decl_scope {
+	/* alias name (typealias/typedef) to struct bt_ctf_field_type* */
+	GHashTable *alias_decl;
+
+	/* struct name to struct bt_ctf_field_type* */
+	GHashTable *struct_decl;
+
+	/* variant name to struct bt_ctf_field_type* */
+	GHashTable *variant_decl;
+
+	/* enum name to struct bt_ctf_field_type* */
+	GHashTable *enum_decl;
+
+	/* NULL if this is the root declaration scope */
+	struct ctx_decl_scope *parent_scope;
+};
+
+struct ctx_decl_scope *
+	ctx_decl_scope_create(struct ctx_decl_scope *parent_scope)
+{
+	struct ctx_decl_scope *scope;
+
+	scope = g_new(struct ctx_decl_scope, 1);
+
+	if (!scope) {
+		return NULL;
+	}
+
+#if 0
+	TODO: FIXME:
+
+	scope->  = g_hash_table_new_full(g_direct_hash,
+					g_direct_equal, NULL,
+					(GDestroyNotify) bt_declaration_unref);
+	scope->struct_declarations = g_hash_table_new_full(g_direct_hash,
+					g_direct_equal, NULL,
+					(GDestroyNotify) bt_declaration_unref);
+	scope->variant_declarations = g_hash_table_new_full(g_direct_hash,
+					g_direct_equal, NULL,
+					(GDestroyNotify) bt_declaration_unref);
+	scope->enum_declarations = g_hash_table_new_full(g_direct_hash,
+					g_direct_equal, NULL,
+					(GDestroyNotify) bt_declaration_unref);
+#endif
+	scope->parent_scope = parent_scope;
+
+	return scope;
+}
+
+struct ctx {
+	/* trace being filled */
+	struct bt_ctf_trace *trace;
+
+	/* error stream */
+	FILE *efd;
+
+	/* current declaration scope */
+	struct ctx_decl_scope *current_scope;
+};
+
+static
+void ctx_decl_scope_destroy(struct ctx_decl_scope *scope)
+{
+	g_hash_table_destroy(scope->enum_decl);
+	g_hash_table_destroy(scope->variant_decl);
+	g_hash_table_destroy(scope->struct_decl);
+	g_hash_table_destroy(scope->alias_decl);
+	g_free(scope);
+}
+
+static
+struct ctx *ctx_create(struct bt_ctf_trace *trace, FILE *efd)
+{
+	struct ctx *ctx;
+
+	ctx = g_new(struct ctx, 1);
+
+	if (!ctx) {
+		return NULL;
+	}
+
+	struct ctx_decl_scope *scope = ctx_decl_scope_create(NULL);
+
+	if (!scope) {
+		g_free(ctx);
+		return NULL;
+	}
+
+	ctx->trace = trace;
+	ctx->efd = efd;
+	ctx->current_scope = scope;
+
+	return ctx;
+}
+
+static
+void ctx_destroy(struct ctx *ctx)
+{
+	// TODO: destroy scope parents too
+	ctx_decl_scope_destroy(ctx->current_scope);
+	g_free(ctx);
+}
+
 struct last_enum_value {
 	union {
 		int64_t s;
@@ -2358,230 +2461,6 @@ error:
 	return ret;
 }
 
-static
-int ctf_clock_declaration_visit(FILE *fd, int depth, struct ctf_node *node,
-		struct ctf_clock *clock, struct ctf_trace *trace)
-{
-	int ret = 0;
-
-	switch (node->type) {
-	case NODE_CTF_EXPRESSION:
-	{
-		char *left;
-
-		left = concatenate_unary_strings(&node->u.ctf_expression.left);
-		if (!left)
-			return -EINVAL;
-		if (!strcmp(left, "name")) {
-			char *right;
-
-			if (CTF_CLOCK_FIELD_IS_SET(clock, name)) {
-				fprintf(fd, "[error] %s: name already declared in clock declaration\n", __func__);
-				ret = -EPERM;
-				goto error;
-			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[error] %s: unexpected unary expression for clock name\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-			clock->name = g_quark_from_string(right);
-			g_free(right);
-			CTF_CLOCK_SET_FIELD(clock, name);
-		} else if (!strcmp(left, "uuid")) {
-			char *right;
-
-			if (clock->uuid) {
-				fprintf(fd, "[error] %s: uuid already declared in clock declaration\n", __func__);
-				ret = -EPERM;
-				goto error;
-			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[error] %s: unexpected unary expression for clock uuid\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-			clock->uuid = g_quark_from_string(right);
-			g_free(right);
-		} else if (!strcmp(left, "description")) {
-			char *right;
-
-			if (clock->description) {
-				fprintf(fd, "[warning] %s: duplicated clock description\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[warning] %s: unexpected unary expression for clock description\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			clock->description = right;
-		} else if (!strcmp(left, "freq")) {
-			if (CTF_CLOCK_FIELD_IS_SET(clock, freq)) {
-				fprintf(fd, "[error] %s: freq already declared in clock declaration\n", __func__);
-				ret = -EPERM;
-				goto error;
-			}
-			ret = get_unary_unsigned(&node->u.ctf_expression.right, &clock->freq);
-			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for clock freq\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-			CTF_CLOCK_SET_FIELD(clock, freq);
-		} else if (!strcmp(left, "precision")) {
-			if (clock->precision) {
-				fprintf(fd, "[error] %s: precision already declared in clock declaration\n", __func__);
-				ret = -EPERM;
-				goto error;
-			}
-			ret = get_unary_unsigned(&node->u.ctf_expression.right, &clock->precision);
-			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for clock precision\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-		} else if (!strcmp(left, "offset_s")) {
-			if (clock->offset_s) {
-				fprintf(fd, "[error] %s: offset_s already declared in clock declaration\n", __func__);
-				ret = -EPERM;
-				goto error;
-			}
-			ret = get_unary_unsigned(&node->u.ctf_expression.right, &clock->offset_s);
-			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for clock offset_s\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-		} else if (!strcmp(left, "offset")) {
-			if (clock->offset) {
-				fprintf(fd, "[error] %s: offset already declared in clock declaration\n", __func__);
-				ret = -EPERM;
-				goto error;
-			}
-			ret = get_unary_unsigned(&node->u.ctf_expression.right, &clock->offset);
-			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for clock offset\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-		} else if (!strcmp(left, "absolute")) {
-			struct ctf_node *right;
-
-			right = _bt_list_first_entry(&node->u.ctf_expression.right, struct ctf_node, siblings);
-			ret = get_boolean(fd, right);
-			if (ret < 0) {
-				fprintf(fd, "[error] %s: unexpected \"absolute\" right member\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-			clock->absolute = ret;
-			ret = 0;
-		} else {
-			fprintf(fd, "[warning] %s: attribute \"%s\" is unknown in clock declaration.\n", __func__, left);
-		}
-
-error:
-		g_free(left);
-		break;
-	}
-	default:
-		return -EPERM;
-	/* TODO: declaration specifier should be added. */
-	}
-
-	return ret;
-}
-
-static
-int ctf_clock_visit(FILE *fd, int depth, struct ctf_node *node, struct ctf_trace *trace)
-{
-	int ret = 0;
-	struct ctf_node *iter;
-	struct ctf_clock *clock;
-
-	if (node->visited)
-		return 0;
-	node->visited = 1;
-
-	clock = g_new0(struct ctf_clock, 1);
-	/* Default clock frequency is set to 1000000000 */
-	clock->freq = 1000000000ULL;
-	bt_list_for_each_entry(iter, &node->u.clock.declaration_list, siblings) {
-		ret = ctf_clock_declaration_visit(fd, depth + 1, iter, clock, trace);
-		if (ret)
-			goto error;
-	}
-	if (opt_clock_force_correlate) {
-		/*
-		 * User requested to forcibly correlate the clock
-		 * sources, even if we have no correlation
-		 * information.
-		 */
-		if (!clock->absolute) {
-			fprintf(fd, "[warning] Forcibly correlating trace clock sources (--clock-force-correlate).\n");
-		}
-		clock->absolute = 1;
-	}
-	if (!CTF_CLOCK_FIELD_IS_SET(clock, name)) {
-		ret = -EPERM;
-		fprintf(fd, "[error] %s: missing name field in clock declaration\n", __func__);
-		goto error;
-	}
-	if (g_hash_table_size(trace->parent.clocks) > 0) {
-		fprintf(fd, "[error] Only CTF traces with a single clock description are supported by this babeltrace version.\n");
-		ret = -EINVAL;
-		goto error;
-	}
-	trace->parent.single_clock = clock;
-	g_hash_table_insert(trace->parent.clocks, (gpointer) (unsigned long) clock->name, clock);
-	return 0;
-
-error:
-	g_free(clock->description);
-	g_free(clock);
-	return ret;
-}
-
-static
-void ctf_clock_default(FILE *fd, int depth, struct ctf_trace *trace)
-{
-	struct ctf_clock *clock;
-
-	clock = g_new0(struct ctf_clock, 1);
-	clock->name = g_quark_from_string("monotonic");
-	clock->uuid = 0;
-	clock->description = g_strdup("Default clock");
-	/* Default clock frequency is set to 1000000000 */
-	clock->freq = 1000000000ULL;
-	if (opt_clock_force_correlate) {
-		/*
-		 * User requested to forcibly correlate the clock
-		 * sources, even if we have no correlatation
-		 * information.
-		 */
-		if (!clock->absolute) {
-			fprintf(fd, "[warning] Forcibly correlating trace clock sources (--clock-force-correlate).\n");
-		}
-		clock->absolute = 1;
-	} else {
-		clock->absolute = 0;	/* Not an absolute reference across traces */
-	}
-
-	trace->parent.single_clock = clock;
-	g_hash_table_insert(trace->parent.clocks, (gpointer) (unsigned long) clock->name, clock);
-}
-
-static
-void clock_free(gpointer data)
-{
-	struct ctf_clock *clock = data;
-
-	g_free(clock->description);
-	g_free(clock);
-}
 
 static
 int ctf_callsite_declaration_visit(FILE *fd, int depth, struct ctf_node *node,
@@ -3119,7 +2998,7 @@ error:
 }
 
 static
-int visit_clock_entry(FILE *efd, struct ctf_node *entry_node,
+int visit_clock_attr(FILE *efd, struct ctf_node *entry_node,
 		struct bt_ctf_clock *clock, int* set)
 {
 	int ret = 0;
@@ -3419,9 +3298,8 @@ int visit_clock(FILE *efd, struct ctf_node *clock_node,
 
 	int set = 0;
 
-	/* visit clocks first since any early integer can be mapped to one */
 	bt_list_for_each_entry(entry_node, &clock_node->u.clock.declaration_list, siblings) {
-		ret = visit_clock_entry(efd, entry_node, clock, &set);
+		ret = visit_clock_attr(efd, entry_node, clock, &set);
 
 		if (ret) {
 			goto error;
@@ -3470,19 +3348,84 @@ error:
 	return ret;
 }
 
+static
+int visit_root_decl(FILE *efd, struct ctf_node *root_decl_node,
+		struct bt_ctf_trace *trace)
+{
+#if 0
+	int ret = 0;
+
+	if (root_decl_node->visited) {
+		return 0;
+	}
+
+	root_decl_node->visited = 1;
+
+
+	if (!trace->restart_root_decl && node->visited)
+		return 0;
+	node->visited = 1;
+
+
+	switch (root_decl_node->type) {
+	case NODE_TYPEDEF:
+		ret = visit_typedef(fd, trace->root_declaration_scope,
+					node->u._typedef.type_specifier_list,
+					&node->u._typedef.type_declarators,
+					trace);
+		if (ret)
+			return ret;
+		break;
+	case NODE_TYPEALIAS:
+		ret = ctf_typealias_visit(fd, depth + 1,
+				trace->root_declaration_scope,
+				node->u.typealias.target, node->u.typealias.alias,
+				trace);
+		if (ret)
+			return ret;
+		break;
+	case NODE_TYPE_SPECIFIER_LIST:
+	{
+		struct bt_declaration *declaration;
+
+		/*
+		 * Just add the type specifier to the root scope
+		 * declaration scope. Release local reference.
+		 */
+		declaration = ctf_type_specifier_list_visit(fd, depth + 1,
+			node, trace->root_declaration_scope, trace);
+		if (!declaration)
+			return -ENOMEM;
+		bt_declaration_unref(declaration);
+		break;
+	}
+	default:
+		return -EPERM;
+	}
+#endif
+	return 0;
+}
+
 int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		struct bt_ctf_trace *trace)
 {
 	int ret = 0;
-	struct ctf_node *iter;
 
 	printf_verbose("CTF visitor: AST -> IR...\n");
 
-	//trace->root_declaration_scope = bt_new_declaration_scope(NULL);
+	struct ctx *ctx = ctx_create(trace, efd);
+
+	if (!ctx) {
+		fprintf(efd, "[error] %s: cannot create visitor context\n",
+			__func__);
+		return -ENOMEM;
+	}
 
 	switch (node->type) {
 	case NODE_ROOT:
 	{
+		struct ctf_node *iter;
+
 		/*
 		 * Find trace declaration's byte order first (for early
 		 * type aliases).
@@ -3504,11 +3447,27 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 			}
 		}
 
+		/* visit clocks first since any early integer can be mapped to one */
 		bt_list_for_each_entry(iter, &node->u.root.clock, siblings) {
 			ret = visit_clock(efd, iter, trace);
 
 			if (ret) {
 				fprintf(efd, "[error] %s: error while visiting clock declaration (%d)\n",
+					__func__, ret);
+				goto error;
+			}
+		}
+
+		/*
+		 * Visit root declarations next, as they can be used by any
+		 * following entity.
+		 */
+		bt_list_for_each_entry(iter, &node->u.root.declaration_list,
+				siblings) {
+			ret = visit_root_decl(efd, iter, trace);
+
+			if (ret) {
+				fprintf(efd, "[error] %s: error while visiting root declaration (%d)\n",
 					__func__, ret);
 				goto error;
 			}
@@ -3590,10 +3549,11 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 	}
 
 	printf_verbose("done!\n");
+	ctx_destroy(ctx);
 	return ret;
 
 error:
-	//bt_free_declaration_scope(trace->root_declaration_scope);
+	ctx_destroy(ctx);
 	return ret;
 }
 
