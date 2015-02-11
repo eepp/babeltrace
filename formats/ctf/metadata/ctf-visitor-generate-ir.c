@@ -270,24 +270,16 @@ void ctx_pop_scope(struct ctx *ctx)
 	ctx->current_scope = parent_scope;
 }
 
+#if 0
 struct last_enum_value {
 	union {
 		int64_t s;
 		uint64_t u;
 	} u;
 };
+#endif
 
 int opt_clock_force_correlate;
-
-static
-struct bt_declaration *ctf_type_specifier_list_visit(FILE *fd,
-		int depth, struct ctf_node *type_specifier_list,
-		struct declaration_scope *declaration_scope,
-		struct ctf_trace *trace);
-
-static
-int ctf_stream_visit(FILE *fd, int depth, struct ctf_node *node,
-		     struct declaration_scope *parent_declaration_scope, struct ctf_trace *trace);
 
 static
 int is_unary_string(struct bt_list_head *head)
@@ -303,8 +295,12 @@ int is_unary_string(struct bt_list_head *head)
 	return 1;
 }
 
-/*
- * String returned must be freed by the caller using g_free.
+/**
+ * Concatenates strings of a unary expression into a single one.
+ *
+ * @param head	Head of unary expression list
+ * @returns	Concatenated string (to be freed using g_free()), or
+ *		NULL on error
  */
 static
 char *concatenate_unary_strings(struct bt_list_head *head)
@@ -342,6 +338,7 @@ char *concatenate_unary_strings(struct bt_list_head *head)
 	return g_string_free(str, FALSE);
 }
 
+#if 0
 static
 GQuark get_map_clock_name_value(struct bt_list_head *head)
 {
@@ -386,6 +383,7 @@ GQuark get_map_clock_name_value(struct bt_list_head *head)
 	}
 	return g_quark_from_string(name);
 }
+#endif
 
 static
 int is_unary_unsigned(struct bt_list_head *head)
@@ -482,28 +480,7 @@ int get_unary_uuid(struct bt_list_head *head, unsigned char *uuid)
 	return ret;
 }
 
-static
-struct ctf_stream_declaration *trace_stream_lookup(struct ctf_trace *trace, uint64_t stream_id)
-{
-	if (trace->streams->len <= stream_id)
-		return NULL;
-	return g_ptr_array_index(trace->streams, stream_id);
-}
-
-static
-struct ctf_event_declaration *stream_event_lookup(struct ctf_stream_declaration *stream, uint64_t event_id)
-{
-	if (stream->events_by_id->len <= event_id)
-		return NULL;
-	return g_ptr_array_index(stream->events_by_id, event_id);
-}
-
-static
-struct ctf_clock *trace_clock_lookup(struct ctf_trace *trace, GQuark clock_name)
-{
-	return g_hash_table_lookup(trace->parent.clocks, (gpointer) (unsigned long) clock_name);
-}
-
+#if 0
 static
 int visit_type_specifier(FILE *fd, struct ctf_node *type_specifier, GString *str)
 {
@@ -866,6 +843,7 @@ int ctf_variant_type_declarators_visit(FILE *fd, int depth,
 	}
 	return 0;
 }
+#endif
 
 static
 int visit_typedef(struct ctx *ctx, struct ctf_node *type_specifier_list,
@@ -980,6 +958,7 @@ error:
 	return 0;
 }
 
+#if 0
 static
 int ctf_struct_declaration_list_visit(FILE *fd, int depth,
 	struct ctf_node *iter, struct declaration_struct *struct_declaration,
@@ -1420,6 +1399,7 @@ struct bt_declaration *ctf_declaration_type_specifier_visit(FILE *fd, int depth,
 	bt_declaration_ref(declaration);
 	return declaration;
 }
+#endif
 
 /*
  * Returns 0/1 boolean, or < 0 on error.
@@ -1432,40 +1412,43 @@ int get_boolean(FILE *efd, struct ctf_node *unary_expr)
 			__func__);
 		return -EINVAL;
 	}
+
 	switch (unary_expr->u.unary_expression.type) {
 	case UNARY_UNSIGNED_CONSTANT:
-		if (unary_expr->u.unary_expression.u.unsigned_constant == 0)
+		if (unary_expr->u.unary_expression.u.unsigned_constant == 0) {
 			return 0;
-		else
+		} else {
 			return 1;
+		}
+
 	case UNARY_SIGNED_CONSTANT:
-		if (unary_expr->u.unary_expression.u.signed_constant == 0)
+		if (unary_expr->u.unary_expression.u.signed_constant == 0) {
 			return 0;
-		else
+		} else {
 			return 1;
+		}
+
 	case UNARY_STRING:
-		if (!strcmp(unary_expr->u.unary_expression.u.string, "true"))
+		if (!strcmp(unary_expr->u.unary_expression.u.string, "true")) {
 			return 1;
-		else if (!strcmp(unary_expr->u.unary_expression.u.string, "TRUE"))
+		} else if (!strcmp(unary_expr->u.unary_expression.u.string, "TRUE")) {
 			return 1;
-		else if (!strcmp(unary_expr->u.unary_expression.u.string, "false"))
+		} else if (!strcmp(unary_expr->u.unary_expression.u.string, "false")) {
 			return 0;
-		else if (!strcmp(unary_expr->u.unary_expression.u.string, "FALSE"))
+		} else if (!strcmp(unary_expr->u.unary_expression.u.string, "FALSE")) {
 			return 0;
-		else {
+		} else {
 			fprintf(efd, "[error] %s: unexpected string \"%s\"\n",
 				__func__, unary_expr->u.unary_expression.u.string);
 			return -EINVAL;
 		}
-		break;
+
 	default:
 		fprintf(efd, "[error] %s: unexpected unary expression type\n",
 			__func__);
 		return -EINVAL;
 	}
-
 }
-
 
 static
 enum bt_ctf_byte_order byte_order_from_unary_expr(FILE *efd,
@@ -1490,6 +1473,7 @@ enum bt_ctf_byte_order byte_order_from_unary_expr(FILE *efd,
 	}
 }
 
+#if 0
 static
 int get_trace_byte_order(FILE *fd, int depth, struct ctf_node *unary_expression)
 {
@@ -2934,57 +2918,7 @@ int ctf_env_visit(FILE *fd, int depth, struct ctf_node *node, struct ctf_trace *
 error:
 	return 0;
 }
-
-static
-int ctf_root_declaration_visit(FILE *fd, int depth, struct ctf_node *node, struct ctf_trace *trace)
-{
-	int ret = 0;
-
-	if (!trace->restart_root_decl && node->visited)
-		return 0;
-	node->visited = 1;
-
-	switch (node->type) {
-	case NODE_TYPEDEF:
-		ret = ctf_typedef_visit(fd, depth + 1,
-					trace->root_declaration_scope,
-					node->u._typedef.type_specifier_list,
-					&node->u._typedef.type_declarators,
-					trace);
-		if (ret)
-			return ret;
-		break;
-	case NODE_TYPEALIAS:
-		ret = ctf_typealias_visit(fd, depth + 1,
-				trace->root_declaration_scope,
-				node->u.typealias.target, node->u.typealias.alias,
-				trace);
-		if (ret)
-			return ret;
-		break;
-	case NODE_TYPE_SPECIFIER_LIST:
-	{
-#if 0
-		struct bt_declaration *declaration;
-
-		/*
-		 * Just add the type specifier to the root scope
-		 * declaration scope. Release local reference.
-		 */
-		declaration = ctf_type_specifier_list_visit(fd, depth + 1,
-			node, trace->root_declaration_scope, trace);
-		if (!declaration)
-			return -ENOMEM;
-		bt_declaration_unref(declaration);
 #endif
-		break;
-	}
-	default:
-		return -EPERM;
-	}
-
-	return 0;
-}
 
 static
 int set_trace_byte_order(struct ctx *ctx, struct ctf_node *trace_node)
@@ -3057,50 +2991,6 @@ error:
 }
 
 static
-int uuid_string_to_bytes(FILE *efd, char *uuid_str, unsigned char *uuid)
-{
-	if (strlen(uuid_str) != 36) {
-		goto error;
-	}
-
-	int x = 0, at = 0;
-
-	while (x < 36) {
-		char nib1 = uuid_str[x];
-		char nib0 = uuid_str[x + 1];
-		char nibnext = uuid_str[x + 2];
-
-		if (x == 8 || x == 13 || x == 18 || x == 23) {
-			if (nib1 != '-') {
-				goto error;
-			} else {
-				x++;
-				continue;
-			}
-		}
-
-		if (!isxdigit(nib1) || !isxdigit(nib0)) {
-			goto error;
-		}
-
-		unsigned int hex;
-
-		uuid_str[x + 2] = '\0';
-		sscanf(&uuid_str[x], "%x", &hex);
-		uuid_str[x + 2] = nibnext;
-		uuid[at++] = (unsigned char) hex;
-		x += 2;
-	}
-
-	return 0;
-
-error:
-	fprintf(efd, "[error] %s: malformed UUID string: \"%s\"\n",
-		__func__, uuid_str);
-	return -EINVAL;
-}
-
-static
 int visit_clock_attr(FILE *efd, struct ctf_node *entry_node,
 		struct bt_ctf_clock *clock, int* set)
 {
@@ -3167,9 +3057,9 @@ int visit_clock_attr(FILE *efd, struct ctf_node *entry_node,
 				goto error;
 			}
 
-			unsigned char uuid[16];
+			unsigned char uuid[BABELTRACE_UUID_LEN];
 
-			ret = uuid_string_to_bytes(efd, right, uuid);
+			ret = babeltrace_uuid_parse(right, uuid);
 
 			if (ret) {
 				fprintf(efd, "[error] %s: invalid clock UUID\n",
@@ -3490,7 +3380,6 @@ int visit_root_decl(struct ctx *ctx, struct ctf_node *root_decl_node)
 
 	case NODE_TYPE_SPECIFIER_LIST:
 	{
-		printf("got --> %d\n", root_decl_node->type);
 #if 0
 		struct bt_declaration *declaration;
 
@@ -3664,108 +3553,3 @@ error:
 	ctx_destroy(ctx);
 	return ret;
 }
-
-#if 0
-int ctf_destroy_metadata(struct ctf_trace *trace)
-{
-	int i;
-	struct ctf_file_stream *metadata_stream;
-
-	if (trace->streams) {
-		for (i = 0; i < trace->streams->len; i++) {
-			struct ctf_stream_declaration *stream;
-			int j;
-
-			stream = g_ptr_array_index(trace->streams, i);
-			if (!stream)
-				continue;
-			for (j = 0; j < stream->streams->len; j++) {
-				struct ctf_stream_definition *stream_def;
-				int k;
-
-				stream_def = g_ptr_array_index(stream->streams, j);
-				if (!stream_def)
-					continue;
-				for (k = 0; k < stream_def->events_by_id->len; k++) {
-					struct ctf_event_definition *event;
-
-					event = g_ptr_array_index(stream_def->events_by_id, k);
-					if (!event)
-						continue;
-					if (&event->event_fields->p)
-						bt_definition_unref(&event->event_fields->p);
-					if (&event->event_context->p)
-						bt_definition_unref(&event->event_context->p);
-					g_free(event);
-				}
-				if (&stream_def->trace_packet_header->p)
-					bt_definition_unref(&stream_def->trace_packet_header->p);
-				if (&stream_def->stream_event_header->p)
-					bt_definition_unref(&stream_def->stream_event_header->p);
-				if (&stream_def->stream_packet_context->p)
-					bt_definition_unref(&stream_def->stream_packet_context->p);
-				if (&stream_def->stream_event_context->p)
-					bt_definition_unref(&stream_def->stream_event_context->p);
-				g_ptr_array_free(stream_def->events_by_id, TRUE);
-				g_free(stream_def);
-			}
-			if (stream->event_header_decl)
-				bt_declaration_unref(&stream->event_header_decl->p);
-			if (stream->event_context_decl)
-				bt_declaration_unref(&stream->event_context_decl->p);
-			if (stream->packet_context_decl)
-				bt_declaration_unref(&stream->packet_context_decl->p);
-			g_ptr_array_free(stream->streams, TRUE);
-			g_ptr_array_free(stream->events_by_id, TRUE);
-			g_hash_table_destroy(stream->event_quark_to_id);
-			bt_free_declaration_scope(stream->declaration_scope);
-			g_free(stream);
-		}
-		g_ptr_array_free(trace->streams, TRUE);
-	}
-
-	if (trace->event_declarations) {
-		for (i = 0; i < trace->event_declarations->len; i++) {
-			struct bt_ctf_event_decl *event_decl;
-			struct ctf_event_declaration *event;
-
-			event_decl = g_ptr_array_index(trace->event_declarations, i);
-			if (event_decl->context_decl)
-				g_ptr_array_free(event_decl->context_decl, TRUE);
-			if (event_decl->fields_decl)
-				g_ptr_array_free(event_decl->fields_decl, TRUE);
-			if (event_decl->packet_header_decl)
-				g_ptr_array_free(event_decl->packet_header_decl, TRUE);
-			if (event_decl->event_context_decl)
-				g_ptr_array_free(event_decl->event_context_decl, TRUE);
-			if (event_decl->event_header_decl)
-				g_ptr_array_free(event_decl->event_header_decl, TRUE);
-			if (event_decl->packet_context_decl)
-				g_ptr_array_free(event_decl->packet_context_decl, TRUE);
-
-			event = &event_decl->parent;
-			if (event->fields_decl)
-				bt_declaration_unref(&event->fields_decl->p);
-			if (event->context_decl)
-				bt_declaration_unref(&event->context_decl->p);
-			bt_free_declaration_scope(event->declaration_scope);
-
-			g_free(event);
-		}
-		g_ptr_array_free(trace->event_declarations, TRUE);
-	}
-	if (trace->packet_header_decl)
-		bt_declaration_unref(&trace->packet_header_decl->p);
-
-	bt_free_declaration_scope(trace->root_declaration_scope);
-	bt_free_declaration_scope(trace->declaration_scope);
-
-	g_hash_table_destroy(trace->callsites);
-	g_hash_table_destroy(trace->parent.clocks);
-
-	metadata_stream = container_of(trace->metadata, struct ctf_file_stream, parent);
-	g_free(metadata_stream);
-
-	return 0;
-}
-#endif
