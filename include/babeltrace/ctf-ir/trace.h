@@ -248,6 +248,17 @@ extern int bt_ctf_trace_set_byte_order(struct bt_ctf_trace *trace,
 		enum bt_ctf_byte_order byte_order);
 
 /*
+ * bt_ctf_trace_get_byte_order: get the trace's byte order
+ *
+ * Get the trace's byte order.
+ *
+ * @param trace Trace instance
+ * @returns Trace's byte order
+ */
+extern enum bt_ctf_byte_order bt_ctf_trace_get_byte_order(
+    struct bt_ctf_trace *trace);
+
+/*
  * bt_ctf_trace_get_packet_header_type: get a trace's packet header type.
  *
  * Get the trace's packet header type.

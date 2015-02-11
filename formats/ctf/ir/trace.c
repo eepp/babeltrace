@@ -609,6 +609,12 @@ end:
 	return ret;
 }
 
+enum bt_ctf_byte_order bt_ctf_trace_get_byte_order(struct bt_ctf_trace *trace)
+{
+	// FIXME: implement this
+	return 0;
+}
+
 struct bt_ctf_field_type *bt_ctf_trace_get_packet_header_type(
 		struct bt_ctf_trace *trace)
 {
