@@ -439,27 +439,31 @@ end:
 struct bt_ctf_clock *bt_ctf_trace_get_clock_by_name(
         struct bt_ctf_trace *trace, const char *name)
 {
+	struct bt_ctf_clock *clock = NULL;
+
 	if (!trace || !name) {
-		return NULL;
+		goto end;
 	}
 
 	unsigned int x;
 
 	for (x = 0; x < trace->clocks->len; ++x) {
-		struct bt_ctf_clock *clock = g_ptr_array_index(trace->clocks, x);
-		const char *clock_name = bt_ctf_clock_get_name(clock);
+		struct bt_ctf_clock *clk = g_ptr_array_index(trace->clocks, x);
+		const char *clk_name = bt_ctf_clock_get_name(clock);
 
-		if (!clock_name) {
-			return NULL;
+		if (!clk_name) {
+			goto end;
 		}
 
-		if (!!strcmp(clock_name, name)) {
+		if (!!strcmp(clk_name, name)) {
+			clock = clk;
 			bt_ctf_clock_get(clock);
-			return clock;
+			goto end;
 		}
 	}
 
-	return NULL;
+end:
+	return clock;
 }
 
 BT_HIDDEN
