@@ -868,11 +868,10 @@ int ctf_variant_type_declarators_visit(FILE *fd, int depth,
 }
 
 static
-int ctf_typedef_visit(FILE *fd, int depth, struct declaration_scope *scope,
-		struct ctf_node *type_specifier_list,
-		struct bt_list_head *type_declarators,
-		struct ctf_trace *trace)
+int visit_typedef(struct ctx *ctx, struct ctf_node *type_specifier_list,
+		struct bt_list_head *type_declarators)
 {
+#if 0
 	struct ctf_node *iter;
 	GQuark identifier;
 
@@ -904,14 +903,16 @@ int ctf_typedef_visit(FILE *fd, int depth, struct declaration_scope *scope,
 		}
 		bt_declaration_unref(type_declaration);
 	}
+#endif
+
 	return 0;
 }
 
 static
-int ctf_typealias_visit(FILE *fd, int depth, struct declaration_scope *scope,
-		struct ctf_node *target, struct ctf_node *alias,
-		struct ctf_trace *trace)
+int visit_typealias(struct ctx *ctx, struct ctf_node *target,
+		struct ctf_node *alias)
 {
+#if 0
 	struct bt_declaration *type_declaration;
 	struct ctf_node *node;
 	GQuark dummy_id;
@@ -975,6 +976,8 @@ error:
 		type_declaration->declaration_free(type_declaration);
 	}
 	return err;
+#endif
+	return 0;
 }
 
 static
@@ -2961,6 +2964,7 @@ int ctf_root_declaration_visit(FILE *fd, int depth, struct ctf_node *node, struc
 		break;
 	case NODE_TYPE_SPECIFIER_LIST:
 	{
+#if 0
 		struct bt_declaration *declaration;
 
 		/*
@@ -2972,6 +2976,7 @@ int ctf_root_declaration_visit(FILE *fd, int depth, struct ctf_node *node, struc
 		if (!declaration)
 			return -ENOMEM;
 		bt_declaration_unref(declaration);
+#endif
 		break;
 	}
 	default:
@@ -3448,7 +3453,6 @@ error:
 static
 int visit_root_decl(struct ctx *ctx, struct ctf_node *root_decl_node)
 {
-#if 0
 	int ret = 0;
 
 	if (root_decl_node->visited) {
@@ -3457,31 +3461,37 @@ int visit_root_decl(struct ctx *ctx, struct ctf_node *root_decl_node)
 
 	root_decl_node->visited = 1;
 
-
+#if 0
 	if (!trace->restart_root_decl && node->visited)
 		return 0;
 	node->visited = 1;
-
+#endif
 
 	switch (root_decl_node->type) {
 	case NODE_TYPEDEF:
-		ret = visit_typedef(fd, trace->root_declaration_scope,
-					node->u._typedef.type_specifier_list,
-					&node->u._typedef.type_declarators,
-					trace);
-		if (ret)
+		ret = visit_typedef(ctx, root_decl_node->u._typedef.type_specifier_list,
+			&root_decl_node->u._typedef.type_declarators);
+
+		if (ret) {
 			return ret;
+		}
+
 		break;
+
 	case NODE_TYPEALIAS:
-		ret = ctf_typealias_visit(fd, depth + 1,
-				trace->root_declaration_scope,
-				node->u.typealias.target, node->u.typealias.alias,
-				trace);
-		if (ret)
+		ret = visit_typealias(ctx, root_decl_node->u.typealias.target,
+			root_decl_node->u.typealias.alias);
+
+		if (ret) {
 			return ret;
+		}
+
 		break;
+
 	case NODE_TYPE_SPECIFIER_LIST:
 	{
+		printf("got --> %d\n", root_decl_node->type);
+#if 0
 		struct bt_declaration *declaration;
 
 		/*
@@ -3493,13 +3503,15 @@ int visit_root_decl(struct ctx *ctx, struct ctf_node *root_decl_node)
 		if (!declaration)
 			return -ENOMEM;
 		bt_declaration_unref(declaration);
+#endif
 		break;
 	}
+
 	default:
 		return -EPERM;
 	}
-#endif
-	return 0;
+
+	return ret;
 }
 
 int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
