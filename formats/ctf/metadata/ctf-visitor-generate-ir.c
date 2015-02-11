@@ -68,55 +68,53 @@
 #define _bt_list_first_entry(ptr, type, member)	\
 	bt_list_entry((ptr)->next, type, member)
 
+/*
+ * Declaration scope of a visitor context. This represents a TSDL
+ * lexical scope, so that aliases and named
+ * structures/variants/enumerations may be registered and looked up
+ * hierarchically.
+ *
+ * All the hash tables below hold weak references to field types.
+ */
 struct ctx_decl_scope {
-	/* alias name (typealias/typedef) to struct bt_ctf_field_type* */
-	GHashTable *alias_decl;
+	/*
+	 * Alias name (typealias/typedef) to field type.
+	 *
+	 * GQuark -> struct bt_ctf_field_type *
+	 */
+	GHashTable *alias_decl_map;
 
-	/* struct name to struct bt_ctf_field_type* */
-	GHashTable *struct_decl;
+	/*
+	 * Structure name to field type. Structure name does not include
+	 * `struct` prefix.
+	 *
+	 * GQuark -> struct bt_ctf_field_type *
+	 */
+	GHashTable *struct_decl_map;
 
-	/* variant name to struct bt_ctf_field_type* */
-	GHashTable *variant_decl;
+	/*
+	 * Variant name to field type. Variant name does not include
+	 * `variant` prefix.
+	 *
+	 * GQuark -> struct bt_ctf_field_type *
+	 */
+	GHashTable *variant_decl_map;
 
-	/* enum name to struct bt_ctf_field_type* */
-	GHashTable *enum_decl;
+	/*
+	 * Enumeration name to field type. Enumeration name does not
+	 * include `enum` prefix.
+	 *
+	 * GQuark -> struct bt_ctf_field_type *
+	 */
+	GHashTable *enum_decl_map;
 
-	/* NULL if this is the root declaration scope */
+	/* parent scope; NULL if this is the root declaration scope */
 	struct ctx_decl_scope *parent_scope;
 };
 
-struct ctx_decl_scope *
-	ctx_decl_scope_create(struct ctx_decl_scope *parent_scope)
-{
-	struct ctx_decl_scope *scope;
-
-	scope = g_new(struct ctx_decl_scope, 1);
-
-	if (!scope) {
-		return NULL;
-	}
-
-#if 0
-	TODO: FIXME:
-
-	scope->  = g_hash_table_new_full(g_direct_hash,
-					g_direct_equal, NULL,
-					(GDestroyNotify) bt_declaration_unref);
-	scope->struct_declarations = g_hash_table_new_full(g_direct_hash,
-					g_direct_equal, NULL,
-					(GDestroyNotify) bt_declaration_unref);
-	scope->variant_declarations = g_hash_table_new_full(g_direct_hash,
-					g_direct_equal, NULL,
-					(GDestroyNotify) bt_declaration_unref);
-	scope->enum_declarations = g_hash_table_new_full(g_direct_hash,
-					g_direct_equal, NULL,
-					(GDestroyNotify) bt_declaration_unref);
-#endif
-	scope->parent_scope = parent_scope;
-
-	return scope;
-}
-
+/*
+ * Visitor context.
+ */
 struct ctx {
 	/* trace being filled */
 	struct bt_ctf_trace *trace;
@@ -128,16 +126,60 @@ struct ctx {
 	struct ctx_decl_scope *current_scope;
 };
 
+/**
+ * Creates a new declaration scope.
+ *
+ * @param parent_scope	Parent scope (NULL if creating a root scope)
+ * @returns		New declaration scope, or NULL on error
+ */
+static
+struct ctx_decl_scope *ctx_decl_scope_create(struct ctx_decl_scope *parent_scope)
+{
+	struct ctx_decl_scope *scope;
+
+	scope = g_new(struct ctx_decl_scope, 1);
+
+	if (!scope) {
+		return NULL;
+	}
+
+	scope->alias_decl_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+	scope->struct_decl_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+	scope->variant_decl_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+	scope->enum_decl_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+	scope->parent_scope = parent_scope;
+
+	return scope;
+}
+
+/**
+ * Destroys a declaration scope.
+ *
+ * This function does not destroy the parent scope.
+ *
+ * @param scope	Scope to destroy
+ */
 static
 void ctx_decl_scope_destroy(struct ctx_decl_scope *scope)
 {
-	g_hash_table_destroy(scope->enum_decl);
-	g_hash_table_destroy(scope->variant_decl);
-	g_hash_table_destroy(scope->struct_decl);
-	g_hash_table_destroy(scope->alias_decl);
+	if (!scope) {
+		return;
+	}
+
+	g_hash_table_destroy(scope->enum_decl_map);
+	g_hash_table_destroy(scope->variant_decl_map);
+	g_hash_table_destroy(scope->struct_decl_map);
+	g_hash_table_destroy(scope->alias_decl_map);
 	g_free(scope);
 }
 
+/**
+ * Creates a new visitor context.
+ *
+ * @param trace	Associated trace IR
+ * @param efd	Error stream
+ * @returns	New visitor context, or NULL on error
+ */
 static
 struct ctx *ctx_create(struct bt_ctf_trace *trace, FILE *efd)
 {
@@ -149,6 +191,7 @@ struct ctx *ctx_create(struct bt_ctf_trace *trace, FILE *efd)
 		return NULL;
 	}
 
+	/* root declaration scope */
 	struct ctx_decl_scope *scope = ctx_decl_scope_create(NULL);
 
 	if (!scope) {
@@ -163,12 +206,68 @@ struct ctx *ctx_create(struct bt_ctf_trace *trace, FILE *efd)
 	return ctx;
 }
 
+/**
+ * Destroys a visitor context.
+ *
+ * @param ctx	Visitor context to destroy
+ */
 static
 void ctx_destroy(struct ctx *ctx)
 {
-	// TODO: destroy scope parents too
-	ctx_decl_scope_destroy(ctx->current_scope);
+	/*
+	 * Destroy all scopes, from current one to the root scope.
+	 */
+	struct ctx_decl_scope *scope = ctx->current_scope;
+
+	while (scope) {
+		struct ctx_decl_scope *parent_scope = scope->parent_scope;
+		ctx_decl_scope_destroy(scope);
+		scope = parent_scope;
+	}
+
 	g_free(ctx);
+}
+
+/**
+ * Pushes a new declaration scope on top of a visitor context's
+ * declaration scope stack.
+ *
+ * @param ctx	Visitor context
+ * @returns	0 on success, or a negative value on error
+ */
+static
+int ctx_push_scope(struct ctx *ctx)
+{
+	struct ctx_decl_scope *new_scope =
+		ctx_decl_scope_create(ctx->current_scope);
+
+	if (!new_scope) {
+		return -ENOMEM;
+	}
+
+	ctx->current_scope = new_scope;
+
+	return 0;
+}
+
+/**
+ * Pops a declaration scope from the top of a visitor context's
+ * declaration scope stack.
+ *
+ * @param ctx	Visitor context
+ * @returns	0 on success, or a negative value on error
+ */
+static
+void ctx_pop_scope(struct ctx *ctx)
+{
+	if (!ctx->current_scope) {
+		return;
+	}
+
+	struct ctx_decl_scope *parent_scope = ctx->current_scope->parent_scope;
+
+	ctx_decl_scope_destroy(ctx->current_scope);
+	ctx->current_scope = parent_scope;
 }
 
 struct last_enum_value {
@@ -2883,8 +2982,7 @@ int ctf_root_declaration_visit(FILE *fd, int depth, struct ctf_node *node, struc
 }
 
 static
-int set_trace_byte_order(FILE *efd, struct ctf_node *trace_node,
-		struct bt_ctf_trace *trace)
+int set_trace_byte_order(struct ctx *ctx, struct ctf_node *trace_node)
 {
 	struct ctf_node *node;
 	int got_byte_order = 0;
@@ -2901,7 +2999,7 @@ int set_trace_byte_order(FILE *efd, struct ctf_node *trace_node,
 
 			if (!strcmp(left, "byte_order")) {
 				if (got_byte_order) {
-					fprintf(efd, "[error] %s: duplicate \"byte_order\" attribute in trace declaration\n",
+					fprintf(ctx->efd, "[error] %s: duplicate \"byte_order\" attribute in trace declaration\n",
 						__func__);
 					ret = -EPERM;
 					goto error;
@@ -2912,24 +3010,24 @@ int set_trace_byte_order(FILE *efd, struct ctf_node *trace_node,
 				enum bt_ctf_byte_order bo;
 
 				right_node = _bt_list_first_entry(&node->u.ctf_expression.right, struct ctf_node, siblings);
-				bo = byte_order_from_unary_expr(efd, right_node);
+				bo = byte_order_from_unary_expr(ctx->efd, right_node);
 
 				if (bo == BT_CTF_BYTE_ORDER_UNKNOWN) {
-					fprintf(efd, "[error] %s: unknown \"byte_order\" attribute in trace declaration\n",
+					fprintf(ctx->efd, "[error] %s: unknown \"byte_order\" attribute in trace declaration\n",
 						__func__);
 					ret = -EINVAL;
 					goto error;
 				} else if (bo == BT_CTF_BYTE_ORDER_NATIVE) {
-					fprintf(efd, "[error] %s: \"byte_order\" attribute cannot be set to \"native\" in trace declaration\n",
+					fprintf(ctx->efd, "[error] %s: \"byte_order\" attribute cannot be set to \"native\" in trace declaration\n",
 						__func__);
 					ret = -EPERM;
 					goto error;
 				}
 
-				ret = bt_ctf_trace_set_byte_order(trace, bo);
+				ret = bt_ctf_trace_set_byte_order(ctx->trace, bo);
 
 				if (ret) {
-					fprintf(efd, "[error] %s: cannot set trace's byte order (%d)\n",
+					fprintf(ctx->efd, "[error] %s: cannot set trace's byte order (%d)\n",
 						__func__, ret);
 					goto error;
 				}
@@ -2945,7 +3043,7 @@ error:
 	}
 
 	if (!got_byte_order) {
-		fprintf(efd, "[error] %s: missing \"byte_order\" attribute in trace declaration\n",
+		fprintf(ctx->efd, "[error] %s: missing \"byte_order\" attribute in trace declaration\n",
 			__func__);
 		return -EINVAL;
 	}
@@ -3276,8 +3374,7 @@ error:
 }
 
 static
-int visit_clock(FILE *efd, struct ctf_node *clock_node,
-		struct bt_ctf_trace *trace)
+int visit_clock(struct ctx *ctx, struct ctf_node *clock_node)
 {
 	int ret = 0;
 	struct ctf_node *entry_node;
@@ -3291,7 +3388,7 @@ int visit_clock(FILE *efd, struct ctf_node *clock_node,
 	struct bt_ctf_clock *clock = _bt_ctf_clock_create();
 
 	if (!clock) {
-		fprintf(efd, "[error] %s: cannot create clock IR\n", __func__);
+		fprintf(ctx->efd, "[error] %s: cannot create clock IR\n", __func__);
 		ret = -ENOMEM;
 		goto error;
 	}
@@ -3299,7 +3396,7 @@ int visit_clock(FILE *efd, struct ctf_node *clock_node,
 	int set = 0;
 
 	bt_list_for_each_entry(entry_node, &clock_node->u.clock.declaration_list, siblings) {
-		ret = visit_clock_attr(efd, entry_node, clock, &set);
+		ret = visit_clock_attr(ctx->efd, entry_node, clock, &set);
 
 		if (ret) {
 			goto error;
@@ -3322,20 +3419,20 @@ int visit_clock(FILE *efd, struct ctf_node *clock_node,
 
 	if (!_IS_SET(&set, _CLOCK_NAME_SET)) {
 		ret = -EPERM;
-		fprintf(efd, "[error] %s: missing \"name\" attribute in clock declaration\n", __func__);
+		fprintf(ctx->efd, "[error] %s: missing \"name\" attribute in clock declaration\n", __func__);
 		goto error;
 	}
 
-	if (bt_ctf_trace_get_clock_count(trace) != 0) {
-		fprintf(efd, "[error] Only CTF traces with a single clock declaration are supported by this Babeltrace version\n");
+	if (bt_ctf_trace_get_clock_count(ctx->trace) != 0) {
+		fprintf(ctx->efd, "[error] Only CTF traces with a single clock declaration are supported by this Babeltrace version\n");
 		ret = -EINVAL;
 		goto error;
 	}
 
-	ret = bt_ctf_trace_add_clock(trace, clock);
+	ret = bt_ctf_trace_add_clock(ctx->trace, clock);
 
 	if (ret) {
-		fprintf(efd, "[error] %s: cannot add clock to trace\n",
+		fprintf(ctx->efd, "[error] %s: cannot add clock to trace\n",
 			__func__);
 		goto error;
 	}
@@ -3349,8 +3446,7 @@ error:
 }
 
 static
-int visit_root_decl(FILE *efd, struct ctf_node *root_decl_node,
-		struct bt_ctf_trace *trace)
+int visit_root_decl(struct ctx *ctx, struct ctf_node *root_decl_node)
 {
 #if 0
 	int ret = 0;
@@ -3438,7 +3534,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 					__func__);
 			}
 
-			ret = set_trace_byte_order(efd, iter, trace);
+			ret = set_trace_byte_order(ctx, iter);
 
 			if (ret) {
 				fprintf(efd, "[error] %s: cannot set trace's byte order (%d)\n",
@@ -3449,7 +3545,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 
 		/* visit clocks first since any early integer can be mapped to one */
 		bt_list_for_each_entry(iter, &node->u.root.clock, siblings) {
-			ret = visit_clock(efd, iter, trace);
+			ret = visit_clock(ctx, iter);
 
 			if (ret) {
 				fprintf(efd, "[error] %s: error while visiting clock declaration (%d)\n",
@@ -3464,7 +3560,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		 */
 		bt_list_for_each_entry(iter, &node->u.root.declaration_list,
 				siblings) {
-			ret = visit_root_decl(efd, iter, trace);
+			ret = visit_root_decl(ctx, iter);
 
 			if (ret) {
 				fprintf(efd, "[error] %s: error while visiting root declaration (%d)\n",
@@ -3548,8 +3644,8 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		goto error;
 	}
 
-	printf_verbose("done!\n");
 	ctx_destroy(ctx);
+	printf_verbose("done!\n");
 	return ret;
 
 error:
