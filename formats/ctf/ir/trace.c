@@ -436,6 +436,32 @@ end:
 	return clock;
 }
 
+struct bt_ctf_clock *bt_ctf_trace_get_clock_by_name(
+        struct bt_ctf_trace *trace, const char *name)
+{
+	if (!trace || !name) {
+		return NULL;
+	}
+
+	unsigned int x;
+
+	for (x = 0; x < trace->clocks->len; ++x) {
+		struct bt_ctf_clock *clock = g_ptr_array_index(trace->clocks, x);
+		const char *clock_name = bt_ctf_clock_get_name(clock);
+
+		if (!clock_name) {
+			return NULL;
+		}
+
+		if (!!strcmp(clock_name, name)) {
+			bt_ctf_clock_get(clock);
+			return clock;
+		}
+	}
+
+	return NULL;
+}
+
 BT_HIDDEN
 const char *get_byte_order_string(int byte_order)
 {

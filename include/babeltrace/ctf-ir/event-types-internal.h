@@ -128,6 +128,10 @@ struct bt_ctf_field_type_string {
 };
 
 BT_HIDDEN
+int bt_ctf_field_type_integer_set_size(struct bt_ctf_field_type *type,
+		unsigned int size);
+
+BT_HIDDEN
 void bt_ctf_field_type_freeze(struct bt_ctf_field_type *type);
 
 BT_HIDDEN

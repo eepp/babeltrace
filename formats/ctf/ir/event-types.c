@@ -444,6 +444,29 @@ end:
 	return ret;
 }
 
+int bt_ctf_field_type_integer_set_size(struct bt_ctf_field_type *type,
+		unsigned int size)
+{
+	int ret = 0;
+	struct bt_ctf_field_type_integer *integer;
+
+	if (!type || type->frozen ||
+		type->declaration->id != CTF_TYPE_INTEGER) {
+		ret = -1;
+		goto end;
+	}
+
+	if (size == 0 || size > 64) {
+		ret = -1;
+		goto end;
+	}
+
+	integer = container_of(type, struct bt_ctf_field_type_integer, parent);
+	integer->declaration.len = size;
+end:
+	return ret;
+}
+
 int bt_ctf_field_type_integer_get_signed(struct bt_ctf_field_type *type)
 {
 	int ret = 0;
