@@ -75,6 +75,17 @@ enum {
 	_INTEGER_MAP_SET =		_BV(6),
 };
 
+enum {
+	_FLOAT_ALIGN_SET =		_BV(0),
+	_FLOAT_MANT_DIG_SET =		_BV(1),
+	_FLOAT_EXP_DIG_SET =		_BV(2),
+	_FLOAT_BYTE_ORDER_SET =		_BV(3),
+};
+
+enum {
+	_STRING_ENCODING_SET =		_BV(0),
+};
+
 #define fprintf_dbg(fd, fmt, args...)	fprintf(fd, "%s: " fmt, __func__, ## args)
 
 #define _bt_list_first_entry(ptr, type, member)	\
@@ -1570,7 +1581,7 @@ int visit_integer_decl(struct ctx *ctx,
 	struct bt_ctf_field_type **integer_decl)
 {
 	struct ctf_node *expression;
-	uint64_t alignment = 1, size;
+	uint64_t alignment, size;
 	enum bt_ctf_byte_order byte_order = bt_ctf_trace_get_byte_order(ctx->trace);
 	int signedness = 0;
 	enum bt_ctf_integer_base base = BT_CTF_INTEGER_BASE_DECIMAL;
@@ -1579,6 +1590,8 @@ int visit_integer_decl(struct ctx *ctx,
 	int set = 0;
 	int ret = 0;
 
+	*integer_decl = NULL;
+
 	bt_list_for_each_entry(expression, expressions, siblings) {
 		struct ctf_node *left, *right;
 
@@ -1586,20 +1599,23 @@ int visit_integer_decl(struct ctx *ctx,
 		right = _bt_list_first_entry(&expression->u.ctf_expression.right, struct ctf_node, siblings);
 
 		if (left->u.unary_expression.type != UNARY_STRING) {
-			return -EINVAL;
+			ret = -EINVAL;
+			goto error;
 		}
 
 		if (!strcmp(left->u.unary_expression.u.string, "signed")) {
 			if (_IS_SET(&set, _INTEGER_SIGNED_SET)) {
 				fprintf(ctx->efd, "[error] %s: duplicate attribute \"signed\" in integer declaration\n",
 					__func__);
-				return -EPERM;
+				ret = -EPERM;
+				goto error;
 			}
 
 			signedness = get_boolean(ctx->efd, right);
 
 			if (signedness < 0) {
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			_SET(&set, _INTEGER_SIGNED_SET);
@@ -1607,7 +1623,8 @@ int visit_integer_decl(struct ctx *ctx,
 			if (_IS_SET(&set, _INTEGER_BYTE_ORDER_SET)) {
 				fprintf(ctx->efd, "[error] %s: duplicate attribute \"byte_order\" in integer declaration\n",
 					__func__);
-				return -EPERM;
+				ret = -EPERM;
+				goto error;
 			}
 
 			byte_order = get_real_byte_order(ctx, right);
@@ -1615,7 +1632,8 @@ int visit_integer_decl(struct ctx *ctx,
 			if (byte_order == BT_CTF_BYTE_ORDER_UNKNOWN) {
 				fprintf(ctx->efd, "[error] %s: invalid \"byte_order\" attribute in integer declaration\n",
 					__func__);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			_SET(&set, _INTEGER_BYTE_ORDER_SET);
@@ -1623,13 +1641,15 @@ int visit_integer_decl(struct ctx *ctx,
 			if (_IS_SET(&set, _INTEGER_SIZE_SET)) {
 				fprintf(ctx->efd, "[error] %s: duplicate attribute \"size\" in integer declaration\n",
 					__func__);
-				return -EPERM;
+				ret = -EPERM;
+				goto error;
 			}
 
 			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
 				fprintf(ctx->efd, "[error] %s: invalid \"size\" attribute in integer declaration: expecting unsigned constant\n",
 					__func__);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			size = right->u.unary_expression.u.unsigned_constant;
@@ -1637,7 +1657,8 @@ int visit_integer_decl(struct ctx *ctx,
 			if (size == 0) {
 				fprintf(ctx->efd, "[error] %s: invalid \"size\" attribute in integer declaration: expecting positive constant\n",
 					__func__);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			_SET(&set, _INTEGER_SIZE_SET);
@@ -1645,13 +1666,15 @@ int visit_integer_decl(struct ctx *ctx,
 			if (_IS_SET(&set, _INTEGER_ALIGN_SET)) {
 				fprintf(ctx->efd, "[error] %s: duplicate attribute \"align\" in integer declaration\n",
 					__func__);
-				return -EPERM;
+				ret = -EPERM;
+				goto error;
 			}
 
 			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
 				fprintf(ctx->efd, "[error] %s: invalid \"align\" attribute in integer declaration: expecting unsigned constant\n",
 					__func__);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			alignment = right->u.unary_expression.u.unsigned_constant;
@@ -1659,7 +1682,8 @@ int visit_integer_decl(struct ctx *ctx,
 			if (!is_align_valid(alignment)) {
 				fprintf(ctx->efd, "[error] %s: invalid \"align\" attribute in integer declaration: expecting power of two\n",
 					__func__);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			_SET(&set, _INTEGER_ALIGN_SET);
@@ -1667,7 +1691,8 @@ int visit_integer_decl(struct ctx *ctx,
 			if (_IS_SET(&set, _INTEGER_BASE_SET)) {
 				fprintf(ctx->efd, "[error] %s: duplicate attribute \"base\" in integer declaration\n",
 					__func__);
-				return -EPERM;
+				ret = -EPERM;
+				goto error;
 			}
 
 			switch (right->u.unary_expression.type) {
@@ -1692,7 +1717,8 @@ int visit_integer_decl(struct ctx *ctx,
 				default:
 					fprintf(ctx->efd, "[error] %s: invalid \"base\" attribute in integer declaration: %" PRIu64 "\n",
 						__func__, right->u.unary_expression.u.unsigned_constant);
-					return -EINVAL;
+					ret = -EINVAL;
+					goto error;
 				}
 				break;
 
@@ -1703,8 +1729,8 @@ int visit_integer_decl(struct ctx *ctx,
 				if (!s_right) {
 					fprintf(ctx->efd, "[error] %s: unexpected unary expression for integer declaration's \"base\" attribute\n",
 						__func__);
-					g_free(s_right);
-					return -EINVAL;
+					ret = -EINVAL;
+					goto error;
 				}
 
 				if (!strcmp(s_right, "decimal") ||
@@ -1730,7 +1756,8 @@ int visit_integer_decl(struct ctx *ctx,
 					fprintf(ctx->efd, "[error] %s: unexpected unary expression for integer declaration's \"base\" attribute: \"%s\"\n",
 						__func__, s_right);
 					g_free(s_right);
-					return -EINVAL;
+					ret = -EINVAL;
+					goto error;
 				}
 
 				g_free(s_right);
@@ -1740,7 +1767,8 @@ int visit_integer_decl(struct ctx *ctx,
 			default:
 				fprintf(ctx->efd, "[error] %s: invalid \"base\" attribute in integer declaration: expecting unsigned constant or unary string\n",
 					__func__);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			_SET(&set, _INTEGER_BASE_SET);
@@ -1748,13 +1776,15 @@ int visit_integer_decl(struct ctx *ctx,
 			if (_IS_SET(&set, _INTEGER_ENCODING_SET)) {
 				fprintf(ctx->efd, "[error] %s: duplicate attribute \"encoding\" in integer declaration\n",
 					__func__);
-				return -EPERM;
+				ret = -EPERM;
+				goto error;
 			}
 
 			if (right->u.unary_expression.type != UNARY_STRING) {
 				fprintf(ctx->efd, "[error] %s: invalid \"encoding\" attribute in integer declaration: expecting unary string\n",
 					__func__);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			char *s_right = concatenate_unary_strings(&expression->u.ctf_expression.right);
@@ -1762,8 +1792,8 @@ int visit_integer_decl(struct ctx *ctx,
 			if (!s_right) {
 				fprintf(ctx->efd, "[error] %s: unexpected unary expression for integer declaration's \"encoding\" attribute\n",
 					__func__);
-				g_free(s_right);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			if (!strcmp(s_right, "UTF8") ||
@@ -1780,7 +1810,8 @@ int visit_integer_decl(struct ctx *ctx,
 				fprintf(ctx->efd, "[error] %s: invalid \"encoding\" attribute in integer declaration: unknown encoding \"%s\"\n",
 					__func__, s_right);
 				g_free(s_right);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			g_free(s_right);
@@ -1789,13 +1820,15 @@ int visit_integer_decl(struct ctx *ctx,
 			if (_IS_SET(&set, _INTEGER_MAP_SET)) {
 				fprintf(ctx->efd, "[error] %s: duplicate attribute \"map\" in integer declaration\n",
 					__func__);
-				return -EPERM;
+				ret = -EPERM;
+				goto error;
 			}
 
 			if (right->u.unary_expression.type != UNARY_STRING) {
 				fprintf(ctx->efd, "[error] %s: invalid \"map\" attribute in integer declaration: expecting unary string\n",
 					__func__);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			const char *clock_name =
@@ -1807,8 +1840,8 @@ int visit_integer_decl(struct ctx *ctx,
 				if (!s_right) {
 					fprintf(ctx->efd, "[error] %s: unexpected unary expression for integer declaration's \"map\" attribute\n",
 						__func__);
-					g_free(s_right);
-					return -EINVAL;
+					ret = -EINVAL;
+					goto error;
 				}
 
 				fprintf(ctx->efd, "[error] %s: invalid \"map\" attribute in integer declaration: unknown clock: \"%s\"\n",
@@ -1824,7 +1857,8 @@ int visit_integer_decl(struct ctx *ctx,
 			if (!mapped_clock) {
 				fprintf(ctx->efd, "[error] %s: invalid \"map\" attribute in integer declaration: cannot find clock \"%s\"\n",
 					__func__, clock_name);
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			_SET(&set, _INTEGER_MAP_SET);
@@ -1838,7 +1872,8 @@ int visit_integer_decl(struct ctx *ctx,
 	if (!_IS_SET(&set, _INTEGER_SIZE_SET)) {
 		fprintf(ctx->efd, "[error] %s: missing \"size\" attribute in integer declaration\n",
 			__func__);
-		return -EPERM;
+		ret = -EPERM;
+		goto error;
 	}
 
 	if (!_IS_SET(&set, _INTEGER_ALIGN_SET)) {
@@ -1856,7 +1891,8 @@ int visit_integer_decl(struct ctx *ctx,
 	if (!*integer_decl) {
 		fprintf(ctx->efd, "[error] %s: cannot create integer declaration\n",
 			__func__);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto error;
 	}
 
 	ret = bt_ctf_field_type_integer_set_signed(*integer_decl, signedness);
@@ -1867,87 +1903,170 @@ int visit_integer_decl(struct ctx *ctx,
 	ret &= bt_ctf_field_type_set_byte_order(*integer_decl, byte_order);
 
 	if (mapped_clock) {
-		// TODO: bt_ctf_field_type_integer_set_mapped_clock()
+		ret &= bt_ctf_field_type_integer_set_mapped_clock(*integer_decl,
+			mapped_clock);
+		bt_ctf_clock_put(mapped_clock);
+		mapped_clock = NULL;
 	}
 
 	if (ret) {
 		fprintf(ctx->efd, "[error] %s: cannot configure integer declaration\n",
 			__func__);
-		bt_ctf_field_type_put(*integer_decl);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto error;
 	}
 
 	return 0;
+
+error:
+	if (mapped_clock) {
+		bt_ctf_clock_put(mapped_clock);
+	}
+
+	if (*integer_decl) {
+		bt_ctf_field_type_put(*integer_decl);
+	}
+
+	return ret;
 }
 
-#if 0
 static
-struct bt_declaration *ctf_declaration_floating_point_visit(FILE *fd, int depth,
-		struct bt_list_head *expressions,
-		struct ctf_trace *trace)
+int visit_floating_point_decl(struct ctx *ctx,
+	struct bt_list_head *expressions,
+	struct bt_ctf_field_type **float_decl)
 {
 	struct ctf_node *expression;
-	uint64_t alignment = 1, exp_dig = 0, mant_dig = 0;
-	int byte_order = trace->byte_order, has_alignment = 0,
-		has_exp_dig = 0, has_mant_dig = 0;
-	struct declaration_float *float_declaration;
+	uint64_t alignment = 1, exp_dig, mant_dig;
+	enum bt_ctf_byte_order byte_order = bt_ctf_trace_get_byte_order(ctx->trace);
+	int set = 0;
+	int ret = 0;
 
 	bt_list_for_each_entry(expression, expressions, siblings) {
 		struct ctf_node *left, *right;
 
 		left = _bt_list_first_entry(&expression->u.ctf_expression.left, struct ctf_node, siblings);
 		right = _bt_list_first_entry(&expression->u.ctf_expression.right, struct ctf_node, siblings);
-		if (left->u.unary_expression.type != UNARY_STRING)
-			return NULL;
+
+		if (left->u.unary_expression.type != UNARY_STRING) {
+			ret = -EINVAL;
+			goto error;
+		}
+
 		if (!strcmp(left->u.unary_expression.u.string, "byte_order")) {
-			byte_order = get_byte_order(fd, depth, right, trace);
-			if (byte_order < 0)
-				return NULL;
+			if (_IS_SET(&set, _FLOAT_BYTE_ORDER_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"byte_order\" in floating point number declaration\n",
+					__func__);
+				ret = -EPERM;
+				goto error;
+			}
+
+			byte_order = get_real_byte_order(ctx, right);
+
+			if (byte_order == BT_CTF_BYTE_ORDER_UNKNOWN) {
+				fprintf(ctx->efd, "[error] %s: invalid \"byte_order\" attribute in floating point number declaration\n",
+					__func__);
+				ret = -EINVAL;
+				goto error;
+			}
+
+			_SET(&set, _FLOAT_BYTE_ORDER_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "exp_dig")) {
-			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
-				fprintf(fd, "[error] %s: exp_dig: expecting unsigned constant\n",
+			if (_IS_SET(&set, _FLOAT_EXP_DIG_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"exp_dig\" in floating point number declaration\n",
 					__func__);
-				return NULL;
+				ret = -EPERM;
+				goto error;
 			}
+
+			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
+				fprintf(ctx->efd, "[error] %s: invalid \"exp_dig\" attribute in floating point number declaration: expecting unsigned constant\n",
+					__func__);
+				ret = -EINVAL;
+				goto error;
+			}
+
 			exp_dig = right->u.unary_expression.u.unsigned_constant;
-			has_exp_dig = 1;
+
+			if (!is_align_valid(alignment)) {
+				fprintf(ctx->efd, "[error] %s: invalid \"exp_dig\" attribute in floating point number declaration: expecting power of two\n",
+					__func__);
+				ret = -EINVAL;
+				goto error;
+			}
+
+			_SET(&set, _FLOAT_EXP_DIG_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "mant_dig")) {
-			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
-				fprintf(fd, "[error] %s: mant_dig: expecting unsigned constant\n",
+			if (_IS_SET(&set, _FLOAT_MANT_DIG_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"mant_dig\" in floating point number declaration\n",
 					__func__);
-				return NULL;
+				ret = -EPERM;
+				goto error;
 			}
+
+			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
+				fprintf(ctx->efd, "[error] %s: invalid \"mant_dig\" attribute in floating point number declaration: expecting unsigned constant\n",
+					__func__);
+				ret = -EINVAL;
+				goto error;
+			}
+
 			mant_dig = right->u.unary_expression.u.unsigned_constant;
-			has_mant_dig = 1;
+
+			if (!is_align_valid(alignment)) {
+				fprintf(ctx->efd, "[error] %s: invalid \"mant_dig\" attribute in floating point number declaration: expecting power of two\n",
+					__func__);
+				ret = -EINVAL;
+				goto error;
+			}
+
+			_SET(&set, _FLOAT_MANT_DIG_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "align")) {
+			if (_IS_SET(&set, _FLOAT_ALIGN_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"align\" in floating point number declaration\n",
+					__func__);
+				ret = -EPERM;
+				goto error;
+			}
+
 			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
-				fprintf(fd, "[error] %s: align: expecting unsigned constant\n",
+				fprintf(ctx->efd, "[error] %s: invalid \"align\" attribute in floating point number declaration: expecting unsigned constant\n",
 					__func__);
-				return NULL;
+				ret = -EINVAL;
+				goto error;
 			}
+
 			alignment = right->u.unary_expression.u.unsigned_constant;
-			/* Make sure alignment is a power of two */
-			if (alignment == 0 || (alignment & (alignment - 1)) != 0) {
-				fprintf(fd, "[error] %s: align: expecting power of two\n",
+
+			if (!is_align_valid(alignment)) {
+				fprintf(ctx->efd, "[error] %s: invalid \"align\" attribute in floating point number declaration: expecting power of two\n",
 					__func__);
-				return NULL;
+				ret = -EINVAL;
+				goto error;
 			}
-			has_alignment = 1;
+
+			_SET(&set, _FLOAT_ALIGN_SET);
 		} else {
-			fprintf(fd, "[warning] %s: unknown attribute name %s\n",
-				__func__, left->u.unary_expression.u.string);
-			/* Fall-through after warning */
+			fprintf(ctx->efd, "[warning] %s: unknown attribute \"%s\" in floating point number declaration\n",
+				__func__,
+				left->u.unary_expression.u.string);
 		}
 	}
-	if (!has_mant_dig) {
-		fprintf(fd, "[error] %s: missing mant_dig attribute\n", __func__);
-		return NULL;
+
+	if (!_IS_SET(&set, _FLOAT_MANT_DIG_SET)) {
+		fprintf(ctx->efd, "[error] %s: missing \"mant_dig\" attribute in floating point number declaration\n",
+			__func__);
+		ret = -EPERM;
+		goto error;
 	}
-	if (!has_exp_dig) {
-		fprintf(fd, "[error] %s: missing exp_dig attribute\n", __func__);
-		return NULL;
+
+	if (!_IS_SET(&set, _FLOAT_EXP_DIG_SET)) {
+		fprintf(ctx->efd, "[error] %s: missing \"exp_dig\" attribute in floating point number declaration\n",
+			__func__);
+		ret = -EPERM;
+		goto error;
 	}
-	if (!has_alignment) {
+
+	if (!_IS_SET(&set, _INTEGER_ALIGN_SET)) {
 		if ((mant_dig + exp_dig) % CHAR_BIT) {
 			/* bit-packed alignment */
 			alignment = 1;
@@ -1956,48 +2075,141 @@ struct bt_declaration *ctf_declaration_floating_point_visit(FILE *fd, int depth,
 			alignment = CHAR_BIT;
 		}
 	}
-	float_declaration = bt_float_declaration_new(mant_dig, exp_dig,
-				byte_order, alignment);
-	return &float_declaration->p;
+
+	*float_decl = bt_ctf_field_type_floating_point_create();
+
+	if (!*float_decl) {
+		fprintf(ctx->efd, "[error] %s: cannot create floating point number declaration\n",
+			__func__);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	ret = bt_ctf_field_type_floating_point_set_exponent_digits(*float_decl,
+		exp_dig);
+	ret &= bt_ctf_field_type_floating_point_set_mantissa_digits(*float_decl,
+		mant_dig);
+	ret &= bt_ctf_field_type_set_byte_order(*float_decl, byte_order);
+	ret &= bt_ctf_field_type_set_alignment(*float_decl, alignment);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot configure floating point number declaration\n",
+			__func__);
+		ret = -EINVAL;
+		goto error;
+	}
+
+	return 0;
+
+error:
+	if (*float_decl) {
+		bt_ctf_field_type_put(*float_decl);
+	}
+
+	return ret;
 }
 
 static
-struct bt_declaration *ctf_declaration_string_visit(FILE *fd, int depth,
-		struct bt_list_head *expressions,
-		struct ctf_trace *trace)
+int visit_string_decl(struct ctx *ctx,
+	struct bt_list_head *expressions,
+	struct bt_ctf_field_type **string_decl)
 {
 	struct ctf_node *expression;
-	const char *encoding_c = NULL;
 	enum ctf_string_encoding encoding = CTF_STRING_UTF8;
-	struct declaration_string *string_declaration;
+	int set = 0;
+	int ret = 0;
 
 	bt_list_for_each_entry(expression, expressions, siblings) {
 		struct ctf_node *left, *right;
 
 		left = _bt_list_first_entry(&expression->u.ctf_expression.left, struct ctf_node, siblings);
 		right = _bt_list_first_entry(&expression->u.ctf_expression.right, struct ctf_node, siblings);
-		if (left->u.unary_expression.type != UNARY_STRING)
-			return NULL;
+
+		if (left->u.unary_expression.type != UNARY_STRING) {
+			ret = -EINVAL;
+			goto error;
+		}
+
 		if (!strcmp(left->u.unary_expression.u.string, "encoding")) {
-			if (right->u.unary_expression.type != UNARY_STRING) {
-				fprintf(fd, "[error] %s: encoding: expecting string\n",
+			if (_IS_SET(&set, _STRING_ENCODING_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"encoding\" in string declaration\n",
 					__func__);
-				return NULL;
+				ret = -EPERM;
+				goto error;
 			}
-			encoding_c = right->u.unary_expression.u.string;
+
+			if (right->u.unary_expression.type != UNARY_STRING) {
+				fprintf(ctx->efd, "[error] %s: invalid \"encoding\" attribute in string declaration: expecting unary string\n",
+					__func__);
+				ret = -EINVAL;
+				goto error;
+			}
+
+			char *s_right = concatenate_unary_strings(&expression->u.ctf_expression.right);
+
+			if (!s_right) {
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for string declaration's \"encoding\" attribute\n",
+					__func__);
+				ret = -EINVAL;
+				goto error;
+			}
+
+			if (!strcmp(s_right, "UTF8") ||
+					!strcmp(s_right, "utf8") ||
+					!strcmp(s_right, "utf-8") ||
+					!strcmp(s_right, "UTF-8")) {
+				encoding = CTF_STRING_UTF8;
+			} else if (!strcmp(s_right, "ASCII") ||
+					!strcmp(s_right, "ascii")) {
+				encoding = CTF_STRING_ASCII;
+			} else if (!strcmp(s_right, "none")) {
+				encoding = CTF_STRING_NONE;
+			} else {
+				fprintf(ctx->efd, "[error] %s: invalid \"encoding\" attribute in string declaration: unknown encoding \"%s\"\n",
+					__func__, s_right);
+				g_free(s_right);
+				ret = -EINVAL;
+				goto error;
+			}
+
+			g_free(s_right);
+			_SET(&set, _STRING_ENCODING_SET);
 		} else {
-			fprintf(fd, "[warning] %s: unknown attribute name %s\n",
-				__func__, left->u.unary_expression.u.string);
-			/* Fall-through after warning */
+			fprintf(ctx->efd, "[warning] %s: unknown attribute \"%s\" in string declaration\n",
+				__func__,
+				left->u.unary_expression.u.string);
 		}
 	}
-	if (encoding_c && !strcmp(encoding_c, "ASCII"))
-		encoding = CTF_STRING_ASCII;
-	string_declaration = bt_string_declaration_new(encoding);
-	return &string_declaration->p;
+
+	*string_decl = bt_ctf_field_type_floating_point_create();
+
+	if (!*string_decl) {
+		fprintf(ctx->efd, "[error] %s: cannot create string declaration\n",
+			__func__);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	ret = bt_ctf_field_type_string_set_encoding(*string_decl, encoding);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot configure string declaration\n",
+			__func__);
+		ret = -EINVAL;
+		goto error;
+	}
+
+	return 0;
+
+error:
+	if (*string_decl) {
+		bt_ctf_field_type_put(*string_decl);
+	}
+
+	return ret;
 }
 
-
+#if 0
 static
 struct bt_declaration *ctf_type_specifier_list_visit(FILE *fd,
 		int depth, struct ctf_node *type_specifier_list,
