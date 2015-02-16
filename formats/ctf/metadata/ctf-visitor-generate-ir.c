@@ -86,6 +86,11 @@ enum {
 	_STRING_ENCODING_SET =		_BV(0),
 };
 
+#define _PREFIX_ALIAS	'a'
+#define _PREFIX_ENUM	'e'
+#define _PREFIX_STRUCT	's'
+#define _PREFIX_VARIANT	'v'
+
 #define fprintf_dbg(fd, fmt, args...)	fprintf(fd, "%s: " fmt, __func__, ## args)
 
 #define _bt_list_first_entry(ptr, type, member)	\
@@ -101,35 +106,11 @@ enum {
  */
 struct ctx_decl_scope {
 	/*
-	 * Alias name (typealias/typedef) to field type.
+	 * Alias name to field type.
 	 *
 	 * GQuark -> struct bt_ctf_field_type *
 	 */
-	GHashTable *alias_decl_map;
-
-	/*
-	 * Structure name to field type. Structure name does not include
-	 * `struct` prefix.
-	 *
-	 * GQuark -> struct bt_ctf_field_type *
-	 */
-	GHashTable *struct_decl_map;
-
-	/*
-	 * Variant name to field type. Variant name does not include
-	 * `variant` prefix.
-	 *
-	 * GQuark -> struct bt_ctf_field_type *
-	 */
-	GHashTable *variant_decl_map;
-
-	/*
-	 * Enumeration name to field type. Enumeration name does not
-	 * include `enum` prefix.
-	 *
-	 * GQuark -> struct bt_ctf_field_type *
-	 */
-	GHashTable *enum_decl_map;
+	GHashTable *decl_map;
 
 	/* parent scope; NULL if this is the root declaration scope */
 	struct ctx_decl_scope *parent_scope;
@@ -166,10 +147,7 @@ struct ctx_decl_scope *ctx_decl_scope_create(struct ctx_decl_scope *parent_scope
 		return NULL;
 	}
 
-	scope->alias_decl_map = g_hash_table_new(g_direct_hash, g_direct_equal);
-	scope->struct_decl_map = g_hash_table_new(g_direct_hash, g_direct_equal);
-	scope->variant_decl_map = g_hash_table_new(g_direct_hash, g_direct_equal);
-	scope->enum_decl_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+	scope->decl_map = g_hash_table_new(g_direct_hash, g_direct_equal);
 	scope->parent_scope = parent_scope;
 
 	return scope;
@@ -189,11 +167,252 @@ void ctx_decl_scope_destroy(struct ctx_decl_scope *scope)
 		return;
 	}
 
-	g_hash_table_destroy(scope->enum_decl_map);
-	g_hash_table_destroy(scope->variant_decl_map);
-	g_hash_table_destroy(scope->struct_decl_map);
-	g_hash_table_destroy(scope->alias_decl_map);
+	g_hash_table_destroy(scope->decl_map);
 	g_free(scope);
+}
+
+/**
+ * Returns the GQuark of a prefixed alias.
+ *
+ * @param prefix	Prefix character
+ * @param name		Name
+ * @returns		Associated GQuark, or 0 on error
+ */
+GQuark get_prefixed_named_quark(char prefix, const char *name)
+{
+	assert(name);
+
+	char *prname = g_new(char, strlen(name) + 3);
+
+	if (!prname) {
+		return 0;
+	}
+
+	sprintf(prname, "%c#%s", prefix, name);
+
+	GQuark qname = g_quark_from_string(prname);
+
+	g_free(prname);
+
+	return qname;
+}
+
+/**
+ * Looks up a prefixed type alias within a declaration scope.
+ *
+ * @param scope		Declaration scope
+ * @param prefix	Prefix character
+ * @param name		Alias name
+ * @param level		Number of levels to dig (-1 means infinite)
+ * @returns		Declaration, or NULL if not found
+ */
+struct bt_ctf_field_type *ctx_decl_scope_lookup_prefix_alias(
+	struct ctx_decl_scope *scope, char prefix,
+	const char *name, int levels)
+{
+	assert(scope);
+	assert(name);
+
+	GQuark qname = get_prefixed_named_quark(prefix, name);
+
+	if (!qname) {
+		goto error;
+	}
+
+	struct ctx_decl_scope *cur_scope = scope;
+	struct bt_ctf_field_type *decl = NULL;
+	int cur_levels = 0;
+
+	if (levels < 0) {
+		levels = INT_MAX;
+	}
+
+	while (cur_scope && cur_levels < levels) {
+		decl = g_hash_table_lookup(scope->decl_map,
+			(gconstpointer) (unsigned long) qname);
+
+		if (decl) {
+			break;
+		}
+
+		cur_scope = cur_scope->parent_scope;
+		cur_levels++;
+	}
+
+	return decl;
+
+error:
+	return NULL;
+}
+
+/**
+ * Looks up a type alias within a declaration scope.
+ *
+ * @param scope		Declaration scope
+ * @param name		Alias name
+ * @param level		Number of levels to dig (-1 means infinite)
+ * @returns		Declaration, or NULL if not found
+ */
+struct bt_ctf_field_type *ctx_decl_scope_lookup_alias(
+	struct ctx_decl_scope *scope, const char *name, int levels)
+{
+	return ctx_decl_scope_lookup_prefix_alias(scope, _PREFIX_ALIAS,
+		name, levels);
+}
+
+/**
+ * Looks up an enumeration within a declaration scope.
+ *
+ * @param scope		Declaration scope
+ * @param name		Enumeration name
+ * @param level		Number of levels to dig (-1 means infinite)
+ * @returns		Declaration, or NULL if not found
+ */
+struct bt_ctf_field_type *ctx_decl_scope_lookup_enum(
+	struct ctx_decl_scope *scope, const char *name, int levels)
+{
+	return ctx_decl_scope_lookup_prefix_alias(scope, _PREFIX_ENUM,
+		name, levels);
+}
+
+/**
+ * Looks up a structure within a declaration scope.
+ *
+ * @param scope		Declaration scope
+ * @param name		Structure name
+ * @param level		Number of levels to dig (-1 means infinite)
+ * @returns		Declaration, or NULL if not found
+ */
+struct bt_ctf_field_type *ctx_decl_scope_lookup_struct(
+	struct ctx_decl_scope *scope, const char *name, int levels)
+{
+	return ctx_decl_scope_lookup_prefix_alias(scope, _PREFIX_STRUCT,
+		name, levels);
+}
+
+/**
+ * Looks up a variant within a declaration scope.
+ *
+ * @param scope		Declaration scope
+ * @param name		Variant name
+ * @param level		Number of levels to dig (-1 means infinite)
+ * @returns		Declaration, or NULL if not found
+ */
+struct bt_ctf_field_type *ctx_decl_scope_lookup_variant(
+	struct ctx_decl_scope *scope, const char *name, int levels)
+{
+	return ctx_decl_scope_lookup_prefix_alias(scope, _PREFIX_VARIANT,
+		name, levels);
+}
+
+/**
+ * Registers a prefixed type alias within a declaration scope.
+ *
+ * Reference count is not incremented (weak ref).
+ *
+ * @param scope		Declaration scope
+ * @param prefix	Prefix character
+ * @param name		Alias name (non-NULL)
+ * @param decl		Declaration to register
+ * @returns		0 if registration went okay, negative value otherwise
+ */
+int ctx_decl_scope_register_prefix_alias(struct ctx_decl_scope *scope,
+	char prefix, const char *name, struct bt_ctf_field_type *decl)
+{
+	int ret = 0;
+
+	assert(scope);
+	assert(name);
+	assert(decl);
+
+	GQuark qname = get_prefixed_named_quark(prefix, name);
+
+	if (!qname) {
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	/* make sure alias does not exist in local scope */
+	if (ctx_decl_scope_lookup_prefix_alias(scope, prefix, name, 1)) {
+		ret = -EEXIST;
+		goto error;
+	}
+
+	g_hash_table_insert(scope->decl_map,
+		(gpointer) (unsigned long) qname, decl);
+
+	return 0;
+
+error:
+	return ret;
+}
+
+/**
+ * Registers a type alias within a declaration scope.
+ *
+ * Reference count is not incremented (weak ref).
+ *
+ * @param scope	Declaration scope
+ * @param name	Alias name (non-NULL)
+ * @param decl	Declaration to register
+ * @returns	0 if registration went okay, negative value otherwise
+ */
+int ctx_decl_scope_register_alias(struct ctx_decl_scope *scope,
+	const char *name, struct bt_ctf_field_type *decl)
+{
+	return ctx_decl_scope_register_prefix_alias(scope, _PREFIX_ALIAS,
+		name, decl);
+}
+
+/**
+ * Registers an enumeration declaration within a declaration scope.
+ *
+ * Reference count is not incremented (weak ref).
+ *
+ * @param scope	Declaration scope
+ * @param name	Enumeration name (non-NULL)
+ * @param decl	Enumeration declaration to register
+ * @returns	0 if registration went okay, negative value otherwise
+ */
+int ctx_decl_scope_register_enum(struct ctx_decl_scope *scope,
+	const char *name, struct bt_ctf_field_type *decl)
+{
+	return ctx_decl_scope_register_prefix_alias(scope, _PREFIX_ENUM,
+		name, decl);
+}
+
+/**
+ * Registers a structure declaration within a declaration scope.
+ *
+ * Reference count is not incremented (weak ref).
+ *
+ * @param scope	Declaration scope
+ * @param name	Structure name (non-NULL)
+ * @param decl	Structure declaration to register
+ * @returns	0 if registration went okay, negative value otherwise
+ */
+int ctx_decl_scope_register_struct(struct ctx_decl_scope *scope,
+	const char *name, struct bt_ctf_field_type *decl)
+{
+	return ctx_decl_scope_register_prefix_alias(scope, _PREFIX_STRUCT,
+		name, decl);
+}
+
+/**
+ * Registers a variant declaration within a declaration scope.
+ *
+ * Reference count is not incremented (weak ref).
+ *
+ * @param scope	Declaration scope
+ * @param name	Variant name (non-NULL)
+ * @param decl	Variant declaration to register
+ * @returns	0 if registration went okay, negative value otherwise
+ */
+int ctx_decl_scope_register_variant(struct ctx_decl_scope *scope,
+	const char *name, struct bt_ctf_field_type *decl)
+{
+	return ctx_decl_scope_register_prefix_alias(scope, _PREFIX_VARIANT,
+		name, decl);
 }
 
 /**
@@ -1119,78 +1338,106 @@ int ctf_variant_declaration_list_visit(FILE *fd, int depth,
 	}
 	return 0;
 }
+#endif
 
 static
-struct bt_declaration *ctf_declaration_struct_visit(FILE *fd,
-	int depth, const char *name, struct bt_list_head *declaration_list,
-	int has_body, struct bt_list_head *min_align,
-	struct declaration_scope *declaration_scope,
-	struct ctf_trace *trace)
+int visit_struct(struct ctx *ctx, const char *name,
+	struct bt_list_head *decl_list, int has_body,
+	struct bt_list_head *min_align,
+	struct bt_ctf_field_type **struct_decl)
 {
-	struct declaration_struct *struct_declaration;
-	struct ctf_node *iter;
+	int ret = 0;
 
-	/*
-	 * For named struct (without body), lookup in
-	 * declaration scope. Don't take reference on struct
-	 * declaration: ref is only taken upon definition.
-	 */
+	*struct_decl = NULL;
+
+	/* for named struct (without body), lookup in declaration scope */
 	if (!has_body) {
-		if (!name)
-			return NULL;
-		struct_declaration =
-			bt_lookup_struct_declaration(g_quark_from_string(name),
-						  declaration_scope);
-		bt_declaration_ref(&struct_declaration->p);
-		return &struct_declaration->p;
-	} else {
-		uint64_t min_align_value = 0;
+		if (!name) {
+			ret = -EPERM;
+			goto error;
+		}
 
-		/* For unnamed struct, create type */
-		/* For named struct (with body), create type and add to declaration scope */
+		*struct_decl = ctx_decl_scope_lookup_struct(ctx->current_scope,
+			name, -1);
+
+		if (!*struct_decl) {
+			fprintf(ctx->efd, "[error] %s: cannot find \"struct %s\"\n",
+				__func__, name);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		bt_ctf_field_type_get(*struct_decl);
+	} else {
 		if (name) {
-			if (bt_lookup_struct_declaration(g_quark_from_string(name),
-						      declaration_scope)) {
-				fprintf(fd, "[error] %s: struct %s already declared in scope\n", __func__, name);
-				return NULL;
+			if (ctx_decl_scope_lookup_struct(ctx->current_scope, name, 1)) {
+				fprintf(ctx->efd, "[error] %s: \"struct %s\" already declared in local scope\n",
+					__func__, name);
+				ret = -EINVAL;
+				goto error;
 			}
 		}
+
+		uint64_t min_align_value = 0;
+
 		if (!bt_list_empty(min_align)) {
 			int ret;
 
 			ret = get_unary_unsigned(min_align, &min_align_value);
+
 			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for structure \"align\" attribute\n", __func__);
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for structure declaration's \"align\" attribute\n",
+					__func__);
+				ret = -EINVAL;
 				goto error;
 			}
 		}
-		struct_declaration = bt_struct_declaration_new(declaration_scope,
-							    min_align_value);
-		bt_list_for_each_entry(iter, declaration_list, siblings) {
-			int ret;
 
+		*struct_decl = bt_ctf_field_type_structure_create();
+
+		if (!*struct_decl) {
+			fprintf(ctx->efd, "[error] %s: cannot create structure declaration\n",
+				__func__);
+			ret = -ENOMEM;
+			goto error;
+		}
+
+		struct ctf_node *iter;
+
+		bt_list_for_each_entry(iter, decl_list, siblings) {
+			int ret = 0;
+
+			/*
 			ret = ctf_struct_declaration_list_visit(fd, depth + 1, iter,
 				struct_declaration, trace);
-			if (ret)
-				goto error_free_declaration;
-		}
-		if (name) {
-			int ret;
+			*/
 
-			ret = bt_register_struct_declaration(g_quark_from_string(name),
-					struct_declaration,
-					declaration_scope);
-			if (ret)
-				return NULL;
+			if (ret) {
+				goto error;
+			}
 		}
-		return &struct_declaration->p;
+
+		if (name) {
+			int ret = ctx_decl_scope_register_struct(ctx->current_scope,
+				name, *struct_decl);
+
+			if (ret) {
+				goto error;
+			}
+		}
 	}
-error_free_declaration:
-	struct_declaration->p.declaration_free(&struct_declaration->p);
+
+	return 0;
+
 error:
-	return NULL;
+	if (*struct_decl) {
+		bt_ctf_field_type_put(*struct_decl);
+	}
+
+	return ret;
 }
 
+#if 0
 static
 struct bt_declaration *ctf_declaration_variant_visit(FILE *fd,
 	int depth, const char *name, const char *choice,
@@ -1941,6 +2188,8 @@ int visit_floating_point_decl(struct ctx *ctx,
 	int set = 0;
 	int ret = 0;
 
+	*float_decl = NULL;
+
 	bt_list_for_each_entry(expression, expressions, siblings) {
 		struct ctf_node *left, *right;
 
@@ -2119,6 +2368,8 @@ int visit_string_decl(struct ctx *ctx,
 	int set = 0;
 	int ret = 0;
 
+	*string_decl = NULL;
+
 	bt_list_for_each_entry(expression, expressions, siblings) {
 		struct ctf_node *left, *right;
 
@@ -2209,36 +2460,43 @@ error:
 	return ret;
 }
 
-#if 0
 static
-struct bt_declaration *ctf_type_specifier_list_visit(FILE *fd,
-		int depth, struct ctf_node *type_specifier_list,
-		struct declaration_scope *declaration_scope,
-		struct ctf_trace *trace)
+int visit_type_specifier_list(struct ctx *ctx,
+		struct ctf_node *ts_list,
+		struct bt_ctf_field_type **decl)
 {
-	struct ctf_node *first;
-	struct ctf_node *node;
+	int ret = 0;
+	struct ctf_node *first, *node;
 
-	if (type_specifier_list->type != NODE_TYPE_SPECIFIER_LIST)
-		return NULL;
+	*decl = NULL;
 
-	first = _bt_list_first_entry(&type_specifier_list->u.type_specifier_list.head, struct ctf_node, siblings);
+	if (ts_list->type != NODE_TYPE_SPECIFIER_LIST) {
+		ret = -EINVAL;
+		goto error;
+	}
 
-	if (first->type != NODE_TYPE_SPECIFIER)
-		return NULL;
+	first = _bt_list_first_entry(&ts_list->u.type_specifier_list.head,
+		struct ctf_node, siblings);
+
+	if (first->type != NODE_TYPE_SPECIFIER) {
+		ret = -EINVAL;
+		goto error;
+	}
 
 	node = first->u.type_specifier.node;
 
 	switch (first->u.type_specifier.type) {
-	case TYPESPEC_FLOATING_POINT:
-		return ctf_declaration_floating_point_visit(fd, depth,
-			&node->u.floating_point.expressions, trace);
 	case TYPESPEC_INTEGER:
-		return ctf_declaration_integer_visit(fd, depth,
-			&node->u.integer.expressions, trace);
+		return visit_integer_decl(ctx, &node->u.integer.expressions,
+			decl);
+	case TYPESPEC_FLOATING_POINT:
+		return visit_floating_point_decl(ctx,
+			&node->u.floating_point.expressions, decl);
 	case TYPESPEC_STRING:
-		return ctf_declaration_string_visit(fd, depth,
-			&node->u.string.expressions, trace);
+		return visit_string_decl(ctx,
+			&node->u.string.expressions, decl);
+
+#if 0
 	case TYPESPEC_STRUCT:
 		return ctf_declaration_struct_visit(fd, depth,
 			node->u._struct.name,
@@ -2263,6 +2521,7 @@ struct bt_declaration *ctf_type_specifier_list_visit(FILE *fd,
 			node->u._enum.has_body,
 			declaration_scope,
 			trace);
+#endif
 
 	case TYPESPEC_VOID:
 	case TYPESPEC_CHAR:
@@ -2278,14 +2537,28 @@ struct bt_declaration *ctf_type_specifier_list_visit(FILE *fd,
 	case TYPESPEC_IMAGINARY:
 	case TYPESPEC_CONST:
 	case TYPESPEC_ID_TYPE:
+#if 0
 		return ctf_declaration_type_specifier_visit(fd, depth,
-			type_specifier_list, declaration_scope);
+			ts_list, declaration_scope);
+#endif
 	default:
-		fprintf(fd, "[error] %s: unexpected node type %d\n", __func__, (int) first->u.type_specifier.type);
-		return NULL;
+		fprintf(ctx->efd, "[error] %s: unexpected node type: %d\n",
+			__func__, (int) first->u.type_specifier.type);
+		ret = -EINVAL;
+		goto error;
 	}
+
+	return 0;
+
+error:
+	if (*decl) {
+		bt_ctf_field_type_put(*decl);
+	}
+
+	return ret;
 }
 
+#if 0
 static
 int ctf_event_declaration_visit(FILE *fd, int depth, struct ctf_node *node, struct ctf_event_declaration *event, struct ctf_trace *trace)
 {
