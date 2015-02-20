@@ -315,6 +315,20 @@ extern struct bt_ctf_field_type *bt_ctf_field_get_type(
 extern void bt_ctf_field_get(struct bt_ctf_field *field);
 extern void bt_ctf_field_put(struct bt_ctf_field *field);
 
+#define BT_CTF_FIELD_MOVE(_dst, _src)	\
+	do {				\
+		(_dst) = (_src);	\
+		(_src) = NULL;		\
+	} while (0);
+
+#define BT_CTF_FIELD_MOVE_CALL(_call, _src)	\
+	({					\
+		typeof(_call) ret = _call;	\
+		bt_ctf_field_put(_src);		\
+		(_src) = NULL;			\
+		ret;				\
+	})
+
 #ifdef __cplusplus
 }
 #endif

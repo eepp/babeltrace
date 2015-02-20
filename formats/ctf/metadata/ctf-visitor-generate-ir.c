@@ -1457,74 +1457,73 @@ static
 int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 		struct ctf_node *alias)
 {
-#if 0
-	struct bt_declaration *type_declaration;
+	struct bt_ctf_field_type *type_decl = NULL;
 	struct ctf_node *node;
-	GQuark dummy_id;
-	GQuark alias_q;
-	int err;
-
-	/* See ctf_visitor_type_declarator() in the semantic validator. */
+	GQuark qdummy_field_name;
+	GQuark qalias;
+	int ret = 0;
 
 	/*
 	 * Create target type declaration.
 	 */
-
-	if (bt_list_empty(&target->u.typealias_target.type_declarators))
+	if (bt_list_empty(&target->u.typealias_target.type_declarators)) {
 		node = NULL;
-	else
+	} else {
 		node = _bt_list_first_entry(&target->u.typealias_target.type_declarators,
-				struct ctf_node, siblings);
-	type_declaration = ctf_type_declarator_visit(fd, depth,
+			struct ctf_node, siblings);
+	}
+
+	ret = visit_type_declarator(ctx,
 		target->u.typealias_target.type_specifier_list,
-		&dummy_id, node,
-		scope, NULL, trace);
-	if (!type_declaration) {
-		fprintf(fd, "[error] %s: problem creating type declaration\n", __func__);
-		err = -EINVAL;
+		&qdummy_field_name, node, &type_decl, NULL);
+
+	if (ret) {
+		assert(!type_decl);
+		fprintf(ctx->efd, "[error] %s: problem creating type declaration\n", __func__);
 		goto error;
 	}
-	/*
-	 * Don't allow typedef and typealias of untagged
-	 * variants.
-	 */
-	if (type_declaration->id == CTF_TYPE_UNTAGGED_VARIANT) {
+
+	/* do not allow typedef and typealias of untagged variants */
+#if 0
+	if (type_decl->id == CTF_TYPE_UNTAGGED_VARIANT) {
 		fprintf(fd, "[error] %s: typedef of untagged variant is not permitted.\n", __func__);
-		bt_declaration_unref(type_declaration);
+		bt_declaration_unref(type_decl);
 		return -EPERM;
 	}
+#endif
+
 	/*
 	 * The semantic validator does not check whether the target is
 	 * abstract or not (if it has an identifier). Check it here.
 	 */
-	if (dummy_id != 0) {
-		fprintf(fd, "[error] %s: expecting empty identifier\n", __func__);
-		err = -EINVAL;
+	if (qdummy_field_name != 0) {
+		fprintf(ctx->efd, "[error] %s: expecting empty identifier\n",
+			__func__);
+		ret = -EINVAL;
 		goto error;
 	}
-	/*
-	 * Create alias identifier.
-	 */
 
+	/* create alias identifier */
 	node = _bt_list_first_entry(&alias->u.typealias_alias.type_declarators,
-				struct ctf_node, siblings);
-	alias_q = create_typealias_identifier(fd, depth,
-			alias->u.typealias_alias.type_specifier_list, node);
-	err = bt_register_declaration(alias_q, type_declaration, scope);
-	if (err)
+		struct ctf_node, siblings);
+	qalias = create_typealias_identifier(ctx,
+		alias->u.typealias_alias.type_specifier_list, node);
+	ret = ctx_decl_scope_register_alias(ctx->current_scope,
+		g_quark_to_string(qalias), type_decl);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot register typealias \"%s\"\n",
+			__func__, g_quark_to_string(qalias));
 		goto error;
-	bt_declaration_unref(type_declaration);
-	return 0;
+	}
 
 error:
-	if (type_declaration) {
-		type_declaration->declaration_free(type_declaration);
+	if (type_decl) {
+		bt_ctf_field_type_put(type_decl);
+		type_decl = NULL;
 	}
-	return err;
-#endif
-	puts(":: visiting typealias");
 
-	return 0;
+	return ret;
 }
 
 static
