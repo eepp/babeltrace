@@ -524,6 +524,11 @@ struct last_enum_value {
 int opt_clock_force_correlate;
 
 static
+int visit_type_specifier_list(struct ctx *ctx,
+		struct ctf_node *ts_list,
+		struct bt_ctf_field_type **decl);
+
+static
 int is_unary_string(struct bt_list_head *head)
 {
 	struct ctf_node *node;
@@ -773,9 +778,9 @@ int is_align_valid(uint64_t align)
     return (align != 0) && !(align & (align - 1));
 }
 
-#if 0
 static
-int visit_type_specifier(FILE *fd, struct ctf_node *type_specifier, GString *str)
+int visit_type_specifier2(struct ctx *ctx, struct ctf_node *type_specifier,
+	GString *str)
 {
 	if (type_specifier->type != NODE_TYPE_SPECIFIER)
 		return -EINVAL;
@@ -829,7 +834,7 @@ int visit_type_specifier(FILE *fd, struct ctf_node *type_specifier, GString *str
 		struct ctf_node *node = type_specifier->u.type_specifier.node;
 
 		if (!node->u._struct.name) {
-			fprintf(fd, "[error] %s: unexpected empty variant name\n", __func__);
+			fprintf(ctx->efd, "[error] %s: unexpected empty variant name\n", __func__);
 			return -EINVAL;
 		}
 		g_string_append(str, "struct ");
@@ -841,7 +846,7 @@ int visit_type_specifier(FILE *fd, struct ctf_node *type_specifier, GString *str
 		struct ctf_node *node = type_specifier->u.type_specifier.node;
 
 		if (!node->u.variant.name) {
-			fprintf(fd, "[error] %s: unexpected empty variant name\n", __func__);
+			fprintf(ctx->efd, "[error] %s: unexpected empty variant name\n", __func__);
 			return -EINVAL;
 		}
 		g_string_append(str, "variant ");
@@ -853,7 +858,7 @@ int visit_type_specifier(FILE *fd, struct ctf_node *type_specifier, GString *str
 		struct ctf_node *node = type_specifier->u.type_specifier.node;
 
 		if (!node->u._enum.enum_id) {
-			fprintf(fd, "[error] %s: unexpected empty enum ID\n", __func__);
+			fprintf(ctx->efd, "[error] %s: unexpected empty enum ID\n", __func__);
 			return -EINVAL;
 		}
 		g_string_append(str, "enum ");
@@ -864,14 +869,15 @@ int visit_type_specifier(FILE *fd, struct ctf_node *type_specifier, GString *str
 	case TYPESPEC_INTEGER:
 	case TYPESPEC_STRING:
 	default:
-		fprintf(fd, "[error] %s: unknown specifier\n", __func__);
+		fprintf(ctx->efd, "[error] %s: unknown specifier\n", __func__);
 		return -EINVAL;
 	}
 	return 0;
 }
 
 static
-int visit_type_specifier_list(FILE *fd, struct ctf_node *type_specifier_list, GString *str)
+int visit_type_specifier_list2(struct ctx *ctx, struct ctf_node *type_specifier_list,
+	GString *str)
 {
 	struct ctf_node *iter;
 	int alias_item_nr = 0;
@@ -881,7 +887,7 @@ int visit_type_specifier_list(FILE *fd, struct ctf_node *type_specifier_list, GS
 		if (alias_item_nr != 0)
 			g_string_append(str, " ");
 		alias_item_nr++;
-		ret = visit_type_specifier(fd, iter, str);
+		ret = visit_type_specifier2(ctx, iter, str);
 		if (ret)
 			return ret;
 	}
@@ -889,217 +895,345 @@ int visit_type_specifier_list(FILE *fd, struct ctf_node *type_specifier_list, GS
 }
 
 static
-GQuark create_typealias_identifier(FILE *fd, int depth,
+GQuark create_typealias_identifier(struct ctx *ctx,
 	struct ctf_node *type_specifier_list,
 	struct ctf_node *node_type_declarator)
 {
 	struct ctf_node *iter;
 	GString *str;
 	char *str_c;
-	GQuark alias_q;
+	GQuark qalias;
 	int ret;
 
 	str = g_string_new("");
-	ret = visit_type_specifier_list(fd, type_specifier_list, str);
+	ret = visit_type_specifier_list2(ctx, type_specifier_list, str);
+
 	if (ret) {
 		g_string_free(str, TRUE);
 		return 0;
 	}
+
 	bt_list_for_each_entry(iter, &node_type_declarator->u.type_declarator.pointers, siblings) {
 		g_string_append(str, " *");
-		if (iter->u.pointer.const_qualifier)
+
+		if (iter->u.pointer.const_qualifier) {
 			g_string_append(str, " const");
+		}
 	}
+
 	str_c = g_string_free(str, FALSE);
-	alias_q = g_quark_from_string(str_c);
+	qalias = g_quark_from_string(str_c);
+
 	g_free(str_c);
-	return alias_q;
+
+	return qalias;
 }
 
 static
-struct bt_declaration *ctf_type_declarator_visit(FILE *fd, int depth,
-	struct ctf_node *type_specifier_list,
-	GQuark *field_name,
-	struct ctf_node *node_type_declarator,
-	struct declaration_scope *declaration_scope,
-	struct bt_declaration *nested_declaration,
-	struct ctf_trace *trace)
+int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
+	GQuark *field_name, struct ctf_node *node_type_declarator,
+	struct bt_ctf_field_type **field_decl,
+	struct bt_ctf_field_type *nested_decl)
 {
 	/*
-	 * Visit type declarator by first taking care of sequence/array
-	 * (recursively). Then, when we get to the identifier, take care
-	 * of pointers.
+	 * During this whole function, nested_decl is always OURS,
+	 * whereas field_decl is an output which we create, but
+	 * belongs to the caller.
 	 */
 
+	int ret = 0;
+
+	*field_decl = NULL;
+
+	/* validate type declarator node */
 	if (node_type_declarator) {
 		if (node_type_declarator->u.type_declarator.type == TYPEDEC_UNKNOWN) {
-			return NULL;
+			ret = -EINVAL;
+			goto error;
 		}
 
-		/* TODO: gcc bitfields not supported yet. */
+		/* TODO: GCC bitfields not supported yet */
 		if (node_type_declarator->u.type_declarator.bitfield_len != NULL) {
-			fprintf(fd, "[error] %s: gcc bitfields are not supported yet.\n", __func__);
-			return NULL;
+			fprintf(ctx->efd, "[error] %s: GCC bitfields are not supported yet\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
 		}
 	}
 
-	if (!nested_declaration) {
+	/* find the right nested declaration if not provided */
+	if (!nested_decl) {
 		if (node_type_declarator && !bt_list_empty(&node_type_declarator->u.type_declarator.pointers)) {
-			GQuark alias_q;
+			GQuark qalias;
 
 			/*
-			 * If we have a pointer declarator, it _has_ to be present in
-			 * the typealiases (else fail).
+			 * If we have a pointer declarator, it HAS to
+			 * be present in the typealiases (else fail).
 			 */
-			alias_q = create_typealias_identifier(fd, depth,
+			qalias = create_typealias_identifier(ctx,
 				type_specifier_list, node_type_declarator);
-			nested_declaration = bt_lookup_declaration(alias_q, declaration_scope);
-			if (!nested_declaration) {
-				fprintf(fd, "[error] %s: cannot find typealias \"%s\".\n", __func__, g_quark_to_string(alias_q));
-				return NULL;
+			nested_decl = ctx_decl_scope_lookup_alias(ctx->current_scope,
+				g_quark_to_string(qalias), -1);
+
+			if (!nested_decl) {
+				fprintf(ctx->efd, "[error] %s: cannot find typealias \"%s\"\n",
+					__func__, g_quark_to_string(qalias));
+				ret = -EINVAL;
+				goto error;
 			}
-			if (nested_declaration->id == CTF_TYPE_INTEGER) {
-				struct declaration_integer *integer_declaration =
-					container_of(nested_declaration, struct declaration_integer, p);
-				/* For base to 16 for pointers (expected pretty-print) */
-				if (!integer_declaration->base) {
-					/*
-					 * We need to do a copy of the
-					 * integer declaration to modify it. There could be other references to
-					 * it.
-					 */
-					integer_declaration = bt_integer_declaration_new(integer_declaration->len,
-						integer_declaration->byte_order, integer_declaration->signedness,
-						integer_declaration->p.alignment, 16, integer_declaration->encoding,
-						integer_declaration->clock);
-					nested_declaration = &integer_declaration->p;
+
+			bt_ctf_field_type_get(nested_decl);
+
+			if (bt_ctf_field_type_get_type_id(nested_decl) == CTF_TYPE_INTEGER) {
+				/* copy integer to set its base to 16 */
+				struct bt_ctf_field_type *int_decl_copy;
+
+				int_decl_copy = bt_ctf_field_type_integer_create(
+					bt_ctf_field_type_integer_get_size(nested_decl));
+				bt_ctf_field_type_integer_set_signed(nested_decl,
+					bt_ctf_field_type_integer_get_signed(nested_decl));
+				bt_ctf_field_type_integer_set_base(nested_decl,
+					BT_CTF_INTEGER_BASE_HEXADECIMAL);
+				bt_ctf_field_type_integer_set_encoding(nested_decl,
+					bt_ctf_field_type_integer_get_encoding(nested_decl));
+
+				struct bt_ctf_clock *mapped_clock =
+					bt_ctf_field_type_integer_get_mapped_clock(nested_decl);
+
+				if (mapped_clock) {
+					bt_ctf_field_type_integer_set_mapped_clock(int_decl_copy, mapped_clock);
+					bt_ctf_clock_put(mapped_clock);
 				}
+
+				bt_ctf_field_type_put(nested_decl);
+				nested_decl = int_decl_copy;
 			}
 		} else {
-			nested_declaration = ctf_type_specifier_list_visit(fd, depth,
-				type_specifier_list, declaration_scope, trace);
+			ret = visit_type_specifier_list(ctx,
+				type_specifier_list, &nested_decl);
+
+			if (ret) {
+				assert(!nested_decl);
+				goto error;
+			}
 		}
 	}
 
-	if (!node_type_declarator)
-		return nested_declaration;
+	assert(nested_decl);
+
+	if (!node_type_declarator) {
+		/* move ownership */
+		*field_decl = nested_decl;
+		nested_decl = NULL;
+		goto end;
+	}
 
 	if (node_type_declarator->u.type_declarator.type == TYPEDEC_ID) {
-		if (node_type_declarator->u.type_declarator.u.id)
+		if (node_type_declarator->u.type_declarator.u.id) {
 			*field_name = g_quark_from_string(node_type_declarator->u.type_declarator.u.id);
-		else
+		} else {
 			*field_name = 0;
-		return nested_declaration;
+		}
+
+		/* move ownership */
+		*field_decl = nested_decl;
+		nested_decl = NULL;
+		goto end;
 	} else {
-		struct bt_declaration *declaration;
+		struct bt_ctf_field_type *decl;
 		struct ctf_node *first;
 
-		/* TYPEDEC_NESTED */
-
-		if (!nested_declaration) {
-			fprintf(fd, "[error] %s: nested type is unknown.\n", __func__);
-			return NULL;
-		}
-
-		/* create array/sequence, pass nested_declaration as child. */
+		/* create array/sequence, pass nested_decl as child */
 		if (bt_list_empty(&node_type_declarator->u.type_declarator.u.nested.length)) {
-			fprintf(fd, "[error] %s: expecting length field reference or value.\n", __func__);
-			return NULL;
+			fprintf(ctx->efd, "[error] %s: expecting length field reference or value\n",
+				__func__);
+			ret = -EINVAL;
+			goto error;
 		}
+
 		first = _bt_list_first_entry(&node_type_declarator->u.type_declarator.u.nested.length,
-				struct ctf_node, siblings);
+			struct ctf_node, siblings);
+
 		if (first->type != NODE_UNARY_EXPRESSION) {
-			return NULL;
+			ret = -EINVAL;
+			goto error;
 		}
 
 		switch (first->u.unary_expression.type) {
 		case UNARY_UNSIGNED_CONSTANT:
 		{
-			struct declaration_array *array_declaration;
+			struct bt_ctf_field_type *array_decl;
 			size_t len;
 
 			len = first->u.unary_expression.u.unsigned_constant;
-			array_declaration = bt_array_declaration_new(len, nested_declaration,
-						declaration_scope);
+			array_decl = bt_ctf_field_type_array_create(nested_decl,
+				len);
 
-			if (!array_declaration) {
-				fprintf(fd, "[error] %s: cannot create array declaration.\n", __func__);
-				return NULL;
+			bt_ctf_field_type_put(nested_decl);
+			nested_decl = NULL;
+
+			if (!array_decl) {
+				fprintf(ctx->efd, "[error] %s: cannot create array declaration\n",
+					__func__);
+				ret = -ENOMEM;
+				goto error;
 			}
-			bt_declaration_unref(nested_declaration);
-			declaration = &array_declaration->p;
+
+			/* move ownership */
+			decl = array_decl;
+			array_decl = NULL;
 			break;
 		}
+
 		case UNARY_STRING:
 		{
-			/* Lookup unsigned integer definition, create sequence */
+			/* lookup unsigned integer definition, create sequence */
 			char *length_name = concatenate_unary_strings(&node_type_declarator->u.type_declarator.u.nested.length);
-			struct declaration_sequence *sequence_declaration;
+			struct bt_ctf_field_type *seq_decl;
 
-			if (!length_name)
-				return NULL;
-			sequence_declaration = bt_sequence_declaration_new(length_name, nested_declaration, declaration_scope);
-			if (!sequence_declaration) {
-				fprintf(fd, "[error] %s: cannot create sequence declaration.\n", __func__);
-				g_free(length_name);
-				return NULL;
+			if (!length_name) {
+				ret = -EINVAL;
+				goto error;
 			}
-			bt_declaration_unref(nested_declaration);
-			declaration = &sequence_declaration->p;
-			g_free(length_name);
+
+			seq_decl = bt_ctf_field_type_sequence_create(nested_decl,
+				length_name);
+
+			bt_ctf_field_type_put(nested_decl);
+			nested_decl = NULL;
+
+			if (!seq_decl) {
+				fprintf(ctx->efd, "[error] %s: cannot create sequence declaration\n",
+					__func__);
+				ret = -ENOMEM;
+				goto error;
+			}
+
+			/* move ownership */
+			decl = seq_decl;
+			seq_decl = NULL;
 			break;
 		}
+
 		default:
-			return NULL;
+			ret = -EINVAL;
+			goto error;
 		}
 
-		/* Pass it as content of outer container */
-		declaration = ctf_type_declarator_visit(fd, depth,
-				type_specifier_list, field_name,
-				node_type_declarator->u.type_declarator.u.nested.type_declarator,
-				declaration_scope, declaration, trace);
-		return declaration;
+		assert(!nested_decl);
+		assert(decl);
+		assert(!*field_decl);
+
+		/*
+		 * At this point, we found the next nested declaration.
+		 * We currently own this (and lost the ownership of
+		 * nested_decl in the meantime). Pass this next
+		 * nested declaration as the content of the outer
+		 * container, MOVING its ownership.
+		 */
+		struct bt_ctf_field_type *outer_field_decl = NULL;
+
+		ret = visit_type_declarator(ctx, type_specifier_list,
+			field_name,
+			node_type_declarator->u.type_declarator.u.nested.type_declarator,
+			&outer_field_decl, decl);
+		decl = NULL;
+
+		if (ret) {
+			assert(!outer_field_decl);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		assert(outer_field_decl);
+
+		/* move ownership */
+		*field_decl = outer_field_decl;
 	}
+
+end:
+	if (nested_decl) {
+		bt_ctf_field_type_put(nested_decl);
+	}
+
+	assert(*field_decl);
+
+	return 0;
+
+error:
+	if (nested_decl) {
+		bt_ctf_field_type_put(nested_decl);
+	}
+
+	if (*field_decl) {
+		bt_ctf_field_type_put(*field_decl);
+	}
+
+	return ret;
 }
 
 static
-int ctf_struct_type_declarators_visit(FILE *fd, int depth,
-	struct declaration_struct *struct_declaration,
+int visit_struct_field(struct ctx *ctx,
+	struct bt_ctf_field_type *struct_decl,
 	struct ctf_node *type_specifier_list,
-	struct bt_list_head *type_declarators,
-	struct declaration_scope *declaration_scope,
-	struct ctf_trace *trace)
+	struct bt_list_head *type_declarators)
 {
+	int ret = 0;
 	struct ctf_node *iter;
-	GQuark field_name;
+	struct bt_ctf_field_type *field_decl = NULL;
 
 	bt_list_for_each_entry(iter, type_declarators, siblings) {
-		struct bt_declaration *field_declaration;
+		field_decl = NULL;
+		GQuark qfield_name;
 
-		field_declaration = ctf_type_declarator_visit(fd, depth,
-						type_specifier_list,
-						&field_name, iter,
-						struct_declaration->scope,
-						NULL, trace);
-		if (!field_declaration) {
-			fprintf(fd, "[error] %s: unable to find struct field declaration type\n", __func__);
-			return -EINVAL;
+		ret = visit_type_declarator(ctx, type_specifier_list,
+			&qfield_name, iter, &field_decl, NULL);
+
+		if (ret) {
+			assert(!field_decl);
+			fprintf(ctx->efd, "[error] %s: unable to find struct field declaration type\n",
+				__func__);
+			goto error;
 		}
 
-		/* Check if field with same name already exists */
-		if (bt_struct_declaration_lookup_field_index(struct_declaration, field_name) >= 0) {
-			fprintf(fd, "[error] %s: duplicate field %s in struct\n", __func__, g_quark_to_string(field_name));
-			return -EINVAL;
+		const char *field_name = g_quark_to_string(qfield_name);
+
+		/* check if field with same name already exists */
+		struct bt_ctf_field_type *existing_field_decl;
+
+		existing_field_decl = bt_ctf_field_type_structure_get_field_type_by_name(struct_decl,
+			field_name);
+
+		if (existing_field_decl) {
+			bt_ctf_field_type_put(existing_field_decl);
+			fprintf(ctx->efd, "[error] %s: duplicate field \"%s\" in struct\n",
+				__func__, field_name);
+			ret = -EINVAL;
+			goto error;
 		}
 
-		bt_struct_declaration_add_field(struct_declaration,
-					     g_quark_to_string(field_name),
-					     field_declaration);
-		bt_declaration_unref(field_declaration);
+		/* add field to structure */
+		ret = bt_ctf_field_type_structure_add_field(struct_decl,
+			field_decl, field_name);
+		bt_ctf_field_type_put(field_decl);
+		field_decl = NULL;
+
+		if (ret) {
+			goto error;
+		}
 	}
+
 	return 0;
+
+error:
+	if (field_decl) {
+		bt_ctf_field_type_put(field_decl);
+	}
+
+	return ret;
 }
 
+#if 0
 static
 int ctf_variant_type_declarators_visit(FILE *fd, int depth,
 	struct declaration_untagged_variant *untagged_variant_declaration,
@@ -1251,50 +1385,57 @@ error:
 	return 0;
 }
 
-#if 0
 static
-int ctf_struct_declaration_list_visit(FILE *fd, int depth,
-	struct ctf_node *iter, struct declaration_struct *struct_declaration,
-	struct ctf_trace *trace)
+int visit_struct_entry(struct ctx *ctx, struct ctf_node *entry_node,
+	struct bt_ctf_field_type *struct_decl)
 {
 	int ret;
 
-	switch (iter->type) {
+	switch (entry_node->type) {
 	case NODE_TYPEDEF:
-		/* For each declarator, declare type and add type to struct bt_declaration scope */
-		ret = ctf_typedef_visit(fd, depth,
-			struct_declaration->scope,
-			iter->u._typedef.type_specifier_list,
-			&iter->u._typedef.type_declarators, trace);
-		if (ret)
-			return ret;
+		ret = visit_typedef(ctx,
+			entry_node->u._typedef.type_specifier_list,
+			&entry_node->u._typedef.type_declarators);
+
+		if (ret) {
+			goto error;
+		}
 		break;
+
 	case NODE_TYPEALIAS:
-		/* Declare type with declarator and add type to struct bt_declaration scope */
-		ret = ctf_typealias_visit(fd, depth,
-			struct_declaration->scope,
-			iter->u.typealias.target,
-			iter->u.typealias.alias, trace);
-		if (ret)
-			return ret;
+		ret = visit_typealias(ctx, entry_node->u.typealias.target,
+			entry_node->u.typealias.alias);
+
+		if (ret) {
+			goto error;
+		}
 		break;
+
 	case NODE_STRUCT_OR_VARIANT_DECLARATION:
-		/* Add field to structure declaration */
-		ret = ctf_struct_type_declarators_visit(fd, depth,
-				struct_declaration,
-				iter->u.struct_or_variant_declaration.type_specifier_list,
-				&iter->u.struct_or_variant_declaration.type_declarators,
-				struct_declaration->scope, trace);
-		if (ret)
-			return ret;
+		/* field */
+		ret = visit_struct_field(ctx, struct_decl,
+			entry_node->u.struct_or_variant_declaration.type_specifier_list,
+			&entry_node->u.struct_or_variant_declaration.type_declarators);
+
+		if (ret) {
+			goto error;
+		}
 		break;
+
 	default:
-		fprintf(fd, "[error] %s: unexpected node type %d\n", __func__, (int) iter->type);
-		return -EINVAL;
+		fprintf(ctx->efd, "[error] %s: unexpected node type: %d\n",
+			__func__, (int) entry_node->type);
+		ret = -EINVAL;
+		goto error;
 	}
+
 	return 0;
+
+error:
+	return ret;
 }
 
+#if 0
 static
 int ctf_variant_declaration_list_visit(FILE *fd, int depth,
 	struct ctf_node *iter,
@@ -1381,14 +1522,11 @@ int visit_struct(struct ctx *ctx, const char *name,
 		uint64_t min_align_value = 0;
 
 		if (!bt_list_empty(min_align)) {
-			int ret;
-
 			ret = get_unary_unsigned(min_align, &min_align_value);
 
 			if (ret) {
 				fprintf(ctx->efd, "[error] %s: unexpected unary expression for structure declaration's \"align\" attribute\n",
 					__func__);
-				ret = -EINVAL;
 				goto error;
 			}
 		}
@@ -1402,15 +1540,10 @@ int visit_struct(struct ctx *ctx, const char *name,
 			goto error;
 		}
 
-		struct ctf_node *iter;
+		struct ctf_node *entry_node;
 
-		bt_list_for_each_entry(iter, decl_list, siblings) {
-			int ret = 0;
-
-			/*
-			ret = ctf_struct_declaration_list_visit(fd, depth + 1, iter,
-				struct_declaration, trace);
-			*/
+		bt_list_for_each_entry(entry_node, decl_list, siblings) {
+			ret = visit_struct_entry(ctx, entry_node, *struct_decl);
 
 			if (ret) {
 				goto error;
@@ -1418,7 +1551,7 @@ int visit_struct(struct ctx *ctx, const char *name,
 		}
 
 		if (name) {
-			int ret = ctx_decl_scope_register_struct(ctx->current_scope,
+			ret = ctx_decl_scope_register_struct(ctx->current_scope,
 				name, *struct_decl);
 
 			if (ret) {
