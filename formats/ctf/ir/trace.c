@@ -449,13 +449,13 @@ struct bt_ctf_clock *bt_ctf_trace_get_clock_by_name(
 
 	for (x = 0; x < trace->clocks->len; ++x) {
 		struct bt_ctf_clock *clk = g_ptr_array_index(trace->clocks, x);
-		const char *clk_name = bt_ctf_clock_get_name(clock);
+		const char *clk_name = bt_ctf_clock_get_name(clk);
 
 		if (!clk_name) {
 			goto end;
 		}
 
-		if (!!strcmp(clk_name, name)) {
+		if (!strcmp(clk_name, name)) {
 			clock = clk;
 			bt_ctf_clock_get(clock);
 			goto end;
