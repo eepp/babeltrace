@@ -94,6 +94,18 @@ enum {
 #define _bt_list_first_entry(ptr, type, member)	\
 	bt_list_entry((ptr)->next, type, member)
 
+#define _BT_CTF_FIELD_PUT(_field)		\
+	do {					\
+		bt_ctf_field_type_put(_field);	\
+		_field = NULL;			\
+	} while (0)
+
+#define _BT_CTF_FIELD_MOVE(_dst, _src)	\
+	do {				\
+		(_dst) = (_src);	\
+		(_src) = NULL;		\
+	} while (0)
+
 /*
  * Declaration scope of a visitor context. This represents a TSDL
  * lexical scope, so that aliases and named
@@ -143,7 +155,8 @@ struct ctx_decl_scope *ctx_decl_scope_create(struct ctx_decl_scope *parent_scope
 		return NULL;
 	}
 
-	scope->decl_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+	scope->decl_map = g_hash_table_new_full(g_direct_hash, g_direct_equal,
+		NULL, (GDestroyNotify) bt_ctf_field_type_put);
 	scope->parent_scope = parent_scope;
 
 	return scope;
@@ -225,10 +238,13 @@ struct bt_ctf_field_type *ctx_decl_scope_lookup_prefix_alias(
 	}
 
 	while (cur_scope && cur_levels < levels) {
-		decl = g_hash_table_lookup(scope->decl_map,
+		//printf("looking up %s in scope %p\n", g_quark_to_string(qname), cur_scope);
+
+		decl = g_hash_table_lookup(cur_scope->decl_map,
 			(gconstpointer) (unsigned long) qname);
 
 		if (decl) {
+			bt_ctf_field_type_get(decl);
 			break;
 		}
 
@@ -324,19 +340,27 @@ int ctx_decl_scope_register_prefix_alias(struct ctx_decl_scope *scope,
 
 	GQuark qname = get_prefixed_named_quark(prefix, name);
 
+	//printf("registering %s in scope %p\n", g_quark_to_string(qname), scope);
+
 	if (!qname) {
 		ret = -ENOMEM;
 		goto error;
 	}
 
 	/* make sure alias does not exist in local scope */
-	if (ctx_decl_scope_lookup_prefix_alias(scope, prefix, name, 1)) {
+	struct bt_ctf_field_type *edecl = ctx_decl_scope_lookup_prefix_alias(
+		scope, prefix, name, 1);
+
+	if (edecl) {
+		bt_ctf_field_type_put(edecl);
 		ret = -EEXIST;
 		goto error;
 	}
 
 	g_hash_table_insert(scope->decl_map,
 		(gpointer) (unsigned long) qname, decl);
+
+	bt_ctf_field_type_get(decl);
 
 	return 0;
 
@@ -508,17 +532,6 @@ void ctx_pop_scope(struct ctx *ctx)
 	ctx_decl_scope_destroy(ctx->current_scope);
 	ctx->current_scope = parent_scope;
 }
-
-#if 0
-struct last_enum_value {
-	union {
-		int64_t s;
-		uint64_t u;
-	} u;
-};
-#endif
-
-int opt_clock_force_correlate;
 
 static
 int visit_type_specifier_list(struct ctx *ctx,
@@ -866,7 +879,7 @@ enum bt_ctf_byte_order get_real_byte_order(struct ctx *ctx,
 static
 int is_align_valid(uint64_t align)
 {
-    return (align != 0) && !(align & (align - 1));
+	return (align != 0) && !(align & (align - 1));
 }
 
 static
@@ -1001,8 +1014,8 @@ end:
 }
 
 static
-int visit_type_specifier_list2(struct ctx *ctx, struct ctf_node *type_specifier_list,
-	GString *str)
+int visit_type_specifier_list2(struct ctx *ctx,
+	struct ctf_node *type_specifier_list, GString *str)
 {
 	struct ctf_node *iter;
 	int alias_item_nr = 0;
@@ -1031,9 +1044,9 @@ GQuark create_typealias_identifier(struct ctx *ctx,
 	struct ctf_node *node_type_declarator)
 {
 	struct ctf_node *iter;
+	GQuark qalias = 0;
 	GString *str;
 	char *str_c;
-	GQuark qalias = 0;
 	int ret;
 
 	str = g_string_new("");
@@ -1114,8 +1127,6 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 				goto error;
 			}
 
-			bt_ctf_field_type_get(nested_decl);
-
 			if (bt_ctf_field_type_get_type_id(nested_decl) == CTF_TYPE_INTEGER) {
 				/* copy integer to set its base to 16 */
 				struct bt_ctf_field_type *int_decl_copy;
@@ -1141,10 +1152,8 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 				nested_decl = int_decl_copy;
 			}
 		} else {
-			puts("va la right?");
 			ret = visit_type_specifier_list(ctx,
 				type_specifier_list, &nested_decl);
-			printf("return: %d\n", ret);
 
 			if (ret) {
 				assert(!nested_decl);
@@ -1358,6 +1367,8 @@ int visit_struct_field(struct ctx *ctx,
 		field_decl = NULL;
 
 		if (ret) {
+			fprintf(ctx->efd, "[error] %s: cannot add field %s to structure\n",
+				__func__, g_quark_to_string(qfield_name));
 			goto error;
 		}
 	}
@@ -1455,76 +1466,75 @@ int visit_typedef(struct ctx *ctx, struct ctf_node *type_specifier_list,
 
 static
 int visit_typealias(struct ctx *ctx, struct ctf_node *target,
-		struct ctf_node *alias)
+	struct ctf_node *alias)
 {
-#if 0
-	struct bt_declaration *type_declaration;
+	struct bt_ctf_field_type *type_decl = NULL;
 	struct ctf_node *node;
-	GQuark dummy_id;
-	GQuark alias_q;
-	int err;
-
-	/* See ctf_visitor_type_declarator() in the semantic validator. */
+	GQuark qdummy_field_name;
+	GQuark qalias;
+	int ret = 0;
 
 	/*
 	 * Create target type declaration.
 	 */
-
-	if (bt_list_empty(&target->u.typealias_target.type_declarators))
+	if (bt_list_empty(&target->u.typealias_target.type_declarators)) {
 		node = NULL;
-	else
+	} else {
 		node = _bt_list_first_entry(&target->u.typealias_target.type_declarators,
-				struct ctf_node, siblings);
-	type_declaration = ctf_type_declarator_visit(fd, depth,
-		target->u.typealias_target.type_specifier_list,
-		&dummy_id, node,
-		scope, NULL, trace);
-	if (!type_declaration) {
-		fprintf(fd, "[error] %s: problem creating type declaration\n", __func__);
-		err = -EINVAL;
-		goto error;
+			struct ctf_node, siblings);
 	}
-	/*
-	 * Don't allow typedef and typealias of untagged
-	 * variants.
-	 */
-	if (type_declaration->id == CTF_TYPE_UNTAGGED_VARIANT) {
+
+	ret = visit_type_declarator(ctx,
+		target->u.typealias_target.type_specifier_list,
+		&qdummy_field_name, node, &type_decl, NULL);
+
+	if (ret) {
+		assert(!type_decl);
+		fprintf(ctx->efd, "[error] %s: problem creating type declaration\n", __func__);
+		goto end;
+	}
+
+	/* do not allow typedef and typealias of untagged variants */
+#if 0
+	if (type_decl->id == CTF_TYPE_UNTAGGED_VARIANT) {
 		fprintf(fd, "[error] %s: typedef of untagged variant is not permitted.\n", __func__);
-		bt_declaration_unref(type_declaration);
+		bt_declaration_unref(type_decl);
 		return -EPERM;
 	}
+#endif
+
 	/*
 	 * The semantic validator does not check whether the target is
 	 * abstract or not (if it has an identifier). Check it here.
 	 */
-	if (dummy_id != 0) {
-		fprintf(fd, "[error] %s: expecting empty identifier\n", __func__);
-		err = -EINVAL;
-		goto error;
+	if (qdummy_field_name != 0) {
+		fprintf(ctx->efd, "[error] %s: expecting empty identifier\n",
+			__func__);
+		ret = -EINVAL;
+		goto end;
 	}
-	/*
-	 * Create alias identifier.
-	 */
 
+	/* create alias identifier */
 	node = _bt_list_first_entry(&alias->u.typealias_alias.type_declarators,
-				struct ctf_node, siblings);
-	alias_q = create_typealias_identifier(fd, depth,
-			alias->u.typealias_alias.type_specifier_list, node);
-	err = bt_register_declaration(alias_q, type_declaration, scope);
-	if (err)
-		goto error;
-	bt_declaration_unref(type_declaration);
-	return 0;
+		struct ctf_node, siblings);
+	qalias = create_typealias_identifier(ctx,
+		alias->u.typealias_alias.type_specifier_list, node);
+	ret = ctx_decl_scope_register_alias(ctx->current_scope,
+		g_quark_to_string(qalias), type_decl);
 
-error:
-	if (type_declaration) {
-		type_declaration->declaration_free(type_declaration);
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot register typealias \"%s\"\n",
+			__func__, g_quark_to_string(qalias));
+		goto end;
 	}
-	return err;
-#endif
-	puts(":: visiting typealias");
 
-	return 0;
+end:
+	if (type_decl) {
+		bt_ctf_field_type_put(type_decl);
+		type_decl = NULL;
+	}
+
+	return ret;
 }
 
 static
@@ -1647,11 +1657,14 @@ int visit_struct_decl(struct ctx *ctx, const char *name,
 			ret = -EINVAL;
 			goto error;
 		}
-
-		bt_ctf_field_type_get(*struct_decl);
 	} else {
 		if (name) {
-			if (ctx_decl_scope_lookup_struct(ctx->current_scope, name, 1)) {
+			struct bt_ctf_field_type *estruct_decl =
+				ctx_decl_scope_lookup_struct(ctx->current_scope,
+					name, 1);
+
+			if (estruct_decl) {
+				bt_ctf_field_type_put(estruct_decl);
 				fprintf(ctx->efd, "[error] %s: \"struct %s\" already declared in local scope\n",
 					__func__, name);
 				ret = -EINVAL;
@@ -1787,193 +1800,209 @@ error:
 	untagged_variant_declaration->p.declaration_free(&untagged_variant_declaration->p);
 	return NULL;
 }
-
-static
-int ctf_enumerator_list_visit(FILE *fd, int depth,
-		struct ctf_node *enumerator,
-		struct declaration_enum *enum_declaration,
-		struct last_enum_value *last)
-{
-	GQuark q;
-	struct ctf_node *iter;
-
-	q = g_quark_from_string(enumerator->u.enumerator.id);
-	if (enum_declaration->integer_declaration->signedness) {
-		int64_t start = 0, end = 0;
-		int nr_vals = 0;
-
-		bt_list_for_each_entry(iter, &enumerator->u.enumerator.values, siblings) {
-			int64_t *target;
-
-			if (iter->type != NODE_UNARY_EXPRESSION)
-				return -EINVAL;
-			if (nr_vals == 0)
-				target = &start;
-			else
-				target = &end;
-
-			switch (iter->u.unary_expression.type) {
-			case UNARY_SIGNED_CONSTANT:
-				*target = iter->u.unary_expression.u.signed_constant;
-				break;
-			case UNARY_UNSIGNED_CONSTANT:
-				*target = iter->u.unary_expression.u.unsigned_constant;
-				break;
-			default:
-				fprintf(fd, "[error] %s: invalid enumerator\n", __func__);
-				return -EINVAL;
-			}
-			if (nr_vals > 1) {
-				fprintf(fd, "[error] %s: invalid enumerator\n", __func__);
-				return -EINVAL;
-			}
-			nr_vals++;
-		}
-		if (nr_vals == 0)
-			start = last->u.s;
-		if (nr_vals <= 1)
-			end = start;
-		last->u.s = end + 1;
-		bt_enum_signed_insert(enum_declaration, start, end, q);
-	} else {
-		uint64_t start = 0, end = 0;
-		int nr_vals = 0;
-
-		bt_list_for_each_entry(iter, &enumerator->u.enumerator.values, siblings) {
-			uint64_t *target;
-
-			if (iter->type != NODE_UNARY_EXPRESSION)
-				return -EINVAL;
-			if (nr_vals == 0)
-				target = &start;
-			else
-				target = &end;
-
-			switch (iter->u.unary_expression.type) {
-			case UNARY_UNSIGNED_CONSTANT:
-				*target = iter->u.unary_expression.u.unsigned_constant;
-				break;
-			case UNARY_SIGNED_CONSTANT:
-				/*
-				 * We don't accept signed constants for enums with unsigned
-				 * container type.
-				 */
-				fprintf(fd, "[error] %s: invalid enumerator (signed constant encountered, but enum container type is unsigned)\n", __func__);
-				return -EINVAL;
-			default:
-				fprintf(fd, "[error] %s: invalid enumerator\n", __func__);
-				return -EINVAL;
-			}
-			if (nr_vals > 1) {
-				fprintf(fd, "[error] %s: invalid enumerator\n", __func__);
-				return -EINVAL;
-			}
-			nr_vals++;
-		}
-		if (nr_vals == 0)
-			start = last->u.u;
-		if (nr_vals <= 1)
-			end = start;
-		last->u.u = end + 1;
-		bt_enum_unsigned_insert(enum_declaration, start, end, q);
-	}
-	return 0;
-}
-
-static
-struct bt_declaration *ctf_declaration_enum_visit(FILE *fd, int depth,
-			const char *name,
-			struct ctf_node *container_type,
-			struct bt_list_head *enumerator_list,
-			int has_body,
-			struct declaration_scope *declaration_scope,
-			struct ctf_trace *trace)
-{
-	struct bt_declaration *declaration;
-	struct declaration_enum *enum_declaration;
-	struct declaration_integer *integer_declaration;
-	struct last_enum_value last_value;
-	struct ctf_node *iter;
-	GQuark dummy_id;
-
-	/*
-	 * For named enum (without body), lookup in
-	 * declaration scope. Don't take reference on enum
-	 * declaration: ref is only taken upon definition.
-	 */
-	if (!has_body) {
-		if (!name)
-			return NULL;
-		enum_declaration =
-			bt_lookup_enum_declaration(g_quark_from_string(name),
-						declaration_scope);
-		bt_declaration_ref(&enum_declaration->p);
-		return &enum_declaration->p;
-	} else {
-		/* For unnamed enum, create type */
-		/* For named enum (with body), create type and add to declaration scope */
-		if (name) {
-			if (bt_lookup_enum_declaration(g_quark_from_string(name),
-						    declaration_scope)) {
-				fprintf(fd, "[error] %s: enum %s already declared in scope\n", __func__, name);
-				return NULL;
-			}
-		}
-		if (!container_type) {
-			declaration = bt_lookup_declaration(g_quark_from_static_string("int"),
-							 declaration_scope);
-			if (!declaration) {
-				fprintf(fd, "[error] %s: \"int\" type declaration missing for enumeration\n", __func__);
-				return NULL;
-			}
-		} else {
-			declaration = ctf_type_declarator_visit(fd, depth,
-						container_type,
-						&dummy_id, NULL,
-						declaration_scope,
-						NULL, trace);
-		}
-		if (!declaration) {
-			fprintf(fd, "[error] %s: unable to create container type for enumeration\n", __func__);
-			return NULL;
-		}
-		if (declaration->id != CTF_TYPE_INTEGER) {
-			fprintf(fd, "[error] %s: container type for enumeration is not integer\n", __func__);
-			return NULL;
-		}
-		integer_declaration = container_of(declaration, struct declaration_integer, p);
-		enum_declaration = bt_enum_declaration_new(integer_declaration);
-		bt_declaration_unref(&integer_declaration->p);	/* leave ref to enum */
-		if (enum_declaration->integer_declaration->signedness) {
-			last_value.u.s = 0;
-		} else {
-			last_value.u.u = 0;
-		}
-		bt_list_for_each_entry(iter, enumerator_list, siblings) {
-			int ret;
-
-			ret = ctf_enumerator_list_visit(fd, depth + 1, iter, enum_declaration,
-					&last_value);
-			if (ret)
-				goto error;
-		}
-		if (name) {
-			int ret;
-
-			ret = bt_register_enum_declaration(g_quark_from_string(name),
-					enum_declaration,
-					declaration_scope);
-			if (ret)
-				return NULL;
-			bt_declaration_unref(&enum_declaration->p);
-		}
-		return &enum_declaration->p;
-	}
-error:
-	enum_declaration->p.declaration_free(&enum_declaration->p);
-	return NULL;
-}
 #endif
+
+static
+int visit_enum_decl_entry(struct ctx *ctx, struct ctf_node *enumerator,
+	struct bt_ctf_field_type *enum_decl, int64_t *last)
+{
+	int ret = 0;
+	const char *label = enumerator->u.enumerator.id;
+	int64_t start = 0, end = 0;
+	int nr_vals = 0;
+	struct ctf_node *iter;
+
+	bt_list_for_each_entry(iter, &enumerator->u.enumerator.values, siblings) {
+		int64_t *target;
+
+		if (iter->type != NODE_UNARY_EXPRESSION) {
+			fprintf(ctx->efd, "[error] %s: wrong unary expression for enumeration label \"%s\"\n",
+				__func__, label);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		if (nr_vals == 0) {
+			target = &start;
+		} else {
+			target = &end;
+		}
+
+		switch (iter->u.unary_expression.type) {
+		case UNARY_SIGNED_CONSTANT:
+			*target = iter->u.unary_expression.u.signed_constant;
+			break;
+
+		case UNARY_UNSIGNED_CONSTANT:
+			*target = (int64_t) iter->u.unary_expression.u.unsigned_constant;
+			break;
+
+		default:
+			fprintf(ctx->efd, "[error] %s: invalid enumeration entry: \"%s\"\n",
+				__func__, label);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		if (nr_vals > 1) {
+			fprintf(ctx->efd, "[error] %s: invalid enumeration entry: \"%s\"\n",
+				__func__, label);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		nr_vals++;
+	}
+
+	if (nr_vals == 0) {
+		start = *last;
+	}
+
+	if (nr_vals <= 1) {
+		end = start;
+	}
+
+	*last = end + 1;
+	ret = bt_ctf_field_type_enumeration_add_mapping(enum_decl, label,
+		start, end);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot add mapping to enumeration for label \"%s\"\n",
+			__func__, label);
+		goto error;
+	}
+
+	return 0;
+
+error:
+	return ret;
+}
+
+static
+int visit_enum_decl(struct ctx *ctx, const char *name,
+	struct ctf_node *container_type,
+	struct bt_list_head *enumerator_list,
+	int has_body,
+	struct bt_ctf_field_type **enum_decl)
+{
+	struct bt_ctf_field_type *integer_decl = NULL;
+	GQuark qdummy_id;
+	int ret = 0;
+
+	*enum_decl = NULL;
+
+	/* for named enum (without body), lookup in declaration scope */
+	if (!has_body) {
+		if (!name) {
+			ret = -EPERM;
+			goto error;
+		}
+
+		*enum_decl = ctx_decl_scope_lookup_enum(ctx->current_scope,
+			name, -1);
+
+		if (!*enum_decl) {
+			fprintf(ctx->efd, "[error] %s: cannot find \"enum %s\"\n",
+				__func__, name);
+			ret = -EINVAL;
+			goto error;
+		}
+	} else {
+		if (name) {
+			struct bt_ctf_field_type *eenum_decl =
+				ctx_decl_scope_lookup_enum(ctx->current_scope,
+					name, 1);
+
+			if (eenum_decl) {
+				bt_ctf_field_type_put(eenum_decl);
+				fprintf(ctx->efd, "[error] %s: \"enum %s\" already declared in local scope\n",
+					__func__, name);
+				ret = -EINVAL;
+				goto error;
+			}
+		}
+
+		if (!container_type) {
+			integer_decl =
+				ctx_decl_scope_lookup_alias(ctx->current_scope,
+					"int", -1);
+
+			if (!integer_decl) {
+				fprintf(ctx->efd, "[error] %s: cannot find \"int\" type for enumeration\n",
+					__func__);
+				ret = -EINVAL;
+				goto error;
+			}
+		} else {
+			ret = visit_type_declarator(ctx, container_type,
+				&qdummy_id, NULL, &integer_decl, NULL);
+
+			if (ret) {
+				assert(!integer_decl);
+				ret = -EINVAL;
+				goto error;
+			}
+		}
+
+		assert(integer_decl);
+
+		if (bt_ctf_field_type_get_type_id(integer_decl) != CTF_TYPE_INTEGER) {
+			fprintf(ctx->efd, "[error] %s: container type for enumeration is not an integer\n",
+				__func__);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		*enum_decl = bt_ctf_field_type_enumeration_create(integer_decl);
+
+		if (!*enum_decl) {
+			fprintf(ctx->efd, "[error] %s: cannot create enumeration declaration\n",
+				__func__);
+			ret = -ENOMEM;
+			goto error;
+		}
+
+		int64_t last_value = 0;
+		struct ctf_node *iter;
+
+		bt_list_for_each_entry(iter, enumerator_list, siblings) {
+			ret = visit_enum_decl_entry(ctx, iter, *enum_decl,
+				&last_value);
+
+			if (ret) {
+				goto error;
+			}
+		}
+
+		if (name) {
+			ret = ctx_decl_scope_register_enum(ctx->current_scope,
+				name, *enum_decl);
+
+			if (ret) {
+				goto error;
+			}
+		}
+	}
+
+	assert(integer_decl);
+	bt_ctf_field_type_put(integer_decl);
+	integer_decl = NULL;
+
+	return 0;
+
+error:
+	if (integer_decl) {
+		bt_ctf_field_type_put(integer_decl);
+		integer_decl = NULL;
+	}
+
+	if (*enum_decl) {
+		bt_ctf_field_type_put(*enum_decl);
+		*enum_decl = NULL;
+	}
+
+	return ret;
+}
 
 static
 int visit_type_specifier(struct ctx *ctx,
@@ -2003,7 +2032,6 @@ int visit_type_specifier(struct ctx *ctx,
 
 	(void) g_string_free(str, TRUE);
 	str = NULL;
-	bt_ctf_field_type_get(*decl);
 
 	return 0;
 
@@ -2382,7 +2410,7 @@ error:
 }
 
 static
-int visit_floating_point_decl(struct ctx *ctx,
+int visit_floating_point_number_decl(struct ctx *ctx,
 	struct bt_list_head *expressions,
 	struct bt_ctf_field_type **float_decl)
 {
@@ -2703,7 +2731,7 @@ int visit_type_specifier_list(struct ctx *ctx,
 		break;
 
 	case TYPESPEC_FLOATING_POINT:
-		ret = visit_floating_point_decl(ctx,
+		ret = visit_floating_point_number_decl(ctx,
 			&node->u.floating_point.expressions, decl);
 
 		if (ret) {
@@ -2726,8 +2754,7 @@ int visit_type_specifier_list(struct ctx *ctx,
 		ret = visit_struct_decl(ctx, node->u._struct.name,
 			&node->u._struct.declaration_list,
 			node->u._struct.has_body,
-			&node->u._struct.min_align,
-			decl);
+			&node->u._struct.min_align, decl);
 
 		if (ret) {
 			assert(!*decl);
@@ -2744,15 +2771,19 @@ int visit_type_specifier_list(struct ctx *ctx,
 			node->u.variant.has_body,
 			declaration_scope,
 			trace);
+#endif
+
 	case TYPESPEC_ENUM:
-		return ctf_declaration_enum_visit(fd, depth,
-			node->u._enum.enum_id,
+		ret = visit_enum_decl(ctx, node->u._enum.enum_id,
 			node->u._enum.container_type,
 			&node->u._enum.enumerator_list,
-			node->u._enum.has_body,
-			declaration_scope,
-			trace);
-#endif
+			node->u._enum.has_body, decl);
+
+		if (ret) {
+			assert(!*decl);
+			goto error;
+		}
+		break;
 
 	case TYPESPEC_VOID:
 	case TYPESPEC_CHAR:
@@ -2782,6 +2813,8 @@ int visit_type_specifier_list(struct ctx *ctx,
 		ret = -EINVAL;
 		goto error;
 	}
+
+	assert(*decl);
 
 	return 0;
 
@@ -4282,6 +4315,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		struct bt_ctf_trace **trace)
 {
 	int ret = 0;
+	struct ctx *ctx = NULL;
 
 	printf_verbose("CTF visitor: AST -> IR...\n");
 
@@ -4294,7 +4328,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		goto error;
 	}
 
-	struct ctx *ctx = ctx_create(*trace, efd);
+	ctx = ctx_create(*trace, efd);
 
 	if (!ctx) {
 		fprintf(efd, "[error] %s: cannot create visitor context\n",
