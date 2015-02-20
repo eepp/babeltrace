@@ -91,8 +91,6 @@ enum {
 #define _PREFIX_STRUCT	's'
 #define _PREFIX_VARIANT	'v'
 
-#define fprintf_dbg(fd, fmt, args...)	fprintf(fd, "%s: " fmt, __func__, ## args)
-
 #define _bt_list_first_entry(ptr, type, member)	\
 	bt_list_entry((ptr)->next, type, member)
 
@@ -101,14 +99,12 @@ enum {
  * lexical scope, so that aliases and named
  * structures/variants/enumerations may be registered and looked up
  * hierarchically.
- *
- * All the hash tables below hold weak references to field types.
  */
 struct ctx_decl_scope {
 	/*
 	 * Alias name to field type.
 	 *
-	 * GQuark -> struct bt_ctf_field_type *
+	 * GQuark -> struct bt_ctf_field_type * (weak reference)
 	 */
 	GHashTable *decl_map;
 
@@ -182,6 +178,7 @@ GQuark get_prefixed_named_quark(char prefix, const char *name)
 {
 	assert(name);
 
+	/* prefix character + '#' + original string + '\0' */
 	char *prname = g_new(char, strlen(name) + 3);
 
 	if (!prname) {
@@ -534,11 +531,15 @@ int is_unary_string(struct bt_list_head *head)
 	struct ctf_node *node;
 
 	bt_list_for_each_entry(node, head, siblings) {
-		if (node->type != NODE_UNARY_EXPRESSION)
+		if (node->type != NODE_UNARY_EXPRESSION) {
 			return 0;
-		if (node->u.unary_expression.type != UNARY_STRING)
+		}
+
+		if (node->u.unary_expression.type != UNARY_STRING) {
 			return 0;
+		}
 	}
+
 	return 1;
 }
 
@@ -557,31 +558,38 @@ char *concatenate_unary_strings(struct bt_list_head *head)
 	int i = 0;
 
 	str = g_string_new("");
+
 	bt_list_for_each_entry(node, head, siblings) {
 		char *src_string;
 
-		if (node->type != NODE_UNARY_EXPRESSION
-				|| node->u.unary_expression.type != UNARY_STRING
-				|| !((node->u.unary_expression.link != UNARY_LINK_UNKNOWN)
-					^ (i == 0)))
+		if (node->type != NODE_UNARY_EXPRESSION ||
+				node->u.unary_expression.type != UNARY_STRING ||
+				!((node->u.unary_expression.link != UNARY_LINK_UNKNOWN) ^ (i == 0))) {
 			return NULL;
+		}
+
 		switch (node->u.unary_expression.link) {
 		case UNARY_DOTLINK:
 			g_string_append(str, ".");
 			break;
+
 		case UNARY_ARROWLINK:
 			g_string_append(str, "->");
 			break;
+
 		case UNARY_DOTDOTDOT:
 			g_string_append(str, "...");
 			break;
+
 		default:
 			break;
 		}
+
 		src_string = node->u.unary_expression.u.string;
 		g_string_append(str, src_string);
 		i++;
 	}
+
 	return g_string_free(str, FALSE);
 }
 
@@ -595,11 +603,11 @@ const char *get_map_clock_name_value(struct bt_list_head *head)
 	bt_list_for_each_entry(node, head, siblings) {
 		char *src_string;
 
-		if (node->type != NODE_UNARY_EXPRESSION
-			|| node->u.unary_expression.type != UNARY_STRING
-			|| !((node->u.unary_expression.link != UNARY_LINK_UNKNOWN)
-				^ (i == 0)))
+		if (node->type != NODE_UNARY_EXPRESSION ||
+				node->u.unary_expression.type != UNARY_STRING ||
+				!((node->u.unary_expression.link != UNARY_LINK_UNKNOWN) ^ (i == 0))) {
 			return NULL;
+		}
 
 		/* needs to be chained with . */
 		switch (node->u.unary_expression.link) {
@@ -617,20 +625,25 @@ const char *get_map_clock_name_value(struct bt_list_head *head)
 		src_string = node->u.unary_expression.u.string;
 
 		switch (i) {
-		case 0:	if (strcmp("clock", src_string) != 0) {
+		case 0:
+			if (strcmp("clock", src_string) != 0) {
 				return NULL;
 			}
 			break;
 
-		case 1:	name = src_string;
+		case 1:
+			name = src_string;
 			break;
 
-		case 2:	if (strcmp("value", src_string) != 0) {
+		case 2:
+			if (strcmp("value", src_string) != 0) {
 				return NULL;
 			}
 			break;
+
 		default:
-			return NULL;	/* extra identifier, unknown */
+			/* extra identifier, unknown */
+			return NULL;
 		}
 
 		i++;
@@ -645,11 +658,15 @@ int is_unary_unsigned(struct bt_list_head *head)
 	struct ctf_node *node;
 
 	bt_list_for_each_entry(node, head, siblings) {
-		if (node->type != NODE_UNARY_EXPRESSION)
+		if (node->type != NODE_UNARY_EXPRESSION) {
 			return 0;
-		if (node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT)
+		}
+
+		if (node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
 			return 0;
+		}
 	}
+
 	return 1;
 }
 
@@ -660,14 +677,17 @@ int get_unary_unsigned(struct bt_list_head *head, uint64_t *value)
 	int i = 0;
 
 	bt_list_for_each_entry(node, head, siblings) {
-		if (node->type != NODE_UNARY_EXPRESSION
-				|| node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT
-				|| node->u.unary_expression.link != UNARY_LINK_UNKNOWN
-				|| i != 0)
+		if (node->type != NODE_UNARY_EXPRESSION ||
+				node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT ||
+				node->u.unary_expression.link != UNARY_LINK_UNKNOWN ||
+				i != 0) {
 			return -EINVAL;
+		}
+
 		*value = node->u.unary_expression.u.unsigned_constant;
 		i++;
 	}
+
 	return 0;
 }
 
@@ -677,11 +697,15 @@ int is_unary_signed(struct bt_list_head *head)
 	struct ctf_node *node;
 
 	bt_list_for_each_entry(node, head, siblings) {
-		if (node->type != NODE_UNARY_EXPRESSION)
+		if (node->type != NODE_UNARY_EXPRESSION) {
 			return 0;
-		if (node->u.unary_expression.type != UNARY_SIGNED_CONSTANT)
+		}
+
+		if (node->u.unary_expression.type != UNARY_SIGNED_CONSTANT) {
 			return 0;
+		}
 	}
+
 	return 1;
 }
 
@@ -692,24 +716,30 @@ int get_unary_signed(struct bt_list_head *head, int64_t *value)
 	int i = 0;
 
 	bt_list_for_each_entry(node, head, siblings) {
-		if (node->type != NODE_UNARY_EXPRESSION
-				|| node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT
-				|| (node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT && node->u.unary_expression.type != UNARY_SIGNED_CONSTANT)
-				|| node->u.unary_expression.link != UNARY_LINK_UNKNOWN
-				|| i != 0)
+		if (node->type != NODE_UNARY_EXPRESSION ||
+				node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT ||
+				(node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT && node->u.unary_expression.type != UNARY_SIGNED_CONSTANT) ||
+				node->u.unary_expression.link != UNARY_LINK_UNKNOWN ||
+				i != 0) {
 			return -EINVAL;
+		}
+
 		switch (node->u.unary_expression.type) {
 		case UNARY_UNSIGNED_CONSTANT:
 			*value = (int64_t) node->u.unary_expression.u.unsigned_constant;
 			break;
+
 		case UNARY_SIGNED_CONSTANT:
 			*value = node->u.unary_expression.u.signed_constant;
 			break;
+
 		default:
 			return -EINVAL;
 		}
+
 		i++;
 	}
+
 	return 0;
 }
 
@@ -718,44 +748,105 @@ int get_unary_uuid(struct bt_list_head *head, unsigned char *uuid)
 {
 	struct ctf_node *node;
 	int i = 0;
-	int ret = -1;
+	int ret = 0;
 
 	bt_list_for_each_entry(node, head, siblings) {
-		const char *src_string;
+		if (node->type != NODE_UNARY_EXPRESSION ||
+				node->u.unary_expression.type != UNARY_STRING ||
+				node->u.unary_expression.link != UNARY_LINK_UNKNOWN ||
+				i != 0) {
+			ret = -EINVAL;
+			goto end;
+		}
 
-		if (node->type != NODE_UNARY_EXPRESSION
-				|| node->u.unary_expression.type != UNARY_STRING
-				|| node->u.unary_expression.link != UNARY_LINK_UNKNOWN
-				|| i != 0)
-			return -EINVAL;
-		src_string = node->u.unary_expression.u.string;
+		const char *src_string = node->u.unary_expression.u.string;
+
 		ret = babeltrace_uuid_parse(src_string, uuid);
+
+		if (ret) {
+			goto end;
+		}
 	}
+
+end:
 	return ret;
 }
 
+/*
+ * Returns 0/1 boolean, or < 0 on error.
+ */
+static
+int get_boolean(FILE *efd, struct ctf_node *unary_expr)
+{
+	if (unary_expr->type != NODE_UNARY_EXPRESSION) {
+		fprintf(efd, "[error] %s: expecting unary expression\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	switch (unary_expr->u.unary_expression.type) {
+	case UNARY_UNSIGNED_CONSTANT:
+		if (unary_expr->u.unary_expression.u.unsigned_constant == 0) {
+			return 0;
+		} else {
+			return 1;
+		}
+
+	case UNARY_SIGNED_CONSTANT:
+		if (unary_expr->u.unary_expression.u.signed_constant == 0) {
+			return 0;
+		} else {
+			return 1;
+		}
+
+	case UNARY_STRING:
+		if (!strcmp(unary_expr->u.unary_expression.u.string, "true")) {
+			return 1;
+		} else if (!strcmp(unary_expr->u.unary_expression.u.string, "TRUE")) {
+			return 1;
+		} else if (!strcmp(unary_expr->u.unary_expression.u.string, "false")) {
+			return 0;
+		} else if (!strcmp(unary_expr->u.unary_expression.u.string, "FALSE")) {
+			return 0;
+		} else {
+			fprintf(efd, "[error] %s: unexpected string \"%s\"\n",
+				__func__, unary_expr->u.unary_expression.u.string);
+			return -EINVAL;
+		}
+
+	default:
+		fprintf(efd, "[error] %s: unexpected unary expression type\n",
+			__func__);
+		return -EINVAL;
+	}
+}
 
 static
 enum bt_ctf_byte_order byte_order_from_unary_expr(FILE *efd,
 		struct ctf_node *unary_expr)
 {
+	enum bt_ctf_byte_order bo = BT_CTF_BYTE_ORDER_UNKNOWN;
+
 	if (unary_expr->u.unary_expression.type != UNARY_STRING) {
 		fprintf(efd, "[error] %s: \"byte_order\" attribute: expecting string\n", __func__);
-		return BT_CTF_BYTE_ORDER_UNKNOWN;
+		goto end;
 	}
 
 	if (!strcmp(unary_expr->u.unary_expression.u.string, "be") ||
 			!strcmp(unary_expr->u.unary_expression.u.string, "network")) {
-		return BT_CTF_BYTE_ORDER_BIG_ENDIAN;
+		bo = BT_CTF_BYTE_ORDER_BIG_ENDIAN;
 	} else if (!strcmp(unary_expr->u.unary_expression.u.string, "le")) {
-		return BT_CTF_BYTE_ORDER_LITTLE_ENDIAN;
+		bo = BT_CTF_BYTE_ORDER_LITTLE_ENDIAN;
 	} else if (!strcmp(unary_expr->u.unary_expression.u.string, "native")) {
-		return BT_CTF_BYTE_ORDER_NATIVE;
+		bo = BT_CTF_BYTE_ORDER_NATIVE;
 	} else {
 		fprintf(efd, "[error] %s: unexpected string \"%s\" (should be \"be\", \"le\", \"network\", or \"native\")\n",
 			__func__, unary_expr->u.unary_expression.u.string);
-		return BT_CTF_BYTE_ORDER_UNKNOWN;
+		goto end;
 	}
+
+end:
+	return bo;
 }
 
 static
@@ -782,97 +873,131 @@ static
 int visit_type_specifier2(struct ctx *ctx, struct ctf_node *type_specifier,
 	GString *str)
 {
-	if (type_specifier->type != NODE_TYPE_SPECIFIER)
-		return -EINVAL;
+	int ret = 0;
+
+	if (type_specifier->type != NODE_TYPE_SPECIFIER) {
+		ret = -EINVAL;
+		goto end;
+	}
 
 	switch (type_specifier->u.type_specifier.type) {
 	case TYPESPEC_VOID:
 		g_string_append(str, "void");
 		break;
+
 	case TYPESPEC_CHAR:
 		g_string_append(str, "char");
 		break;
+
 	case TYPESPEC_SHORT:
 		g_string_append(str, "short");
 		break;
+
 	case TYPESPEC_INT:
 		g_string_append(str, "int");
 		break;
+
 	case TYPESPEC_LONG:
 		g_string_append(str, "long");
 		break;
+
 	case TYPESPEC_FLOAT:
 		g_string_append(str, "float");
 		break;
+
 	case TYPESPEC_DOUBLE:
 		g_string_append(str, "double");
 		break;
+
 	case TYPESPEC_SIGNED:
 		g_string_append(str, "signed");
 		break;
+
 	case TYPESPEC_UNSIGNED:
 		g_string_append(str, "unsigned");
 		break;
+
 	case TYPESPEC_BOOL:
 		g_string_append(str, "bool");
 		break;
+
 	case TYPESPEC_COMPLEX:
 		g_string_append(str, "_Complex");
 		break;
+
 	case TYPESPEC_IMAGINARY:
 		g_string_append(str, "_Imaginary");
 		break;
+
 	case TYPESPEC_CONST:
 		g_string_append(str, "const");
 		break;
+
 	case TYPESPEC_ID_TYPE:
-		if (type_specifier->u.type_specifier.id_type)
+		if (type_specifier->u.type_specifier.id_type) {
 			g_string_append(str, type_specifier->u.type_specifier.id_type);
+		}
 		break;
+
 	case TYPESPEC_STRUCT:
 	{
 		struct ctf_node *node = type_specifier->u.type_specifier.node;
 
 		if (!node->u._struct.name) {
-			fprintf(ctx->efd, "[error] %s: unexpected empty variant name\n", __func__);
-			return -EINVAL;
+			fprintf(ctx->efd, "[error] %s: unexpected empty variant name\n",
+				__func__);
+			ret = -EINVAL;
+			goto end;
 		}
+
 		g_string_append(str, "struct ");
 		g_string_append(str, node->u._struct.name);
 		break;
 	}
+
 	case TYPESPEC_VARIANT:
 	{
 		struct ctf_node *node = type_specifier->u.type_specifier.node;
 
 		if (!node->u.variant.name) {
-			fprintf(ctx->efd, "[error] %s: unexpected empty variant name\n", __func__);
-			return -EINVAL;
+			fprintf(ctx->efd, "[error] %s: unexpected empty variant name\n",
+				__func__);
+			ret = -EINVAL;
+			goto end;
 		}
+
 		g_string_append(str, "variant ");
 		g_string_append(str, node->u.variant.name);
 		break;
 	}
+
 	case TYPESPEC_ENUM:
 	{
 		struct ctf_node *node = type_specifier->u.type_specifier.node;
 
 		if (!node->u._enum.enum_id) {
-			fprintf(ctx->efd, "[error] %s: unexpected empty enum ID\n", __func__);
-			return -EINVAL;
+			fprintf(ctx->efd, "[error] %s: unexpected empty enum ID\n",
+				__func__);
+			ret = -EINVAL;
+			goto end;
 		}
+
 		g_string_append(str, "enum ");
 		g_string_append(str, node->u._enum.enum_id);
 		break;
 	}
+
 	case TYPESPEC_FLOATING_POINT:
 	case TYPESPEC_INTEGER:
 	case TYPESPEC_STRING:
 	default:
 		fprintf(ctx->efd, "[error] %s: unknown specifier\n", __func__);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto end;
 	}
-	return 0;
+
+end:
+	return ret;
 }
 
 static
@@ -884,14 +1009,20 @@ int visit_type_specifier_list2(struct ctx *ctx, struct ctf_node *type_specifier_
 	int ret;
 
 	bt_list_for_each_entry(iter, &type_specifier_list->u.type_specifier_list.head, siblings) {
-		if (alias_item_nr != 0)
+		if (alias_item_nr != 0) {
 			g_string_append(str, " ");
+		}
+
 		alias_item_nr++;
 		ret = visit_type_specifier2(ctx, iter, str);
-		if (ret)
-			return ret;
+
+		if (ret) {
+			goto end;
+		}
 	}
-	return 0;
+
+end:
+	return ret;
 }
 
 static
@@ -902,7 +1033,7 @@ GQuark create_typealias_identifier(struct ctx *ctx,
 	struct ctf_node *iter;
 	GString *str;
 	char *str_c;
-	GQuark qalias;
+	GQuark qalias = 0;
 	int ret;
 
 	str = g_string_new("");
@@ -910,7 +1041,7 @@ GQuark create_typealias_identifier(struct ctx *ctx,
 
 	if (ret) {
 		g_string_free(str, TRUE);
-		return 0;
+		goto end;
 	}
 
 	bt_list_for_each_entry(iter, &node_type_declarator->u.type_declarator.pointers, siblings) {
@@ -926,6 +1057,7 @@ GQuark create_typealias_identifier(struct ctx *ctx,
 
 	g_free(str_c);
 
+end:
 	return qalias;
 }
 
@@ -1389,7 +1521,7 @@ static
 int visit_struct_entry(struct ctx *ctx, struct ctf_node *entry_node,
 	struct bt_ctf_field_type *struct_decl)
 {
-	int ret;
+	int ret = 0;
 
 	switch (entry_node->type) {
 	case NODE_TYPEDEF:
@@ -1398,7 +1530,7 @@ int visit_struct_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			&entry_node->u._typedef.type_declarators);
 
 		if (ret) {
-			goto error;
+			goto end;
 		}
 		break;
 
@@ -1407,7 +1539,7 @@ int visit_struct_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			entry_node->u.typealias.alias);
 
 		if (ret) {
-			goto error;
+			goto end;
 		}
 		break;
 
@@ -1418,7 +1550,7 @@ int visit_struct_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			&entry_node->u.struct_or_variant_declaration.type_declarators);
 
 		if (ret) {
-			goto error;
+			goto end;
 		}
 		break;
 
@@ -1426,12 +1558,10 @@ int visit_struct_entry(struct ctx *ctx, struct ctf_node *entry_node,
 		fprintf(ctx->efd, "[error] %s: unexpected node type: %d\n",
 			__func__, (int) entry_node->type);
 		ret = -EINVAL;
-		goto error;
+		goto end;
 	}
 
-	return 0;
-
-error:
+end:
 	return ret;
 }
 
@@ -1555,6 +1685,8 @@ int visit_struct(struct ctx *ctx, const char *name,
 				name, *struct_decl);
 
 			if (ret) {
+				fprintf(ctx->efd, "[error] %s: cannot register \"struct %s\" in declaration scope\n",
+					__func__, name);
 				goto error;
 			}
 		}
@@ -1826,134 +1958,47 @@ error:
 	enum_declaration->p.declaration_free(&enum_declaration->p);
 	return NULL;
 }
+#endif
 
 static
-struct bt_declaration *ctf_declaration_type_specifier_visit(FILE *fd, int depth,
-		struct ctf_node *type_specifier_list,
-		struct declaration_scope *declaration_scope)
+int visit_type_specifier(struct ctx *ctx,
+	struct ctf_node *type_specifier_list,
+	struct bt_ctf_field_type **decl)
 {
-	GString *str;
-	struct bt_declaration *declaration;
-	char *str_c;
-	int ret;
-	GQuark id_q;
+	GString *str = NULL;
+	int ret = 0;
+
+	*decl = NULL;
 
 	str = g_string_new("");
-	ret = visit_type_specifier_list(fd, type_specifier_list, str);
+	ret = visit_type_specifier_list2(ctx, type_specifier_list, str);
+
 	if (ret) {
+		goto error;
+	}
+
+	*decl = ctx_decl_scope_lookup_alias(ctx->current_scope, str->str, -1);
+
+	if (!*decl) {
+		goto error;
+	}
+
+	bt_ctf_field_type_get(*decl);
+	(void) g_string_free(str, TRUE);
+
+	return 0;
+
+error:
+	if (str) {
 		(void) g_string_free(str, TRUE);
-		return NULL;
 	}
-	str_c = g_string_free(str, FALSE);
-	id_q = g_quark_from_string(str_c);
-	g_free(str_c);
-	declaration = bt_lookup_declaration(id_q, declaration_scope);
-	if (!declaration)
-		return NULL;
-	bt_declaration_ref(declaration);
-	return declaration;
+
+	if (*decl) {
+		bt_ctf_field_type_put(*decl);
+	}
+
+	return ret;
 }
-#endif
-
-/*
- * Returns 0/1 boolean, or < 0 on error.
- */
-static
-int get_boolean(FILE *efd, struct ctf_node *unary_expr)
-{
-	if (unary_expr->type != NODE_UNARY_EXPRESSION) {
-		fprintf(efd, "[error] %s: expecting unary expression\n",
-			__func__);
-		return -EINVAL;
-	}
-
-	switch (unary_expr->u.unary_expression.type) {
-	case UNARY_UNSIGNED_CONSTANT:
-		if (unary_expr->u.unary_expression.u.unsigned_constant == 0) {
-			return 0;
-		} else {
-			return 1;
-		}
-
-	case UNARY_SIGNED_CONSTANT:
-		if (unary_expr->u.unary_expression.u.signed_constant == 0) {
-			return 0;
-		} else {
-			return 1;
-		}
-
-	case UNARY_STRING:
-		if (!strcmp(unary_expr->u.unary_expression.u.string, "true")) {
-			return 1;
-		} else if (!strcmp(unary_expr->u.unary_expression.u.string, "TRUE")) {
-			return 1;
-		} else if (!strcmp(unary_expr->u.unary_expression.u.string, "false")) {
-			return 0;
-		} else if (!strcmp(unary_expr->u.unary_expression.u.string, "FALSE")) {
-			return 0;
-		} else {
-			fprintf(efd, "[error] %s: unexpected string \"%s\"\n",
-				__func__, unary_expr->u.unary_expression.u.string);
-			return -EINVAL;
-		}
-
-	default:
-		fprintf(efd, "[error] %s: unexpected unary expression type\n",
-			__func__);
-		return -EINVAL;
-	}
-}
-
-#if 0
-static
-int get_trace_byte_order(FILE *fd, int depth, struct ctf_node *unary_expression)
-{
-	int byte_order;
-
-	if (unary_expression->u.unary_expression.type != UNARY_STRING) {
-		fprintf(fd, "[error] %s: byte_order: expecting string\n",
-			__func__);
-		return -EINVAL;
-	}
-	if (!strcmp(unary_expression->u.unary_expression.u.string, "be"))
-		byte_order = BIG_ENDIAN;
-	else if (!strcmp(unary_expression->u.unary_expression.u.string, "le"))
-		byte_order = LITTLE_ENDIAN;
-	else {
-		fprintf(fd, "[error] %s: unexpected string \"%s\". Should be \"be\" or \"le\".\n",
-			__func__, unary_expression->u.unary_expression.u.string);
-		return -EINVAL;
-	}
-	return byte_order;
-}
-
-static
-int get_byte_order(FILE *fd, int depth, struct ctf_node *unary_expression,
-		struct ctf_trace *trace)
-{
-	int byte_order;
-
-	if (unary_expression->u.unary_expression.type != UNARY_STRING) {
-		fprintf(fd, "[error] %s: byte_order: expecting string\n",
-			__func__);
-		return -EINVAL;
-	}
-	if (!strcmp(unary_expression->u.unary_expression.u.string, "native"))
-		byte_order = trace->byte_order;
-	else if (!strcmp(unary_expression->u.unary_expression.u.string, "network"))
-		byte_order = BIG_ENDIAN;
-	else if (!strcmp(unary_expression->u.unary_expression.u.string, "be"))
-		byte_order = BIG_ENDIAN;
-	else if (!strcmp(unary_expression->u.unary_expression.u.string, "le"))
-		byte_order = LITTLE_ENDIAN;
-	else {
-		fprintf(fd, "[error] %s: unexpected string \"%s\". Should be \"native\", \"network\", \"be\" or \"le\".\n",
-			__func__, unary_expression->u.unary_expression.u.string);
-		return -EINVAL;
-	}
-	return byte_order;
-}
-#endif
 
 static
 int visit_integer_decl(struct ctx *ctx,
@@ -3823,8 +3868,6 @@ int visit_clock_attr(FILE *efd, struct ctf_node *entry_node,
 
 			_SET(set, _CLOCK_NAME_SET);
 		} else if (!strcmp(left, "uuid")) {
-			char *right;
-
 			if (_IS_SET(set, _CLOCK_UUID_SET)) {
 				fprintf(efd, "[error] %s: duplicate attribute \"uuid\" in clock declaration\n",
 					__func__);
@@ -3832,23 +3875,13 @@ int visit_clock_attr(FILE *efd, struct ctf_node *entry_node,
 				goto error;
 			}
 
-			right = concatenate_unary_strings(&entry_node->u.ctf_expression.right);
-
-			if (!right) {
-				fprintf(efd, "[error] %s: unexpected unary expression for clock's \"uuid\" attribute\n",
-					__func__);
-				ret = -EINVAL;
-				goto error;
-			}
-
 			unsigned char uuid[BABELTRACE_UUID_LEN];
 
-			ret = babeltrace_uuid_parse(right, uuid);
+			ret = get_unary_uuid(&entry_node->u.ctf_expression.right, uuid);
 
 			if (ret) {
 				fprintf(efd, "[error] %s: invalid clock UUID\n",
 					__func__);
-				g_free(right);
 				goto error;
 			}
 
@@ -3857,11 +3890,8 @@ int visit_clock_attr(FILE *efd, struct ctf_node *entry_node,
 			if (ret) {
 				fprintf(efd, "[error] %s: cannot set clock's UUID\n",
 					__func__);
-				g_free(right);
 				goto error;
 			}
-
-			g_free(right);
 
 			_SET(set, _CLOCK_UUID_SET);
 		} else if (!strcmp(left, "description")) {
