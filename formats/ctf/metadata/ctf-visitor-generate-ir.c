@@ -143,7 +143,8 @@ struct ctx_decl_scope *ctx_decl_scope_create(struct ctx_decl_scope *parent_scope
 		return NULL;
 	}
 
-	scope->decl_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+	scope->decl_map = g_hash_table_new_full(g_direct_hash, g_direct_equal,
+		NULL, (GDestroyNotify) bt_ctf_field_type_put);
 	scope->parent_scope = parent_scope;
 
 	return scope;
@@ -229,6 +230,7 @@ struct bt_ctf_field_type *ctx_decl_scope_lookup_prefix_alias(
 			(gconstpointer) (unsigned long) qname);
 
 		if (decl) {
+			bt_ctf_field_type_get(decl);
 			break;
 		}
 
@@ -330,13 +332,19 @@ int ctx_decl_scope_register_prefix_alias(struct ctx_decl_scope *scope,
 	}
 
 	/* make sure alias does not exist in local scope */
-	if (ctx_decl_scope_lookup_prefix_alias(scope, prefix, name, 1)) {
+	struct bt_ctf_field_type *edecl = ctx_decl_scope_lookup_prefix_alias(
+		scope, prefix, name, 1);
+
+	if (edecl) {
+		bt_ctf_field_type_put(edecl);
 		ret = -EEXIST;
 		goto error;
 	}
 
 	g_hash_table_insert(scope->decl_map,
 		(gpointer) (unsigned long) qname, decl);
+
+	bt_ctf_field_type_get(decl);
 
 	return 0;
 
@@ -866,7 +874,7 @@ enum bt_ctf_byte_order get_real_byte_order(struct ctx *ctx,
 static
 int is_align_valid(uint64_t align)
 {
-    return (align != 0) && !(align & (align - 1));
+	return (align != 0) && !(align & (align - 1));
 }
 
 static
@@ -1113,8 +1121,6 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 				ret = -EINVAL;
 				goto error;
 			}
-
-			bt_ctf_field_type_get(nested_decl);
 
 			if (bt_ctf_field_type_get_type_id(nested_decl) == CTF_TYPE_INTEGER) {
 				/* copy integer to set its base to 16 */
@@ -1455,7 +1461,7 @@ int visit_typedef(struct ctx *ctx, struct ctf_node *type_specifier_list,
 
 static
 int visit_typealias(struct ctx *ctx, struct ctf_node *target,
-		struct ctf_node *alias)
+	struct ctf_node *alias)
 {
 	struct bt_ctf_field_type *type_decl = NULL;
 	struct ctf_node *node;
@@ -1480,7 +1486,7 @@ int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 	if (ret) {
 		assert(!type_decl);
 		fprintf(ctx->efd, "[error] %s: problem creating type declaration\n", __func__);
-		goto error;
+		goto end;
 	}
 
 	/* do not allow typedef and typealias of untagged variants */
@@ -1500,7 +1506,7 @@ int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 		fprintf(ctx->efd, "[error] %s: expecting empty identifier\n",
 			__func__);
 		ret = -EINVAL;
-		goto error;
+		goto end;
 	}
 
 	/* create alias identifier */
@@ -1514,10 +1520,10 @@ int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 	if (ret) {
 		fprintf(ctx->efd, "[error] %s: cannot register typealias \"%s\"\n",
 			__func__, g_quark_to_string(qalias));
-		goto error;
+		goto end;
 	}
 
-error:
+end:
 	if (type_decl) {
 		bt_ctf_field_type_put(type_decl);
 		type_decl = NULL;
@@ -1646,11 +1652,14 @@ int visit_struct_decl(struct ctx *ctx, const char *name,
 			ret = -EINVAL;
 			goto error;
 		}
-
-		bt_ctf_field_type_get(*struct_decl);
 	} else {
 		if (name) {
-			if (ctx_decl_scope_lookup_struct(ctx->current_scope, name, 1)) {
+			struct bt_ctf_field_type *estruct_decl =
+				ctx_decl_scope_lookup_struct(ctx->current_scope,
+					name, 1);
+
+			if (estruct_decl) {
+				bt_ctf_field_type_put(estruct_decl);
 				fprintf(ctx->efd, "[error] %s: \"struct %s\" already declared in local scope\n",
 					__func__, name);
 				ret = -EINVAL;
@@ -2002,7 +2011,6 @@ int visit_type_specifier(struct ctx *ctx,
 
 	(void) g_string_free(str, TRUE);
 	str = NULL;
-	bt_ctf_field_type_get(*decl);
 
 	return 0;
 
@@ -4281,6 +4289,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		struct bt_ctf_trace **trace)
 {
 	int ret = 0;
+	struct ctx *ctx = NULL;
 
 	printf_verbose("CTF visitor: AST -> IR...\n");
 
@@ -4293,7 +4302,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		goto error;
 	}
 
-	struct ctx *ctx = ctx_create(*trace, efd);
+	ctx = ctx_create(*trace, efd);
 
 	if (!ctx) {
 		fprintf(efd, "[error] %s: cannot create visitor context\n",
