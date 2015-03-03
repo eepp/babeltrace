@@ -3622,202 +3622,106 @@ void callsite_free(gpointer data)
 	}
 	g_free(cs_dups);
 }
+#endif
 
 static
-int ctf_env_declaration_visit(FILE *fd, int depth, struct ctf_node *node,
-		struct ctf_trace *trace)
+int visit_env(struct ctx *ctx, struct ctf_node *node)
 {
 	int ret = 0;
-	struct ctf_tracer_env *env = &trace->env;
+	char *left = NULL;
+	struct ctf_node *entry_node;
 
-	switch (node->type) {
-	case NODE_CTF_EXPRESSION:
-	{
-		char *left;
+	if (node->visited) {
+		return 0;
+	}
 
-		left = concatenate_unary_strings(&node->u.ctf_expression.left);
-		if (!left)
-			return -EINVAL;
-		if (!strcmp(left, "vpid")) {
-			uint64_t v;
+	node->visited = 1;
 
-			if (env->vpid != -1) {
-				fprintf(fd, "[error] %s: vpid already declared in env declaration\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			ret = get_unary_unsigned(&node->u.ctf_expression.right, &v);
-			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for env vpid\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			env->vpid = (int) v;
-			printf_verbose("env.vpid = %d\n", env->vpid);
-		} else if (!strcmp(left, "procname")) {
-			char *right;
+	bt_list_for_each_entry(entry_node, &node->u.env.declaration_list, siblings) {
+		left = NULL;
 
-			if (env->procname[0]) {
-				fprintf(fd, "[warning] %s: duplicated env procname\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[warning] %s: unexpected unary expression for env procname\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			strncpy(env->procname, right, TRACER_ENV_LEN);
-			env->procname[TRACER_ENV_LEN - 1] = '\0';
-			printf_verbose("env.procname = \"%s\"\n", env->procname);
-			g_free(right);
-		} else if (!strcmp(left, "hostname")) {
-			char *right;
-
-			if (env->hostname[0]) {
-				fprintf(fd, "[warning] %s: duplicated env hostname\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[warning] %s: unexpected unary expression for env hostname\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			strncpy(env->hostname, right, TRACER_ENV_LEN);
-			env->hostname[TRACER_ENV_LEN - 1] = '\0';
-			printf_verbose("env.hostname = \"%s\"\n", env->hostname);
-			g_free(right);
-		} else if (!strcmp(left, "domain")) {
-			char *right;
-
-			if (env->domain[0]) {
-				fprintf(fd, "[warning] %s: duplicated env domain\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[warning] %s: unexpected unary expression for env domain\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			strncpy(env->domain, right, TRACER_ENV_LEN);
-			env->domain[TRACER_ENV_LEN - 1] = '\0';
-			printf_verbose("env.domain = \"%s\"\n", env->domain);
-			g_free(right);
-		} else if (!strcmp(left, "sysname")) {
-			char *right;
-
-			if (env->sysname[0]) {
-				fprintf(fd, "[warning] %s: duplicated env sysname\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[warning] %s: unexpected unary expression for env sysname\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			strncpy(env->sysname, right, TRACER_ENV_LEN);
-			env->sysname[TRACER_ENV_LEN - 1] = '\0';
-			printf_verbose("env.sysname = \"%s\"\n", env->sysname);
-			g_free(right);
-		} else if (!strcmp(left, "kernel_release")) {
-			char *right;
-
-			if (env->release[0]) {
-				fprintf(fd, "[warning] %s: duplicated env release\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[warning] %s: unexpected unary expression for env release\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			strncpy(env->release, right, TRACER_ENV_LEN);
-			env->release[TRACER_ENV_LEN - 1] = '\0';
-			printf_verbose("env.release = \"%s\"\n", env->release);
-			g_free(right);
-		} else if (!strcmp(left, "kernel_version")) {
-			char *right;
-
-			if (env->version[0]) {
-				fprintf(fd, "[warning] %s: duplicated env version\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[warning] %s: unexpected unary expression for env version\n", __func__);
-				goto error;	/* ret is 0, so not an actual error, just warn. */
-			}
-			strncpy(env->version, right, TRACER_ENV_LEN);
-			env->version[TRACER_ENV_LEN - 1] = '\0';
-			printf_verbose("env.version = \"%s\"\n", env->version);
-			g_free(right);
-		} else {
-			if (is_unary_string(&node->u.ctf_expression.right)) {
-				char *right;
-
-				right = concatenate_unary_strings(&node->u.ctf_expression.right);
-				if (!right) {
-					fprintf(fd, "[warning] %s: unexpected unary expression for env\n", __func__);
-					ret = -EINVAL;
-					goto error;
-				}
-				printf_verbose("env.%s = \"%s\"\n", left, right);
-				g_free(right);
-			} else if (is_unary_unsigned(&node->u.ctf_expression.right)) {
-				uint64_t v;
-				int ret;
-
-				ret = get_unary_unsigned(&node->u.ctf_expression.right, &v);
-				if (ret)
-					goto error;
-				printf_verbose("env.%s = %" PRIu64 "\n", left, v);
-			} else if (is_unary_signed(&node->u.ctf_expression.right)) {
-				int64_t v;
-				int ret;
-
-				ret = get_unary_signed(&node->u.ctf_expression.right, &v);
-				if (ret)
-					goto error;
-				printf_verbose("env.%s = %" PRId64 "\n", left, v);
-			} else {
-				printf_verbose("%s: attribute \"%s\" has unknown type.\n", __func__, left);
-			}
+		if (entry_node->type != NODE_CTF_EXPRESSION) {
+			fprintf(ctx->efd, "[error] %s: wrong expression in environment entry\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
 		}
 
-error:
+		left = concatenate_unary_strings(&entry_node->u.ctf_expression.left);
+
+		if (!left) {
+			fprintf(ctx->efd, "[error] %s: cannot get environment entry name\n",
+				__func__);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		if (is_unary_string(&entry_node->u.ctf_expression.right)) {
+			char *right;
+
+			right = concatenate_unary_strings(&entry_node->u.ctf_expression.right);
+
+			if (!right) {
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for environment entry's value (\"%s\")\n",
+					__func__, left);
+				ret = -EINVAL;
+				goto error;
+			}
+
+			printf_verbose("env.%s = \"%s\"\n", left, right);
+			ret = bt_ctf_trace_add_environment_field(ctx->trace,
+				left, right);
+
+			g_free(right);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: environment: cannot add entry \"%s\" to trace\n",
+					__func__, left);
+				goto error;
+			}
+		} else if (is_unary_unsigned(&entry_node->u.ctf_expression.right) ||
+				is_unary_signed(&entry_node->u.ctf_expression.right)) {
+			int64_t v;
+
+			if (is_unary_unsigned(&entry_node->u.ctf_expression.right)) {
+				ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, (uint64_t*) &v);
+			} else {
+				ret = get_unary_signed(&entry_node->u.ctf_expression.right, &v);
+			}
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for environment entry's value (\"%s\")\n",
+					__func__, left);
+				ret = -EINVAL;
+				goto error;
+			}
+
+			printf_verbose("env.%s = %" PRIu64 "\n", left, v);
+			ret = bt_ctf_trace_add_environment_field_integer(ctx->trace,
+				left, v);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: environment: cannot add entry \"%s\" to trace\n",
+					__func__, left);
+				goto error;
+			}
+		} else {
+			printf_verbose("%s: environment entry \"%s\" has unknown type\n",
+				__func__, left);
+		}
+
 		g_free(left);
-		break;
 	}
-	default:
-		return -EPERM;
+
+	return 0;
+
+error:
+	if (left) {
+		g_free(left);
 	}
 
 	return ret;
 }
-
-static
-int ctf_env_visit(FILE *fd, int depth, struct ctf_node *node, struct ctf_trace *trace)
-{
-	int ret = 0;
-	struct ctf_node *iter;
-
-	if (node->visited)
-		return 0;
-	node->visited = 1;
-
-	trace->env.vpid = -1;
-	trace->env.procname[0] = '\0';
-	trace->env.hostname[0] = '\0';
-	trace->env.domain[0] = '\0';
-	trace->env.sysname[0] = '\0';
-	trace->env.release[0] = '\0';
-	trace->env.version[0] = '\0';
-	bt_list_for_each_entry(iter, &node->u.env.declaration_list, siblings) {
-		ret = ctf_env_declaration_visit(fd, depth + 1, iter, trace);
-		if (ret)
-			goto error;
-	}
-error:
-	return 0;
-}
-#endif
 
 static
 int set_trace_byte_order(struct ctx *ctx, struct ctf_node *trace_node)
@@ -4408,13 +4312,19 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 			ret = -EINVAL;
 			goto error;
 		}
+#endif
+
 		bt_list_for_each_entry(iter, &node->u.root.env, siblings) {
-			ret = ctf_env_visit(fd, depth + 1, iter, trace);
+			ret = visit_env(ctx, iter);
+
 			if (ret) {
-				fprintf(fd, "[error] %s: env declaration error\n", __func__);
+				fprintf(efd, "[error] %s: error while visiting environment block (%d)\n",
+					__func__, ret);
 				goto error;
 			}
 		}
+
+#if 0
 		bt_list_for_each_entry(iter, &node->u.root.stream, siblings) {
 			ret = ctf_stream_visit(fd, depth + 1, iter,
 		    			       trace->root_declaration_scope, trace);
