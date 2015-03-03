@@ -1412,42 +1412,49 @@ static
 int visit_typedef(struct ctx *ctx, struct ctf_node *type_specifier_list,
 		struct bt_list_head *type_declarators)
 {
-#if 0
+	_BT_CTF_FIELD_TYPE_INIT(type_decl);
 	struct ctf_node *iter;
-	GQuark identifier;
+	GQuark qidentifier;
+	int ret = 0;
 
 	bt_list_for_each_entry(iter, type_declarators, siblings) {
-		struct bt_declaration *type_declaration;
-		int ret;
+		type_decl = NULL;
+		ret = visit_type_declarator(ctx, type_specifier_list,
+			&qidentifier, iter, &type_decl, NULL);
 
-		type_declaration = ctf_type_declarator_visit(fd, depth,
-					type_specifier_list,
-					&identifier, iter,
-					scope, NULL, trace);
-		if (!type_declaration) {
-			fprintf(fd, "[error] %s: problem creating type declaration\n", __func__);
-			return -EINVAL;
+		if (ret) {
+			fprintf(ctx->efd, "[error] %s: problem creating type declaration\n",
+				__func__);
+			ret = -EINVAL;
+			goto error;
 		}
-		/*
-		 * Don't allow typedef and typealias of untagged
-		 * variants.
-		 */
+
+		/* do not allow typedef and typealias of untagged variants */
+#if 0
 		if (type_declaration->id == CTF_TYPE_UNTAGGED_VARIANT) {
 			fprintf(fd, "[error] %s: typedef of untagged variant is not permitted.\n", __func__);
 			bt_declaration_unref(type_declaration);
 			return -EPERM;
 		}
-		ret = bt_register_declaration(identifier, type_declaration, scope);
-		if (ret) {
-			type_declaration->declaration_free(type_declaration);
-			return ret;
-		}
-		bt_declaration_unref(type_declaration);
-	}
 #endif
-	puts(":: visiting typedef");
+
+		ret = ctx_decl_scope_register_alias(ctx->current_scope,
+			g_quark_to_string(qidentifier), type_decl);
+		_BT_CTF_FIELD_TYPE_PUT(type_decl);
+
+		if (ret) {
+			fprintf(ctx->efd, "[error] %s: cannot register typedef \"%s\"\n",
+				__func__, g_quark_to_string(qidentifier));
+			goto error;
+		}
+	}
 
 	return 0;
+
+error:
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(type_decl);
+
+	return ret;
 }
 
 static
@@ -1460,9 +1467,7 @@ int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 	GQuark qalias;
 	int ret = 0;
 
-	/*
-	 * Create target type declaration.
-	 */
+	/* create target type declaration */
 	if (bt_list_empty(&target->u.typealias_target.type_declarators)) {
 		node = NULL;
 	} else {
@@ -1964,7 +1969,7 @@ int visit_enum_decl(struct ctx *ctx, const char *name,
 		}
 	}
 
-	_BT_CTF_FIELD_TYPE_PUT(integer_decl);
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(integer_decl);
 
 	return 0;
 
