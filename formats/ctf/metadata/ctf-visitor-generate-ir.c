@@ -1715,6 +1715,7 @@ error:
 	return ret;
 }
 
+#if 0
 static
 int visit_variant_decl(struct ctx *ctx, const char *name,
 	const char *tag, struct bt_list_head *declaration_list,
@@ -1752,23 +1753,17 @@ int visit_variant_decl(struct ctx *ctx, const char *name,
 				ctx_decl_scope_lookup_struct(ctx->current_scope,
 					name, 1);
 
-			if (estruct_decl) {
-				_BT_CTF_FIELD_TYPE_PUT(estruct_decl);
-				fprintf(ctx->efd, "[error] %s: \"struct %s\" already declared in local scope\n",
+			if (evariant_decl) {
+				_BT_CTF_FIELD_TYPE_PUT(evariant_decl);
+				fprintf(ctx->efd, "[error] %s: \"variant %s\" already declared in local scope\n",
 					__func__, name);
 				ret = -EINVAL;
 				goto error;
 			}
 		}
-//HERE
 
-		if (name) {
-			if (bt_lookup_variant_declaration(g_quark_from_string(name),
-						       declaration_scope)) {
-				fprintf(fd, "[error] %s: variant %s already declared in scope\n", __func__, name);
-				return NULL;
-			}
-		}
+		// TODO: build untagged variant
+
 		untagged_variant_declaration = bt_untagged_bt_variant_declaration_new(declaration_scope);
 		bt_list_for_each_entry(iter, declaration_list, siblings) {
 			int ret;
@@ -1805,6 +1800,7 @@ error:
 	untagged_variant_declaration->p.declaration_free(&untagged_variant_declaration->p);
 	return NULL;
 }
+#endif
 
 static
 int visit_enum_decl_entry(struct ctx *ctx, struct ctf_node *enumerator,
@@ -2745,8 +2741,11 @@ int visit_type_specifier_list(struct ctx *ctx,
 		}
 		break;
 
-#if 0
 	case TYPESPEC_VARIANT:
+		fprintf(ctx->efd, "TODO: support variants\n");
+		ret = -EPERM;
+		goto error;
+#if 0
 		return ctf_declaration_variant_visit(fd, depth,
 			node->u.variant.name,
 			node->u.variant.choice,
