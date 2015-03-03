@@ -94,17 +94,27 @@ enum {
 #define _bt_list_first_entry(ptr, type, member)	\
 	bt_list_entry((ptr)->next, type, member)
 
-#define _BT_CTF_FIELD_PUT(_field)		\
+#define _BT_CTF_FIELD_TYPE_PUT(_field)		\
 	do {					\
+		assert(_field);			\
 		bt_ctf_field_type_put(_field);	\
 		_field = NULL;			\
 	} while (0)
 
-#define _BT_CTF_FIELD_MOVE(_dst, _src)	\
+#define _BT_CTF_FIELD_TYPE_MOVE(_dst, _src)	\
 	do {				\
 		(_dst) = (_src);	\
 		(_src) = NULL;		\
 	} while (0)
+
+#define _BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(_field)	\
+	do {						\
+		if (_field) {				\
+			_BT_CTF_FIELD_TYPE_PUT(_field);	\
+		}					\
+	} while (0)
+
+#define _BT_CTF_FIELD_TYPE_INIT(_name)	struct bt_ctf_field_type *_name = NULL;
 
 /*
  * Declaration scope of a visitor context. This represents a TSDL
@@ -230,7 +240,7 @@ struct bt_ctf_field_type *ctx_decl_scope_lookup_prefix_alias(
 	}
 
 	struct ctx_decl_scope *cur_scope = scope;
-	struct bt_ctf_field_type *decl = NULL;
+	_BT_CTF_FIELD_TYPE_INIT(decl);
 	int cur_levels = 0;
 
 	if (levels < 0) {
@@ -348,11 +358,11 @@ int ctx_decl_scope_register_prefix_alias(struct ctx_decl_scope *scope,
 	}
 
 	/* make sure alias does not exist in local scope */
-	struct bt_ctf_field_type *edecl = ctx_decl_scope_lookup_prefix_alias(
-		scope, prefix, name, 1);
+	struct bt_ctf_field_type *edecl =
+		ctx_decl_scope_lookup_prefix_alias(scope, prefix, name, 1);
 
 	if (edecl) {
-		bt_ctf_field_type_put(edecl);
+		_BT_CTF_FIELD_TYPE_PUT(edecl);
 		ret = -EEXIST;
 		goto error;
 	}
@@ -1129,7 +1139,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 
 			if (bt_ctf_field_type_get_type_id(nested_decl) == CTF_TYPE_INTEGER) {
 				/* copy integer to set its base to 16 */
-				struct bt_ctf_field_type *int_decl_copy;
+				_BT_CTF_FIELD_TYPE_INIT(int_decl_copy);
 
 				int_decl_copy = bt_ctf_field_type_integer_create(
 					bt_ctf_field_type_integer_get_size(nested_decl));
@@ -1148,7 +1158,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 					bt_ctf_clock_put(mapped_clock);
 				}
 
-				bt_ctf_field_type_put(nested_decl);
+				_BT_CTF_FIELD_TYPE_PUT(nested_decl);
 				nested_decl = int_decl_copy;
 			}
 		} else {
@@ -1165,9 +1175,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 	assert(nested_decl);
 
 	if (!node_type_declarator) {
-		/* move ownership */
-		*field_decl = nested_decl;
-		nested_decl = NULL;
+		_BT_CTF_FIELD_TYPE_MOVE(*field_decl, nested_decl);
 		goto end;
 	}
 
@@ -1178,12 +1186,10 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 			*field_name = 0;
 		}
 
-		/* move ownership */
-		*field_decl = nested_decl;
-		nested_decl = NULL;
+		_BT_CTF_FIELD_TYPE_MOVE(*field_decl, nested_decl);
 		goto end;
 	} else {
-		struct bt_ctf_field_type *decl;
+		_BT_CTF_FIELD_TYPE_INIT(decl);
 		struct ctf_node *first;
 
 		/* create array/sequence, pass nested_decl as child */
@@ -1205,15 +1211,14 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 		switch (first->u.unary_expression.type) {
 		case UNARY_UNSIGNED_CONSTANT:
 		{
-			struct bt_ctf_field_type *array_decl;
+			_BT_CTF_FIELD_TYPE_INIT(array_decl);
 			size_t len;
 
 			len = first->u.unary_expression.u.unsigned_constant;
 			array_decl = bt_ctf_field_type_array_create(nested_decl,
 				len);
 
-			bt_ctf_field_type_put(nested_decl);
-			nested_decl = NULL;
+			_BT_CTF_FIELD_TYPE_PUT(nested_decl);
 
 			if (!array_decl) {
 				fprintf(ctx->efd, "[error] %s: cannot create array declaration\n",
@@ -1222,9 +1227,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 				goto error;
 			}
 
-			/* move ownership */
-			decl = array_decl;
-			array_decl = NULL;
+			_BT_CTF_FIELD_TYPE_MOVE(decl, array_decl);
 			break;
 		}
 
@@ -1232,7 +1235,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 		{
 			/* lookup unsigned integer definition, create sequence */
 			char *length_name = concatenate_unary_strings(&node_type_declarator->u.type_declarator.u.nested.length);
-			struct bt_ctf_field_type *seq_decl;
+			_BT_CTF_FIELD_TYPE_INIT(seq_decl);
 
 			if (!length_name) {
 				ret = -EINVAL;
@@ -1244,8 +1247,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 
 			g_free(length_name);
 
-			bt_ctf_field_type_put(nested_decl);
-			nested_decl = NULL;
+			_BT_CTF_FIELD_TYPE_PUT(nested_decl);
 
 			if (!seq_decl) {
 				fprintf(ctx->efd, "[error] %s: cannot create sequence declaration\n",
@@ -1254,9 +1256,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 				goto error;
 			}
 
-			/* move ownership */
-			decl = seq_decl;
-			seq_decl = NULL;
+			_BT_CTF_FIELD_TYPE_MOVE(decl, seq_decl);
 			break;
 		}
 
@@ -1276,7 +1276,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 		 * nested declaration as the content of the outer
 		 * container, MOVING its ownership.
 		 */
-		struct bt_ctf_field_type *outer_field_decl = NULL;
+		_BT_CTF_FIELD_TYPE_INIT(outer_field_decl);
 
 		ret = visit_type_declarator(ctx, type_specifier_list,
 			field_name,
@@ -1291,29 +1291,18 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 		}
 
 		assert(outer_field_decl);
-
-		/* move ownership */
-		*field_decl = outer_field_decl;
+		_BT_CTF_FIELD_TYPE_MOVE(*field_decl, outer_field_decl);
 	}
 
 end:
-	if (nested_decl) {
-		bt_ctf_field_type_put(nested_decl);
-	}
-
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(nested_decl);
 	assert(*field_decl);
 
 	return 0;
 
 error:
-	if (nested_decl) {
-		bt_ctf_field_type_put(nested_decl);
-	}
-
-	if (*field_decl) {
-		bt_ctf_field_type_put(*field_decl);
-		*field_decl = NULL;
-	}
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(nested_decl);
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(*field_decl);
 
 	return ret;
 }
@@ -1326,7 +1315,7 @@ int visit_struct_field(struct ctx *ctx,
 {
 	int ret = 0;
 	struct ctf_node *iter;
-	struct bt_ctf_field_type *field_decl = NULL;
+	_BT_CTF_FIELD_TYPE_INIT(field_decl);
 
 	bt_list_for_each_entry(iter, type_declarators, siblings) {
 		field_decl = NULL;
@@ -1353,7 +1342,7 @@ int visit_struct_field(struct ctx *ctx,
 			field_name);
 
 		if (existing_field_decl) {
-			bt_ctf_field_type_put(existing_field_decl);
+			_BT_CTF_FIELD_TYPE_PUT(existing_field_decl);
 			fprintf(ctx->efd, "[error] %s: duplicate field \"%s\" in struct\n",
 				__func__, field_name);
 			ret = -EINVAL;
@@ -1363,8 +1352,7 @@ int visit_struct_field(struct ctx *ctx,
 		/* add field to structure */
 		ret = bt_ctf_field_type_structure_add_field(struct_decl,
 			field_decl, field_name);
-		bt_ctf_field_type_put(field_decl);
-		field_decl = NULL;
+		_BT_CTF_FIELD_TYPE_PUT(field_decl);
 
 		if (ret) {
 			fprintf(ctx->efd, "[error] %s: cannot add field %s to structure\n",
@@ -1376,9 +1364,7 @@ int visit_struct_field(struct ctx *ctx,
 	return 0;
 
 error:
-	if (field_decl) {
-		bt_ctf_field_type_put(field_decl);
-	}
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(field_decl);
 
 	return ret;
 }
@@ -1468,7 +1454,7 @@ static
 int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 	struct ctf_node *alias)
 {
-	struct bt_ctf_field_type *type_decl = NULL;
+	_BT_CTF_FIELD_TYPE_INIT(type_decl);
 	struct ctf_node *node;
 	GQuark qdummy_field_name;
 	GQuark qalias;
@@ -1529,10 +1515,7 @@ int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 	}
 
 end:
-	if (type_decl) {
-		bt_ctf_field_type_put(type_decl);
-		type_decl = NULL;
-	}
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(type_decl);
 
 	return ret;
 }
@@ -1664,7 +1647,7 @@ int visit_struct_decl(struct ctx *ctx, const char *name,
 					name, 1);
 
 			if (estruct_decl) {
-				bt_ctf_field_type_put(estruct_decl);
+				_BT_CTF_FIELD_TYPE_PUT(estruct_decl);
 				fprintf(ctx->efd, "[error] %s: \"struct %s\" already declared in local scope\n",
 					__func__, name);
 				ret = -EINVAL;
@@ -1722,10 +1705,7 @@ int visit_struct_decl(struct ctx *ctx, const char *name,
 	return 0;
 
 error:
-	if (*struct_decl) {
-		bt_ctf_field_type_put(*struct_decl);
-		*struct_decl = NULL;
-	}
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(*struct_decl);
 
 	return ret;
 }
@@ -1885,7 +1865,7 @@ int visit_enum_decl(struct ctx *ctx, const char *name,
 	int has_body,
 	struct bt_ctf_field_type **enum_decl)
 {
-	struct bt_ctf_field_type *integer_decl = NULL;
+	_BT_CTF_FIELD_TYPE_INIT(integer_decl);
 	GQuark qdummy_id;
 	int ret = 0;
 
@@ -1914,7 +1894,7 @@ int visit_enum_decl(struct ctx *ctx, const char *name,
 					name, 1);
 
 			if (eenum_decl) {
-				bt_ctf_field_type_put(eenum_decl);
+				_BT_CTF_FIELD_TYPE_PUT(eenum_decl);
 				fprintf(ctx->efd, "[error] %s: \"enum %s\" already declared in local scope\n",
 					__func__, name);
 				ret = -EINVAL;
@@ -1984,22 +1964,13 @@ int visit_enum_decl(struct ctx *ctx, const char *name,
 		}
 	}
 
-	assert(integer_decl);
-	bt_ctf_field_type_put(integer_decl);
-	integer_decl = NULL;
+	_BT_CTF_FIELD_TYPE_PUT(integer_decl);
 
 	return 0;
 
 error:
-	if (integer_decl) {
-		bt_ctf_field_type_put(integer_decl);
-		integer_decl = NULL;
-	}
-
-	if (*enum_decl) {
-		bt_ctf_field_type_put(*enum_decl);
-		*enum_decl = NULL;
-	}
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(integer_decl);
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(*enum_decl);
 
 	return ret;
 }
@@ -2040,10 +2011,7 @@ error:
 		(void) g_string_free(str, TRUE);
 	}
 
-	if (*decl) {
-		bt_ctf_field_type_put(*decl);
-		*decl = NULL;
-	}
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(*decl);
 
 	return ret;
 }
@@ -2401,10 +2369,7 @@ error:
 		bt_ctf_clock_put(mapped_clock);
 	}
 
-	if (*integer_decl) {
-		bt_ctf_field_type_put(*integer_decl);
-		*integer_decl = NULL;
-	}
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(*integer_decl);
 
 	return ret;
 }
@@ -2583,10 +2548,7 @@ int visit_floating_point_number_decl(struct ctx *ctx,
 	return 0;
 
 error:
-	if (*float_decl) {
-		bt_ctf_field_type_put(*float_decl);
-		*float_decl = NULL;
-	}
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(*float_decl);
 
 	return ret;
 }
@@ -2686,10 +2648,7 @@ int visit_string_decl(struct ctx *ctx,
 	return 0;
 
 error:
-	if (*string_decl) {
-		bt_ctf_field_type_put(*string_decl);
-		*string_decl = NULL;
-	}
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(*string_decl);
 
 	return ret;
 }
@@ -2819,10 +2778,7 @@ int visit_type_specifier_list(struct ctx *ctx,
 	return 0;
 
 error:
-	if (*decl) {
-		bt_ctf_field_type_put(*decl);
-		*decl = NULL;
-	}
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(*decl);
 
 	return ret;
 }
@@ -4285,7 +4241,7 @@ int visit_root_decl(struct ctx *ctx, struct ctf_node *root_decl_node)
 
 	case NODE_TYPE_SPECIFIER_LIST:
 	{
-		struct bt_ctf_field_type *decl = NULL;
+		_BT_CTF_FIELD_TYPE_INIT(decl);
 
 		/*
 		 * Just add the type specifier to the root
@@ -4298,7 +4254,7 @@ int visit_root_decl(struct ctx *ctx, struct ctf_node *root_decl_node)
 			goto end;
 		}
 
-		bt_ctf_field_type_put(decl);
+		_BT_CTF_FIELD_TYPE_PUT(decl);
 		break;
 	}
 
