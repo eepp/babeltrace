@@ -1715,33 +1715,53 @@ error:
 	return ret;
 }
 
-#if 0
 static
-struct bt_declaration *ctf_declaration_variant_visit(FILE *fd,
-	int depth, const char *name, const char *choice,
-	struct bt_list_head *declaration_list,
-	int has_body, struct declaration_scope *declaration_scope,
-	struct ctf_trace *trace)
+int visit_variant_decl(struct ctx *ctx, const char *name,
+	const char *tag, struct bt_list_head *declaration_list,
+	int has_body, struct bt_ctf_field_type **variant_decl)
 {
-	struct declaration_untagged_variant *untagged_variant_declaration;
-	struct declaration_variant *variant_declaration;
+	_BT_CTF_FIELD_TYPE_INIT(untagged_variant_decl);
 	struct ctf_node *iter;
+	int ret = 0;
+
+	*variant_decl = NULL;
 
 	/*
-	 * For named variant (without body), lookup in
-	 * declaration scope. Don't take reference on variant
-	 * declaration: ref is only taken upon definition.
+	 * For named variant (without body), lookup in declaration
+	 * scope.
 	 */
 	if (!has_body) {
-		if (!name)
-			return NULL;
-		untagged_variant_declaration =
-			bt_lookup_variant_declaration(g_quark_from_string(name),
-						   declaration_scope);
-		bt_declaration_ref(&untagged_variant_declaration->p);
+		if (!name) {
+			ret = -EPERM;
+			goto error;
+		}
+
+		untagged_variant_decl =
+			ctx_decl_scope_lookup_variant(ctx->current_scope,
+				name, -1);
+
+		if (!*untagged_variant_decl) {
+			fprintf(ctx->efd, "[error] %s: cannot find \"variant %s\"\n",
+				__func__, name);
+			ret = -EINVAL;
+			goto error;
+		}
 	} else {
-		/* For unnamed variant, create type */
-		/* For named variant (with body), create type and add to declaration scope */
+		if (name) {
+			struct bt_ctf_field_type *evariant_decl =
+				ctx_decl_scope_lookup_struct(ctx->current_scope,
+					name, 1);
+
+			if (estruct_decl) {
+				_BT_CTF_FIELD_TYPE_PUT(estruct_decl);
+				fprintf(ctx->efd, "[error] %s: \"struct %s\" already declared in local scope\n",
+					__func__, name);
+				ret = -EINVAL;
+				goto error;
+			}
+		}
+//HERE
+
 		if (name) {
 			if (bt_lookup_variant_declaration(g_quark_from_string(name),
 						       declaration_scope)) {
@@ -1785,7 +1805,6 @@ error:
 	untagged_variant_declaration->p.declaration_free(&untagged_variant_declaration->p);
 	return NULL;
 }
-#endif
 
 static
 int visit_enum_decl_entry(struct ctx *ctx, struct ctf_node *enumerator,
