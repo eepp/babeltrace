@@ -3200,14 +3200,15 @@ error:
 
 	return ret;
 }
+#endif
 
+#if 0
 static
-int ctf_stream_visit(FILE *fd, int depth, struct ctf_node *node,
-		     struct declaration_scope *parent_declaration_scope, struct ctf_trace *trace)
+int visit_stream(struct ctx *ctx, struct ctf_node *node)
 {
 	int ret = 0;
 	struct ctf_node *iter;
-	struct ctf_stream_declaration *stream;
+
 
 	if (node) {
 		if (node->visited)
@@ -4019,12 +4020,6 @@ int visit_root_decl(struct ctx *ctx, struct ctf_node *root_decl_node)
 
 	root_decl_node->visited = 1;
 
-#if 0
-	if (!trace->restart_root_decl && node->visited)
-		return 0;
-	node->visited = 1;
-#endif
-
 	switch (root_decl_node->type) {
 	case NODE_TYPEDEF:
 		ret = visit_typedef(ctx, root_decl_node->u._typedef.type_specifier_list,
@@ -4193,42 +4188,6 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 				goto error;
 			}
 		}
-
-#if 0
-		bt_list_for_each_entry(iter, &node->u.root.trace, siblings) {
-			ret = ctf_trace_visit(fd, depth + 1, iter, trace);
-			if (ret == -EINTR) {
-				trace->restart_root_decl = 1;
-				bt_free_declaration_scope(trace->root_declaration_scope);
-				/*
-				 * Need to restart creation of type
-				 * definitions, aliases and
-				 * trace header declarations.
-				 */
-				goto retry;
-			}
-			if (ret) {
-				fprintf(fd, "[error] %s: trace declaration error\n", __func__);
-				goto error;
-			}
-		}
-		trace->restart_root_decl = 0;
-		bt_list_for_each_entry(iter, &node->u.root.callsite, siblings) {
-			ret = ctf_callsite_visit(fd, depth + 1, iter,
-					      trace);
-			if (ret) {
-				fprintf(fd, "[error] %s: callsite declaration error\n", __func__);
-				goto error;
-			}
-		}
-		if (!trace->streams) {
-			fprintf(fd, "[error] %s: missing trace declaration\n", __func__);
-			ret = -EINVAL;
-			goto error;
-		}
-#endif
-
-
 
 #if 0
 		bt_list_for_each_entry(iter, &node->u.root.stream, siblings) {
