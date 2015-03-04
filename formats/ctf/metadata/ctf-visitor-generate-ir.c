@@ -86,13 +86,21 @@ enum {
 	_STRING_ENCODING_SET =		_BV(0),
 };
 
+enum {
+	_TRACE_MINOR_SET =		_BV(0),
+	_TRACE_MAJOR_SET =		_BV(1),
+	_TRACE_BYTE_ORDER_SET =		_BV(2),
+	_TRACE_UUID_SET =		_BV(3),
+	_TRACE_PACKET_HEADER_SET =	_BV(4),
+};
+
 #define _PREFIX_ALIAS	'a'
 #define _PREFIX_ENUM	'e'
 #define _PREFIX_STRUCT	's'
 #define _PREFIX_VARIANT	'v'
 
-#define _bt_list_first_entry(ptr, type, member)	\
-	bt_list_entry((ptr)->next, type, member)
+#define _BT_LIST_FIRST_ENTRY(_ptr, _type, _member)	\
+	bt_list_entry((_ptr)->next, _type, _member)
 
 #define _BT_CTF_FIELD_TYPE_PUT(_field)		\
 	do {					\
@@ -138,7 +146,7 @@ struct ctx_decl_scope {
  * Visitor context.
  */
 struct ctx {
-	/* trace being filled */
+	/* trace being filled (weak ref) */
 	struct bt_ctf_trace *trace;
 
 	/* error stream */
@@ -146,6 +154,14 @@ struct ctx {
 
 	/* current declaration scope */
 	struct ctx_decl_scope *current_scope;
+
+	/* trace is visited */
+	int is_trace_visited;
+
+	/* trace attributes */
+	uint64_t trace_major;
+	uint64_t trace_minor;
+	unsigned char trace_uuid[BABELTRACE_UUID_LEN];
 };
 
 /**
@@ -475,6 +491,7 @@ struct ctx *ctx_create(struct bt_ctf_trace *trace, FILE *efd)
 	ctx->trace = trace;
 	ctx->efd = efd;
 	ctx->current_scope = scope;
+	ctx->is_trace_visited = FALSE;
 
 	return ctx;
 }
@@ -514,6 +531,8 @@ int ctx_push_scope(struct ctx *ctx)
 	struct ctx_decl_scope *new_scope =
 		ctx_decl_scope_create(ctx->current_scope);
 
+	//printf("PUSH  old=%p  new=%p\n", ctx->current_scope, new_scope);
+
 	if (!new_scope) {
 		return -ENOMEM;
 	}
@@ -538,6 +557,8 @@ void ctx_pop_scope(struct ctx *ctx)
 	}
 
 	struct ctx_decl_scope *parent_scope = ctx->current_scope->parent_scope;
+
+	//printf("POP  old=%p  new=%p\n", ctx->current_scope, parent_scope);
 
 	ctx_decl_scope_destroy(ctx->current_scope);
 	ctx->current_scope = parent_scope;
@@ -1200,7 +1221,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 			goto error;
 		}
 
-		first = _bt_list_first_entry(&node_type_declarator->u.type_declarator.u.nested.length,
+		first = _BT_LIST_FIRST_ENTRY(&node_type_declarator->u.type_declarator.u.nested.length,
 			struct ctf_node, siblings);
 
 		if (first->type != NODE_UNARY_EXPRESSION) {
@@ -1471,7 +1492,7 @@ int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 	if (bt_list_empty(&target->u.typealias_target.type_declarators)) {
 		node = NULL;
 	} else {
-		node = _bt_list_first_entry(&target->u.typealias_target.type_declarators,
+		node = _BT_LIST_FIRST_ENTRY(&target->u.typealias_target.type_declarators,
 			struct ctf_node, siblings);
 	}
 
@@ -1506,7 +1527,7 @@ int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 	}
 
 	/* create alias identifier */
-	node = _bt_list_first_entry(&alias->u.typealias_alias.type_declarators,
+	node = _BT_LIST_FIRST_ENTRY(&alias->u.typealias_alias.type_declarators,
 		struct ctf_node, siblings);
 	qalias = create_typealias_identifier(ctx,
 		alias->u.typealias_alias.type_specifier_list, node);
@@ -1689,6 +1710,7 @@ int visit_struct_decl(struct ctx *ctx, const char *name,
 			ret = visit_struct_entry(ctx, entry_node, *struct_decl);
 
 			if (ret) {
+				ctx_pop_scope(ctx);
 				goto error;
 			}
 		}
@@ -2056,8 +2078,8 @@ int visit_integer_decl(struct ctx *ctx,
 	bt_list_for_each_entry(expression, expressions, siblings) {
 		struct ctf_node *left, *right;
 
-		left = _bt_list_first_entry(&expression->u.ctf_expression.left, struct ctf_node, siblings);
-		right = _bt_list_first_entry(&expression->u.ctf_expression.right, struct ctf_node, siblings);
+		left = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.left, struct ctf_node, siblings);
+		right = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.right, struct ctf_node, siblings);
 
 		if (left->u.unary_expression.type != UNARY_STRING) {
 			ret = -EINVAL;
@@ -2410,8 +2432,8 @@ int visit_floating_point_number_decl(struct ctx *ctx,
 	bt_list_for_each_entry(expression, expressions, siblings) {
 		struct ctf_node *left, *right;
 
-		left = _bt_list_first_entry(&expression->u.ctf_expression.left, struct ctf_node, siblings);
-		right = _bt_list_first_entry(&expression->u.ctf_expression.right, struct ctf_node, siblings);
+		left = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.left, struct ctf_node, siblings);
+		right = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.right, struct ctf_node, siblings);
 
 		if (left->u.unary_expression.type != UNARY_STRING) {
 			ret = -EINVAL;
@@ -2588,8 +2610,8 @@ int visit_string_decl(struct ctx *ctx,
 	bt_list_for_each_entry(expression, expressions, siblings) {
 		struct ctf_node *left, *right;
 
-		left = _bt_list_first_entry(&expression->u.ctf_expression.left, struct ctf_node, siblings);
-		right = _bt_list_first_entry(&expression->u.ctf_expression.right, struct ctf_node, siblings);
+		left = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.left, struct ctf_node, siblings);
+		right = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.right, struct ctf_node, siblings);
 
 		if (left->u.unary_expression.type != UNARY_STRING) {
 			ret = -EINVAL;
@@ -2688,7 +2710,7 @@ int visit_type_specifier_list(struct ctx *ctx,
 		goto error;
 	}
 
-	first = _bt_list_first_entry(&ts_list->u.type_specifier_list.head,
+	first = _BT_LIST_FIRST_ENTRY(&ts_list->u.type_specifier_list.head,
 		struct ctf_node, siblings);
 
 	if (first->type != NODE_TYPE_SPECIFIER) {
@@ -2895,7 +2917,7 @@ int ctf_event_declaration_visit(FILE *fd, int depth, struct ctf_node *node, stru
 				goto error;
 			}
 			declaration = ctf_type_specifier_list_visit(fd, depth,
-					_bt_list_first_entry(&node->u.ctf_expression.right,
+					_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
 						struct ctf_node, siblings),
 					event->declaration_scope, trace);
 			if (!declaration) {
@@ -2916,7 +2938,7 @@ int ctf_event_declaration_visit(FILE *fd, int depth, struct ctf_node *node, stru
 				goto error;
 			}
 			declaration = ctf_type_specifier_list_visit(fd, depth,
-					_bt_list_first_entry(&node->u.ctf_expression.right,
+					_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
 						struct ctf_node, siblings),
 					event->declaration_scope, trace);
 			if (!declaration) {
@@ -3108,7 +3130,7 @@ int ctf_stream_declaration_visit(FILE *fd, int depth, struct ctf_node *node, str
 				goto error;
 			}
 			declaration = ctf_type_specifier_list_visit(fd, depth,
-					_bt_list_first_entry(&node->u.ctf_expression.right,
+					_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
 						struct ctf_node, siblings),
 					stream->declaration_scope, trace);
 			if (!declaration) {
@@ -3129,7 +3151,7 @@ int ctf_stream_declaration_visit(FILE *fd, int depth, struct ctf_node *node, str
 				goto error;
 			}
 			declaration = ctf_type_specifier_list_visit(fd, depth,
-					_bt_list_first_entry(&node->u.ctf_expression.right,
+					_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
 						struct ctf_node, siblings),
 					stream->declaration_scope, trace);
 			if (!declaration) {
@@ -3150,7 +3172,7 @@ int ctf_stream_declaration_visit(FILE *fd, int depth, struct ctf_node *node, str
 				goto error;
 			}
 			declaration = ctf_type_specifier_list_visit(fd, depth,
-					_bt_list_first_entry(&node->u.ctf_expression.right,
+					_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
 						struct ctf_node, siblings),
 					stream->declaration_scope, trace);
 			if (!declaration) {
@@ -3243,386 +3265,236 @@ error:
 	g_free(stream);
 	return ret;
 }
+#endif
 
 static
-int ctf_trace_declaration_visit(FILE *fd, int depth, struct ctf_node *node, struct ctf_trace *trace)
+int visit_trace_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 {
 	int ret = 0;
+	char *left = NULL;
+	_BT_CTF_FIELD_TYPE_INIT(packet_header_decl);
 
 	switch (node->type) {
 	case NODE_TYPEDEF:
-		ret = ctf_typedef_visit(fd, depth + 1,
-					trace->declaration_scope,
-					node->u._typedef.type_specifier_list,
-					&node->u._typedef.type_declarators,
-					trace);
-		if (ret)
-			return ret;
+		ret = visit_typedef(ctx, node->u._typedef.type_specifier_list,
+			&node->u._typedef.type_declarators);
+
+		if (ret) {
+			fprintf(ctx->efd, "[error] %s: cannot add typedef in \"trace\" block\n",
+				__func__);
+			goto error;
+		}
 		break;
+
 	case NODE_TYPEALIAS:
-		ret = ctf_typealias_visit(fd, depth + 1,
-				trace->declaration_scope,
-				node->u.typealias.target, node->u.typealias.alias,
-				trace);
-		if (ret)
-			return ret;
+		ret = visit_typealias(ctx, node->u.typealias.target,
+			node->u.typealias.alias);
+
+		if (ret) {
+			fprintf(ctx->efd, "[error] %s: cannot add typealias in \"trace\" block\n",
+				__func__);
+			goto error;
+		}
 		break;
+
 	case NODE_CTF_EXPRESSION:
 	{
-		char *left;
-
 		left = concatenate_unary_strings(&node->u.ctf_expression.left);
-		if (!left)
-			return -EINVAL;
+
+		if (!left) {
+			ret = -EINVAL;
+			goto error;
+		}
+
 		if (!strcmp(left, "major")) {
-			if (CTF_TRACE_FIELD_IS_SET(trace, major)) {
-				fprintf(fd, "[error] %s: major already declared in trace declaration\n", __func__);
+			if (_IS_SET(set, _TRACE_MAJOR_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"major\" in trace declaration\n",
+					__func__);
 				ret = -EPERM;
 				goto error;
 			}
-			ret = get_unary_unsigned(&node->u.ctf_expression.right, &trace->major);
+
+			ret = get_unary_unsigned(&node->u.ctf_expression.right,
+				&ctx->trace_major);
+
 			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for trace major number\n", __func__);
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for trace's \"major\" attribute\n",
+					__func__);
 				ret = -EINVAL;
 				goto error;
 			}
-			CTF_TRACE_SET_FIELD(trace, major);
+
+			_SET(set, _TRACE_MAJOR_SET);
 		} else if (!strcmp(left, "minor")) {
-			if (CTF_TRACE_FIELD_IS_SET(trace, minor)) {
-				fprintf(fd, "[error] %s: minor already declared in trace declaration\n", __func__);
+			if (_IS_SET(set, _TRACE_MINOR_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"minor\" in trace declaration\n",
+					__func__);
 				ret = -EPERM;
 				goto error;
 			}
-			ret = get_unary_unsigned(&node->u.ctf_expression.right, &trace->minor);
+
+			ret = get_unary_unsigned(&node->u.ctf_expression.right,
+				&ctx->trace_minor);
+
 			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for trace minor number\n", __func__);
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for trace's \"minor\" attribute\n",
+					__func__);
 				ret = -EINVAL;
 				goto error;
 			}
-			CTF_TRACE_SET_FIELD(trace, minor);
+
+			_SET(set, _TRACE_MINOR_SET);
 		} else if (!strcmp(left, "uuid")) {
-			unsigned char uuid[BABELTRACE_UUID_LEN];
-
-			ret = get_unary_uuid(&node->u.ctf_expression.right, uuid);
-			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for trace uuid\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-			if (CTF_TRACE_FIELD_IS_SET(trace, uuid)
-				&& babeltrace_uuid_compare(uuid, trace->uuid)) {
-				fprintf(fd, "[error] %s: uuid mismatch\n", __func__);
+			if (_IS_SET(set, _TRACE_UUID_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"uuid\" in trace declaration\n",
+					__func__);
 				ret = -EPERM;
 				goto error;
-			} else {
-				memcpy(trace->uuid, uuid, sizeof(uuid));
 			}
-			CTF_TRACE_SET_FIELD(trace, uuid);
+
+			ret = get_unary_uuid(&node->u.ctf_expression.right,
+				ctx->trace_uuid);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: invalid trace UUID\n",
+					__func__);
+				goto error;
+			}
+
+			_SET(set, _TRACE_UUID_SET);
 		} else if (!strcmp(left, "byte_order")) {
-			struct ctf_node *right;
-			int byte_order;
-
-			right = _bt_list_first_entry(&node->u.ctf_expression.right, struct ctf_node, siblings);
-			byte_order = get_trace_byte_order(fd, depth, right);
-			if (byte_order < 0) {
-				ret = -EINVAL;
-				goto error;
-			}
-
-			if (CTF_TRACE_FIELD_IS_SET(trace, byte_order)
-				&& byte_order != trace->byte_order) {
-				fprintf(fd, "[error] %s: endianness mismatch\n", __func__);
+			/* this is already done at this stage */
+			if (_IS_SET(set, _TRACE_BYTE_ORDER_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"byte_order\" in trace declaration\n",
+					__func__);
 				ret = -EPERM;
 				goto error;
-			} else {
-				if (byte_order != trace->byte_order) {
-					trace->byte_order = byte_order;
-					/*
-					 * We need to restart
-					 * construction of the
-					 * intermediate representation.
-					 */
-					trace->field_mask = 0;
-					CTF_TRACE_SET_FIELD(trace, byte_order);
-					ret = -EINTR;
-					goto error;
-				}
 			}
-			CTF_TRACE_SET_FIELD(trace, byte_order);
+
+			_SET(set, _TRACE_BYTE_ORDER_SET);
 		} else if (!strcmp(left, "packet.header")) {
-			struct bt_declaration *declaration;
+			if (_IS_SET(set, _TRACE_PACKET_HEADER_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate \"packet.header\" in trace declaration\n",
+					__func__);
+				ret = -EPERM;
+				goto error;
+			}
 
-			if (trace->packet_header_decl) {
-				fprintf(fd, "[error] %s: packet.header already declared in trace declaration\n", __func__);
-				ret = -EINVAL;
+			ret = visit_type_specifier_list(ctx,
+				_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+					struct ctf_node, siblings),
+				&packet_header_decl);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: cannot create packet header declaration\n",
+					__func__);
 				goto error;
 			}
-			declaration = ctf_type_specifier_list_visit(fd, depth,
-					_bt_list_first_entry(&node->u.ctf_expression.right,
-						struct ctf_node, siblings),
-					trace->declaration_scope, trace);
-			if (!declaration) {
-				ret = -EPERM;
+
+			assert(packet_header_decl);
+
+			ret = bt_ctf_trace_set_packet_header_type(ctx->trace,
+				packet_header_decl);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: cannot set trace's packet header declaration\n",
+					__func__);
 				goto error;
 			}
-			if (declaration->id != CTF_TYPE_STRUCT) {
-				ret = -EPERM;
-				goto error;
-			}
-			trace->packet_header_decl = container_of(declaration, struct declaration_struct, p);
+
+			_BT_CTF_FIELD_TYPE_PUT(packet_header_decl);
+			_SET(set, _TRACE_PACKET_HEADER_SET);
 		} else {
-			fprintf(fd, "[warning] %s: attribute \"%s\" is unknown in trace declaration.\n", __func__, left);
+			fprintf(ctx->efd, "[warning] %s: unknown attribute \"%s\" in trace declaration.\n",
+				__func__, left);
 		}
 
-error:
 		g_free(left);
+		left = NULL;
 		break;
 	}
+
 	default:
-		return -EPERM;
-	/* TODO: declaration specifier should be added. */
+		fprintf(ctx->efd, "[error] %s: unknown expression in trace declaration\n",
+			__func__);
+		ret = -EINVAL;
+		goto error;
 	}
+
+	return 0;
+
+error:
+	if (left) {
+		g_free(left);
+	}
+
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(packet_header_decl);
 
 	return ret;
 }
 
 static
-int ctf_trace_visit(FILE *fd, int depth, struct ctf_node *node, struct ctf_trace *trace)
+int visit_trace(struct ctx *ctx, struct ctf_node *node)
 {
 	int ret = 0;
 	struct ctf_node *iter;
 
-	if (!trace->restart_root_decl && node->visited)
+	if (node->visited) {
 		return 0;
+	}
+
 	node->visited = 1;
 
-	if (trace->declaration_scope)
-		return -EEXIST;
+	if (ctx->is_trace_visited) {
+		fprintf(ctx->efd, "[error] %s: duplicate \"trace\" block\n",
+			__func__);
+		ret = -EEXIST;
+		goto error;
+	}
 
-	trace->declaration_scope = bt_new_declaration_scope(trace->root_declaration_scope);
-	trace->streams = g_ptr_array_new();
-	trace->event_declarations = g_ptr_array_new();
+	int set = 0;
+
+	ctx_push_scope(ctx);
+
 	bt_list_for_each_entry(iter, &node->u.trace.declaration_list, siblings) {
-		ret = ctf_trace_declaration_visit(fd, depth + 1, iter, trace);
-		if (ret)
-			goto error;
-	}
-	if (!CTF_TRACE_FIELD_IS_SET(trace, major)) {
-		ret = -EPERM;
-		fprintf(fd, "[error] %s: missing major field in trace declaration\n", __func__);
-		goto error;
-	}
-	if (!CTF_TRACE_FIELD_IS_SET(trace, minor)) {
-		ret = -EPERM;
-		fprintf(fd, "[error] %s: missing minor field in trace declaration\n", __func__);
-		goto error;
-	}
-	if (!CTF_TRACE_FIELD_IS_SET(trace, byte_order)) {
-		ret = -EPERM;
-		fprintf(fd, "[error] %s: missing byte_order field in trace declaration\n", __func__);
-		goto error;
-	}
+		ret = visit_trace_entry(ctx, iter, &set);
 
-	if (!CTF_TRACE_FIELD_IS_SET(trace, byte_order)) {
-		/* check that the packet header contains a "magic" field */
-		if (!trace->packet_header_decl
-		    || bt_struct_declaration_lookup_field_index(trace->packet_header_decl, g_quark_from_static_string("magic")) < 0) {
-			ret = -EPERM;
-			fprintf(fd, "[error] %s: missing both byte_order and packet header magic number in trace declaration\n", __func__);
+		if (ret) {
+			ctx_pop_scope(ctx);
 			goto error;
 		}
 	}
+
+	ctx_pop_scope(ctx);
+
+	if (!_IS_SET(&set, _TRACE_MAJOR_SET)) {
+		ret = -EPERM;
+		fprintf(ctx->efd, "[error] %s: missing \"major\" attribute in trace declaration\n",
+			__func__);
+		goto error;
+	}
+
+	if (!_IS_SET(&set, _TRACE_MINOR_SET)) {
+		ret = -EPERM;
+		fprintf(ctx->efd, "[error] %s: missing \"minor\" attribute in trace declaration\n",
+			__func__);
+		goto error;
+	}
+
+	if (!_IS_SET(&set, _TRACE_BYTE_ORDER_SET)) {
+		ret = -EPERM;
+		fprintf(ctx->efd, "[error] %s: missing \"byte_order\" attribute in trace declaration\n",
+			__func__);
+		goto error;
+	}
+
+	ctx->is_trace_visited = TRUE;
+
 	return 0;
 
 error:
-	if (trace->packet_header_decl) {
-		bt_declaration_unref(&trace->packet_header_decl->p);
-		trace->packet_header_decl = NULL;
-	}
-	g_ptr_array_free(trace->streams, TRUE);
-	g_ptr_array_free(trace->event_declarations, TRUE);
-	bt_free_declaration_scope(trace->declaration_scope);
-	trace->declaration_scope = NULL;
 	return ret;
 }
-
-
-static
-int ctf_callsite_declaration_visit(FILE *fd, int depth, struct ctf_node *node,
-		struct ctf_callsite *callsite, struct ctf_trace *trace)
-{
-	int ret = 0;
-
-	switch (node->type) {
-	case NODE_CTF_EXPRESSION:
-	{
-		char *left;
-
-		left = concatenate_unary_strings(&node->u.ctf_expression.left);
-		if (!left)
-			return -EINVAL;
-		if (!strcmp(left, "name")) {
-			char *right;
-
-			if (CTF_CALLSITE_FIELD_IS_SET(callsite, name)) {
-				fprintf(fd, "[error] %s: name already declared in callsite declaration\n", __func__);
-				ret = -EPERM;
-				goto error;
-			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[error] %s: unexpected unary expression for callsite name\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-			callsite->name = g_quark_from_string(right);
-			g_free(right);
-			CTF_CALLSITE_SET_FIELD(callsite, name);
-		} else if (!strcmp(left, "func")) {
-			char *right;
-
-			if (CTF_CALLSITE_FIELD_IS_SET(callsite, func)) {
-				fprintf(fd, "[error] %s: func already declared in callsite declaration\n", __func__);
-				ret = -EPERM;
-				goto error;
-			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[error] %s: unexpected unary expression for callsite func\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-			callsite->func = right;
-			CTF_CALLSITE_SET_FIELD(callsite, func);
-		} else if (!strcmp(left, "file")) {
-			char *right;
-
-			if (CTF_CALLSITE_FIELD_IS_SET(callsite, file)) {
-				fprintf(fd, "[error] %s: file already declared in callsite declaration\n", __func__);
-				ret = -EPERM;
-				goto error;
-			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[error] %s: unexpected unary expression for callsite file\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-			callsite->file = right;
-			CTF_CALLSITE_SET_FIELD(callsite, file);
-		} else if (!strcmp(left, "line")) {
-			if (CTF_CALLSITE_FIELD_IS_SET(callsite, line)) {
-				fprintf(fd, "[error] %s: line already declared in callsite declaration\n", __func__);
-				ret = -EPERM;
-				goto error;
-			}
-			ret = get_unary_unsigned(&node->u.ctf_expression.right, &callsite->line);
-			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for callsite line\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-			CTF_CALLSITE_SET_FIELD(callsite, line);
-		} else if (!strcmp(left, "ip")) {
-			if (CTF_CALLSITE_FIELD_IS_SET(callsite, ip)) {
-				fprintf(fd, "[error] %s: ip already declared in callsite declaration\n", __func__);
-				ret = -EPERM;
-				goto error;
-			}
-			ret = get_unary_unsigned(&node->u.ctf_expression.right, &callsite->ip);
-			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for callsite ip\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-			CTF_CALLSITE_SET_FIELD(callsite, ip);
-		} else {
-			fprintf(fd, "[warning] %s: attribute \"%s\" is unknown in callsite declaration.\n", __func__, left);
-		}
-
-error:
-		g_free(left);
-		break;
-	}
-	default:
-		return -EPERM;
-	/* TODO: declaration specifier should be added. */
-	}
-
-	return ret;
-}
-
-static
-int ctf_callsite_visit(FILE *fd, int depth, struct ctf_node *node, struct ctf_trace *trace)
-{
-	int ret = 0;
-	struct ctf_node *iter;
-	struct ctf_callsite *callsite;
-	struct ctf_callsite_dups *cs_dups;
-
-	if (node->visited)
-		return 0;
-	node->visited = 1;
-
-	callsite = g_new0(struct ctf_callsite, 1);
-	bt_list_for_each_entry(iter, &node->u.callsite.declaration_list, siblings) {
-		ret = ctf_callsite_declaration_visit(fd, depth + 1, iter, callsite, trace);
-		if (ret)
-			goto error;
-	}
-	if (!CTF_CALLSITE_FIELD_IS_SET(callsite, name)) {
-		ret = -EPERM;
-		fprintf(fd, "[error] %s: missing name field in callsite declaration\n", __func__);
-		goto error;
-	}
-	if (!CTF_CALLSITE_FIELD_IS_SET(callsite, func)) {
-		ret = -EPERM;
-		fprintf(fd, "[error] %s: missing func field in callsite declaration\n", __func__);
-		goto error;
-	}
-	if (!CTF_CALLSITE_FIELD_IS_SET(callsite, file)) {
-		ret = -EPERM;
-		fprintf(fd, "[error] %s: missing file field in callsite declaration\n", __func__);
-		goto error;
-	}
-	if (!CTF_CALLSITE_FIELD_IS_SET(callsite, line)) {
-		ret = -EPERM;
-		fprintf(fd, "[error] %s: missing line field in callsite declaration\n", __func__);
-		goto error;
-	}
-
-	cs_dups = g_hash_table_lookup(trace->callsites,
-		(gpointer) (unsigned long) callsite->name);
-	if (!cs_dups) {
-		cs_dups = g_new0(struct ctf_callsite_dups, 1);
-		BT_INIT_LIST_HEAD(&cs_dups->head);
-		g_hash_table_insert(trace->callsites,
-			(gpointer) (unsigned long) callsite->name, cs_dups);
-	}
-	bt_list_add_tail(&callsite->node, &cs_dups->head);
-	return 0;
-
-error:
-	g_free(callsite->func);
-	g_free(callsite->file);
-	g_free(callsite);
-	return ret;
-}
-
-static
-void callsite_free(gpointer data)
-{
-	struct ctf_callsite_dups *cs_dups = data;
-	struct ctf_callsite *callsite, *cs_n;
-
-	bt_list_for_each_entry_safe(callsite, cs_n, &cs_dups->head, node) {
-		g_free(callsite->func);
-		g_free(callsite->file);
-		g_free(callsite);
-	}
-	g_free(cs_dups);
-}
-#endif
 
 static
 int visit_env(struct ctx *ctx, struct ctf_node *node)
@@ -3638,8 +3510,6 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 	node->visited = 1;
 
 	bt_list_for_each_entry(entry_node, &node->u.env.declaration_list, siblings) {
-		left = NULL;
-
 		if (entry_node->type != NODE_CTF_EXPRESSION) {
 			fprintf(ctx->efd, "[error] %s: wrong expression in environment entry\n",
 				__func__);
@@ -3711,6 +3581,7 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 		}
 
 		g_free(left);
+		left = NULL;
 	}
 
 	return 0;
@@ -3727,31 +3598,33 @@ static
 int set_trace_byte_order(struct ctx *ctx, struct ctf_node *trace_node)
 {
 	struct ctf_node *node;
-	int got_byte_order = 0;
+	int set = 0;
+	char *left = NULL;
 	int ret = 0;
 
 	bt_list_for_each_entry(node, &trace_node->u.trace.declaration_list, siblings) {
 		if (node->type == NODE_CTF_EXPRESSION) {
-			char *left = concatenate_unary_strings(&node->u.ctf_expression.left);
+			left = concatenate_unary_strings(&node->u.ctf_expression.left);
 			struct ctf_node *right_node;
 
 			if (!left) {
-				return -EINVAL;
+				ret = -EINVAL;
+				goto error;
 			}
 
 			if (!strcmp(left, "byte_order")) {
-				if (got_byte_order) {
+				if (_IS_SET(&set, _TRACE_BYTE_ORDER_SET)) {
 					fprintf(ctx->efd, "[error] %s: duplicate \"byte_order\" attribute in trace declaration\n",
 						__func__);
 					ret = -EPERM;
 					goto error;
 				}
 
-				got_byte_order = 1;
+				_SET(&set, _TRACE_BYTE_ORDER_SET);
 
 				enum bt_ctf_byte_order bo;
 
-				right_node = _bt_list_first_entry(&node->u.ctf_expression.right, struct ctf_node, siblings);
+				right_node = _BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right, struct ctf_node, siblings);
 				bo = byte_order_from_unary_expr(ctx->efd, right_node);
 
 				if (bo == BT_CTF_BYTE_ORDER_UNKNOWN) {
@@ -3775,19 +3648,23 @@ int set_trace_byte_order(struct ctx *ctx, struct ctf_node *trace_node)
 				}
 			}
 
-error:
 			g_free(left);
-
-			if (ret) {
-				return ret;
-			}
+			left = NULL;
 		}
 	}
 
-	if (!got_byte_order) {
+	if (!_IS_SET(&set, _TRACE_BYTE_ORDER_SET)) {
 		fprintf(ctx->efd, "[error] %s: missing \"byte_order\" attribute in trace declaration\n",
 			__func__);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto error;
+	}
+
+	return 0;
+
+error:
+	if (left) {
+		g_free(left);
 	}
 
 	return ret;
@@ -3798,259 +3675,262 @@ int visit_clock_attr(FILE *efd, struct ctf_node *entry_node,
 		struct bt_ctf_clock *clock, int* set)
 {
 	int ret = 0;
+	char *left = NULL;
 
-	switch (entry_node->type) {
-	case NODE_CTF_EXPRESSION:
-	{
-		char *left;
-
-		left = concatenate_unary_strings(&entry_node->u.ctf_expression.left);
-
-		if (!left) {
-			return -EINVAL;
-		}
-
-		if (!strcmp(left, "name")) {
-			char *right;
-
-			if (_IS_SET(set, _CLOCK_NAME_SET)) {
-				fprintf(efd, "[error] %s: duplicate attribute \"name\" in clock declaration\n",
-					__func__);
-				ret = -EPERM;
-				goto error;
-			}
-
-			right = concatenate_unary_strings(&entry_node->u.ctf_expression.right);
-
-			if (!right) {
-				fprintf(efd, "[error] %s: unexpected unary expression for clock's \"name\" attribute\n",
-					__func__);
-				ret = -EINVAL;
-				goto error;
-			}
-
-			ret = bt_ctf_clock_set_name(clock, right);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: cannot set clock's name\n",
-					__func__);
-				g_free(right);
-				goto error;
-			}
-
-			g_free(right);
-
-			_SET(set, _CLOCK_NAME_SET);
-		} else if (!strcmp(left, "uuid")) {
-			if (_IS_SET(set, _CLOCK_UUID_SET)) {
-				fprintf(efd, "[error] %s: duplicate attribute \"uuid\" in clock declaration\n",
-					__func__);
-				ret = -EPERM;
-				goto error;
-			}
-
-			unsigned char uuid[BABELTRACE_UUID_LEN];
-
-			ret = get_unary_uuid(&entry_node->u.ctf_expression.right, uuid);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: invalid clock UUID\n",
-					__func__);
-				goto error;
-			}
-
-			ret = bt_ctf_clock_set_uuid(clock, uuid);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: cannot set clock's UUID\n",
-					__func__);
-				goto error;
-			}
-
-			_SET(set, _CLOCK_UUID_SET);
-		} else if (!strcmp(left, "description")) {
-			char *right;
-
-			if (_IS_SET(set, _CLOCK_DESCRIPTION_SET)) {
-				fprintf(efd, "[error] %s: duplicate attribute \"description\" in clock declaration\n",
-					__func__);
-				ret = -EPERM;
-				goto error;
-			}
-
-			right = concatenate_unary_strings(&entry_node->u.ctf_expression.right);
-
-			if (!right) {
-				fprintf(efd, "[error] %s: unexpected unary expression for clock's \"description\" attribute\n",
-					__func__);
-				ret = -EINVAL;
-				goto error;
-			}
-
-			ret = bt_ctf_clock_set_description(clock, right);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: cannot set clock's description\n",
-					__func__);
-				g_free(right);
-				goto error;
-			}
-
-			g_free(right);
-
-			_SET(set, _CLOCK_DESCRIPTION_SET);
-		} else if (!strcmp(left, "freq")) {
-			if (_IS_SET(set, _CLOCK_FREQ_SET)) {
-				fprintf(efd, "[error] %s: duplicate attribute \"freq\" in clock declaration\n",
-					__func__);
-				ret = -EPERM;
-				goto error;
-			}
-
-			uint64_t freq;
-
-			ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, &freq);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: unexpected unary expression for clock's \"freq\" attribute\n",
-					__func__);
-				ret = -EINVAL;
-				goto error;
-			}
-
-			ret = bt_ctf_clock_set_frequency(clock, freq);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: cannot set clock's frequency\n",
-					__func__);
-				goto error;
-			}
-
-			_SET(set, _CLOCK_FREQ_SET);
-		} else if (!strcmp(left, "precision")) {
-			if (_IS_SET(set, _CLOCK_PRECISION_SET)) {
-				fprintf(efd, "[error] %s: duplicate attribute \"precision\" in clock declaration\n",
-					__func__);
-				ret = -EPERM;
-				goto error;
-			}
-
-			uint64_t precision;
-
-			ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, &precision);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: unexpected unary expression for clock's \"precision\" attribute\n",
-					__func__);
-				ret = -EINVAL;
-				goto error;
-			}
-
-			ret = bt_ctf_clock_set_precision(clock, precision);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: cannot set clock's precision\n",
-					__func__);
-				goto error;
-			}
-
-			_SET(set, _CLOCK_PRECISION_SET);
-		} else if (!strcmp(left, "offset_s")) {
-			if (_IS_SET(set, _CLOCK_OFFSET_S_SET)) {
-				fprintf(efd, "[error] %s: duplicate attribute \"offset_s\" in clock declaration\n",
-					__func__);
-				ret = -EPERM;
-				goto error;
-			}
-
-			uint64_t offset_s;
-
-			ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, &offset_s);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: unexpected unary expression for clock's \"offset_s\" attribute\n",
-					__func__);
-				ret = -EINVAL;
-				goto error;
-			}
-
-			ret = bt_ctf_clock_set_offset_s(clock, offset_s);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: cannot set clock's offset in seconds\n",
-					__func__);
-				goto error;
-			}
-
-			_SET(set, _CLOCK_OFFSET_S_SET);
-		} else if (!strcmp(left, "offset")) {
-			if (_IS_SET(set, _CLOCK_OFFSET_SET)) {
-				fprintf(efd, "[error] %s: duplicate attribute \"offset\" in clock declaration\n",
-					__func__);
-				ret = -EPERM;
-				goto error;
-			}
-
-			uint64_t offset;
-
-			ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, &offset);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: unexpected unary expression for clock's \"offset\" attribute\n",
-					__func__);
-				ret = -EINVAL;
-				goto error;
-			}
-
-			ret = bt_ctf_clock_set_offset(clock, offset);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: cannot set clock's offset in cycles\n",
-					__func__);
-				goto error;
-			}
-
-			_SET(set, _CLOCK_OFFSET_SET);
-		} else if (!strcmp(left, "absolute")) {
-			if (_IS_SET(set, _CLOCK_ABSOLUTE_SET)) {
-				fprintf(efd, "[error] %s: duplicate attribute \"absolute\" in clock declaration\n",
-					__func__);
-				ret = -EPERM;
-				goto error;
-			}
-
-			struct ctf_node *right;
-
-			right = _bt_list_first_entry(&entry_node->u.ctf_expression.right, struct ctf_node, siblings);
-			ret = get_boolean(efd, right);
-
-			if (ret < 0) {
-				fprintf(efd, "[error] %s: unexpected unary expression for clock's \"absolute\" attribute\n",
-					__func__);
-				ret = -EINVAL;
-				goto error;
-			}
-
-			ret = bt_ctf_clock_set_is_absolute(clock, ret);
-
-			if (ret) {
-				fprintf(efd, "[error] %s: cannot set clock's absolute option\n",
-					__func__);
-				goto error;
-			}
-
-			_SET(set, _CLOCK_ABSOLUTE_SET);
-		} else {
-			fprintf(efd, "[warning] %s: unknown attribute \"%s\" in clock declaration\n", __func__, left);
-		}
-
-error:
-		g_free(left);
-		break;
+	if (entry_node->type != NODE_CTF_EXPRESSION) {
+		ret = -EPERM;
+		goto error;
 	}
 
-	default:
-		return -EPERM;
+	left = concatenate_unary_strings(&entry_node->u.ctf_expression.left);
+
+	if (!left) {
+		ret = -EINVAL;
+		goto error;
+	}
+
+	if (!strcmp(left, "name")) {
+		char *right;
+
+		if (_IS_SET(set, _CLOCK_NAME_SET)) {
+			fprintf(efd, "[error] %s: duplicate attribute \"name\" in clock declaration\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
+		}
+
+		right = concatenate_unary_strings(&entry_node->u.ctf_expression.right);
+
+		if (!right) {
+			fprintf(efd, "[error] %s: unexpected unary expression for clock's \"name\" attribute\n",
+				__func__);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		ret = bt_ctf_clock_set_name(clock, right);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: cannot set clock's name\n",
+				__func__);
+			g_free(right);
+			goto error;
+		}
+
+		g_free(right);
+
+		_SET(set, _CLOCK_NAME_SET);
+	} else if (!strcmp(left, "uuid")) {
+		if (_IS_SET(set, _CLOCK_UUID_SET)) {
+			fprintf(efd, "[error] %s: duplicate attribute \"uuid\" in clock declaration\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
+		}
+
+		unsigned char uuid[BABELTRACE_UUID_LEN];
+
+		ret = get_unary_uuid(&entry_node->u.ctf_expression.right, uuid);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: invalid clock UUID\n",
+				__func__);
+			goto error;
+		}
+
+		ret = bt_ctf_clock_set_uuid(clock, uuid);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: cannot set clock's UUID\n",
+				__func__);
+			goto error;
+		}
+
+		_SET(set, _CLOCK_UUID_SET);
+	} else if (!strcmp(left, "description")) {
+		char *right;
+
+		if (_IS_SET(set, _CLOCK_DESCRIPTION_SET)) {
+			fprintf(efd, "[error] %s: duplicate attribute \"description\" in clock declaration\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
+		}
+
+		right = concatenate_unary_strings(&entry_node->u.ctf_expression.right);
+
+		if (!right) {
+			fprintf(efd, "[error] %s: unexpected unary expression for clock's \"description\" attribute\n",
+				__func__);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		ret = bt_ctf_clock_set_description(clock, right);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: cannot set clock's description\n",
+				__func__);
+			g_free(right);
+			goto error;
+		}
+
+		g_free(right);
+
+		_SET(set, _CLOCK_DESCRIPTION_SET);
+	} else if (!strcmp(left, "freq")) {
+		if (_IS_SET(set, _CLOCK_FREQ_SET)) {
+			fprintf(efd, "[error] %s: duplicate attribute \"freq\" in clock declaration\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
+		}
+
+		uint64_t freq;
+
+		ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, &freq);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: unexpected unary expression for clock's \"freq\" attribute\n",
+				__func__);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		ret = bt_ctf_clock_set_frequency(clock, freq);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: cannot set clock's frequency\n",
+				__func__);
+			goto error;
+		}
+
+		_SET(set, _CLOCK_FREQ_SET);
+	} else if (!strcmp(left, "precision")) {
+		if (_IS_SET(set, _CLOCK_PRECISION_SET)) {
+			fprintf(efd, "[error] %s: duplicate attribute \"precision\" in clock declaration\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
+		}
+
+		uint64_t precision;
+
+		ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, &precision);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: unexpected unary expression for clock's \"precision\" attribute\n",
+				__func__);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		ret = bt_ctf_clock_set_precision(clock, precision);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: cannot set clock's precision\n",
+				__func__);
+			goto error;
+		}
+
+		_SET(set, _CLOCK_PRECISION_SET);
+	} else if (!strcmp(left, "offset_s")) {
+		if (_IS_SET(set, _CLOCK_OFFSET_S_SET)) {
+			fprintf(efd, "[error] %s: duplicate attribute \"offset_s\" in clock declaration\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
+		}
+
+		uint64_t offset_s;
+
+		ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, &offset_s);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: unexpected unary expression for clock's \"offset_s\" attribute\n",
+				__func__);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		ret = bt_ctf_clock_set_offset_s(clock, offset_s);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: cannot set clock's offset in seconds\n",
+				__func__);
+			goto error;
+		}
+
+		_SET(set, _CLOCK_OFFSET_S_SET);
+	} else if (!strcmp(left, "offset")) {
+		if (_IS_SET(set, _CLOCK_OFFSET_SET)) {
+			fprintf(efd, "[error] %s: duplicate attribute \"offset\" in clock declaration\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
+		}
+
+		uint64_t offset;
+
+		ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, &offset);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: unexpected unary expression for clock's \"offset\" attribute\n",
+				__func__);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		ret = bt_ctf_clock_set_offset(clock, offset);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: cannot set clock's offset in cycles\n",
+				__func__);
+			goto error;
+		}
+
+		_SET(set, _CLOCK_OFFSET_SET);
+	} else if (!strcmp(left, "absolute")) {
+		if (_IS_SET(set, _CLOCK_ABSOLUTE_SET)) {
+			fprintf(efd, "[error] %s: duplicate attribute \"absolute\" in clock declaration\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
+		}
+
+		struct ctf_node *right;
+
+		right = _BT_LIST_FIRST_ENTRY(&entry_node->u.ctf_expression.right, struct ctf_node, siblings);
+		ret = get_boolean(efd, right);
+
+		if (ret < 0) {
+			fprintf(efd, "[error] %s: unexpected unary expression for clock's \"absolute\" attribute\n",
+				__func__);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		ret = bt_ctf_clock_set_is_absolute(clock, ret);
+
+		if (ret) {
+			fprintf(efd, "[error] %s: cannot set clock's absolute option\n",
+				__func__);
+			goto error;
+		}
+
+		_SET(set, _CLOCK_ABSOLUTE_SET);
+	} else {
+		fprintf(efd, "[warning] %s: unknown attribute \"%s\" in clock declaration\n", __func__, left);
+	}
+
+	g_free(left);
+	left = NULL;
+
+	return 0;
+
+error:
+	if (left) {
+		g_free(left);
 	}
 
 	return ret;
@@ -4229,7 +4109,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		 * Find trace declaration's byte order first (for early
 		 * type aliases).
 		 */
-		int got_trace_decl = 0;
+		int got_trace_decl = FALSE;
 
 		bt_list_for_each_entry(iter, &node->u.root.trace, siblings) {
 			if (got_trace_decl) {
@@ -4244,6 +4124,15 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 					__func__, ret);
 				goto error;
 			}
+
+			got_trace_decl = TRUE;
+		}
+
+		if (!got_trace_decl) {
+			fprintf(efd, "[error] %s: trace declaration not found (%d)\n",
+				__func__, ret);
+			ret = -EPERM;
+			goto error;
 		}
 
 		/* visit clocks first since any early integer can be mapped to one */
@@ -4272,15 +4161,40 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 			}
 		}
 
-#if 0
-		bt_list_for_each_entry(iter, &node->u.root.declaration_list,
-					siblings) {
-			ret = ctf_root_declaration_visit(fd, depth + 1, iter, trace);
+		/* callsite are not supported */
+		int found_callsite = FALSE;
+
+		bt_list_for_each_entry(iter, &node->u.root.callsite, siblings) {
+			found_callsite = TRUE;
+		}
+
+		if (found_callsite) {
+			fprintf(efd, "[warning] \"callsite\" blocks are not supported as of this version\n");
+		}
+
+		/* environment */
+		bt_list_for_each_entry(iter, &node->u.root.env, siblings) {
+			ret = visit_env(ctx, iter);
+
 			if (ret) {
-				fprintf(fd, "[error] %s: root declaration error\n", __func__);
+				fprintf(efd, "[error] %s: error while visiting environment block (%d)\n",
+					__func__, ret);
 				goto error;
 			}
 		}
+
+		/* trace */
+		bt_list_for_each_entry(iter, &node->u.root.trace, siblings) {
+			ret = visit_trace(ctx, iter);
+
+			if (ret) {
+				fprintf(efd, "[error] %s: error while visiting trace declaration\n",
+					__func__);
+				goto error;
+			}
+		}
+
+#if 0
 		bt_list_for_each_entry(iter, &node->u.root.trace, siblings) {
 			ret = ctf_trace_visit(fd, depth + 1, iter, trace);
 			if (ret == -EINTR) {
@@ -4314,15 +4228,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		}
 #endif
 
-		bt_list_for_each_entry(iter, &node->u.root.env, siblings) {
-			ret = visit_env(ctx, iter);
 
-			if (ret) {
-				fprintf(efd, "[error] %s: error while visiting environment block (%d)\n",
-					__func__, ret);
-				goto error;
-			}
-		}
 
 #if 0
 		bt_list_for_each_entry(iter, &node->u.root.stream, siblings) {
