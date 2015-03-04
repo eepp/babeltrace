@@ -566,8 +566,8 @@ void ctx_pop_scope(struct ctx *ctx)
 
 static
 int visit_type_specifier_list(struct ctx *ctx,
-		struct ctf_node *ts_list,
-		struct bt_ctf_field_type **decl);
+	struct ctf_node *ts_list,
+	struct bt_ctf_field_type **decl);
 
 static
 int is_unary_string(struct bt_list_head *head)
@@ -647,9 +647,14 @@ const char *get_map_clock_name_value(struct bt_list_head *head)
 	bt_list_for_each_entry(node, head, siblings) {
 		char *src_string;
 
-		if (node->type != NODE_UNARY_EXPRESSION ||
-				node->u.unary_expression.type != UNARY_STRING ||
-				!((node->u.unary_expression.link != UNARY_LINK_UNKNOWN) ^ (i == 0))) {
+		if (
+			node->type != NODE_UNARY_EXPRESSION ||
+			node->u.unary_expression.type != UNARY_STRING ||
+			!(
+				(node->u.unary_expression.link != UNARY_LINK_UNKNOWN) ^
+				(i == 0)
+			)
+		) {
 			return NULL;
 		}
 
@@ -721,10 +726,12 @@ int get_unary_unsigned(struct bt_list_head *head, uint64_t *value)
 	int i = 0;
 
 	bt_list_for_each_entry(node, head, siblings) {
-		if (node->type != NODE_UNARY_EXPRESSION ||
-				node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT ||
-				node->u.unary_expression.link != UNARY_LINK_UNKNOWN ||
-				i != 0) {
+		if (
+			node->type != NODE_UNARY_EXPRESSION ||
+			node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT ||
+			node->u.unary_expression.link != UNARY_LINK_UNKNOWN ||
+			i != 0
+		) {
 			return -EINVAL;
 		}
 
@@ -760,11 +767,16 @@ int get_unary_signed(struct bt_list_head *head, int64_t *value)
 	int i = 0;
 
 	bt_list_for_each_entry(node, head, siblings) {
-		if (node->type != NODE_UNARY_EXPRESSION ||
-				node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT ||
-				(node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT && node->u.unary_expression.type != UNARY_SIGNED_CONSTANT) ||
-				node->u.unary_expression.link != UNARY_LINK_UNKNOWN ||
-				i != 0) {
+		if (
+			node->type != NODE_UNARY_EXPRESSION ||
+			node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT ||
+			(
+				node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT &&
+				node->u.unary_expression.type != UNARY_SIGNED_CONSTANT
+			) ||
+			node->u.unary_expression.link != UNARY_LINK_UNKNOWN ||
+			i != 0
+		) {
 			return -EINVAL;
 		}
 
