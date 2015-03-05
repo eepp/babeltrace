@@ -1801,7 +1801,12 @@ int visit_struct_decl(struct ctx *ctx, const char *name,
 			goto error;
 		}
 
-		ctx_push_scope(ctx);
+		ret = ctx_push_scope(ctx);
+
+		if (ret) {
+			fprintf("[error] %s: cannot push scope\n", __func__);
+			goto error;
+		}
 
 		bt_list_for_each_entry(entry_node, decl_list, siblings) {
 			ret = visit_struct_entry(ctx, entry_node, *struct_decl);
@@ -3480,7 +3485,12 @@ int visit_stream_decl(struct ctx *ctx, struct ctf_node *node)
 		goto error;
 	}
 
-	ctx_push_scope(ctx);
+	ret = ctx_push_scope(ctx);
+
+	if (ret) {
+		fprintf("[error] %s: cannot push scope\n", __func__);
+		goto error;
+	}
 
 	bt_list_for_each_entry(iter, &node->u.stream.declaration_list, siblings) {
 		ret = visit_stream_decl_entry(ctx, iter, stream_class, &set);
@@ -3747,7 +3757,12 @@ int visit_trace_decl(struct ctx *ctx, struct ctf_node *node)
 		goto error;
 	}
 
-	ctx_push_scope(ctx);
+	ret = ctx_push_scope(ctx);
+
+	if (ret) {
+		fprintf("[error] %s: cannot push scope\n", __func__);
+		goto error;
+	}
 
 	bt_list_for_each_entry(iter, &node->u.trace.declaration_list, siblings) {
 		ret = visit_trace_decl_entry(ctx, iter, &set);
