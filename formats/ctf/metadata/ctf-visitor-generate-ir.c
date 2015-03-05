@@ -3126,6 +3126,7 @@ int visit_stream_entry(struct ctx *ctx, struct ctf_node *node,
 {
 	int ret = 0;
 	char *left = NULL;
+	_BT_CTF_FIELD_TYPE_INIT(decl);
 
 	switch (node->type) {
 	case NODE_TYPEDEF:
@@ -3196,74 +3197,101 @@ int visit_stream_entry(struct ctx *ctx, struct ctf_node *node,
 
 			_SET(set, _STREAM_ID_SET);
 		} else if (!strcmp(left, "event.header")) {
-#if 0
-			struct bt_declaration *declaration;
+			if (_IS_SET(set, _STREAM_EVENT_HEADER_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate \"event.header\" entry in stream declaration\n",
+					__func__);
+				ret = -EPERM;
+				goto error;
+			}
 
-			if (stream->event_header_decl) {
-				fprintf(fd, "[error] %s: event.header already declared in stream declaration\n", __func__);
-				ret = -EINVAL;
+			ret = visit_type_specifier_list(ctx,
+				_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+					struct ctf_node, siblings),
+				&decl);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: cannot create event header declaration\n",
+					__func__);
 				goto error;
 			}
-			declaration = ctf_type_specifier_list_visit(fd, depth,
-					_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
-						struct ctf_node, siblings),
-					stream->declaration_scope, trace);
-			if (!declaration) {
-				ret = -EPERM;
+
+			assert(decl);
+
+			ret = bt_ctf_stream_class_set_event_header_type(stream_class,
+				decl);
+			_BT_CTF_FIELD_TYPE_PUT(decl);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: cannot set stream's event header declaration\n",
+					__func__);
 				goto error;
 			}
-			if (declaration->id != CTF_TYPE_STRUCT) {
-				ret = -EPERM;
-				goto error;
-			}
-			stream->event_header_decl = container_of(declaration, struct declaration_struct, p);
-#endif
+
+			_SET(set, _STREAM_EVENT_HEADER_SET);
 		} else if (!strcmp(left, "event.context")) {
-#if 0
-			struct bt_declaration *declaration;
+			if (_IS_SET(set, _STREAM_EVENT_CONTEXT_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate \"event.context\" entry in stream declaration\n",
+					__func__);
+				ret = -EPERM;
+				goto error;
+			}
 
-			if (stream->event_context_decl) {
-				fprintf(fd, "[error] %s: event.context already declared in stream declaration\n", __func__);
-				ret = -EINVAL;
+			ret = visit_type_specifier_list(ctx,
+				_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+					struct ctf_node, siblings),
+				&decl);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: cannot create event context declaration\n",
+					__func__);
 				goto error;
 			}
-			declaration = ctf_type_specifier_list_visit(fd, depth,
-					_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
-						struct ctf_node, siblings),
-					stream->declaration_scope, trace);
-			if (!declaration) {
-				ret = -EPERM;
+
+			assert(decl);
+
+			ret = bt_ctf_stream_class_set_event_context_type(stream_class,
+				decl);
+			_BT_CTF_FIELD_TYPE_PUT(decl);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: cannot set stream's event context declaration\n",
+					__func__);
 				goto error;
 			}
-			if (declaration->id != CTF_TYPE_STRUCT) {
-				ret = -EPERM;
-				goto error;
-			}
-			stream->event_context_decl = container_of(declaration, struct declaration_struct, p);
-#endif
+
+			_SET(set, _STREAM_EVENT_CONTEXT_SET);
 		} else if (!strcmp(left, "packet.context")) {
-#if 0
-			struct bt_declaration *declaration;
+			if (_IS_SET(set, _STREAM_PACKET_CONTEXT_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate \"packet.context\" entry in stream declaration\n",
+					__func__);
+				ret = -EPERM;
+				goto error;
+			}
 
-			if (stream->packet_context_decl) {
-				fprintf(fd, "[error] %s: packet.context already declared in stream declaration\n", __func__);
-				ret = -EINVAL;
+			ret = visit_type_specifier_list(ctx,
+				_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+					struct ctf_node, siblings),
+				&decl);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: cannot create packet context declaration\n",
+					__func__);
 				goto error;
 			}
-			declaration = ctf_type_specifier_list_visit(fd, depth,
-					_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
-						struct ctf_node, siblings),
-					stream->declaration_scope, trace);
-			if (!declaration) {
-				ret = -EPERM;
+
+			assert(decl);
+
+			ret = bt_ctf_stream_class_set_packet_context_type(stream_class,
+				decl);
+			_BT_CTF_FIELD_TYPE_PUT(decl);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: cannot set stream's packet context declaration\n",
+					__func__);
 				goto error;
 			}
-			if (declaration->id != CTF_TYPE_STRUCT) {
-				ret = -EPERM;
-				goto error;
-			}
-			stream->packet_context_decl = container_of(declaration, struct declaration_struct, p);
-#endif
+
+			_SET(set, _STREAM_PACKET_CONTEXT_SET);
 		} else {
 			fprintf(ctx->efd, "[warning] %s: unknown attribute \"%s\" in stream declaration\n",
 				__func__, left);
@@ -3284,6 +3312,78 @@ error:
 	if (left) {
 		g_free(left);
 	}
+
+	return ret;
+}
+
+static
+int reset_stream_decl_types(struct ctx *ctx,
+	struct bt_ctf_stream_class *stream_class)
+{
+	int ret = 0;
+	_BT_CTF_FIELD_TYPE_INIT(decl);
+
+	/* packet context */
+	decl = bt_ctf_field_type_structure_create();
+
+	if (!decl) {
+		fprintf(ctx->efd, "[error] %s: cannot create initial, empty packet context structure\n",
+			__func__);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	ret = bt_ctf_stream_class_set_packet_context_type(stream_class, decl);
+	_BT_CTF_FIELD_TYPE_PUT(decl);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot set initial, empty packet context structure\n",
+			__func__);
+		goto error;
+	}
+
+	/* event header */
+	decl = bt_ctf_field_type_structure_create();
+
+	if (!decl) {
+		fprintf(ctx->efd, "[error] %s: cannot create initial, empty event header structure\n",
+			__func__);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	ret = bt_ctf_stream_class_set_event_header_type(stream_class, decl);
+	_BT_CTF_FIELD_TYPE_PUT(decl);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot set initial, empty event header structure\n",
+			__func__);
+		goto error;
+	}
+
+	/* event context */
+	decl = bt_ctf_field_type_structure_create();
+
+	if (!decl) {
+		fprintf(ctx->efd, "[error] %s: cannot create initial, empty event context structure\n",
+			__func__);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	ret = bt_ctf_stream_class_set_event_context_type(stream_class, decl);
+	_BT_CTF_FIELD_TYPE_PUT(decl);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot set initial, empty event context structure\n",
+			__func__);
+		goto error;
+	}
+
+	return 0;
+
+error:
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(decl);
 
 	return ret;
 }
@@ -3311,13 +3411,28 @@ int visit_stream(struct ctx *ctx, struct ctf_node *node)
 		goto error;
 	}
 
+	/*
+	 * Set packet context, event header, and event context to empty
+	 * structures tu override the default ones.
+	 */
+	ret = reset_stream_decl_types(ctx, stream_class);
+
+	if (ret) {
+		goto error;
+	}
+
+	ctx_push_scope(ctx);
+
 	bt_list_for_each_entry(iter, &node->u.stream.declaration_list, siblings) {
 		ret = visit_stream_entry(ctx, iter, stream_class, &set);
 
 		if (ret) {
+			ctx_pop_scope(ctx);
 			goto error;
 		}
 	}
+
+	ctx_pop_scope(ctx);
 
 	if (_IS_SET(&set, _STREAM_ID_SET)) {
 		/* check that packet header has stream_id field */
@@ -3494,7 +3609,7 @@ int visit_trace_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 			_SET(set, _TRACE_BYTE_ORDER_SET);
 		} else if (!strcmp(left, "packet.header")) {
 			if (_IS_SET(set, _TRACE_PACKET_HEADER_SET)) {
-				fprintf(ctx->efd, "[error] %s: duplicate \"packet.header\" in trace declaration\n",
+				fprintf(ctx->efd, "[error] %s: duplicate \"packet.header\" entry in trace declaration\n",
 					__func__);
 				ret = -EPERM;
 				goto error;
