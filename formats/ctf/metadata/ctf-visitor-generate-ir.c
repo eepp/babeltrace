@@ -46,6 +46,8 @@
 #include "ctf-ast.h"
 
 #include <babeltrace/ctf-ir/trace.h>
+#include <babeltrace/ctf-ir/stream-class.h>
+#include <babeltrace/ctf-ir/event.h>
 #include <babeltrace/ctf-ir/event-types.h>
 #include <babeltrace/ctf-ir/clock.h>
 #include <babeltrace/ctf-ir/clock-internal.h>
@@ -94,6 +96,13 @@ enum {
 	_TRACE_PACKET_HEADER_SET =	_BV(4),
 };
 
+enum {
+	_STREAM_ID_SET =		_BV(0),
+	_STREAM_PACKET_CONTEXT_SET =	_BV(1),
+	_STREAM_EVENT_HEADER_SET =	_BV(2),
+	_STREAM_EVENT_CONTEXT_SET =	_BV(3),
+};
+
 #define _PREFIX_ALIAS	'a'
 #define _PREFIX_ENUM	'e'
 #define _PREFIX_STRUCT	's'
@@ -134,7 +143,7 @@ struct ctx_decl_scope {
 	/*
 	 * Alias name to field type.
 	 *
-	 * GQuark -> struct bt_ctf_field_type * (weak reference)
+	 * GQuark -> struct bt_ctf_field_type *
 	 */
 	GHashTable *decl_map;
 
@@ -162,6 +171,20 @@ struct ctx {
 	uint64_t trace_major;
 	uint64_t trace_minor;
 	unsigned char trace_uuid[BABELTRACE_UUID_LEN];
+
+	/*
+	 * Stream IDs to stream classes.
+	 *
+	 * int64_t -> struct bt_ctf_stream_class *
+	 */
+	GHashTable *stream_classes;
+
+	/*
+	 * Event IDs to event classes.
+	 *
+	 * int64_t -> struct bt_ctf_event_class *
+	 */
+	GHashTable *event_classes;
 };
 
 /**
@@ -488,6 +511,10 @@ struct ctx *ctx_create(struct bt_ctf_trace *trace, FILE *efd)
 		return NULL;
 	}
 
+	ctx->stream_classes = g_hash_table_new_full(g_direct_hash, g_direct_equal,
+		NULL, (GDestroyNotify) bt_ctf_stream_class_put);
+	ctx->event_classes = g_hash_table_new_full(g_direct_hash, g_direct_equal,
+		NULL, (GDestroyNotify) bt_ctf_event_class_put);
 	ctx->trace = trace;
 	ctx->efd = efd;
 	ctx->current_scope = scope;
@@ -514,6 +541,9 @@ void ctx_destroy(struct ctx *ctx)
 		ctx_decl_scope_destroy(scope);
 		scope = parent_scope;
 	}
+
+	g_hash_table_destroy(ctx->stream_classes);
+	g_hash_table_destroy(ctx->event_classes);
 
 	g_free(ctx);
 }
@@ -3088,52 +3118,85 @@ error:
 	g_free(event_decl);
 	return ret;
 }
-
+#endif
 
 static
-int ctf_stream_declaration_visit(FILE *fd, int depth, struct ctf_node *node, struct ctf_stream_declaration *stream, struct ctf_trace *trace)
+int visit_stream_entry(struct ctx *ctx, struct ctf_node *node,
+	struct bt_ctf_stream_class *stream_class, int *set)
 {
 	int ret = 0;
+	char *left = NULL;
 
 	switch (node->type) {
 	case NODE_TYPEDEF:
-		ret = ctf_typedef_visit(fd, depth + 1,
-					stream->declaration_scope,
-					node->u._typedef.type_specifier_list,
-					&node->u._typedef.type_declarators,
-					trace);
-		if (ret)
-			return ret;
+		ret = visit_typedef(ctx, node->u._typedef.type_specifier_list,
+			&node->u._typedef.type_declarators);
+
+		if (ret) {
+			fprintf(ctx->efd, "[error] %s: cannot add typedef in \"stream\" block\n",
+				__func__);
+			goto error;
+		}
 		break;
+
 	case NODE_TYPEALIAS:
-		ret = ctf_typealias_visit(fd, depth + 1,
-				stream->declaration_scope,
-				node->u.typealias.target, node->u.typealias.alias,
-				trace);
-		if (ret)
-			return ret;
+		ret = visit_typealias(ctx, node->u.typealias.target,
+			node->u.typealias.alias);
+
+		if (ret) {
+			fprintf(ctx->efd, "[error] %s: cannot add typealias in \"trace\" block\n",
+				__func__);
+			goto error;
+		}
 		break;
+
 	case NODE_CTF_EXPRESSION:
 	{
-		char *left;
-
 		left = concatenate_unary_strings(&node->u.ctf_expression.left);
-		if (!left)
-			return -EINVAL;
+
+		if (!left) {
+			ret = -EINVAL;
+			goto error;
+		}
+
 		if (!strcmp(left, "id")) {
-			if (CTF_STREAM_FIELD_IS_SET(stream, stream_id)) {
-				fprintf(fd, "[error] %s: id already declared in stream declaration\n", __func__);
+			int64_t id;
+
+			if (_IS_SET(set, _STREAM_ID_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"id\" in stream declaration\n",
+					__func__);
 				ret = -EPERM;
 				goto error;
 			}
-			ret = get_unary_unsigned(&node->u.ctf_expression.right, &stream->stream_id);
-			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for stream id\n", __func__);
+
+			ret = get_unary_unsigned(&node->u.ctf_expression.right,
+				(uint64_t*) &id);
+
+			if (ret || id < 0) {
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for stream declaration's \"id\" attribute\n",
+					__func__);
 				ret = -EINVAL;
 				goto error;
 			}
-			CTF_STREAM_SET_FIELD(stream, stream_id);
+
+			if (g_hash_table_lookup(ctx->stream_classes, (gpointer) id)) {
+				fprintf(ctx->efd, "[error] %s: duplicate stream with ID %" PRId64 "\n",
+					__func__, id);
+				ret = -EPERM;
+				goto error;
+			}
+
+			ret = bt_ctf_stream_class_set_id(stream_class, id);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: cannot set stream declaration's ID\n",
+					__func__);
+				goto error;
+			}
+
+			_SET(set, _STREAM_ID_SET);
 		} else if (!strcmp(left, "event.header")) {
+#if 0
 			struct bt_declaration *declaration;
 
 			if (stream->event_header_decl) {
@@ -3154,7 +3217,9 @@ int ctf_stream_declaration_visit(FILE *fd, int depth, struct ctf_node *node, str
 				goto error;
 			}
 			stream->event_header_decl = container_of(declaration, struct declaration_struct, p);
+#endif
 		} else if (!strcmp(left, "event.context")) {
+#if 0
 			struct bt_declaration *declaration;
 
 			if (stream->event_context_decl) {
@@ -3175,7 +3240,9 @@ int ctf_stream_declaration_visit(FILE *fd, int depth, struct ctf_node *node, str
 				goto error;
 			}
 			stream->event_context_decl = container_of(declaration, struct declaration_struct, p);
+#endif
 		} else if (!strcmp(left, "packet.context")) {
+#if 0
 			struct bt_declaration *declaration;
 
 			if (stream->packet_context_decl) {
@@ -3196,89 +3263,129 @@ int ctf_stream_declaration_visit(FILE *fd, int depth, struct ctf_node *node, str
 				goto error;
 			}
 			stream->packet_context_decl = container_of(declaration, struct declaration_struct, p);
+#endif
 		} else {
-			fprintf(fd, "[warning] %s: attribute \"%s\" is unknown in stream declaration.\n", __func__, left);
-			/* Fall-through after warning */
+			fprintf(ctx->efd, "[warning] %s: unknown attribute \"%s\" in stream declaration\n",
+				__func__, left);
 		}
 
-error:
 		g_free(left);
+		left = NULL;
 		break;
 	}
 	default:
-		return -EPERM;
-	/* TODO: declaration specifier should be added. */
+		ret = -EPERM;
+		goto error;
 	}
-
-	return ret;
-}
-#endif
-
-#if 0
-static
-int visit_stream(struct ctx *ctx, struct ctf_node *node)
-{
-	int ret = 0;
-	struct ctf_node *iter;
-
-
-	if (node) {
-		if (node->visited)
-			return 0;
-		node->visited = 1;
-	}
-
-	stream = g_new0(struct ctf_stream_declaration, 1);
-	stream->declaration_scope = bt_new_declaration_scope(parent_declaration_scope);
-	stream->events_by_id = g_ptr_array_new();
-	stream->event_quark_to_id = g_hash_table_new(g_direct_hash, g_direct_equal);
-	stream->streams = g_ptr_array_new();
-	if (node) {
-		bt_list_for_each_entry(iter, &node->u.stream.declaration_list, siblings) {
-			ret = ctf_stream_declaration_visit(fd, depth + 1, iter, stream, trace);
-			if (ret)
-				goto error;
-		}
-	}
-	if (CTF_STREAM_FIELD_IS_SET(stream, stream_id)) {
-		/* check that packet header has stream_id field. */
-		if (!trace->packet_header_decl
-		    || bt_struct_declaration_lookup_field_index(trace->packet_header_decl, g_quark_from_static_string("stream_id")) < 0) {
-			ret = -EPERM;
-			fprintf(fd, "[error] %s: missing stream_id field in packet header declaration, but stream_id attribute is declared for stream.\n", __func__);
-			goto error;
-		}
-	} else {
-		/* Allow only one id-less stream */
-		if (trace->streams->len != 0) {
-			ret = -EPERM;
-			fprintf(fd, "[error] %s: missing id field in stream declaration\n", __func__);
-			goto error;
-		}
-		stream->stream_id = 0;
-	}
-	if (trace->streams->len <= stream->stream_id)
-		g_ptr_array_set_size(trace->streams, stream->stream_id + 1);
-	g_ptr_array_index(trace->streams, stream->stream_id) = stream;
-	stream->trace = trace;
 
 	return 0;
 
 error:
-	if (stream->event_header_decl)
-		bt_declaration_unref(&stream->event_header_decl->p);
-	if (stream->event_context_decl)
-		bt_declaration_unref(&stream->event_context_decl->p);
-	if (stream->packet_context_decl)
-		bt_declaration_unref(&stream->packet_context_decl->p);
-	g_ptr_array_free(stream->streams, TRUE);
-	g_ptr_array_free(stream->events_by_id, TRUE);
-	g_hash_table_destroy(stream->event_quark_to_id);
-	bt_free_declaration_scope(stream->declaration_scope);
-	g_free(stream);
+	if (left) {
+		g_free(left);
+	}
+
 	return ret;
 }
-#endif
+
+static
+int visit_stream(struct ctx *ctx, struct ctf_node *node)
+{
+	int64_t id;
+	int set = 0;
+	int ret = 0;
+	struct ctf_node *iter;
+	struct bt_ctf_stream_class *stream_class = NULL;
+
+	if (node->visited) {
+		return 0;
+	}
+
+	node->visited = 1;
+	stream_class = bt_ctf_stream_class_create(NULL);
+
+	if (!stream_class) {
+		fprintf(ctx->efd, "[error] %s: cannot create stream class\n",
+			__func__);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	bt_list_for_each_entry(iter, &node->u.stream.declaration_list, siblings) {
+		ret = visit_stream_entry(ctx, iter, stream_class, &set);
+
+		if (ret) {
+			goto error;
+		}
+	}
+
+	if (_IS_SET(&set, _STREAM_ID_SET)) {
+		/* check that packet header has stream_id field */
+		_BT_CTF_FIELD_TYPE_INIT(stream_id_decl);
+		_BT_CTF_FIELD_TYPE_INIT(packet_header_decl);
+
+		packet_header_decl =
+			bt_ctf_trace_get_packet_header_type(ctx->trace);
+
+		if (!packet_header_decl) {
+			fprintf(ctx->efd, "[error] %s: cannot get trace packet header declaration\n",
+				__func__);
+			goto error;
+		}
+
+		stream_id_decl = bt_ctf_field_type_structure_get_field_type_by_name(
+			packet_header_decl, "stream_id");
+		_BT_CTF_FIELD_TYPE_PUT(packet_header_decl);
+
+		if (!stream_id_decl) {
+			fprintf(ctx->efd, "[error] %s: missing \"stream_id\" field in packet header declaration, but \"id\" attribute is declared for stream\n",
+				__func__);
+			goto error;
+		}
+
+		if (bt_ctf_field_type_get_type_id(stream_id_decl) != CTF_TYPE_INTEGER) {
+			_BT_CTF_FIELD_TYPE_PUT(stream_id_decl);
+			fprintf(ctx->efd, "[error] %s: \"stream_id\" field in packet header declaration is not an integer\n",
+				__func__);
+			goto error;
+		}
+
+		_BT_CTF_FIELD_TYPE_PUT(stream_id_decl);
+	} else {
+		/* allow only _one_ ID-less stream */
+		if (g_hash_table_size(ctx->stream_classes) != 0) {
+			fprintf(ctx->efd, "[error] %s: missing \"id\" field in stream declaration\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
+		}
+
+		/* automatic ID: 0 */
+		ret = bt_ctf_stream_class_set_id(stream_class, 0);
+	}
+
+	id = bt_ctf_stream_class_get_id(stream_class);
+
+	if (id < 0) {
+		fprintf(ctx->efd, "[error] %s: wrong stream ID: %" PRId64 "\n",
+			__func__, id);
+		ret = -EINVAL;
+		goto error;
+	}
+
+	/* move reference to visitor's context */
+	g_hash_table_insert(ctx->stream_classes, (gpointer) (int64_t) id,
+		stream_class);
+
+	return 0;
+
+error:
+	if (stream_class) {
+		bt_ctf_stream_class_put(stream_class);
+	}
+
+	return ret;
+}
 
 static
 int visit_trace_entry(struct ctx *ctx, struct ctf_node *node, int *set)
@@ -3408,6 +3515,7 @@ int visit_trace_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 
 			ret = bt_ctf_trace_set_packet_header_type(ctx->trace,
 				packet_header_decl);
+			_BT_CTF_FIELD_TYPE_PUT(packet_header_decl);
 
 			if (ret) {
 				fprintf(ctx->efd, "[error] %s: cannot set trace's packet header declaration\n",
@@ -3415,10 +3523,9 @@ int visit_trace_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 				goto error;
 			}
 
-			_BT_CTF_FIELD_TYPE_PUT(packet_header_decl);
 			_SET(set, _TRACE_PACKET_HEADER_SET);
 		} else {
-			fprintf(ctx->efd, "[warning] %s: unknown attribute \"%s\" in trace declaration.\n",
+			fprintf(ctx->efd, "[warning] %s: unknown attribute \"%s\" in trace declaration\n",
 				__func__, left);
 		}
 
@@ -3685,7 +3792,7 @@ error:
 
 static
 int visit_clock_attr(FILE *efd, struct ctf_node *entry_node,
-		struct bt_ctf_clock *clock, int* set)
+		struct bt_ctf_clock *clock, int *set)
 {
 	int ret = 0;
 	char *left = NULL;
@@ -4086,6 +4193,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 {
 	int ret = 0;
 	struct ctx *ctx = NULL;
+	_BT_CTF_FIELD_TYPE_INIT(packet_header_decl);
 
 	printf_verbose("CTF visitor: AST -> IR...\n");
 
@@ -4095,6 +4203,25 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		fprintf(stderr, "[error] %s: cannot create trace IR\n",
 			__func__);
 		ret = -ENOMEM;
+		goto error;
+	}
+
+	/* set packet header to an empty struct tu override the default one */
+	packet_header_decl = bt_ctf_field_type_structure_create();
+
+	if (!packet_header_decl) {
+		fprintf(efd, "[error] %s: cannot create initial, empty packet header structure\n",
+			__func__);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	ret = bt_ctf_trace_set_packet_header_type(*trace, packet_header_decl);
+	_BT_CTF_FIELD_TYPE_PUT(packet_header_decl);
+
+	if (ret) {
+		fprintf(efd, "[error] %s: cannot set initial, empty packet header structure\n",
+			__func__);
 		goto error;
 	}
 
@@ -4201,15 +4328,18 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 			}
 		}
 
-#if 0
+		/* streams */
 		bt_list_for_each_entry(iter, &node->u.root.stream, siblings) {
-			ret = ctf_stream_visit(fd, depth + 1, iter,
-		    			       trace->root_declaration_scope, trace);
+			ret = visit_stream(ctx, iter);
+
 			if (ret) {
-				fprintf(fd, "[error] %s: stream declaration error\n", __func__);
+				fprintf(efd, "[error] %s: error while visiting stream declaration\n",
+					__func__);
 				goto error;
 			}
 		}
+
+#if 0
 		bt_list_for_each_entry(iter, &node->u.root.event, siblings) {
 			ret = ctf_event_visit(fd, depth + 1, iter,
 		    			      trace->root_declaration_scope, trace);
@@ -4236,6 +4366,8 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 	return ret;
 
 error:
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(packet_header_decl);
+
 	if (ctx) {
 		ctx_destroy(ctx);
 	}
