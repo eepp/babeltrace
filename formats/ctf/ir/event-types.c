@@ -1555,7 +1555,9 @@ struct bt_ctf_field_type *bt_ctf_field_type_sequence_create(
 {
 	struct bt_ctf_field_type_sequence *sequence = NULL;
 
-	if (!element_type || bt_ctf_validate_identifier(length_field_name) ||
+	if (!element_type ||
+		(length_field_name &&
+			bt_ctf_validate_identifier(length_field_name)) ||
 		bt_ctf_field_type_validate(element_type)) {
 		goto error;
 	}
@@ -1608,7 +1610,8 @@ const char *bt_ctf_field_type_sequence_get_length_field_name(
 
 	sequence = container_of(type, struct bt_ctf_field_type_sequence,
 		parent);
-	ret = sequence->length_field_name->str;
+	ret = sequence->length_field_name->len ?
+		sequence->length_field_name->str : NULL;
 end:
 	return ret;
 }
