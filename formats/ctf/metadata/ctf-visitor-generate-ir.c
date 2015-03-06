@@ -49,10 +49,16 @@
 #include <babeltrace/ctf-ir/clock.h>
 #include <babeltrace/ctf-ir/clock-internal.h>
 
+/* bit value (left shift) */
 #define _BV(_val)		(1 << (_val))
+
+/* bit is set in a set of bits */
 #define _IS_SET(_set, _mask)	(*(_set) & (_mask))
+
+/* set bit in a set of bits */
 #define _SET(_set, _mask)	(*(_set) |= (_mask))
 
+/* bits for verifying existing attributes */
 enum {
 	_CLOCK_NAME_SET =		_BV(0),
 	_CLOCK_UUID_SET =		_BV(1),
@@ -110,14 +116,35 @@ enum {
 	_EVENT_FIELDS_SET =		_BV(6),
 };
 
-#define _PREFIX_ALIAS		'a'
-#define _PREFIX_ENUM		'e'
-#define _PREFIX_STRUCT		's'
-#define _PREFIX_VARIANT		'v'
+/* prefixes of type aliases */
+#define _PREFIX_ALIAS			'a'
+#define _PREFIX_ENUM			'e'
+#define _PREFIX_STRUCT			's'
+#define _PREFIX_VARIANT			'v'
 
+/* first entry in a BT list */
 #define _BT_LIST_FIRST_ENTRY(_ptr, _type, _member)	\
 	bt_list_entry((_ptr)->next, _type, _member)
 
+/*
+ * The following macros MUST be used whenever a
+ * struct bt_ctf_field_type * must be declared:
+ *
+ *     _BT_CTF_FIELD_TYPE_INIT(name);
+ *
+ * or moved from one variable to another (no reference counting
+ * changes):
+ *
+ *     _BT_CTF_FIELD_TYPE_MOVE(dest, src);
+ *
+ * or put unconditionally (when you are sure the variable is not NULL):
+ *
+ *     _BT_CTF_FIELD_TYPE_PUT(name);
+ *
+ * or put conditionally (when the variable could be NULL):
+ *
+ *     _BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(name);
+ */
 #define _BT_CTF_FIELD_TYPE_PUT(_field)				\
 	do {							\
 		assert(_field);					\
@@ -140,6 +167,7 @@ enum {
 
 #define _BT_CTF_FIELD_TYPE_INIT(_name)	struct bt_ctf_field_type *_name = NULL;
 
+/* error printing wrappers */
 #define _PERROR(_fmt, ...)					\
 	do {							\
 		fprintf(ctx->efd, "[error] %s: " _fmt "\n",	\

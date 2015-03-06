@@ -315,7 +315,6 @@ struct bt_ctf_event_class *bt_ctf_stream_class_get_event_class_by_id(
 		struct bt_ctf_stream_class *stream_class, int64_t id)
 {
 	size_t i;
-	GQuark name_quark;
 	struct bt_ctf_event_class *event_class = NULL;
 
 	if (!stream_class || id < 0) {
