@@ -118,24 +118,24 @@ enum {
 #define _BT_LIST_FIRST_ENTRY(_ptr, _type, _member)	\
 	bt_list_entry((_ptr)->next, _type, _member)
 
-#define _BT_CTF_FIELD_TYPE_PUT(_field)		\
-	do {					\
-		assert(_field);			\
-		bt_ctf_field_type_put(_field);	\
-		_field = NULL;			\
+#define _BT_CTF_FIELD_TYPE_PUT(_field)				\
+	do {							\
+		assert(_field);					\
+		bt_ctf_field_type_put(_field);			\
+		_field = NULL;					\
 	} while (0)
 
-#define _BT_CTF_FIELD_TYPE_MOVE(_dst, _src)	\
-	do {				\
-		(_dst) = (_src);	\
-		(_src) = NULL;		\
+#define _BT_CTF_FIELD_TYPE_MOVE(_dst, _src)			\
+	do {							\
+		(_dst) = (_src);				\
+		(_src) = NULL;					\
 	} while (0)
 
-#define _BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(_field)	\
-	do {						\
-		if (_field) {				\
-			_BT_CTF_FIELD_TYPE_PUT(_field);	\
-		}					\
+#define _BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(_field)		\
+	do {							\
+		if (_field) {					\
+			_BT_CTF_FIELD_TYPE_PUT(_field);		\
+		}						\
 	} while (0)
 
 #define _BT_CTF_FIELD_TYPE_INIT(_name)	struct bt_ctf_field_type *_name = NULL;
@@ -162,6 +162,13 @@ enum {
 	do {							\
 		fprintf(_stream, "[warning] %s: " _fmt "\n",	\
 			__func__, __VA_ARGS__);			\
+	} while (0)
+
+#define _PERROR_DUP_ATTR(_attr, _entity)			\
+	do {							\
+		fprintf(ctx->efd,				\
+			"[error] %s: duplicate attribute \""	\
+			_attr "\" in " _entity "\n", __func__);	\
 	} while (0)
 
 /*
@@ -2189,7 +2196,7 @@ int visit_integer_decl(struct ctx *ctx,
 
 		if (!strcmp(left->u.unary_expression.u.string, "signed")) {
 			if (_IS_SET(&set, _INTEGER_SIGNED_SET)) {
-				_PERROR("%s", "duplicate attribute \"signed\" in integer declaration");
+				_PERROR_DUP_ATTR("signed", "integer declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2204,7 +2211,7 @@ int visit_integer_decl(struct ctx *ctx,
 			_SET(&set, _INTEGER_SIGNED_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "byte_order")) {
 			if (_IS_SET(&set, _INTEGER_BYTE_ORDER_SET)) {
-				_PERROR("%s", "duplicate attribute \"byte_order\" in integer declaration");
+				_PERROR_DUP_ATTR("byte_order", "integer declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2220,7 +2227,7 @@ int visit_integer_decl(struct ctx *ctx,
 			_SET(&set, _INTEGER_BYTE_ORDER_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "size")) {
 			if (_IS_SET(&set, _INTEGER_SIZE_SET)) {
-				_PERROR("%s", "duplicate attribute \"size\" in integer declaration");
+				_PERROR_DUP_ATTR("size", "integer declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2246,7 +2253,7 @@ int visit_integer_decl(struct ctx *ctx,
 			_SET(&set, _INTEGER_SIZE_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "align")) {
 			if (_IS_SET(&set, _INTEGER_ALIGN_SET)) {
-				_PERROR("%s", "duplicate attribute \"align\" in integer declaration");
+				_PERROR_DUP_ATTR("align", "integer declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2268,7 +2275,7 @@ int visit_integer_decl(struct ctx *ctx,
 			_SET(&set, _INTEGER_ALIGN_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "base")) {
 			if (_IS_SET(&set, _INTEGER_BASE_SET)) {
-				_PERROR("%s", "duplicate attribute \"base\" in integer declaration");
+				_PERROR_DUP_ATTR("base", "integer declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2352,7 +2359,7 @@ int visit_integer_decl(struct ctx *ctx,
 			char *s_right;
 
 			if (_IS_SET(&set, _INTEGER_ENCODING_SET)) {
-				_PERROR("%s", "duplicate attribute \"encoding\" in integer declaration");
+				_PERROR_DUP_ATTR("encoding", "integer declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2395,7 +2402,7 @@ int visit_integer_decl(struct ctx *ctx,
 			const char *clock_name;
 
 			if (_IS_SET(&set, _INTEGER_MAP_SET)) {
-				_PERROR("%s", "duplicate attribute \"map\" in integer declaration");
+				_PERROR_DUP_ATTR("map", "integer declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2525,7 +2532,7 @@ int visit_floating_point_number_decl(struct ctx *ctx,
 
 		if (!strcmp(left->u.unary_expression.u.string, "byte_order")) {
 			if (_IS_SET(&set, _FLOAT_BYTE_ORDER_SET)) {
-				_PERROR("%s", "duplicate attribute \"byte_order\" in floating point number declaration");
+				_PERROR_DUP_ATTR("byte_order", "floating point number declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2541,7 +2548,7 @@ int visit_floating_point_number_decl(struct ctx *ctx,
 			_SET(&set, _FLOAT_BYTE_ORDER_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "exp_dig")) {
 			if (_IS_SET(&set, _FLOAT_EXP_DIG_SET)) {
-				_PERROR("%s", "duplicate attribute \"exp_dig\" in floating point number declaration");
+				_PERROR_DUP_ATTR("exp_dig", "floating point number declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2563,7 +2570,7 @@ int visit_floating_point_number_decl(struct ctx *ctx,
 			_SET(&set, _FLOAT_EXP_DIG_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "mant_dig")) {
 			if (_IS_SET(&set, _FLOAT_MANT_DIG_SET)) {
-				_PERROR("%s", "duplicate attribute \"mant_dig\" in floating point number declaration");
+				_PERROR_DUP_ATTR("mant_dig", "floating point number declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2585,7 +2592,7 @@ int visit_floating_point_number_decl(struct ctx *ctx,
 			_SET(&set, _FLOAT_MANT_DIG_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "align")) {
 			if (_IS_SET(&set, _FLOAT_ALIGN_SET)) {
-				_PERROR("%s", "duplicate attribute \"align\" in floating point number declaration");
+				_PERROR_DUP_ATTR("align", "floating point number declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2689,7 +2696,7 @@ int visit_string_decl(struct ctx *ctx,
 			char *s_right;
 
 			if (_IS_SET(&set, _STRING_ENCODING_SET)) {
-				_PERROR("%s", "duplicate attribute \"encoding\" in string declaration");
+				_PERROR_DUP_ATTR("encoding", "string declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2933,7 +2940,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 		if (!strcmp(left, "name")) {
 			/* this is already known at this stage */
 			if (_IS_SET(set, _EVENT_NAME_SET)) {
-				_PERROR("%s", "duplicate attribute \"name\" in event declaration");
+				_PERROR_DUP_ATTR("name", "event declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2943,7 +2950,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			int64_t id;
 
 			if (_IS_SET(set, _EVENT_ID_SET)) {
-				_PERROR("%s", "duplicate attribute \"id\" in event declaration");
+				_PERROR_DUP_ATTR("id", "event declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2967,7 +2974,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			_SET(set, _EVENT_ID_SET);
 		} else if (!strcmp(left, "stream_id")) {
 			if (_IS_SET(set, _EVENT_STREAM_ID_SET)) {
-				_PERROR("%s", "duplicate attribute \"stream_id\" in event declaration");
+				_PERROR_DUP_ATTR("stream_id", "event declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -3043,7 +3050,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			uint64_t loglevel;
 
 			if (_IS_SET(set, _EVENT_LOGLEVEL_SET)) {
-				_PERROR("%s", "duplicate attribute \"loglevel\" in event declaration");
+				_PERROR_DUP_ATTR("loglevel", "event declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -3063,7 +3070,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			char *right;
 
 			if (_IS_SET(set, _EVENT_MODEL_EMF_URI_SET)) {
-				_PERROR("%s", "duplicate attribute \"model.emf.uri\" in event declaration");
+				_PERROR_DUP_ATTR("model.emf.uri", "event declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -3532,7 +3539,7 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			int64_t id;
 
 			if (_IS_SET(set, _STREAM_ID_SET)) {
-				_PERROR("%s", "duplicate attribute \"id\" in stream declaration");
+				_PERROR_DUP_ATTR("id", "stream declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -3818,7 +3825,7 @@ int visit_trace_decl_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 
 		if (!strcmp(left, "major")) {
 			if (_IS_SET(set, _TRACE_MAJOR_SET)) {
-				_PERROR("%s", "duplicate attribute \"major\" in trace declaration");
+				_PERROR_DUP_ATTR("major", "trace declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -3835,7 +3842,7 @@ int visit_trace_decl_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 			_SET(set, _TRACE_MAJOR_SET);
 		} else if (!strcmp(left, "minor")) {
 			if (_IS_SET(set, _TRACE_MINOR_SET)) {
-				_PERROR("%s", "duplicate attribute \"minor\" in trace declaration");
+				_PERROR_DUP_ATTR("minor", "trace declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -3852,7 +3859,7 @@ int visit_trace_decl_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 			_SET(set, _TRACE_MINOR_SET);
 		} else if (!strcmp(left, "uuid")) {
 			if (_IS_SET(set, _TRACE_UUID_SET)) {
-				_PERROR("%s", "duplicate attribute \"uuid\" in trace declaration");
+				_PERROR_DUP_ATTR("uuid", "trace declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -3869,7 +3876,7 @@ int visit_trace_decl_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 		} else if (!strcmp(left, "byte_order")) {
 			/* native byte order is already known at this stage */
 			if (_IS_SET(set, _TRACE_BYTE_ORDER_SET)) {
-				_PERROR("%s", "duplicate attribute \"byte_order\" in trace declaration");
+				_PERROR_DUP_ATTR("byte_order", "trace declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -4113,7 +4120,7 @@ int set_trace_byte_order(struct ctx *ctx, struct ctf_node *trace_node)
 				enum bt_ctf_byte_order bo;
 
 				if (_IS_SET(&set, _TRACE_BYTE_ORDER_SET)) {
-					_PERROR("%s", "duplicate \"byte_order\" attribute in trace declaration");
+					_PERROR_DUP_ATTR("byte_order", "trace declaration");
 					ret = -EPERM;
 					goto error;
 				}
@@ -4187,7 +4194,7 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 		char *right;
 
 		if (_IS_SET(set, _CLOCK_NAME_SET)) {
-			_PERROR("%s", "duplicate attribute \"name\" in clock declaration");
+			_PERROR_DUP_ATTR("name", "clock declaration");
 			ret = -EPERM;
 			goto error;
 		}
@@ -4212,7 +4219,7 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 		_SET(set, _CLOCK_NAME_SET);
 	} else if (!strcmp(left, "uuid")) {
 		if (_IS_SET(set, _CLOCK_UUID_SET)) {
-			_PERROR("%s", "duplicate attribute \"uuid\" in clock declaration");
+			_PERROR_DUP_ATTR("uuid", "clock declaration");
 			ret = -EPERM;
 			goto error;
 		}
@@ -4238,7 +4245,7 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 		char *right;
 
 		if (_IS_SET(set, _CLOCK_DESCRIPTION_SET)) {
-			_PERROR("%s", "duplicate attribute \"description\" in clock declaration");
+			_PERROR_DUP_ATTR("description", "clock declaration");
 			ret = -EPERM;
 			goto error;
 		}
@@ -4265,7 +4272,7 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 		uint64_t freq;
 
 		if (_IS_SET(set, _CLOCK_FREQ_SET)) {
-			_PERROR("%s", "duplicate attribute \"freq\" in clock declaration");
+			_PERROR_DUP_ATTR("freq", "clock declaration");
 			ret = -EPERM;
 			goto error;
 		}
@@ -4290,7 +4297,7 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 		uint64_t precision;
 
 		if (_IS_SET(set, _CLOCK_PRECISION_SET)) {
-			_PERROR("%s", "duplicate attribute \"precision\" in clock declaration");
+			_PERROR_DUP_ATTR("precision", "clock declaration");
 			ret = -EPERM;
 			goto error;
 		}
@@ -4315,7 +4322,7 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 		uint64_t offset_s;
 
 		if (_IS_SET(set, _CLOCK_OFFSET_S_SET)) {
-			_PERROR("%s", "duplicate attribute \"offset_s\" in clock declaration");
+			_PERROR_DUP_ATTR("offset_s", "clock declaration");
 			ret = -EPERM;
 			goto error;
 		}
@@ -4340,7 +4347,7 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 		uint64_t offset;
 
 		if (_IS_SET(set, _CLOCK_OFFSET_SET)) {
-			_PERROR("%s", "duplicate attribute \"offset\" in clock declaration");
+			_PERROR_DUP_ATTR("offset", "clock declaration");
 			ret = -EPERM;
 			goto error;
 		}
@@ -4365,7 +4372,7 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 		struct ctf_node *right;
 
 		if (_IS_SET(set, _CLOCK_ABSOLUTE_SET)) {
-			_PERROR("%s", "duplicate attribute \"absolute\" in clock declaration");
+			_PERROR_DUP_ATTR("absolute", "clock declaration");
 			ret = -EPERM;
 			goto error;
 		}
