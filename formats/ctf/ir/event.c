@@ -136,7 +136,7 @@ end:
 	return stream_class;
 }
 
-struct bt_ctf_field_type *bt_ctf_event_class_get_payload(
+struct bt_ctf_field_type *bt_ctf_event_class_get_payload_type(
 		struct bt_ctf_event_class *event_class)
 {
 	struct bt_ctf_field_type *payload = NULL;
@@ -151,7 +151,7 @@ end:
 	return payload;
 }
 
-int bt_ctf_event_class_set_payload(struct bt_ctf_event_class *event_class,
+int bt_ctf_event_class_set_payload_type(struct bt_ctf_event_class *event_class,
 		struct bt_ctf_field_type *payload)
 {
 	int ret = 0;
