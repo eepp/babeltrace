@@ -53,6 +53,11 @@ struct bt_ctf_event_class *bt_ctf_event_class_create(const char *name)
 		goto end;
 	}
 
+	event_class->fields = bt_ctf_field_type_structure_create();
+	if (!event_class->fields) {
+		goto end;
+	}
+
 	event_class = g_new0(struct bt_ctf_event_class, 1);
 	if (!event_class) {
 		goto end;
@@ -131,6 +136,38 @@ end:
 	return stream_class;
 }
 
+struct bt_ctf_field_type *bt_ctf_event_class_get_payload(
+		struct bt_ctf_event_class *event_class)
+{
+	struct bt_ctf_field_type *payload = NULL;
+
+	if (!event_class) {
+		goto end;
+	}
+
+	bt_ctf_field_type_get(event_class->fields);
+	payload = event_class->fields;
+end:
+	return payload;
+}
+
+int bt_ctf_event_class_set_payload(struct bt_ctf_event_class *event_class,
+		struct bt_ctf_field_type *payload)
+{
+	int ret = 0;
+
+	if (!event_class || !payload) {
+		ret = -1;
+		goto end;
+	}
+
+	bt_ctf_field_type_get(payload);
+	bt_ctf_field_type_put(event_class->fields);
+	event_class->fields = payload;
+end:
+	return ret;
+}
+
 int bt_ctf_event_class_add_field(struct bt_ctf_event_class *event_class,
 		struct bt_ctf_field_type *type,
 		const char *name)
@@ -143,12 +180,10 @@ int bt_ctf_event_class_add_field(struct bt_ctf_event_class *event_class,
 		goto end;
 	}
 
-	if (!event_class->fields) {
-		event_class->fields = bt_ctf_field_type_structure_create();
-		if (!event_class->fields) {
-			ret = -1;
-			goto end;
-		}
+	if (bt_ctf_field_type_get_type_id(event_class->fields) !=
+		CTF_TYPE_STRUCT) {
+		ret = -1;
+		goto end;
 	}
 
 	ret = bt_ctf_field_type_structure_add_field(event_class->fields,
@@ -163,6 +198,12 @@ int bt_ctf_event_class_get_field_count(
 	int ret;
 
 	if (!event_class) {
+		ret = -1;
+		goto end;
+	}
+
+	if (bt_ctf_field_type_get_type_id(event_class->fields) !=
+		CTF_TYPE_STRUCT) {
 		ret = -1;
 		goto end;
 	}
@@ -183,6 +224,12 @@ int bt_ctf_event_class_get_field(struct bt_ctf_event_class *event_class,
 		goto end;
 	}
 
+	if (bt_ctf_field_type_get_type_id(event_class->fields) !=
+		CTF_TYPE_STRUCT) {
+		ret = -1;
+		goto end;
+	}
+
 	ret = bt_ctf_field_type_structure_get_field(event_class->fields,
 		field_name, field_type, index);
 end:
@@ -196,6 +243,11 @@ struct bt_ctf_field_type *bt_ctf_event_class_get_field_by_name(
 	struct bt_ctf_field_type *field_type = NULL;
 
 	if (!event_class || !name) {
+		goto end;
+	}
+
+	if (bt_ctf_field_type_get_type_id(event_class->fields) !=
+		CTF_TYPE_STRUCT) {
 		goto end;
 	}
 

@@ -103,6 +103,32 @@ extern struct bt_ctf_stream_class *bt_ctf_event_class_get_stream_class(
 		struct bt_ctf_event_class *event_class);
 
 /*
+ * bt_ctf_event_class_get_payload: get an event class' payload.
+ *
+ * Get an event class' payload type.
+ *
+ * @param event_class Event class.
+ *
+ * Returns the event class' payload, NULL on error.
+ */
+extern struct bt_ctf_field_type *bt_ctf_event_class_get_payload(
+		struct bt_ctf_event_class *event_class);
+
+/*
+ * bt_ctf_event_class_set_payload: set an event class' payload.
+ *
+ * Set an event class' payload type.
+ *
+ * @param event_class Event class.
+ * @param payload The payload's type.
+ *
+ * Returns 0 on success, a negative value on error.
+ */
+extern int bt_ctf_event_class_set_payload(
+		struct bt_ctf_event_class *event_class,
+		struct bt_ctf_field_type *payload);
+
+/*
  * bt_ctf_event_class_add_field: add a field to an event class.
  *
  * Add a field of type "type" to the event class. The event class will share
