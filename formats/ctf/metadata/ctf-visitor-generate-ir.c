@@ -2898,6 +2898,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 {
 	int ret = 0;
 	char *left = NULL;
+	_BT_CTF_FIELD_TYPE_INIT(decl);
 
 	switch (node->type) {
 	case NODE_TYPEDEF:
@@ -2981,51 +2982,63 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 
 			_SET(set, _EVENT_STREAM_ID_SET);
 		} else if (!strcmp(left, "context")) {
-#if 0
-			struct bt_declaration *declaration;
+			if (_IS_SET(set, _EVENT_CONTEXT_SET)) {
+				_PERROR("%s", "duplicate \"context\" entry in event declaration");
+				ret = -EPERM;
+				goto error;
+			}
 
-			if (event->context_decl) {
-				fprintf(fd, "[error] %s: context already declared in event declaration\n", __func__);
-				ret = -EINVAL;
+			ret = visit_type_specifier_list(ctx,
+				_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+					struct ctf_node, siblings),
+				&decl);
+
+			if (ret) {
+				_PERROR("%s", "cannot create event context declaration");
 				goto error;
 			}
-			declaration = ctf_type_specifier_list_visit(fd, depth,
-					_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
-						struct ctf_node, siblings),
-					event->declaration_scope, trace);
-			if (!declaration) {
-				ret = -EPERM;
+
+			assert(decl);
+
+			ret = bt_ctf_event_class_set_context_type(event_class,
+				decl);
+			_BT_CTF_FIELD_TYPE_PUT(decl);
+
+			if (ret) {
+				_PERROR("%s", "cannot set event's context declaration");
 				goto error;
 			}
-			if (declaration->id != CTF_TYPE_STRUCT) {
-				ret = -EPERM;
-				goto error;
-			}
-			event->context_decl = container_of(declaration, struct declaration_struct, p);
-#endif
+
+			_SET(set, _EVENT_CONTEXT_SET);
 		} else if (!strcmp(left, "fields")) {
-#if 0
-			struct bt_declaration *declaration;
+			if (_IS_SET(set, _EVENT_FIELDS_SET)) {
+				_PERROR("%s", "duplicate \"fields\" entry in event declaration");
+				ret = -EPERM;
+				goto error;
+			}
 
-			if (event->fields_decl) {
-				fprintf(fd, "[error] %s: fields already declared in event declaration\n", __func__);
-				ret = -EINVAL;
+			ret = visit_type_specifier_list(ctx,
+				_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+					struct ctf_node, siblings),
+				&decl);
+
+			if (ret) {
+				_PERROR("%s", "cannot create event payload declaration");
 				goto error;
 			}
-			declaration = ctf_type_specifier_list_visit(fd, depth,
-					_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
-						struct ctf_node, siblings),
-					event->declaration_scope, trace);
-			if (!declaration) {
-				ret = -EPERM;
+
+			assert(decl);
+
+			ret = bt_ctf_event_class_set_payload_type(event_class,
+				decl);
+			_BT_CTF_FIELD_TYPE_PUT(decl);
+
+			if (ret) {
+				_PERROR("%s", "cannot set event's payload declaration");
 				goto error;
 			}
-			if (declaration->id != CTF_TYPE_STRUCT) {
-				ret = -EPERM;
-				goto error;
-			}
-			event->fields_decl = container_of(declaration, struct declaration_struct, p);
-#endif
+
+			_SET(set, _EVENT_FIELDS_SET);
 		} else if (!strcmp(left, "loglevel")) {
 			uint64_t loglevel;
 
@@ -3088,6 +3101,8 @@ error:
 	if (left) {
 		g_free(left);
 	}
+
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(decl);
 
 	return ret;
 }
@@ -3588,7 +3603,7 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 				&decl);
 
 			if (ret) {
-				_PERROR("%s", "cannot create event context declaration");
+				_PERROR("%s", "cannot create stream event context declaration");
 				goto error;
 			}
 
@@ -3654,6 +3669,8 @@ error:
 	if (left) {
 		g_free(left);
 	}
+
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(decl);
 
 	return ret;
 }
