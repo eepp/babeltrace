@@ -1484,7 +1484,7 @@ int visit_struct_decl_field(struct ctx *ctx,
 
 		if (ret) {
 			assert(!field_decl);
-			_PERROR("%s", "unable to find struct field declaration type");
+			_PERROR("%s", "unable to find structure field declaration type");
 			goto error;
 		}
 
@@ -1522,44 +1522,65 @@ error:
 	return ret;
 }
 
-#if 0
 static
-int ctf_variant_type_declarators_visit(FILE *fd, int depth,
-	struct declaration_untagged_variant *untagged_variant_declaration,
+int visit_variant_decl_field(struct ctx *ctx,
+	struct bt_ctf_field_type *variant_decl,
 	struct ctf_node *type_specifier_list,
-	struct bt_list_head *type_declarators,
-	struct declaration_scope *declaration_scope,
-	struct ctf_trace *trace)
+	struct bt_list_head *type_declarators)
 {
+	int ret = 0;
 	struct ctf_node *iter;
-	GQuark field_name;
+	_BT_CTF_FIELD_TYPE_INIT(field_decl);
 
 	bt_list_for_each_entry(iter, type_declarators, siblings) {
-		struct bt_declaration *field_declaration;
+		field_decl = NULL;
+		GQuark qfield_name;
+		const char *field_name;
+		_BT_CTF_FIELD_TYPE_INIT(efield_decl);
 
-		field_declaration = ctf_type_declarator_visit(fd, depth,
-						type_specifier_list,
-						&field_name, iter,
-						untagged_variant_declaration->scope,
-						NULL, trace);
-		if (!field_declaration) {
-			fprintf(fd, "[error] %s: unable to find variant field declaration type\n", __func__);
-			return -EINVAL;
+		ret = visit_type_declarator(ctx, type_specifier_list,
+			&qfield_name, iter, &field_decl, NULL);
+
+		if (ret) {
+			assert(!field_decl);
+			_PERROR("%s", "unable to find variant field declaration type");
+			goto error;
 		}
 
-		if (bt_untagged_variant_declaration_get_field_from_tag(untagged_variant_declaration, field_name) != NULL) {
-			fprintf(fd, "[error] %s: duplicate field %s in variant\n", __func__, g_quark_to_string(field_name));
-			return -EINVAL;
+		assert(field_decl);
+		field_name = g_quark_to_string(qfield_name);
+
+		/* check if field with same name already exists */
+		efield_decl = bt_ctf_field_type_variant_get_field_type_by_name(variant_decl,
+			field_name);
+
+		if (efield_decl) {
+			_BT_CTF_FIELD_TYPE_PUT(efield_decl);
+			_PERROR("duplicate field \"%s\" in variant",
+				field_name);
+			ret = -EINVAL;
+			goto error;
 		}
 
-		bt_untagged_variant_declaration_add_field(untagged_variant_declaration,
-					      g_quark_to_string(field_name),
-					      field_declaration);
-		bt_declaration_unref(field_declaration);
+		/* add field to structure */
+		ret = bt_ctf_field_type_variant_add_field(variant_decl,
+			field_decl, field_name);
+		_BT_CTF_FIELD_TYPE_PUT(field_decl);
+
+		if (ret) {
+			_PERROR("cannot add field \"%s\" to variant",
+				g_quark_to_string(qfield_name));
+			goto error;
+		}
 	}
+
 	return 0;
+
+error:
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(field_decl);
+
+	return ret;
 }
-#endif
 
 static
 int visit_typedef(struct ctx *ctx, struct ctf_node *type_specifier_list,
@@ -1577,32 +1598,29 @@ int visit_typedef(struct ctx *ctx, struct ctf_node *type_specifier_list,
 		if (ret) {
 			_PERROR("%s", "problem creating type declaration");
 			ret = -EINVAL;
-			goto error;
+			goto end;
 		}
 
 		/* do not allow typedef and typealias of untagged variants */
-#if 0
-		if (type_declaration->id == CTF_TYPE_UNTAGGED_VARIANT) {
-			fprintf(fd, "[error] %s: typedef of untagged variant is not permitted.\n", __func__);
-			bt_declaration_unref(type_declaration);
-			return -EPERM;
+		if (bt_ctf_field_type_get_type_id(type_decl) == CTF_TYPE_VARIANT) {
+			if (bt_ctf_field_type_variant_get_tag_name(type_decl)) {
+				_PERROR("%s", "typedef of untagged variant is not allowed");
+				ret = -EPERM;
+				goto end;
+			}
 		}
-#endif
 
 		ret = ctx_decl_scope_register_alias(ctx->current_scope,
 			g_quark_to_string(qidentifier), type_decl);
-		_BT_CTF_FIELD_TYPE_PUT(type_decl);
 
 		if (ret) {
 			_PERROR("cannot register typedef \"%s\"",
 				g_quark_to_string(qidentifier));
-			goto error;
+			goto end;
 		}
 	}
 
-	return 0;
-
-error:
+end:
 	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(type_decl);
 
 	return ret;
@@ -1637,13 +1655,13 @@ int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 	}
 
 	/* do not allow typedef and typealias of untagged variants */
-#if 0
-	if (type_decl->id == CTF_TYPE_UNTAGGED_VARIANT) {
-		fprintf(fd, "[error] %s: typedef of untagged variant is not permitted.\n", __func__);
-		bt_declaration_unref(type_decl);
-		return -EPERM;
+	if (bt_ctf_field_type_get_type_id(type_decl) == CTF_TYPE_VARIANT) {
+		if (bt_ctf_field_type_variant_get_tag_name(type_decl)) {
+			_PERROR("%s", "typealias of untagged variant is not allowed");
+			ret = -EPERM;
+			goto end;
+		}
 	}
-#endif
 
 	/*
 	 * The semantic validator does not check whether the target is
@@ -1724,51 +1742,54 @@ end:
 	return ret;
 }
 
-#if 0
 static
-int ctf_variant_declaration_list_visit(FILE *fd, int depth,
-	struct ctf_node *iter,
-	struct declaration_untagged_variant *untagged_variant_declaration,
-	struct ctf_trace *trace)
+int visit_variant_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
+	struct bt_ctf_field_type *variant_decl)
 {
-	int ret;
+	int ret = 0;
 
-	switch (iter->type) {
+	switch (entry_node->type) {
 	case NODE_TYPEDEF:
-		/* For each declarator, declare type and add type to variant declaration scope */
-		ret = ctf_typedef_visit(fd, depth,
-			untagged_variant_declaration->scope,
-			iter->u._typedef.type_specifier_list,
-			&iter->u._typedef.type_declarators, trace);
-		if (ret)
-			return ret;
+		ret = visit_typedef(ctx,
+			entry_node->u._typedef.type_specifier_list,
+			&entry_node->u._typedef.type_declarators);
+
+		if (ret) {
+			_PERROR("%s", "cannot add typedef in \"variant\" declaration");
+			goto end;
+		}
 		break;
+
 	case NODE_TYPEALIAS:
-		/* Declare type with declarator and add type to variant declaration scope */
-		ret = ctf_typealias_visit(fd, depth,
-			untagged_variant_declaration->scope,
-			iter->u.typealias.target,
-			iter->u.typealias.alias, trace);
-		if (ret)
-			return ret;
+		ret = visit_typealias(ctx, entry_node->u.typealias.target,
+			entry_node->u.typealias.alias);
+
+		if (ret) {
+			_PERROR("%s", "cannot add typealias in \"variant\" declaration");
+			goto end;
+		}
 		break;
+
 	case NODE_STRUCT_OR_VARIANT_DECLARATION:
-		/* Add field to structure declaration */
-		ret = ctf_variant_type_declarators_visit(fd, depth,
-				untagged_variant_declaration,
-				iter->u.struct_or_variant_declaration.type_specifier_list,
-				&iter->u.struct_or_variant_declaration.type_declarators,
-				untagged_variant_declaration->scope, trace);
-		if (ret)
-			return ret;
+		/* field */
+		ret = visit_variant_decl_field(ctx, variant_decl,
+			entry_node->u.struct_or_variant_declaration.type_specifier_list,
+			&entry_node->u.struct_or_variant_declaration.type_declarators);
+
+		if (ret) {
+			goto end;
+		}
 		break;
+
 	default:
-		fprintf(fd, "[error] %s: unexpected node type %d\n", __func__, (int) iter->type);
-		return -EINVAL;
+		_PERROR("unexpected node type: %d", (int) entry_node->type);
+		ret = -EINVAL;
+		goto end;
 	}
-	return 0;
+
+end:
+	return ret;
 }
-#endif
 
 static
 int visit_struct_decl(struct ctx *ctx, const char *name,
@@ -1930,10 +1951,8 @@ int visit_variant_decl(struct ctx *ctx, const char *name,
 		}
 
 		bt_list_for_each_entry(entry_node, declaration_list, siblings) {
-#if 0
 			ret = visit_variant_decl_entry(ctx, entry_node,
-				&untagged_variant_decl);
-#endif
+				untagged_variant_decl);
 
 			if (ret) {
 				ctx_pop_scope(ctx);
@@ -2872,18 +2891,16 @@ int visit_type_specifier_list(struct ctx *ctx,
 		break;
 
 	case TYPESPEC_VARIANT:
-		_PERROR("%s", "TODO: support variants");
-		ret = -EPERM;
-		goto error;
-#if 0
-		return ctf_declaration_variant_visit(fd, depth,
-			node->u.variant.name,
+		ret = visit_variant_decl(ctx, node->u.variant.name,
 			node->u.variant.choice,
 			&node->u.variant.declaration_list,
-			node->u.variant.has_body,
-			declaration_scope,
-			trace);
-#endif
+			node->u.variant.has_body, decl);
+
+		if (ret) {
+			assert(!*decl);
+			goto error;
+		}
+		break;
 
 	case TYPESPEC_ENUM:
 		ret = visit_enum_decl(ctx, node->u._enum.enum_id,
