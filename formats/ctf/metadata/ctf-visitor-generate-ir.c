@@ -3161,27 +3161,22 @@ int reset_event_decl_types(struct ctx *ctx,
 		goto error;
 	}
 
-	// TODO: FIXME: do this when bt_ctf_event_class_set_payload_type() is available
 	/* event payload */
-#if 0
 	decl = bt_ctf_field_type_structure_create();
 
 	if (!decl) {
-		fprintf(ctx->efd, "[error] %s: cannot create initial, empty event payload structure\n",
-			__func__);
+		_PERROR("%s", "cannot create initial, empty event payload structure");
 		ret = -ENOMEM;
 		goto error;
 	}
 
-	ret = bt_ctf_event_class_set_payload_type(stream_class, decl);
+	ret = bt_ctf_event_class_set_payload_type(event_class, decl);
 	_BT_CTF_FIELD_TYPE_PUT(decl);
 
 	if (ret) {
-		fprintf(ctx->efd, "[error] %s: cannot set initial, empty event payload structure\n",
-			__func__);
+		_PERROR("%s", "cannot set initial, empty event payload structure");
 		goto error;
 	}
-#endif
 
 	return 0;
 
