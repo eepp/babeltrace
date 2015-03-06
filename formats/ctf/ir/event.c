@@ -53,17 +53,19 @@ struct bt_ctf_event_class *bt_ctf_event_class_create(const char *name)
 		goto end;
 	}
 
-	event_class->fields = bt_ctf_field_type_structure_create();
-	if (!event_class->fields) {
-		goto end;
-	}
-
 	event_class = g_new0(struct bt_ctf_event_class, 1);
 	if (!event_class) {
 		goto end;
 	}
 
 	bt_ctf_ref_init(&event_class->ref_count);
+	event_class->fields = bt_ctf_field_type_structure_create();
+	if (!event_class->fields) {
+		bt_ctf_event_class_put(event_class);
+		event_class = NULL;
+		goto end;
+	}
+
 	event_class->name = g_quark_from_string(name);
 end:
 	return event_class;
