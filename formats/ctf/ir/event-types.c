@@ -2650,7 +2650,7 @@ struct bt_ctf_field_type *bt_ctf_field_type_enumeration_copy(
 		struct bt_ctf_field_type *type)
 {
 	size_t i;
-	struct bt_ctf_field_type *copy, *copy_container;
+	struct bt_ctf_field_type *copy = NULL, *copy_container;
 	struct bt_ctf_field_type_enumeration *enumeration, *copy_enumeration;
 
 	enumeration = container_of(type, struct bt_ctf_field_type_enumeration,
@@ -2788,7 +2788,7 @@ struct bt_ctf_field_type *bt_ctf_field_type_variant_copy(
 	int i;
 	GHashTableIter iter;
 	gpointer key, value;
-	struct bt_ctf_field_type *copy, *copy_tag = NULL;
+	struct bt_ctf_field_type *copy = NULL, *copy_tag = NULL;
 	struct bt_ctf_field_type_variant *variant, *copy_variant;
 
 	variant = container_of(type, struct bt_ctf_field_type_variant,
@@ -2860,7 +2860,7 @@ static
 struct bt_ctf_field_type *bt_ctf_field_type_array_copy(
 		struct bt_ctf_field_type *type)
 {
-	struct bt_ctf_field_type *copy, *copy_element;
+	struct bt_ctf_field_type *copy = NULL, *copy_element;
 	struct bt_ctf_field_type_array *array, *copy_array;
 
 	array = container_of(type, struct bt_ctf_field_type_array,
@@ -2890,7 +2890,7 @@ static
 struct bt_ctf_field_type *bt_ctf_field_type_sequence_copy(
 		struct bt_ctf_field_type *type)
 {
-	struct bt_ctf_field_type *copy, *copy_element;
+	struct bt_ctf_field_type *copy = NULL, *copy_element;
 	struct bt_ctf_field_type_sequence *sequence, *copy_sequence;
 
 	sequence = container_of(type, struct bt_ctf_field_type_sequence,
