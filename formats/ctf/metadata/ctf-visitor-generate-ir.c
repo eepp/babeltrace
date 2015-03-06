@@ -46,6 +46,7 @@
 #include <babeltrace/ctf-ir/stream-class.h>
 #include <babeltrace/ctf-ir/event.h>
 #include <babeltrace/ctf-ir/event-types.h>
+#include <babeltrace/ctf-ir/event-types-internal.h>
 #include <babeltrace/ctf-ir/clock.h>
 #include <babeltrace/ctf-ir/clock-internal.h>
 
@@ -1053,7 +1054,7 @@ int is_align_valid(uint64_t align)
 }
 
 static
-int visit_type_specifier2(struct ctx *ctx, struct ctf_node *type_specifier,
+int get_type_specifier_name(struct ctx *ctx, struct ctf_node *type_specifier,
 	GString *str)
 {
 	int ret = 0;
@@ -1127,7 +1128,7 @@ int visit_type_specifier2(struct ctx *ctx, struct ctf_node *type_specifier,
 		struct ctf_node *node = type_specifier->u.type_specifier.node;
 
 		if (!node->u._struct.name) {
-			_PERROR("%s", "unexpected empty variant name");
+			_PERROR("%s", "unexpected empty structure name");
 			ret = -EINVAL;
 			goto end;
 		}
@@ -1157,7 +1158,7 @@ int visit_type_specifier2(struct ctx *ctx, struct ctf_node *type_specifier,
 		struct ctf_node *node = type_specifier->u.type_specifier.node;
 
 		if (!node->u._enum.enum_id) {
-			_PERROR("%s", "unexpected empty enum ID");
+			_PERROR("%s", "unexpected empty enum name");
 			ret = -EINVAL;
 			goto end;
 		}
@@ -1181,7 +1182,7 @@ end:
 }
 
 static
-int visit_type_specifier_list2(struct ctx *ctx,
+int get_type_specifier_list_name(struct ctx *ctx,
 	struct ctf_node *type_specifier_list, GString *str)
 {
 	int ret;
@@ -1194,7 +1195,7 @@ int visit_type_specifier_list2(struct ctx *ctx,
 		}
 
 		alias_item_nr++;
-		ret = visit_type_specifier2(ctx, iter, str);
+		ret = get_type_specifier_name(ctx, iter, str);
 
 		if (ret) {
 			goto end;
@@ -1217,7 +1218,7 @@ GQuark create_typealias_identifier(struct ctx *ctx,
 	struct ctf_node *iter;
 
 	str = g_string_new("");
-	ret = visit_type_specifier_list2(ctx, type_specifier_list, str);
+	ret = get_type_specifier_list_name(ctx, type_specifier_list, str);
 
 	if (ret) {
 		g_string_free(str, TRUE);
@@ -1277,6 +1278,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 		if (node_type_declarator &&
 				!bt_list_empty(&node_type_declarator->u.type_declarator.pointers)) {
 			GQuark qalias;
+			_BT_CTF_FIELD_TYPE_INIT(nested_decl_copy);
 
 			/*
 			 * If we have a pointer declarator, it HAS to
@@ -1294,29 +1296,22 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 				goto error;
 			}
 
-			if (bt_ctf_field_type_get_type_id(nested_decl) == CTF_TYPE_INTEGER) {
-				/* copy integer to set its base to 16 */
-				struct bt_ctf_clock *mapped_clock;
-				_BT_CTF_FIELD_TYPE_INIT(int_decl_copy);
+			/* make a copy of it */
+			nested_decl_copy = bt_ctf_field_type_copy(nested_decl);
+			_BT_CTF_FIELD_TYPE_PUT(nested_decl);
 
-				int_decl_copy = bt_ctf_field_type_integer_create(
-					bt_ctf_field_type_integer_get_size(nested_decl));
-				bt_ctf_field_type_integer_set_signed(nested_decl,
-					bt_ctf_field_type_integer_get_signed(nested_decl));
+			if (!nested_decl_copy) {
+				_PERROR("%s", "cannot copy nested declaration");
+				ret = -EINVAL;
+				goto error;
+			}
+
+			_BT_CTF_FIELD_TYPE_MOVE(nested_decl, nested_decl_copy);
+
+			/* force integer's base to 16 since it's a pointer */
+			if (bt_ctf_field_type_get_type_id(nested_decl) == CTF_TYPE_INTEGER) {
 				bt_ctf_field_type_integer_set_base(nested_decl,
 					BT_CTF_INTEGER_BASE_HEXADECIMAL);
-				bt_ctf_field_type_integer_set_encoding(nested_decl,
-					bt_ctf_field_type_integer_get_encoding(nested_decl));
-				mapped_clock =
-					bt_ctf_field_type_integer_get_mapped_clock(nested_decl);
-
-				if (mapped_clock) {
-					bt_ctf_field_type_integer_set_mapped_clock(int_decl_copy, mapped_clock);
-					bt_ctf_clock_put(mapped_clock);
-				}
-
-				_BT_CTF_FIELD_TYPE_PUT(nested_decl);
-				_BT_CTF_FIELD_TYPE_MOVE(nested_decl, int_decl_copy);
 			}
 		} else {
 			ret = visit_type_specifier_list(ctx,
@@ -1394,7 +1389,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 			char *length_name;
 
 			length_name =
-			concatenate_unary_strings(&node_type_declarator->u.type_declarator.u.nested.length);
+				concatenate_unary_strings(&node_type_declarator->u.type_declarator.u.nested.length);
 
 			if (!length_name) {
 				ret = -EINVAL;
@@ -1403,9 +1398,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 
 			seq_decl = bt_ctf_field_type_sequence_create(nested_decl,
 				length_name);
-
 			g_free(length_name);
-
 			_BT_CTF_FIELD_TYPE_PUT(nested_decl);
 
 			if (!seq_decl) {
@@ -1803,6 +1796,8 @@ int visit_struct_decl(struct ctx *ctx, const char *name,
 
 	/* for named struct (without body), lookup in declaration scope */
 	if (!has_body) {
+		_BT_CTF_FIELD_TYPE_INIT(struct_decl_copy);
+
 		if (!name) {
 			ret = -EPERM;
 			goto error;
@@ -1816,6 +1811,18 @@ int visit_struct_decl(struct ctx *ctx, const char *name,
 			ret = -EINVAL;
 			goto error;
 		}
+
+		/* make a copy of it */
+		struct_decl_copy = bt_ctf_field_type_copy(*struct_decl);
+
+		if (!struct_decl_copy) {
+			_PERROR("%s", "cannot create copy of structure declaration");
+			ret = -EINVAL;
+			goto error;
+		}
+
+		_BT_CTF_FIELD_TYPE_PUT(*struct_decl);
+		_BT_CTF_FIELD_TYPE_MOVE(*struct_decl, struct_decl_copy);
 	} else {
 		struct ctf_node *entry_node;
 		uint64_t min_align_value = 0;
@@ -1903,6 +1910,8 @@ int visit_variant_decl(struct ctx *ctx, const char *name,
 
 	/* for named variant (without body), lookup in declaration scope */
 	if (!has_body) {
+		_BT_CTF_FIELD_TYPE_INIT(variant_decl_copy);
+
 		if (!name) {
 			ret = -EPERM;
 			goto error;
@@ -1917,6 +1926,19 @@ int visit_variant_decl(struct ctx *ctx, const char *name,
 			ret = -EINVAL;
 			goto error;
 		}
+
+		/* make a copy of it */
+		variant_decl_copy = bt_ctf_field_type_copy(untagged_variant_decl);
+
+		if (!variant_decl_copy) {
+			_PERROR("%s", "cannot create copy of structure declaration");
+			ret = -EINVAL;
+			goto error;
+		}
+
+		_BT_CTF_FIELD_TYPE_PUT(untagged_variant_decl);
+		_BT_CTF_FIELD_TYPE_MOVE(untagged_variant_decl,
+			variant_decl_copy);
 	} else {
 		struct ctf_node *entry_node;
 
@@ -1981,8 +2003,13 @@ int visit_variant_decl(struct ctx *ctx, const char *name,
 	if (!tag) {
 		_BT_CTF_FIELD_TYPE_MOVE(*variant_decl, untagged_variant_decl);
 	} else {
-		// TODO: FIXME: deep copy untagged_variant_decl into *variant_decl
-		//              and set its tag
+		/*
+		 * At this point, we have a fresh untagged variant; nobody
+		 * else owns it. Set its tag now.
+		 */
+
+		// TODO: FIXME: set tag
+		_BT_CTF_FIELD_TYPE_MOVE(*variant_decl, untagged_variant_decl);
 	}
 
 	assert(!untagged_variant_decl);
@@ -2086,6 +2113,8 @@ int visit_enum_decl(struct ctx *ctx, const char *name,
 
 	/* for named enum (without body), lookup in declaration scope */
 	if (!has_body) {
+		_BT_CTF_FIELD_TYPE_INIT(enum_decl_copy);
+
 		if (!name) {
 			ret = -EPERM;
 			goto error;
@@ -2099,6 +2128,18 @@ int visit_enum_decl(struct ctx *ctx, const char *name,
 			ret = -EINVAL;
 			goto error;
 		}
+
+		/* make a copy of it */
+		enum_decl_copy = bt_ctf_field_type_copy(*enum_decl);
+
+		if (!enum_decl_copy) {
+			_PERROR("%s", "cannot create copy of enumeration declaration");
+			ret = -EINVAL;
+			goto error;
+		}
+
+		_BT_CTF_FIELD_TYPE_PUT(*enum_decl);
+		_BT_CTF_FIELD_TYPE_MOVE(*enum_decl, enum_decl_copy);
 	} else {
 		struct ctf_node *iter;
 		int64_t last_value = 0;
@@ -2191,11 +2232,12 @@ int visit_type_specifier(struct ctx *ctx,
 {
 	int ret = 0;
 	GString *str = NULL;
+	_BT_CTF_FIELD_TYPE_INIT(decl_copy);
 
 	*decl = NULL;
 
 	str = g_string_new("");
-	ret = visit_type_specifier_list2(ctx, type_specifier_list, str);
+	ret = get_type_specifier_list_name(ctx, type_specifier_list, str);
 
 	if (ret) {
 		goto error;
@@ -2209,6 +2251,17 @@ int visit_type_specifier(struct ctx *ctx,
 		goto error;
 	}
 
+	/* make a copy of the type declaration */
+	decl_copy = bt_ctf_field_type_copy(*decl);
+
+	if (!decl_copy) {
+		_PERROR("%s", "cannot create copy of type declaration");
+		ret = -EINVAL;
+		goto error;
+	}
+
+	_BT_CTF_FIELD_TYPE_PUT(*decl);
+	_BT_CTF_FIELD_TYPE_MOVE(*decl, decl_copy);
 	(void) g_string_free(str, TRUE);
 	str = NULL;
 
@@ -2218,6 +2271,8 @@ error:
 	if (str) {
 		(void) g_string_free(str, TRUE);
 	}
+
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(*decl);
 
 	return ret;
 }
@@ -3173,7 +3228,7 @@ static
 char *get_event_decl_name(struct ctx *ctx, struct ctf_node *node)
 {
 	char *left = NULL;
-	char* name = NULL;
+	char *name = NULL;
 	struct ctf_node *iter;
 
 	bt_list_for_each_entry(iter, &node->u.event.declaration_list, siblings) {
@@ -3370,7 +3425,7 @@ int visit_event_decl(struct ctx *ctx, struct ctf_node *node)
 	int64_t event_id;
 	struct ctf_node *iter;
 	int64_t stream_id = -1;
-	char* event_name = NULL;
+	char *event_name = NULL;
 	struct bt_ctf_event_class *event_class;
 	struct bt_ctf_event_class *eevent_class;
 	struct bt_ctf_stream_class *stream_class;
