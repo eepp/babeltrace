@@ -432,17 +432,32 @@ end:
 
 int bt_ctf_event_set_payload(struct bt_ctf_event *event,
 		const char *name,
-		struct bt_ctf_field *value)
+		struct bt_ctf_field *payload)
 {
 	int ret = 0;
 
-	if (!event || !value || bt_ctf_validate_identifier(name)) {
+	if (!event || !payload) {
 		ret = -1;
 		goto end;
 	}
 
-	ret = bt_ctf_field_structure_set_field(event->fields_payload,
-		name, value);
+	if (name) {
+		ret = bt_ctf_field_structure_set_field(event->fields_payload,
+			name, payload);
+	} else {
+		struct bt_ctf_field_type *payload_type;
+
+		payload_type = bt_ctf_field_get_type(payload);
+		if (payload_type == event->event_class->fields) {
+			bt_ctf_field_put(event->fields_payload);
+			bt_ctf_field_get(payload);
+			event->fields_payload = payload;
+		} else {
+			ret = -1;
+		}
+
+		bt_ctf_field_type_put(payload_type);
+	}
 end:
 	return ret;
 }
@@ -453,11 +468,17 @@ struct bt_ctf_field *bt_ctf_event_get_payload(struct bt_ctf_event *event,
 {
 	struct bt_ctf_field *field = NULL;
 
-	if (!event || !name) {
+	if (!event) {
 		goto end;
 	}
 
-	field = bt_ctf_field_structure_get_field(event->fields_payload, name);
+	if (name) {
+		field = bt_ctf_field_structure_get_field(event->fields_payload,
+			name);
+	} else {
+		field = event->fields_payload;
+		bt_ctf_field_get(field);
+	}
 end:
 	return field;
 }
