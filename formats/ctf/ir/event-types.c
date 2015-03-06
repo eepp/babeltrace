@@ -2640,6 +2640,10 @@ struct bt_ctf_field_type *bt_ctf_field_type_integer_copy(
 	copy_integer = container_of(copy, struct bt_ctf_field_type_integer,
 		parent);
 	copy_integer->declaration = integer->declaration;
+	if (integer->mapped_clock) {
+		bt_ctf_clock_get(integer->mapped_clock);
+		copy_integer->mapped_clock = integer->mapped_clock;
+	}
 end:
 	return copy;
 }
@@ -2665,6 +2669,8 @@ struct bt_ctf_field_type *bt_ctf_field_type_enumeration_copy(
 	if (!copy) {
 		goto end;
 	}
+	copy_enumeration = container_of(copy,
+		struct bt_ctf_field_type_enumeration, parent);
 
 	/* Copy all enumaration entries */
 	for (i = 0; i < enumeration->entries->len; i++) {
@@ -2677,11 +2683,10 @@ struct bt_ctf_field_type *bt_ctf_field_type_enumeration_copy(
 			goto error;
 		}
 
-		copy_mapping = mapping;
+		*copy_mapping = *mapping;
+		g_ptr_array_add(copy_enumeration->entries, copy_mapping);
 	}
 
-	copy_enumeration = container_of(copy,
-		struct bt_ctf_field_type_enumeration, parent);
 	copy_enumeration->declaration = enumeration->declaration;
 end:
 	if (copy_container) {
@@ -2800,7 +2805,7 @@ struct bt_ctf_field_type *bt_ctf_field_type_variant_copy(
 
 	copy = bt_ctf_field_type_variant_create(copy_tag,
 		variant->tag_name->len ? variant->tag_name->str : NULL);
-	if (copy) {
+	if (!copy) {
 		goto end;
 	}
 
