@@ -354,8 +354,6 @@ struct bt_ctf_field_type *ctx_decl_scope_lookup_prefix_alias(
 	}
 
 	while (cur_scope && cur_levels < levels) {
-		//printf("looking up %s in scope %p\n", g_quark_to_string(qname), cur_scope);
-
 		decl = g_hash_table_lookup(cur_scope->decl_map,
 			(gconstpointer) (unsigned long) qname);
 
@@ -460,10 +458,7 @@ int ctx_decl_scope_register_prefix_alias(struct ctx_decl_scope *scope,
 	assert(scope);
 	assert(name);
 	assert(decl);
-
 	qname = get_prefixed_named_quark(prefix, name);
-
-	//printf("registering %s in scope %p\n", g_quark_to_string(qname), scope);
 
 	if (!qname) {
 		ret = -ENOMEM;
@@ -642,8 +637,6 @@ int ctx_push_scope(struct ctx *ctx)
 	struct ctx_decl_scope *new_scope =
 		ctx_decl_scope_create(ctx->current_scope);
 
-	//printf("PUSH  old=%p  new=%p\n", ctx->current_scope, new_scope);
-
 	if (!new_scope) {
 		ret = -ENOMEM;
 		goto error;
@@ -674,9 +667,6 @@ void ctx_pop_scope(struct ctx *ctx)
 	}
 
 	parent_scope = ctx->current_scope->parent_scope;
-
-	//printf("POP  old=%p  new=%p\n", ctx->current_scope, parent_scope);
-
 	ctx_decl_scope_destroy(ctx->current_scope);
 	ctx->current_scope = parent_scope;
 
@@ -1474,7 +1464,7 @@ error:
 }
 
 static
-int visit_struct_field(struct ctx *ctx,
+int visit_struct_decl_field(struct ctx *ctx,
 	struct bt_ctf_field_type *struct_decl,
 	struct ctf_node *type_specifier_list,
 	struct bt_list_head *type_declarators)
@@ -1686,7 +1676,7 @@ end:
 }
 
 static
-int visit_struct_entry(struct ctx *ctx, struct ctf_node *entry_node,
+int visit_struct_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 	struct bt_ctf_field_type *struct_decl)
 {
 	int ret = 0;
@@ -1715,7 +1705,7 @@ int visit_struct_entry(struct ctx *ctx, struct ctf_node *entry_node,
 
 	case NODE_STRUCT_OR_VARIANT_DECLARATION:
 		/* field */
-		ret = visit_struct_field(ctx, struct_decl,
+		ret = visit_struct_decl_field(ctx, struct_decl,
 			entry_node->u.struct_or_variant_declaration.type_specifier_list,
 			&entry_node->u.struct_or_variant_declaration.type_declarators);
 
@@ -1849,7 +1839,8 @@ int visit_struct_decl(struct ctx *ctx, const char *name,
 		}
 
 		bt_list_for_each_entry(entry_node, decl_list, siblings) {
-			ret = visit_struct_entry(ctx, entry_node, *struct_decl);
+			ret = visit_struct_decl_entry(ctx, entry_node,
+				*struct_decl);
 
 			if (ret) {
 				ctx_pop_scope(ctx);
@@ -1879,22 +1870,17 @@ error:
 	return ret;
 }
 
-#if 0
 static
 int visit_variant_decl(struct ctx *ctx, const char *name,
 	const char *tag, struct bt_list_head *declaration_list,
 	int has_body, struct bt_ctf_field_type **variant_decl)
 {
-	_BT_CTF_FIELD_TYPE_INIT(untagged_variant_decl);
-	struct ctf_node *iter;
 	int ret = 0;
+	_BT_CTF_FIELD_TYPE_INIT(untagged_variant_decl);
 
 	*variant_decl = NULL;
 
-	/*
-	 * For named variant (without body), lookup in declaration
-	 * scope.
-	 */
+	/* for named variant (without body), lookup in declaration scope */
 	if (!has_body) {
 		if (!name) {
 			ret = -EPERM;
@@ -1905,13 +1891,14 @@ int visit_variant_decl(struct ctx *ctx, const char *name,
 			ctx_decl_scope_lookup_variant(ctx->current_scope,
 				name, -1);
 
-		if (!*untagged_variant_decl) {
-			fprintf(ctx->efd, "[error] %s: cannot find \"variant %s\"\n",
-				__func__, name);
+		if (!untagged_variant_decl) {
+			_PERROR("cannot find \"variant %s\"", name);
 			ret = -EINVAL;
 			goto error;
 		}
 	} else {
+		struct ctf_node *entry_node;
+
 		if (name) {
 			struct bt_ctf_field_type *evariant_decl =
 				ctx_decl_scope_lookup_struct(ctx->current_scope,
@@ -1919,52 +1906,75 @@ int visit_variant_decl(struct ctx *ctx, const char *name,
 
 			if (evariant_decl) {
 				_BT_CTF_FIELD_TYPE_PUT(evariant_decl);
-				fprintf(ctx->efd, "[error] %s: \"variant %s\" already declared in local scope\n",
-					__func__, name);
+				_PERROR("\"variant %s\" already declared in local scope",
+					name);
 				ret = -EINVAL;
 				goto error;
 			}
 		}
 
-		// TODO: build untagged variant
+		untagged_variant_decl = bt_ctf_field_type_variant_create(NULL,
+			NULL);
 
-		untagged_variant_declaration = bt_untagged_bt_variant_declaration_new(declaration_scope);
-		bt_list_for_each_entry(iter, declaration_list, siblings) {
-			int ret;
-
-			ret = ctf_variant_declaration_list_visit(fd, depth + 1, iter,
-				untagged_variant_declaration, trace);
-			if (ret)
-				goto error;
-		}
-		if (name) {
-			int ret;
-
-			ret = bt_register_variant_declaration(g_quark_from_string(name),
-					untagged_variant_declaration,
-					declaration_scope);
-			if (ret)
-				return NULL;
-		}
-	}
-	/*
-	 * if tagged, create tagged variant and return. else return
-	 * untagged variant.
-	 */
-	if (!choice) {
-		return &untagged_variant_declaration->p;
-	} else {
-		variant_declaration = bt_variant_declaration_new(untagged_variant_declaration, choice);
-		if (!variant_declaration)
+		if (!untagged_variant_decl) {
+			_PERROR("%s", "cannot create variant declaration");
+			ret = -ENOMEM;
 			goto error;
-		bt_declaration_unref(&untagged_variant_declaration->p);
-		return &variant_declaration->p;
-	}
-error:
-	untagged_variant_declaration->p.declaration_free(&untagged_variant_declaration->p);
-	return NULL;
-}
+		}
+
+		ret = ctx_push_scope(ctx);
+
+		if (ret) {
+			_PERROR("%s", "cannot push scope");
+			goto error;
+		}
+
+		bt_list_for_each_entry(entry_node, declaration_list, siblings) {
+#if 0
+			ret = visit_variant_decl_entry(ctx, entry_node,
+				&untagged_variant_decl);
 #endif
+
+			if (ret) {
+				ctx_pop_scope(ctx);
+				goto error;
+			}
+		}
+
+		ctx_pop_scope(ctx);
+
+		if (name) {
+			ret = ctx_decl_scope_register_variant(ctx->current_scope,
+				name, untagged_variant_decl);
+
+			if (ret) {
+				_PERROR("cannot register \"variant %s\" in declaration scope",
+					name);
+				goto error;
+			}
+		}
+	}
+
+	/*
+	 * If tagged, create tagged variant and return; otherwise
+	 * return untagged variant.
+	 */
+	if (!tag) {
+		_BT_CTF_FIELD_TYPE_MOVE(*variant_decl, untagged_variant_decl);
+	} else {
+		// TODO: FIXME: deep copy untagged_variant_decl into *variant_decl
+		//              and set its tag
+	}
+
+	assert(!untagged_variant_decl);
+
+	return 0;
+error:
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(untagged_variant_decl);
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(*variant_decl);
+
+	return ret;
+}
 
 static
 int visit_enum_decl_entry(struct ctx *ctx, struct ctf_node *enumerator,
