@@ -91,4 +91,8 @@ int bt_ctf_event_serialize(struct bt_ctf_event *event,
 BT_HIDDEN
 int bt_ctf_event_populate_event_header(struct bt_ctf_event *event);
 
+BT_HIDDEN
+int bt_ctf_event_class_to_xml(struct bt_ctf_event_class *event_class,
+	GString *xml);
+
 #endif /* BABELTRACE_CTF_IR_EVENT_INTERNAL_H */

@@ -429,3 +429,48 @@ void bt_ctf_clock_destroy(struct bt_ctf_ref *ref)
 
 	g_free(clock);
 }
+
+BT_HIDDEN
+int bt_ctf_clock_to_xml(struct bt_ctf_clock *clock, GString *xml)
+{
+	const char *description;
+	const unsigned char *uuid;
+	char uuid_str[BABELTRACE_UUID_STR_LEN];
+
+	g_string_append_printf(xml,
+		"<clock "
+		"refs=\"%ld\" "
+		"addr=\"%p\" "
+		"name=\"%s\" "
+		"freq=\"%" PRIu64 "\" "
+		"precision=\"%" PRIu64 "\" "
+		"offset-s=\"%" PRIu64 "\" "
+		"offset=\"%" PRIu64 "\" "
+		"is-absolute=\"%d\" ",
+		clock->ref_count.refcount, clock,
+		bt_ctf_clock_get_name(clock),
+		bt_ctf_clock_get_frequency(clock),
+		bt_ctf_clock_get_precision(clock),
+		bt_ctf_clock_get_offset_s(clock),
+		bt_ctf_clock_get_offset(clock),
+		bt_ctf_clock_get_is_absolute(clock));
+
+	description = bt_ctf_clock_get_description(clock);
+
+	if (description) {
+		g_string_append_printf(xml, "description=\"%s\" ",
+			description);
+	}
+
+	uuid = bt_ctf_clock_get_uuid(clock);
+
+	if (uuid) {
+		babeltrace_uuid_unparse(uuid, uuid_str);
+		g_string_append_printf(xml, "uuid=\"%s\" ",
+			uuid_str);
+	}
+
+	g_string_append(xml, "/>");
+
+	return 0;
+}

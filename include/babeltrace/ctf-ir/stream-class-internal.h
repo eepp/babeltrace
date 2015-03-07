@@ -62,4 +62,7 @@ BT_HIDDEN
 int bt_ctf_stream_class_set_byte_order(struct bt_ctf_stream_class *stream_class,
 		enum bt_ctf_byte_order byte_order);
 
+BT_HIDDEN
+GString *bt_ctf_stream_class_to_xml(struct bt_ctf_stream_class *stream_class);
+
 #endif /* BABELTRACE_CTF_IR_STREAM_CLASS_INTERNAL_H */

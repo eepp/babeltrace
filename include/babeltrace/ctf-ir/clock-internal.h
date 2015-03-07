@@ -78,4 +78,7 @@ BT_HIDDEN
 void bt_ctf_clock_serialize(struct bt_ctf_clock *clock,
 		struct metadata_context *context);
 
+BT_HIDDEN
+int bt_ctf_clock_to_xml(struct bt_ctf_clock *clock, GString *xml);
+
 #endif /* BABELTRACE_CTF_IR_CLOCK_INTERNAL_H */

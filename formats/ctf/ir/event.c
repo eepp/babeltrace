@@ -908,3 +908,10 @@ end:
 	}
 	return ret;
 }
+
+BT_HIDDEN
+int bt_ctf_event_class_to_xml(struct bt_ctf_event_class *event_class,
+	GString *xml)
+{
+	return 0;
+}

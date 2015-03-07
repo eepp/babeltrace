@@ -30,6 +30,7 @@
 #include <babeltrace/ctf-ir/event-types-internal.h>
 #include <babeltrace/ctf-ir/utils.h>
 #include <babeltrace/ctf-ir/clock.h>
+#include <babeltrace/ctf-ir/clock-internal.h>
 #include <babeltrace/ctf-writer/writer-internal.h>
 #include <babeltrace/compiler.h>
 #include <babeltrace/endian.h>
@@ -224,6 +225,44 @@ struct bt_ctf_field_type *(* const type_copy_funcs[])(
 	[CTF_TYPE_ARRAY] = bt_ctf_field_type_array_copy,
 	[CTF_TYPE_SEQUENCE] = bt_ctf_field_type_sequence_copy,
 	[CTF_TYPE_STRING] = bt_ctf_field_type_string_copy,
+};
+
+static
+int bt_ctf_field_type_integer_to_xml(struct bt_ctf_field_type *,
+	GString *);
+static
+int bt_ctf_field_type_enumeration_to_xml(struct bt_ctf_field_type *,
+	GString *);
+static
+int bt_ctf_field_type_floating_point_to_xml(struct bt_ctf_field_type *,
+	GString *);
+static
+int bt_ctf_field_type_structure_to_xml(struct bt_ctf_field_type *,
+	GString *);
+static
+int bt_ctf_field_type_variant_to_xml(struct bt_ctf_field_type *,
+	GString *);
+static
+int bt_ctf_field_type_array_to_xml(struct bt_ctf_field_type *,
+	GString *);
+static
+int bt_ctf_field_type_sequence_to_xml(struct bt_ctf_field_type *,
+	GString *);
+static
+int bt_ctf_field_type_string_to_xml(struct bt_ctf_field_type *,
+	GString *);
+
+static
+int (* const type_to_xml_funcs[])(struct bt_ctf_field_type *,
+		GString *) = {
+	[CTF_TYPE_INTEGER] = bt_ctf_field_type_integer_to_xml,
+	[CTF_TYPE_ENUM] = bt_ctf_field_type_enumeration_to_xml,
+	[CTF_TYPE_FLOAT] = bt_ctf_field_type_floating_point_to_xml,
+	[CTF_TYPE_STRUCT] = bt_ctf_field_type_structure_to_xml,
+	[CTF_TYPE_VARIANT] = bt_ctf_field_type_variant_to_xml,
+	[CTF_TYPE_ARRAY] = bt_ctf_field_type_array_to_xml,
+	[CTF_TYPE_SEQUENCE] = bt_ctf_field_type_sequence_to_xml,
+	[CTF_TYPE_STRING] = bt_ctf_field_type_string_to_xml,
 };
 
 static
@@ -2960,4 +2999,429 @@ struct bt_ctf_field_type *bt_ctf_field_type_string_copy(
 	copy_string->declaration = string->declaration;
 end:
 	return copy;
+}
+
+BT_HIDDEN
+int bt_ctf_field_type_to_xml(struct bt_ctf_field_type *type, GString *xml)
+{
+	int id;
+	int ret = 0;
+
+	if (!type) {
+		g_string_append(xml, "<null-ptr/>");
+		goto end;
+	}
+
+	id = bt_ctf_field_type_get_type_id(type);
+
+	switch (id) {
+	case CTF_TYPE_INTEGER:
+	case CTF_TYPE_ENUM:
+	case CTF_TYPE_FLOAT:
+	case CTF_TYPE_STRUCT:
+	case CTF_TYPE_VARIANT:
+	case CTF_TYPE_ARRAY:
+	case CTF_TYPE_SEQUENCE:
+	case CTF_TYPE_STRING:
+		ret = type_to_xml_funcs[id](type, xml);
+		break;
+
+	default:
+		g_string_append(xml, "<unknown-type/>");
+		goto end;
+	}
+
+end:
+	return ret;
+}
+
+static
+void append_encoding_xml_attribute(GString *xml,
+	enum ctf_string_encoding encoding)
+{
+	const char *encoding_attr;
+
+	switch (encoding) {
+	case CTF_STRING_NONE:
+		encoding_attr = "none";
+		break;
+
+	case CTF_STRING_UTF8:
+		encoding_attr = "utf-8";
+		break;
+
+	case CTF_STRING_ASCII:
+		encoding_attr = "ascii";
+		break;
+
+	default:
+		encoding_attr = "unknown";
+	}
+
+	g_string_append_printf(xml, "encoding=\"%s\" ", encoding_attr);
+}
+
+static
+void append_byte_order_xml_attribute(GString *xml,
+	enum bt_ctf_byte_order byte_order)
+{
+	const char *byte_order_attr;
+
+	switch (byte_order) {
+	case BT_CTF_BYTE_ORDER_NATIVE:
+		byte_order_attr = "native";
+		break;
+
+	case BT_CTF_BYTE_ORDER_LITTLE_ENDIAN:
+		byte_order_attr = "le";
+		break;
+
+	case BT_CTF_BYTE_ORDER_BIG_ENDIAN:
+		byte_order_attr = "be";
+		break;
+
+	case BT_CTF_BYTE_ORDER_NETWORK:
+		byte_order_attr = "network";
+		break;
+
+	default:
+		byte_order_attr = "unknown";
+	}
+
+	g_string_append_printf(xml, "byte-order=\"%s\" ", byte_order_attr);
+}
+
+static
+int bt_ctf_field_type_integer_to_xml(struct bt_ctf_field_type *type,
+	GString *xml)
+{
+	int ret = 0;
+	struct bt_ctf_clock *mapped_clock;
+
+	g_string_append_printf(xml,
+		"<integer "
+		"refs=\"%ld\" "
+		"addr=\"%p\" "
+		"size=\"%d\" "
+		"is-signed=\"%d\" "
+		"base=\"%d\" "
+		"align=\"%d\" ",
+		type->ref_count.refcount, type,
+		bt_ctf_field_type_integer_get_size(type),
+		bt_ctf_field_type_integer_get_signed(type),
+		bt_ctf_field_type_integer_get_base(type),
+		bt_ctf_field_type_get_alignment(type));
+	append_encoding_xml_attribute(xml,
+		bt_ctf_field_type_integer_get_encoding(type));
+	append_byte_order_xml_attribute(xml,
+		bt_ctf_field_type_get_byte_order(type));
+	g_string_append(xml, ">");
+
+	mapped_clock = bt_ctf_field_type_integer_get_mapped_clock(type);
+
+	if (mapped_clock) {
+		bt_ctf_clock_put(mapped_clock);
+		g_string_append(xml, "<mapped-clock>");
+		ret = bt_ctf_clock_to_xml(mapped_clock, xml);
+
+		if (ret) {
+			goto end;
+		}
+
+		g_string_append(xml, "</mapped-clock>");
+	}
+
+	g_string_append(xml, "</integer>");
+
+end:
+	return ret;
+}
+
+static
+int bt_ctf_field_type_enumeration_to_xml(struct bt_ctf_field_type *type,
+	GString *xml)
+{
+	int x;
+	int ret = 0;
+	int mapping_count;
+	struct bt_ctf_field_type *container_type;
+
+	g_string_append_printf(xml,
+		"<enum "
+		"refs=\"%ld\" "
+		"addr=\"%p\">",
+		type->ref_count.refcount, type);
+	container_type = bt_ctf_field_type_enumeration_get_container_type(type);
+
+	if (!container_type) {
+		ret = -1;
+		goto end;
+	}
+
+	g_string_append(xml, "<container-type>");
+	bt_ctf_field_type_put(container_type);
+	ret = bt_ctf_field_type_to_xml(container_type, xml);
+	g_string_append(xml, "</container-type>");
+
+	if (ret) {
+		goto end;
+	}
+
+	mapping_count = bt_ctf_field_type_enumeration_get_mapping_count(type);
+
+	if (mapping_count < 1) {
+		ret = -1;
+		goto end;
+	}
+
+	g_string_append(xml, "<entries>");
+
+	for (x = 0; x < mapping_count; ++x) {
+		const char *name;
+		int64_t range_start, range_end;
+
+		ret = bt_ctf_field_type_enumeration_get_mapping(type, x, &name,
+			&range_start, &range_end);
+
+		if (ret) {
+			goto end;
+		}
+
+		g_string_append_printf(xml,
+			"<entry "
+			"label=\"%s\" "
+			"start=\"%" PRId64 "\" "
+			"end=\"%" PRId64 "\" />",
+			name, range_start, range_end);
+	}
+
+	g_string_append(xml, "</entries></enum>");
+
+end:
+	return ret;
+}
+
+static
+int bt_ctf_field_type_floating_point_to_xml(struct bt_ctf_field_type *type,
+	GString *xml)
+{
+	g_string_append_printf(xml,
+		"<floating-point "
+		"refs=\"%ld\" "
+		"addr=\"%p\" "
+		"mant-dig=\"%d\" "
+		"exp-dig=\"%d\" "
+		"align=\"%d\" "
+		"byte-order=\"%d\" />",
+		type->ref_count.refcount, type,
+		bt_ctf_field_type_floating_point_get_mantissa_digits(type),
+		bt_ctf_field_type_floating_point_get_exponent_digits(type),
+		bt_ctf_field_type_get_alignment(type),
+		bt_ctf_field_type_get_byte_order(type));
+
+	return 0;
+}
+
+static
+int bt_ctf_field_type_structure_to_xml(struct bt_ctf_field_type *type,
+	GString *xml)
+{
+	int x;
+	int ret = 0;
+	int field_count;
+
+	g_string_append_printf(xml,
+		"<struct "
+		"refs=\"%ld\" "
+		"addr=\"%p\" "
+		"min-align=\"%d\">",
+		type->ref_count.refcount, type,
+		bt_ctf_field_type_get_alignment(type));
+	field_count = bt_ctf_field_type_structure_get_field_count(type);
+
+	if (field_count < 1) {
+		ret = -1;
+		goto end;
+	}
+
+	g_string_append(xml, "<fields>");
+
+	for (x = 0; x < field_count; ++x) {
+		const char *field_name;
+		struct bt_ctf_field_type *field_type;
+
+		ret = bt_ctf_field_type_structure_get_field(type, &field_name,
+			&field_type, x);
+
+		if (ret) {
+			goto end;
+		}
+
+		bt_ctf_field_type_put(field_type);
+		g_string_append_printf(xml, "<field name=\"%s\">", field_name);
+		ret = bt_ctf_field_type_to_xml(field_type, xml);
+
+		if (ret) {
+			goto end;
+		}
+
+		g_string_append(xml, "</field>");
+	}
+
+	g_string_append(xml, "</fields></struct>");
+
+end:
+	return ret;
+}
+
+static
+int bt_ctf_field_type_variant_to_xml(struct bt_ctf_field_type *type,
+	GString *xml)
+{
+	int x;
+	int ret = 0;
+	int field_count;
+	const char *tag_name;
+
+	g_string_append_printf(xml,
+		"<variant "
+		"refs=\"%ld\" "
+		"addr=\"%p\" ",
+		type->ref_count.refcount, type);
+	tag_name = bt_ctf_field_type_variant_get_tag_name(type);
+
+	if (!tag_name) {
+		tag_name = "";
+	}
+
+	g_string_append_printf(xml, "tag=\"%s\">", tag_name);
+	field_count = bt_ctf_field_type_variant_get_field_count(type);
+
+	if (field_count < 1) {
+		ret = -1;
+		goto end;
+	}
+
+	g_string_append(xml, "<fields>");
+
+	for (x = 0; x < field_count; ++x) {
+		const char *field_name;
+		struct bt_ctf_field_type *field_type;
+
+		ret = bt_ctf_field_type_variant_get_field(type, &field_name,
+			&field_type, x);
+
+		if (ret) {
+			goto end;
+		}
+
+		bt_ctf_field_type_put(field_type);
+		g_string_append_printf(xml, "<field name=\"%s\">", field_name);
+		ret = bt_ctf_field_type_to_xml(field_type, xml);
+
+		if (ret) {
+			goto end;
+		}
+
+		g_string_append(xml, "</field>");
+	}
+
+	g_string_append(xml, "</fields></variant>");
+
+end:
+	return ret;
+}
+
+static
+int bt_ctf_field_type_array_to_xml(struct bt_ctf_field_type *type,
+	GString *xml)
+{
+	int ret = 0;
+	struct bt_ctf_field_type *element_type;
+
+	g_string_append_printf(xml,
+		"<array "
+		"refs=\"%ld\" "
+		"addr=\"%p\" "
+		"length=\"%" PRId64 "\">",
+		type->ref_count.refcount, type,
+		bt_ctf_field_type_array_get_length(type));
+	element_type = bt_ctf_field_type_array_get_element_type(type);
+
+	if (!element_type) {
+		ret = -1;
+		goto end;
+	}
+
+	g_string_append(xml, "<element-type>");
+	bt_ctf_field_type_put(element_type);
+	ret = bt_ctf_field_type_to_xml(element_type, xml);
+
+	if (ret) {
+		goto end;
+	}
+
+	g_string_append(xml, "</element-type></array>");
+
+end:
+	return ret;
+}
+
+static
+int bt_ctf_field_type_sequence_to_xml(struct bt_ctf_field_type *type,
+	GString *xml)
+{
+	int ret = 0;
+	const char *length_field_name;
+	struct bt_ctf_field_type *element_type;
+
+	g_string_append_printf(xml,
+		"<sequence "
+		"refs=\"%ld\" "
+		"addr=\"%p\" ",
+		type->ref_count.refcount, type);
+	length_field_name =
+		bt_ctf_field_type_sequence_get_length_field_name(type);
+
+	if (!length_field_name) {
+		ret = -1;
+		goto end;
+	}
+
+	g_string_append_printf(xml, "length=\"%s\">", length_field_name);
+	element_type = bt_ctf_field_type_sequence_get_element_type(type);
+
+	if (!element_type) {
+		ret = -1;
+		goto end;
+	}
+
+	g_string_append(xml, "<element-type>");
+	bt_ctf_field_type_put(element_type);
+	ret = bt_ctf_field_type_to_xml(element_type, xml);
+
+	if (ret) {
+		goto end;
+	}
+
+	g_string_append(xml, "</element-type></sequence>");
+
+end:
+	return ret;
+}
+
+static
+int bt_ctf_field_type_string_to_xml(struct bt_ctf_field_type *type,
+	GString *xml)
+{
+	g_string_append_printf(xml,
+		"<string "
+		"refs=\"%ld\" "
+		"addr=\"%p\" ",
+		type->ref_count.refcount, type);
+	append_encoding_xml_attribute(xml,
+		bt_ctf_field_type_string_get_encoding(type));
+	g_string_append(xml, " />");
+
+	return 0;
 }
