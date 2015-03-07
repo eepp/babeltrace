@@ -80,4 +80,7 @@ const char *get_byte_order_string(int byte_order);
 BT_HIDDEN
 struct bt_ctf_field_type *get_field_type(enum field_type_alias alias);
 
+BT_HIDDEN
+int bt_ctf_trace_to_xml(struct bt_ctf_trace *trace, GString *xml);
+
 #endif /* BABELTRACE_CTF_IR_TRACE_INTERNAL_H */

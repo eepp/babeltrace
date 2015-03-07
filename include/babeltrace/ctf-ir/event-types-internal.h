@@ -165,4 +165,11 @@ BT_HIDDEN
 struct bt_ctf_field_type *bt_ctf_field_type_copy(
 		struct bt_ctf_field_type *type);
 
+BT_HIDDEN
+int bt_ctf_field_type_to_xml(struct bt_ctf_field_type *type, GString *xml);
+
+BT_HIDDEN
+void append_byte_order_xml_attribute(GString *xml,
+	enum bt_ctf_byte_order byte_order);
+
 #endif /* BABELTRACE_CTF_IR_EVENT_TYPES_INTERNAL_H */
