@@ -43,7 +43,9 @@
 #include "ctf-ast.h"
 
 #include <babeltrace/ctf-ir/trace.h>
+#include <babeltrace/ctf-ir/trace-internal.h>
 #include <babeltrace/ctf-ir/stream-class.h>
+#include <babeltrace/ctf-ir/stream-class-internal.h>
 #include <babeltrace/ctf-ir/event.h>
 #include <babeltrace/ctf-ir/event-types.h>
 #include <babeltrace/ctf-ir/event-types-internal.h>
@@ -1253,7 +1255,6 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 	 * whereas field_decl is an output which we create, but
 	 * belongs to the caller (it is moved).
 	 */
-
 	int ret = 0;
 
 	*field_decl = NULL;
@@ -3145,7 +3146,6 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			}
 
 			assert(decl);
-
 			ret = bt_ctf_event_class_set_payload_type(event_class,
 				decl);
 			_BT_CTF_FIELD_TYPE_PUT(decl);
@@ -3164,6 +3164,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 				ret = -EPERM;
 				goto error;
 			}
+
 			ret = get_unary_unsigned(&node->u.ctf_expression.right,
 				&loglevel);
 
@@ -4640,6 +4641,22 @@ end:
 	return ret;
 }
 
+static
+void print_gh_func(gpointer key, gpointer value, gpointer user_data)
+{
+	GString *xml = g_string_new(NULL);
+	int ret = bt_ctf_stream_class_to_xml(value, xml);
+
+	if (ret) {
+		fprintf(stderr, "%s", "DAYUM CANNOT GET XML");
+		g_string_free(xml, TRUE);
+		return;
+	}
+
+	printf("%s\n", xml->str);
+	g_string_free(xml, TRUE);
+}
+
 int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		struct bt_ctf_trace **trace)
 {
@@ -4801,6 +4818,20 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		ret = -EINVAL;
 		goto error;
 	}
+
+	GString *xml = g_string_new(NULL);
+	ret = bt_ctf_trace_to_xml(ctx->trace, xml);
+
+	if (ret) {
+		_PERROR("%s", "DAYUM CANNOT GET XML");
+		g_string_free(xml, TRUE);
+		goto error;
+	}
+
+	printf("%s\n", xml->str);
+	g_string_free(xml, TRUE);
+
+	g_hash_table_foreach(ctx->stream_classes, print_gh_func, NULL);
 
 	ctx_destroy(ctx);
 	printf_verbose("done!\n");
