@@ -909,3 +909,52 @@ end:
 	}
 	return ret;
 }
+
+BT_HIDDEN
+int bt_ctf_event_class_to_xml(struct bt_ctf_event_class *event_class,
+	GString *xml)
+{
+	int ret = 0;
+	struct bt_ctf_field_type *type;
+
+	g_string_append_printf(xml,
+		"<event-class "
+		"refs=\"%ld\" "
+		"addr=\"%p\" "
+		"name=\"%s\" "
+		"id=\"%" PRId64 "\">",
+		event_class->ref_count.refcount, event_class,
+		bt_ctf_event_class_get_name(event_class),
+		bt_ctf_event_class_get_id(event_class));
+	type = bt_ctf_event_class_get_context_type(event_class);
+
+	if (type) {
+		bt_ctf_field_type_put(type);
+	}
+
+	g_string_append(xml, "<context-type>");
+	ret = bt_ctf_field_type_to_xml(type, xml);
+
+	if (ret) {
+		goto end;
+	}
+
+	g_string_append(xml, "</context-type>");
+	type = bt_ctf_event_class_get_payload_type(event_class);
+
+	if (type) {
+		bt_ctf_field_type_put(type);
+	}
+
+	g_string_append(xml, "<payload-type>");
+	ret = bt_ctf_field_type_to_xml(type, xml);
+
+	if (ret) {
+		goto end;
+	}
+
+	g_string_append(xml, "</payload-type></event-class>");
+
+end:
+	return ret;
+}

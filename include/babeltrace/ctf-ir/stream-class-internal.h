@@ -67,4 +67,8 @@ BT_HIDDEN
 int _bt_ctf_stream_class_set_id(struct bt_ctf_stream_class *stream_class,
 		uint32_t id);
 
+BT_HIDDEN
+int bt_ctf_stream_class_to_xml(struct bt_ctf_stream_class *stream_class,
+	GString *xml);
+
 #endif /* BABELTRACE_CTF_IR_STREAM_CLASS_INTERNAL_H */

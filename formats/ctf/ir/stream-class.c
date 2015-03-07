@@ -767,3 +767,105 @@ end:
 	bt_ctf_field_type_put(_uint64_t);
 	return ret;
 }
+
+BT_HIDDEN
+int bt_ctf_stream_class_to_xml(struct bt_ctf_stream_class *stream_class,
+	GString *xml)
+{
+	int x;
+	int ret = 0;
+	int event_class_count;
+	const char *stream_name;
+	struct bt_ctf_field_type *type;
+
+	g_string_append_printf(xml,
+		"<stream-class "
+		"refs=\"%ld\" "
+		"addr=\"%p\" "
+		"id=\"%" PRId64 "\" ",
+		stream_class->ref_count.refcount, stream_class,
+		bt_ctf_stream_class_get_id(stream_class));
+	stream_name = bt_ctf_stream_class_get_name(stream_class);
+
+	if (!stream_name) {
+		stream_name = "";
+	}
+
+	g_string_append_printf(xml, "name=\"%s\">", stream_name);
+
+	type = bt_ctf_stream_class_get_packet_context_type(stream_class);
+
+	if (type) {
+		bt_ctf_field_type_put(type);
+	}
+
+	g_string_append(xml, "<packet-context-type>");
+	ret = bt_ctf_field_type_to_xml(type, xml);
+
+	if (ret) {
+		goto end;
+	}
+
+	g_string_append(xml, "</packet-context-type>");
+	type = bt_ctf_stream_class_get_event_header_type(stream_class);
+
+	if (type) {
+		bt_ctf_field_type_put(type);
+	}
+
+	g_string_append(xml, "<event-header-type>");
+	ret = bt_ctf_field_type_to_xml(type, xml);
+
+	if (ret) {
+		goto end;
+	}
+
+	g_string_append(xml, "</event-header-type>");
+	type = bt_ctf_stream_class_get_event_context_type(stream_class);
+
+	if (type) {
+		bt_ctf_field_type_put(type);
+	}
+
+	g_string_append(xml, "<event-context-type>");
+	ret = bt_ctf_field_type_to_xml(type, xml);
+
+	if (ret) {
+		goto end;
+	}
+
+	g_string_append(xml, "</event-context-type>");
+	event_class_count =
+		bt_ctf_stream_class_get_event_class_count(stream_class);
+
+	if (event_class_count < 0) {
+		ret = -1;
+		goto end;
+	}
+
+	g_string_append(xml, "<event-classes>");
+
+	for (x = 0; x < event_class_count; ++x) {
+		struct bt_ctf_event_class *event_class;
+
+		event_class =
+			bt_ctf_stream_class_get_event_class(stream_class, x);
+
+		if (!event_class) {
+			ret = -1;
+			goto end;
+		}
+
+		bt_ctf_event_class_put(event_class);
+		ret = bt_ctf_event_class_to_xml(event_class, xml);
+
+		if (ret) {
+			goto end;
+		}
+	}
+
+	g_string_append(xml, "</event-classes></stream-class>");
+
+end:
+	return ret;
+}
