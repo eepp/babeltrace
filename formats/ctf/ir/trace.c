@@ -781,3 +781,106 @@ void environment_variable_destroy(struct environment_variable *var)
 	}
 	g_free(var);
 }
+
+BT_HIDDEN
+int bt_ctf_trace_to_xml(struct bt_ctf_trace *trace, GString *xml)
+{
+	int x;
+	int count;
+	int ret = 0;
+	struct bt_ctf_field_type *type;
+
+	g_string_append_printf(xml,
+		"<trace "
+		"refs=\"%ld\" "
+		"addr=\"%p\" ",
+		trace->ref_count.refcount, trace);
+	append_byte_order_xml_attribute(xml,
+		bt_ctf_trace_get_byte_order(trace));
+	count = bt_ctf_trace_get_environment_field_count(trace);
+	g_string_append(xml, ">");
+
+	if (count < 0) {
+		ret = -1;
+		goto end;
+	}
+
+	g_string_append(xml, "<environment>");
+
+	for (x = 0; x < count; ++x) {
+		int64_t int_value;
+		const char *str_value;
+		const char *field_name;
+		enum bt_environment_field_type env_field_type;
+
+		env_field_type =
+			bt_ctf_trace_get_environment_field_type(trace, x);
+
+		if (env_field_type < 0) {
+			ret = -1;
+			goto end;
+		}
+
+		field_name =
+			bt_ctf_trace_get_environment_field_name(trace, x);
+
+		if (!field_name) {
+			ret = -1;
+			goto end;
+		}
+
+		g_string_append_printf(xml, "<entry name=\"%s\" ", field_name);
+
+		switch (env_field_type) {
+		case BT_ENVIRONMENT_FIELD_TYPE_STRING:
+			str_value =
+				bt_ctf_trace_get_environment_field_value_string(
+					trace, x);
+
+			if (!str_value) {
+				ret = -1;
+				goto end;
+			}
+
+			g_string_append_printf(xml, "value=\"%s\" />",
+				str_value);
+			break;
+
+		case BT_ENVIRONMENT_FIELD_TYPE_INTEGER:
+			ret = bt_ctf_trace_get_environment_field_value_integer(
+				trace, x, &int_value);
+
+			if (ret) {
+				goto end;
+			}
+
+			g_string_append_printf(xml, "value=\"%" PRId64 "\" />",
+				int_value);
+			break;
+
+		default:
+			ret = -1;
+			goto end;
+		}
+	}
+
+	g_string_append(xml, "</environment>");
+
+	type = bt_ctf_trace_get_packet_header_type(trace);
+
+	if (type) {
+		bt_ctf_field_type_put(type);
+	}
+
+	g_string_append(xml, "<packet-header-type>");
+	ret = bt_ctf_field_type_to_xml(type, xml);
+
+	if (ret) {
+		goto end;
+	}
+
+	g_string_append(xml, "</packet-header-type></trace>");
+
+end:
+	return ret;
+}
