@@ -361,6 +361,7 @@ struct bt_ctf_field_type *ctx_decl_scope_lookup_prefix_alias(
 			(gconstpointer) (unsigned long) qname);
 
 		if (decl) {
+			/* caller's reference */
 			bt_ctf_field_type_get(decl);
 			break;
 		}
@@ -562,7 +563,7 @@ int ctx_decl_scope_register_variant(struct ctx_decl_scope *scope,
 /**
  * Creates a new visitor context.
  *
- * @param trace	Associated trace IR
+ * @param trace	Associated trace
  * @param efd	Error stream
  * @returns	New visitor context, or NULL on error
  */
@@ -610,10 +611,13 @@ error:
 static
 void ctx_destroy(struct ctx *ctx)
 {
+	struct ctx_decl_scope *scope;
 	/*
 	 * Destroy all scopes, from current one to the root scope.
 	 */
-	struct ctx_decl_scope *scope = ctx->current_scope;
+
+	assert(ctx);
+	scope = ctx->current_scope;
 
 	while (scope) {
 		struct ctx_decl_scope *parent_scope = scope->parent_scope;
@@ -637,8 +641,10 @@ static
 int ctx_push_scope(struct ctx *ctx)
 {
 	int ret = 0;
-	struct ctx_decl_scope *new_scope =
-		ctx_decl_scope_create(ctx->current_scope);
+	struct ctx_decl_scope *new_scope;
+
+	assert(ctx);
+	new_scope = ctx_decl_scope_create(ctx->current_scope);
 
 	if (!new_scope) {
 		ret = -ENOMEM;
@@ -664,6 +670,8 @@ static
 void ctx_pop_scope(struct ctx *ctx)
 {
 	struct ctx_decl_scope *parent_scope = NULL;
+
+	assert(ctx);
 
 	if (!ctx->current_scope) {
 		goto end;
@@ -4560,7 +4568,7 @@ int visit_clock_decl(struct ctx *ctx, struct ctf_node *clock_node)
 	}
 
 	if (bt_ctf_trace_get_clock_count(ctx->trace) != 0) {
-		_PERROR("%s", "only CTF traces with a single clock declaration are supported by this version");
+		_PERROR("%s", "only CTF traces with a single clock declaration are supported as of this version");
 		ret = -EINVAL;
 		goto error;
 	}
@@ -4642,19 +4650,25 @@ end:
 }
 
 static
-void print_gh_func(gpointer key, gpointer value, gpointer user_data)
+int add_stream_classes_to_trace(struct ctx *ctx)
 {
-	GString *xml = g_string_new(NULL);
-	int ret = bt_ctf_stream_class_to_xml(value, xml);
+	int ret;
+	GHashTableIter iter;
+	gpointer key, stream_class;
 
-	if (ret) {
-		fprintf(stderr, "%s", "DAYUM CANNOT GET XML");
-		g_string_free(xml, TRUE);
-		return;
+	g_hash_table_iter_init(&iter, ctx->stream_classes);
+
+	while (g_hash_table_iter_next(&iter, &key, &stream_class)) {
+		ret = bt_ctf_trace_add_stream_class(ctx->trace,
+			stream_class);
+
+		if (ret) {
+			goto end;
+		}
 	}
 
-	printf("%s\n", xml->str);
-	g_string_free(xml, TRUE);
+end:
+	return ret;
 }
 
 int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
@@ -4664,7 +4678,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 	struct ctx *ctx = NULL;
 	_BT_CTF_FIELD_TYPE_INIT(packet_header_decl);
 
-	printf_verbose("CTF visitor: AST -> IR...\n");
+	printf_verbose("CTF visitor: AST -> CTF IR...\n");
 
 	*trace = bt_ctf_trace_create();
 
@@ -4678,7 +4692,9 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 	packet_header_decl = bt_ctf_field_type_structure_create();
 
 	if (!packet_header_decl) {
-		_FPERROR(efd, "%s", "cannot create initial, empty packet header structure");
+		_FPERROR(efd,
+			"%s",
+			"cannot create initial, empty packet header structure");
 		ret = -ENOMEM;
 		goto error;
 	}
@@ -4687,7 +4703,9 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 	_BT_CTF_FIELD_TYPE_PUT(packet_header_decl);
 
 	if (ret) {
-		_FPERROR(efd, "%s", "cannot set initial, empty packet header structure");
+		_FPERROR(efd,
+			"%s",
+			"cannot set initial, empty packet header structure");
 		goto error;
 	}
 
@@ -4733,7 +4751,10 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 			goto error;
 		}
 
-		/* visit clocks first since any early integer can be mapped to one */
+		/*
+		 * Visit clocks first since any early integer can be mapped
+		 * to one.
+		 */
 		bt_list_for_each_entry(iter, &node->u.root.clock, siblings) {
 			ret = visit_clock_decl(ctx, iter);
 
@@ -4819,19 +4840,26 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		goto error;
 	}
 
-	GString *xml = g_string_new(NULL);
-	ret = bt_ctf_trace_to_xml(ctx->trace, xml);
+	/* add stream classes to trace now */
+	ret = add_stream_classes_to_trace(ctx);
 
 	if (ret) {
-		_PERROR("%s", "DAYUM CANNOT GET XML");
-		g_string_free(xml, TRUE);
-		goto error;
+		_PERROR("%s", "cannot add stream classes to trace");
 	}
 
-	printf("%s\n", xml->str);
-	g_string_free(xml, TRUE);
+	{
+		GString *xml = g_string_new(NULL);
+		ret = bt_ctf_trace_to_xml(ctx->trace, xml);
 
-	g_hash_table_foreach(ctx->stream_classes, print_gh_func, NULL);
+		if (ret) {
+			_PERROR("%s", "DAYUM CANNOT GET XML");
+			g_string_free(xml, TRUE);
+			goto error;
+		}
+
+		printf("%s\n", xml->str);
+		g_string_free(xml, TRUE);
+	}
 
 	ctx_destroy(ctx);
 	printf_verbose("done!\n");
