@@ -1522,18 +1522,20 @@ int get_byte_order(FILE *fd, int depth, struct ctf_node *unary_expression,
 	}
 	return byte_order;
 }
+#endif
 
 static
-struct bt_declaration *ctf_declaration_integer_visit(FILE *fd, int depth,
-		struct bt_list_head *expressions,
-		struct ctf_trace *trace)
+struct bt_ctf_field_type *visit_integer_decl(struct ctx *ctx,
+	struct bt_list_head *expressions)
 {
 	struct ctf_node *expression;
 	uint64_t alignment = 1, size = 0;
-	int byte_order = trace->byte_order;
+	int byte_order = bt_ctf_trace_get_byte_order(ctx->trace);
 	int signedness = 0;
 	int has_alignment = 0, has_size = 0;
 	int base = 0;
+
+#if 0
 	enum ctf_string_encoding encoding = CTF_STRING_NONE;
 	struct ctf_clock *clock = NULL;
 	struct declaration_integer *integer_declaration;
@@ -1713,8 +1715,12 @@ struct bt_declaration *ctf_declaration_integer_visit(FILE *fd, int depth,
 				byte_order, signedness, alignment,
 				base, encoding, clock);
 	return &integer_declaration->p;
+#endif
+
+	return NULL;
 }
 
+#if 0
 static
 struct bt_declaration *ctf_declaration_floating_point_visit(FILE *fd, int depth,
 		struct bt_list_head *expressions,
