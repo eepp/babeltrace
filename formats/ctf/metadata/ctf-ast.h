@@ -313,7 +313,7 @@ BT_HIDDEN
 int ctf_visitor_parent_links(FILE *fd, int depth, struct ctf_node *node);
 BT_HIDDEN
 int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
-		struct bt_ctf_trace *trace);
+		struct bt_ctf_trace **trace);
 
 BT_HIDDEN
 int ctf_destroy_metadata(struct ctf_trace *trace);
