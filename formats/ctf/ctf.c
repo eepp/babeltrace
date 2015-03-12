@@ -1319,25 +1319,20 @@ int ctf_trace_metadata_read(struct ctf_trace *td, FILE *metadata_fp,
 		goto end;
 	}
 
-	struct bt_ctf_trace *trace = bt_ctf_trace_create();
+	struct bt_ctf_trace *trace;
 
-	if (!trace) {
-		fprintf(stderr, "[error] Cannot create trace IR\n");
-		ret = -ENOMEM;
-		goto end;
-	}
-
-	ret = ctf_visitor_generate_ir(stderr, &scanner->ast->root, trace);
+	ret = ctf_visitor_generate_ir(stderr, &scanner->ast->root, &trace);
 
 	if (ret) {
 		fprintf(stderr, "[error] Error in AST -> IR phase (%d)\n", ret);
 		goto end;
 	}
 
-	puts("AST -> IR phase passed successfully, and now we're about to SEGFAULT!");
-
 	// FIXME: remove this once we actually use the thing
+	assert(trace);
 	bt_ctf_trace_put(trace);
+	ret = -EINVAL;
+
 end:
 	if (fp) {
 		closeret = fclose(fp);

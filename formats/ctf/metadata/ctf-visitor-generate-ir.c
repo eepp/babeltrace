@@ -1141,8 +1141,10 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 				nested_decl = int_decl_copy;
 			}
 		} else {
+			puts("va la right?");
 			ret = visit_type_specifier_list(ctx,
 				type_specifier_list, &nested_decl);
+			printf("return: %d\n", ret);
 
 			if (ret) {
 				assert(!nested_decl);
@@ -1231,6 +1233,8 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 			seq_decl = bt_ctf_field_type_sequence_create(nested_decl,
 				length_name);
 
+			g_free(length_name);
+
 			bt_ctf_field_type_put(nested_decl);
 			nested_decl = NULL;
 
@@ -1299,6 +1303,7 @@ error:
 
 	if (*field_decl) {
 		bt_ctf_field_type_put(*field_decl);
+		*field_decl = NULL;
 	}
 
 	return ret;
@@ -1327,6 +1332,8 @@ int visit_struct_field(struct ctx *ctx,
 				__func__);
 			goto error;
 		}
+
+		assert(field_decl);
 
 		const char *field_name = g_quark_to_string(qfield_name);
 
@@ -1441,6 +1448,7 @@ int visit_typedef(struct ctx *ctx, struct ctf_node *type_specifier_list,
 		bt_declaration_unref(type_declaration);
 	}
 #endif
+	puts(":: visiting typedef");
 
 	return 0;
 }
@@ -1514,6 +1522,8 @@ error:
 	}
 	return err;
 #endif
+	puts(":: visiting typealias");
+
 	return 0;
 }
 
@@ -1612,7 +1622,7 @@ int ctf_variant_declaration_list_visit(FILE *fd, int depth,
 #endif
 
 static
-int visit_struct(struct ctx *ctx, const char *name,
+int visit_struct_decl(struct ctx *ctx, const char *name,
 	struct bt_list_head *decl_list, int has_body,
 	struct bt_list_head *min_align,
 	struct bt_ctf_field_type **struct_decl)
@@ -1670,6 +1680,8 @@ int visit_struct(struct ctx *ctx, const char *name,
 			goto error;
 		}
 
+		ctx_push_scope(ctx);
+
 		struct ctf_node *entry_node;
 
 		bt_list_for_each_entry(entry_node, decl_list, siblings) {
@@ -1679,6 +1691,8 @@ int visit_struct(struct ctx *ctx, const char *name,
 				goto error;
 			}
 		}
+
+		ctx_pop_scope(ctx);
 
 		if (name) {
 			ret = ctx_decl_scope_register_struct(ctx->current_scope,
@@ -1697,6 +1711,7 @@ int visit_struct(struct ctx *ctx, const char *name,
 error:
 	if (*struct_decl) {
 		bt_ctf_field_type_put(*struct_decl);
+		*struct_decl = NULL;
 	}
 
 	return ret;
@@ -1980,11 +1995,15 @@ int visit_type_specifier(struct ctx *ctx,
 	*decl = ctx_decl_scope_lookup_alias(ctx->current_scope, str->str, -1);
 
 	if (!*decl) {
+		fprintf(ctx->efd, "[error] %s: cannot find type alias \"%s\"\n",
+			__func__, str->str);
+		ret = -EINVAL;
 		goto error;
 	}
 
-	bt_ctf_field_type_get(*decl);
 	(void) g_string_free(str, TRUE);
+	str = NULL;
+	bt_ctf_field_type_get(*decl);
 
 	return 0;
 
@@ -1995,6 +2014,7 @@ error:
 
 	if (*decl) {
 		bt_ctf_field_type_put(*decl);
+		*decl = NULL;
 	}
 
 	return ret;
@@ -2006,7 +2026,7 @@ int visit_integer_decl(struct ctx *ctx,
 	struct bt_ctf_field_type **integer_decl)
 {
 	struct ctf_node *expression;
-	uint64_t alignment, size;
+	uint64_t alignment = 0, size = 0;
 	enum bt_ctf_byte_order byte_order = bt_ctf_trace_get_byte_order(ctx->trace);
 	int signedness = 0;
 	enum bt_ctf_integer_base base = BT_CTF_INTEGER_BASE_DECIMAL;
@@ -2081,6 +2101,11 @@ int visit_integer_decl(struct ctx *ctx,
 
 			if (size == 0) {
 				fprintf(ctx->efd, "[error] %s: invalid \"size\" attribute in integer declaration: expecting positive constant\n",
+					__func__);
+				ret = -EINVAL;
+				goto error;
+			} else if (size > 64) {
+				fprintf(ctx->efd, "[error] %s: invalid \"size\" attribute in integer declaration: integers over 64-bit are not supported yet\n",
 					__func__);
 				ret = -EINVAL;
 				goto error;
@@ -2269,7 +2294,7 @@ int visit_integer_decl(struct ctx *ctx,
 					goto error;
 				}
 
-				fprintf(ctx->efd, "[error] %s: invalid \"map\" attribute in integer declaration: unknown clock: \"%s\"\n",
+				fprintf(ctx->efd, "[warning] %s: invalid \"map\" attribute in integer declaration: unknown clock: \"%s\"\n",
 					__func__, s_right);
 				_SET(&set, _INTEGER_MAP_SET);
 				g_free(s_right);
@@ -2350,6 +2375,7 @@ error:
 
 	if (*integer_decl) {
 		bt_ctf_field_type_put(*integer_decl);
+		*integer_decl = NULL;
 	}
 
 	return ret;
@@ -2361,7 +2387,7 @@ int visit_floating_point_decl(struct ctx *ctx,
 	struct bt_ctf_field_type **float_decl)
 {
 	struct ctf_node *expression;
-	uint64_t alignment = 1, exp_dig, mant_dig;
+	uint64_t alignment = 1, exp_dig = 0, mant_dig = 0;
 	enum bt_ctf_byte_order byte_order = bt_ctf_trace_get_byte_order(ctx->trace);
 	int set = 0;
 	int ret = 0;
@@ -2531,6 +2557,7 @@ int visit_floating_point_decl(struct ctx *ctx,
 error:
 	if (*float_decl) {
 		bt_ctf_field_type_put(*float_decl);
+		*float_decl = NULL;
 	}
 
 	return ret;
@@ -2610,7 +2637,7 @@ int visit_string_decl(struct ctx *ctx,
 		}
 	}
 
-	*string_decl = bt_ctf_field_type_floating_point_create();
+	*string_decl = bt_ctf_field_type_string_create();
 
 	if (!*string_decl) {
 		fprintf(ctx->efd, "[error] %s: cannot create string declaration\n",
@@ -2633,6 +2660,7 @@ int visit_string_decl(struct ctx *ctx,
 error:
 	if (*string_decl) {
 		bt_ctf_field_type_put(*string_decl);
+		*string_decl = NULL;
 	}
 
 	return ret;
@@ -2665,24 +2693,49 @@ int visit_type_specifier_list(struct ctx *ctx,
 
 	switch (first->u.type_specifier.type) {
 	case TYPESPEC_INTEGER:
-		return visit_integer_decl(ctx, &node->u.integer.expressions,
+		ret = visit_integer_decl(ctx, &node->u.integer.expressions,
 			decl);
+
+		if (ret) {
+			assert(!*decl);
+			goto error;
+		}
+		break;
+
 	case TYPESPEC_FLOATING_POINT:
-		return visit_floating_point_decl(ctx,
+		ret = visit_floating_point_decl(ctx,
 			&node->u.floating_point.expressions, decl);
+
+		if (ret) {
+			assert(!*decl);
+			goto error;
+		}
+		break;
+
 	case TYPESPEC_STRING:
-		return visit_string_decl(ctx,
+		ret = visit_string_decl(ctx,
 			&node->u.string.expressions, decl);
 
-#if 0
+		if (ret) {
+			assert(!*decl);
+			goto error;
+		}
+		break;
+
 	case TYPESPEC_STRUCT:
-		return ctf_declaration_struct_visit(fd, depth,
-			node->u._struct.name,
+		ret = visit_struct_decl(ctx, node->u._struct.name,
 			&node->u._struct.declaration_list,
 			node->u._struct.has_body,
 			&node->u._struct.min_align,
-			declaration_scope,
-			trace);
+			decl);
+
+		if (ret) {
+			assert(!*decl);
+			goto error;
+		}
+		break;
+
+#if 0
 	case TYPESPEC_VARIANT:
 		return ctf_declaration_variant_visit(fd, depth,
 			node->u.variant.name,
@@ -2715,10 +2768,14 @@ int visit_type_specifier_list(struct ctx *ctx,
 	case TYPESPEC_IMAGINARY:
 	case TYPESPEC_CONST:
 	case TYPESPEC_ID_TYPE:
-#if 0
-		return ctf_declaration_type_specifier_visit(fd, depth,
-			ts_list, declaration_scope);
-#endif
+		ret = visit_type_specifier(ctx, ts_list, decl);
+
+		if (ret) {
+			assert(!*decl);
+			goto error;
+		}
+		break;
+
 	default:
 		fprintf(ctx->efd, "[error] %s: unexpected node type: %d\n",
 			__func__, (int) first->u.type_specifier.type);
@@ -2731,6 +2788,7 @@ int visit_type_specifier_list(struct ctx *ctx,
 error:
 	if (*decl) {
 		bt_ctf_field_type_put(*decl);
+		*decl = NULL;
 	}
 
 	return ret;
@@ -4160,7 +4218,7 @@ int visit_root_decl(struct ctx *ctx, struct ctf_node *root_decl_node)
 	int ret = 0;
 
 	if (root_decl_node->visited) {
-		return 0;
+		goto end;
 	}
 
 	root_decl_node->visited = 1;
@@ -4177,7 +4235,7 @@ int visit_root_decl(struct ctx *ctx, struct ctf_node *root_decl_node)
 			&root_decl_node->u._typedef.type_declarators);
 
 		if (ret) {
-			return ret;
+			goto end;
 		}
 
 		break;
@@ -4187,49 +4245,62 @@ int visit_root_decl(struct ctx *ctx, struct ctf_node *root_decl_node)
 			root_decl_node->u.typealias.alias);
 
 		if (ret) {
-			return ret;
+			goto end;
 		}
 
 		break;
 
 	case NODE_TYPE_SPECIFIER_LIST:
 	{
-#if 0
-		struct bt_declaration *declaration;
+		struct bt_ctf_field_type *decl = NULL;
 
 		/*
-		 * Just add the type specifier to the root scope
-		 * declaration scope. Release local reference.
+		 * Just add the type specifier to the root
+		 * declaration scope. Put local reference.
 		 */
-		declaration = ctf_type_specifier_list_visit(fd, depth + 1,
-			node, trace->root_declaration_scope, trace);
-		if (!declaration)
-			return -ENOMEM;
-		bt_declaration_unref(declaration);
-#endif
+		ret = visit_type_specifier_list(ctx, root_decl_node, &decl);
+
+		if (ret) {
+			assert(!decl);
+			goto end;
+		}
+
+		bt_ctf_field_type_put(decl);
 		break;
 	}
 
 	default:
-		return -EPERM;
+		ret = -EPERM;
+		goto end;
 	}
 
+end:
 	return ret;
 }
 
 int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
-		struct bt_ctf_trace *trace)
+		struct bt_ctf_trace **trace)
 {
 	int ret = 0;
 
 	printf_verbose("CTF visitor: AST -> IR...\n");
 
-	struct ctx *ctx = ctx_create(trace, efd);
+	*trace = bt_ctf_trace_create();
+
+	if (!*trace) {
+		fprintf(stderr, "[error] %s: cannot create trace IR\n",
+			__func__);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	struct ctx *ctx = ctx_create(*trace, efd);
 
 	if (!ctx) {
 		fprintf(efd, "[error] %s: cannot create visitor context\n",
 			__func__);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto error;
 	}
 
 	switch (node->type) {
@@ -4361,9 +4432,17 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 
 	ctx_destroy(ctx);
 	printf_verbose("done!\n");
+
 	return ret;
 
 error:
-	ctx_destroy(ctx);
+	if (ctx) {
+		ctx_destroy(ctx);
+	}
+
+	if (*trace) {
+		bt_ctf_trace_put(*trace);
+	}
+
 	return ret;
 }
