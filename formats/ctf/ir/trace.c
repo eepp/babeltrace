@@ -882,6 +882,20 @@ int bt_ctf_trace_to_xml(struct bt_ctf_trace *trace, GString *xml)
 		goto end;
 	}
 
+	type = bt_ctf_trace_get_packet_header_type(trace);
+
+	if (type) {
+		bt_ctf_field_type_put(type);
+	}
+
+	g_string_append(xml, "<packet-header-type>");
+	ret = bt_ctf_field_type_to_xml(type, xml);
+
+	if (ret) {
+		goto end;
+	}
+
+	g_string_append(xml, "</packet-header-type>");
 	g_string_append(xml, "<environment>");
 
 	for (x = 0; x < count; ++x) {
@@ -942,21 +956,59 @@ int bt_ctf_trace_to_xml(struct bt_ctf_trace *trace, GString *xml)
 	}
 
 	g_string_append(xml, "</environment>");
+	g_string_append(xml, "<clocks>");
+	count = bt_ctf_trace_get_clock_count(trace);
 
-	type = bt_ctf_trace_get_packet_header_type(trace);
-
-	if (type) {
-		bt_ctf_field_type_put(type);
-	}
-
-	g_string_append(xml, "<packet-header-type>");
-	ret = bt_ctf_field_type_to_xml(type, xml);
-
-	if (ret) {
+	if (count < 0) {
+		ret = -1;
 		goto end;
 	}
 
-	g_string_append(xml, "</packet-header-type></trace>");
+	for (x = 0; x < count; ++x) {
+		struct bt_ctf_clock *clock = bt_ctf_trace_get_clock(trace, x);
+
+		if (!clock) {
+			ret = -1;
+			goto end;
+		}
+
+		bt_ctf_clock_put(clock);
+		ret = bt_ctf_clock_to_xml(clock, xml);
+
+		if (ret) {
+			goto end;
+		}
+	}
+
+	g_string_append(xml, "</clocks>");
+	count = bt_ctf_trace_get_stream_class_count(trace);
+
+	if (count < 0) {
+		ret = -1;
+		goto end;
+	}
+
+	g_string_append(xml, "<stream-classes>");
+
+	for (x = 0; x < count; ++x) {
+		struct bt_ctf_stream_class *stream_class =
+			bt_ctf_trace_get_stream_class(trace, x);
+
+		if (!stream_class) {
+			ret = -1;
+			goto end;
+		}
+
+		bt_ctf_stream_class_put(stream_class);
+		ret = bt_ctf_stream_class_to_xml(stream_class, xml);
+
+		if (ret) {
+			goto end;
+		}
+	}
+
+	g_string_append(xml, "</stream-classes>");
+	g_string_append(xml, "</trace>");
 
 end:
 	return ret;
