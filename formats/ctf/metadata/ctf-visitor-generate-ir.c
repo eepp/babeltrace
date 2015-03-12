@@ -100,10 +100,20 @@ enum {
 	_STREAM_EVENT_CONTEXT_SET =	_BV(3),
 };
 
-#define _PREFIX_ALIAS	'a'
-#define _PREFIX_ENUM	'e'
-#define _PREFIX_STRUCT	's'
-#define _PREFIX_VARIANT	'v'
+enum {
+	_EVENT_NAME_SET =		_BV(0),
+	_EVENT_ID_SET =			_BV(1),
+	_EVENT_MODEL_EMF_URI_SET =	_BV(2),
+	_EVENT_STREAM_ID_SET =		_BV(3),
+	_EVENT_LOGLEVEL_SET =		_BV(4),
+	_EVENT_CONTEXT_SET =		_BV(5),
+	_EVENT_FIELDS_SET =		_BV(6),
+};
+
+#define _PREFIX_ALIAS		'a'
+#define _PREFIX_ENUM		'e'
+#define _PREFIX_STRUCT		's'
+#define _PREFIX_VARIANT		'v'
 
 #define _BT_LIST_FIRST_ENTRY(_ptr, _type, _member)	\
 	bt_list_entry((_ptr)->next, _type, _member)
@@ -175,13 +185,6 @@ struct ctx {
 	 * int64_t -> struct bt_ctf_stream_class *
 	 */
 	GHashTable *stream_classes;
-
-	/*
-	 * Event IDs to event classes.
-	 *
-	 * int64_t -> struct bt_ctf_event_class *
-	 */
-	GHashTable *event_classes;
 };
 
 /**
@@ -527,8 +530,6 @@ struct ctx *ctx_create(struct bt_ctf_trace *trace, FILE *efd)
 
 	ctx->stream_classes = g_hash_table_new_full(g_direct_hash, g_direct_equal,
 		NULL, (GDestroyNotify) bt_ctf_stream_class_put);
-	ctx->event_classes = g_hash_table_new_full(g_direct_hash, g_direct_equal,
-		NULL, (GDestroyNotify) bt_ctf_event_class_put);
 	ctx->trace = trace;
 	ctx->efd = efd;
 	ctx->current_scope = scope;
@@ -565,7 +566,6 @@ void ctx_destroy(struct ctx *ctx)
 	}
 
 	g_hash_table_destroy(ctx->stream_classes);
-	g_hash_table_destroy(ctx->event_classes);
 	g_free(ctx);
 }
 
@@ -1804,7 +1804,8 @@ int visit_struct_decl(struct ctx *ctx, const char *name,
 		ret = ctx_push_scope(ctx);
 
 		if (ret) {
-			fprintf("[error] %s: cannot push scope\n", __func__);
+			fprintf(ctx->efd, "[error] %s: cannot push scope\n",
+				__func__);
 			goto error;
 		}
 
@@ -2933,87 +2934,105 @@ error:
 	return ret;
 }
 
-#if 0
 static
-int ctf_event_declaration_visit(FILE *fd, int depth, struct ctf_node *node, struct ctf_event_declaration *event, struct ctf_trace *trace)
+int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
+	struct bt_ctf_event_class *event_class, int64_t *stream_id,
+	int *set)
 {
 	int ret = 0;
+	char *left = NULL;
 
 	switch (node->type) {
 	case NODE_TYPEDEF:
-		ret = ctf_typedef_visit(fd, depth + 1,
-					event->declaration_scope,
-					node->u._typedef.type_specifier_list,
-					&node->u._typedef.type_declarators,
-					trace);
-		if (ret)
-			return ret;
+		ret = visit_typedef(ctx, node->u._typedef.type_specifier_list,
+			&node->u._typedef.type_declarators);
+
+		if (ret) {
+			fprintf(ctx->efd, "[error] %s: cannot add typedef in \"event\" declaration\n",
+				__func__);
+			goto error;
+		}
 		break;
+
 	case NODE_TYPEALIAS:
-		ret = ctf_typealias_visit(fd, depth + 1,
-				event->declaration_scope,
-				node->u.typealias.target, node->u.typealias.alias,
-				trace);
-		if (ret)
-			return ret;
+		ret = visit_typealias(ctx, node->u.typealias.target,
+			node->u.typealias.alias);
+
+		if (ret) {
+			fprintf(ctx->efd, "[error] %s: cannot add typealias in \"event\" declaration\n",
+				__func__);
+			goto error;
+		}
 		break;
+
 	case NODE_CTF_EXPRESSION:
 	{
-		char *left;
-
 		left = concatenate_unary_strings(&node->u.ctf_expression.left);
-		if (!left)
-			return -EINVAL;
-		if (!strcmp(left, "name")) {
-			char *right;
 
-			if (CTF_EVENT_FIELD_IS_SET(event, name)) {
-				fprintf(fd, "[error] %s: name already declared in event declaration\n", __func__);
+		if (!left) {
+			ret = -EINVAL;
+			goto error;
+		}
+
+		if (!strcmp(left, "name")) {
+			/* this is already known at this stage */
+			if (_IS_SET(set, _EVENT_NAME_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"name\" in event declaration\n",
+					__func__);
 				ret = -EPERM;
 				goto error;
 			}
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
-			if (!right) {
-				fprintf(fd, "[error] %s: unexpected unary expression for event name\n", __func__);
-				ret = -EINVAL;
-				goto error;
-			}
-			event->name = g_quark_from_string(right);
-			g_free(right);
-			CTF_EVENT_SET_FIELD(event, name);
+
+			_SET(set, _EVENT_NAME_SET);
 		} else if (!strcmp(left, "id")) {
-			if (CTF_EVENT_FIELD_IS_SET(event, id)) {
-				fprintf(fd, "[error] %s: id already declared in event declaration\n", __func__);
+			int64_t id;
+
+			if (_IS_SET(set, _EVENT_ID_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"id\" in event declaration\n",
+					__func__);
 				ret = -EPERM;
 				goto error;
 			}
-			ret = get_unary_unsigned(&node->u.ctf_expression.right, &event->id);
-			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for event id\n", __func__);
+
+			ret = get_unary_unsigned(&node->u.ctf_expression.right,
+				(uint64_t*) &id);
+
+			if (ret || id < 0) {
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for event declaration's \"id\" attribute\n",
+					__func__);
 				ret = -EINVAL;
 				goto error;
 			}
-			CTF_EVENT_SET_FIELD(event, id);
+
+			ret = bt_ctf_event_class_set_id(event_class, id);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: cannot set event declaration's ID\n",
+					__func__);
+				goto error;
+			}
+
+			_SET(set, _EVENT_ID_SET);
 		} else if (!strcmp(left, "stream_id")) {
-			if (CTF_EVENT_FIELD_IS_SET(event, stream_id)) {
-				fprintf(fd, "[error] %s: stream_id already declared in event declaration\n", __func__);
+			if (_IS_SET(set, _EVENT_STREAM_ID_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"stream_id\" in event declaration\n",
+					__func__);
 				ret = -EPERM;
 				goto error;
 			}
-			ret = get_unary_unsigned(&node->u.ctf_expression.right, &event->stream_id);
-			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for event stream_id\n", __func__);
+			ret = get_unary_unsigned(&node->u.ctf_expression.right,
+				(uint64_t*) stream_id);
+
+			if (ret || *stream_id < 0) {
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for event declaration's \"stream_id\" attribute\n",
+					__func__);
 				ret = -EINVAL;
 				goto error;
 			}
-			event->stream = trace_stream_lookup(trace, event->stream_id);
-			if (!event->stream) {
-				fprintf(fd, "[error] %s: stream id %" PRIu64 " cannot be found\n", __func__, event->stream_id);
-				ret = -EINVAL;
-				goto error;
-			}
-			CTF_EVENT_SET_FIELD(event, stream_id);
+
+			_SET(set, _EVENT_STREAM_ID_SET);
 		} else if (!strcmp(left, "context")) {
+#if 0
 			struct bt_declaration *declaration;
 
 			if (event->context_decl) {
@@ -3034,7 +3053,9 @@ int ctf_event_declaration_visit(FILE *fd, int depth, struct ctf_node *node, stru
 				goto error;
 			}
 			event->context_decl = container_of(declaration, struct declaration_struct, p);
+#endif
 		} else if (!strcmp(left, "fields")) {
+#if 0
 			struct bt_declaration *declaration;
 
 			if (event->fields_decl) {
@@ -3055,133 +3076,483 @@ int ctf_event_declaration_visit(FILE *fd, int depth, struct ctf_node *node, stru
 				goto error;
 			}
 			event->fields_decl = container_of(declaration, struct declaration_struct, p);
+#endif
 		} else if (!strcmp(left, "loglevel")) {
-			int64_t loglevel = -1;
+			uint64_t loglevel;
 
-			if (CTF_EVENT_FIELD_IS_SET(event, loglevel)) {
-				fprintf(fd, "[error] %s: loglevel already declared in event declaration\n", __func__);
+			if (_IS_SET(set, _EVENT_LOGLEVEL_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"loglevel\" in event declaration\n",
+					__func__);
 				ret = -EPERM;
 				goto error;
 			}
-			ret = get_unary_signed(&node->u.ctf_expression.right, &loglevel);
+			ret = get_unary_unsigned(&node->u.ctf_expression.right,
+				&loglevel);
+
 			if (ret) {
-				fprintf(fd, "[error] %s: unexpected unary expression for event loglevel\n", __func__);
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for event declaration's \"loglevel\" attribute\n",
+					__func__);
 				ret = -EINVAL;
 				goto error;
 			}
-			event->loglevel = (int) loglevel;
-			CTF_EVENT_SET_FIELD(event, loglevel);
+
+			// TODO: FIXME: set log level here
+
+			_SET(set, _EVENT_LOGLEVEL_SET);
 		} else if (!strcmp(left, "model.emf.uri")) {
 			char *right;
 
-			if (CTF_EVENT_FIELD_IS_SET(event, model_emf_uri)) {
-				fprintf(fd, "[error] %s: model.emf.uri already declared in event declaration\n", __func__);
+			if (_IS_SET(set, _EVENT_MODEL_EMF_URI_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"model.emf.uri\" in event declaration\n",
+					__func__);
 				ret = -EPERM;
 				goto error;
 			}
+
 			right = concatenate_unary_strings(&node->u.ctf_expression.right);
+
 			if (!right) {
-				fprintf(fd, "[error] %s: unexpected unary expression for event model.emf.uri\n", __func__);
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for event declaration's \"model.emf.uri\" attribute\n",
+					__func__);
 				ret = -EINVAL;
 				goto error;
 			}
-			event->model_emf_uri = g_quark_from_string(right);
+
+			// TODO: FIXME: set model EMF URI here
+
 			g_free(right);
-			CTF_EVENT_SET_FIELD(event, model_emf_uri);
+			_SET(set, _EVENT_MODEL_EMF_URI_SET);
 		} else {
-			fprintf(fd, "[warning] %s: attribute \"%s\" is unknown in event declaration.\n", __func__, left);
-			/* Fall-through after warning */
+			fprintf(ctx->efd, "[warning] %s: unknown attribute \"%s\" in event declaration.\n",
+				__func__, left);
 		}
-error:
+
 		g_free(left);
+		left = NULL;
 		break;
 	}
+
 	default:
-		return -EPERM;
-	/* TODO: declaration specifier should be added. */
+		ret = -EPERM;
+		goto error;
+	}
+
+	return 0;
+
+error:
+	if (left) {
+		g_free(left);
 	}
 
 	return ret;
 }
 
 static
-int ctf_event_visit(FILE *fd, int depth, struct ctf_node *node,
-		    struct declaration_scope *parent_declaration_scope, struct ctf_trace *trace)
+char *get_event_decl_name(struct ctx *ctx, struct ctf_node *node)
 {
-	int ret = 0;
+	char *left = NULL;
+	char* name = NULL;
 	struct ctf_node *iter;
-	struct ctf_event_declaration *event;
-	struct bt_ctf_event_decl *event_decl;
 
-	if (node->visited)
-		return 0;
-	node->visited = 1;
-
-	event_decl = g_new0(struct bt_ctf_event_decl, 1);
-	event = &event_decl->parent;
-	event->declaration_scope = bt_new_declaration_scope(parent_declaration_scope);
-	event->loglevel = -1;
 	bt_list_for_each_entry(iter, &node->u.event.declaration_list, siblings) {
-		ret = ctf_event_declaration_visit(fd, depth + 1, iter, event, trace);
-		if (ret)
-			goto error;
-	}
-	if (!CTF_EVENT_FIELD_IS_SET(event, name)) {
-		ret = -EPERM;
-		fprintf(fd, "[error] %s: missing name field in event declaration\n", __func__);
-		goto error;
-	}
-	if (!CTF_EVENT_FIELD_IS_SET(event, stream_id)) {
-		/* Allow missing stream_id if there is only a single stream */
-		switch (trace->streams->len) {
-		case 0:	/* Create stream if there was none. */
-			ret = ctf_stream_visit(fd, depth, NULL, trace->root_declaration_scope, trace);
-			if (ret)
-				goto error;
-			/* Fall-through */
-		case 1:
-			event->stream_id = 0;
-			event->stream = trace_stream_lookup(trace, event->stream_id);
-			break;
-		default:
-			ret = -EPERM;
-			fprintf(fd, "[error] %s: missing stream_id field in event declaration\n", __func__);
+		if (iter->type != NODE_CTF_EXPRESSION) {
+			continue;
+		}
+
+		left = concatenate_unary_strings(&iter->u.ctf_expression.left);
+
+		if (!left) {
 			goto error;
 		}
+
+		if (!strcmp(left, "name")) {
+			name = concatenate_unary_strings(&iter->u.ctf_expression.right);
+
+			if (!name) {
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for event declaration's \"name\" attribute\n",
+					__func__);
+				goto error;
+			}
+		}
+
+		g_free(left);
+		left = NULL;
+
+		if (name) {
+			break;
+		}
 	}
-	/* Allow only one event without id per stream */
-	if (!CTF_EVENT_FIELD_IS_SET(event, id)
-	    && event->stream->events_by_id->len != 0) {
-		ret = -EPERM;
-		fprintf(fd, "[error] %s: missing id field in event declaration\n", __func__);
+
+	return name;
+
+error:
+	if (left) {
+		g_free(left);
+	}
+
+	return NULL;
+}
+
+static
+int reset_event_decl_types(struct ctx *ctx,
+	struct bt_ctf_event_class *event_class)
+{
+	int ret = 0;
+	_BT_CTF_FIELD_TYPE_INIT(decl);
+
+	/* event context */
+	decl = bt_ctf_field_type_structure_create();
+
+	if (!decl) {
+		fprintf(ctx->efd, "[error] %s: cannot create initial, empty event context structure\n",
+			__func__);
+		ret = -ENOMEM;
 		goto error;
 	}
-	/* Disallow re-using the same event ID in the same stream */
-	if (stream_event_lookup(event->stream, event->id)) {
-		ret = -EPERM;
-		fprintf(fd, "[error] %s: event ID %" PRIu64 " used more than once in stream %" PRIu64 "\n",
-			__func__, event->id, event->stream_id);
+
+	ret = bt_ctf_event_class_set_context_type(event_class, decl);
+	_BT_CTF_FIELD_TYPE_PUT(decl);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot set initial, empty event context structure\n",
+			__func__);
 		goto error;
 	}
-	if (event->stream->events_by_id->len <= event->id)
-		g_ptr_array_set_size(event->stream->events_by_id, event->id + 1);
-	g_ptr_array_index(event->stream->events_by_id, event->id) = event;
-	g_hash_table_insert(event->stream->event_quark_to_id,
-			    (gpointer) (unsigned long) event->name,
-			    &event->id);
-	g_ptr_array_add(trace->event_declarations, event_decl);
+
+	// TODO: FIXME: do this when bt_ctf_event_class_set_payload_type() is available
+	/* event payload */
+#if 0
+	decl = bt_ctf_field_type_structure_create();
+
+	if (!decl) {
+		fprintf(ctx->efd, "[error] %s: cannot create initial, empty event payload structure\n",
+			__func__);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	ret = bt_ctf_event_class_set_payload_type(stream_class, decl);
+	_BT_CTF_FIELD_TYPE_PUT(decl);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot set initial, empty event payload structure\n",
+			__func__);
+		goto error;
+	}
+#endif
+
 	return 0;
 
 error:
-	if (event->fields_decl)
-		bt_declaration_unref(&event->fields_decl->p);
-	if (event->context_decl)
-		bt_declaration_unref(&event->context_decl->p);
-	bt_free_declaration_scope(event->declaration_scope);
-	g_free(event_decl);
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(decl);
+
 	return ret;
 }
-#endif
+
+static
+int reset_stream_decl_types(struct ctx *ctx,
+	struct bt_ctf_stream_class *stream_class)
+{
+	int ret = 0;
+	_BT_CTF_FIELD_TYPE_INIT(decl);
+
+	/* packet context */
+	decl = bt_ctf_field_type_structure_create();
+
+	if (!decl) {
+		fprintf(ctx->efd, "[error] %s: cannot create initial, empty packet context structure\n",
+			__func__);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	ret = bt_ctf_stream_class_set_packet_context_type(stream_class, decl);
+	_BT_CTF_FIELD_TYPE_PUT(decl);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot set initial, empty packet context structure\n",
+			__func__);
+		goto error;
+	}
+
+	/* event header */
+	decl = bt_ctf_field_type_structure_create();
+
+	if (!decl) {
+		fprintf(ctx->efd, "[error] %s: cannot create initial, empty event header structure\n",
+			__func__);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	ret = bt_ctf_stream_class_set_event_header_type(stream_class, decl);
+	_BT_CTF_FIELD_TYPE_PUT(decl);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot set initial, empty event header structure\n",
+			__func__);
+		goto error;
+	}
+
+	/* event context */
+	decl = bt_ctf_field_type_structure_create();
+
+	if (!decl) {
+		fprintf(ctx->efd, "[error] %s: cannot create initial, empty stream event context structure\n",
+			__func__);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	ret = bt_ctf_stream_class_set_event_context_type(stream_class, decl);
+	_BT_CTF_FIELD_TYPE_PUT(decl);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot set initial, empty stream event context structure\n",
+			__func__);
+		goto error;
+	}
+
+	return 0;
+
+error:
+	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(decl);
+
+	return ret;
+}
+
+static
+struct bt_ctf_stream_class *create_reset_stream_class(struct ctx *ctx)
+{
+	int ret;
+	struct bt_ctf_stream_class *stream_class;
+
+	stream_class = bt_ctf_stream_class_create(NULL);
+
+	if (!stream_class) {
+		fprintf(ctx->efd, "[error] %s: cannot create stream class\n",
+			__func__);
+		goto error;
+	}
+
+	/*
+	 * Set packet context, event header, and event context to empty
+	 * structures to override the default ones.
+	 */
+	ret = reset_stream_decl_types(ctx, stream_class);
+
+	if (ret) {
+		goto error;
+	}
+
+	return stream_class;
+
+error:
+	if (stream_class) {
+		bt_ctf_stream_class_put(stream_class);
+	}
+
+	return NULL;
+}
+
+static
+int visit_event_decl(struct ctx *ctx, struct ctf_node *node)
+{
+	int ret = 0;
+	int set = 0;
+	int64_t event_id;
+	struct ctf_node *iter;
+	int64_t stream_id = -1;
+	char* event_name = NULL;
+	struct bt_ctf_event_class *event_class;
+	struct bt_ctf_event_class *eevent_class;
+	struct bt_ctf_stream_class *stream_class;
+
+	if (node->visited) {
+		goto end;
+	}
+
+	node->visited = TRUE;
+	event_name = get_event_decl_name(ctx, node);
+
+	if (!event_name) {
+		fprintf(ctx->efd, "[error] %s: missing \"name\" attribute in event declaration\n",
+			__func__);
+		ret = -EPERM;
+		goto error;
+	}
+
+	event_class = bt_ctf_event_class_create(event_name);
+
+	/*
+	 * Set context and fields to empty structures to override the
+	 * default ones.
+	 */
+	ret = reset_event_decl_types(ctx, event_class);
+
+	if (ret) {
+		goto error;
+	}
+
+
+	ret = ctx_push_scope(ctx);
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot push scope\n", __func__);
+		goto error;
+	}
+
+	bt_list_for_each_entry(iter, &node->u.event.declaration_list, siblings) {
+		ret = visit_event_decl_entry(ctx, iter, event_class,
+			&stream_id, &set);
+
+		if (ret) {
+			goto error;
+		}
+	}
+
+	if (!_IS_SET(&set, _EVENT_STREAM_ID_SET)) {
+		GList *keys = NULL;
+		struct bt_ctf_stream_class *new_stream_class;
+
+		/* allow missing stream_id if there is only a single stream */
+		switch (g_hash_table_size(ctx->stream_classes)) {
+		case 0:
+			/* create stream if there's none */
+			new_stream_class = create_reset_stream_class(ctx);
+
+			if (!new_stream_class) {
+				ret = -EINVAL;
+				goto error;
+			}
+
+			ret = bt_ctf_stream_class_set_id(new_stream_class, 0);
+
+			if (ret) {
+				fprintf(ctx->efd, "[error] %s: cannot set stream's ID\n",
+					__func__);
+				bt_ctf_stream_class_put(new_stream_class);
+				goto error;
+			}
+
+			stream_id = 0;
+
+			/* move reference to visitor's context */
+			g_hash_table_insert(ctx->stream_classes,
+				(gpointer) stream_id, new_stream_class);
+			new_stream_class = NULL;
+
+			break;
+
+		case 1:
+			/* single stream: get its ID */
+			keys = g_hash_table_get_keys(ctx->stream_classes);
+			stream_id = (int64_t) keys->data;
+			g_list_free(keys);
+			keys = NULL;
+			break;
+
+		default:
+			fprintf(ctx->efd, "[error] %s: missing \"stream_id\" attribute in event declaration\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
+		}
+	}
+
+
+
+	assert(stream_id >= 0);
+
+	/* we have the stream ID now; borrow the stream class if found */
+	stream_class = g_hash_table_lookup(ctx->stream_classes,
+		(gpointer) stream_id);
+
+	if (!stream_class) {
+		fprintf(ctx->efd, "[error] %s: cannot find stream class with ID %" PRId64 "\n",
+			__func__, stream_id);
+		ret = -EINVAL;
+		goto error;
+	}
+
+	if (!_IS_SET(&set, _EVENT_ID_SET)) {
+		/* allow only one event without ID per stream */
+		if (bt_ctf_stream_class_get_event_class_count(stream_class) != 0) {
+			fprintf(ctx->efd, "[error] %s: missing \"id\" field in event declaration\n",
+				__func__);
+			ret = -EPERM;
+			goto error;
+		}
+
+		/* automatic ID */
+		ret = bt_ctf_event_class_set_id(event_class, 0);
+
+		if (ret) {
+			fprintf(ctx->efd, "[error] %s: cannot set event's ID\n",
+				__func__);
+			goto error;
+		}
+	}
+
+	event_id = bt_ctf_event_class_get_id(event_class);
+
+	if (event_id < 0) {
+		fprintf(ctx->efd, "[error] %s: cannot get event's ID\n",
+			__func__);
+		ret = -EINVAL;
+		goto error;
+	}
+
+	eevent_class = bt_ctf_stream_class_get_event_class_by_id(stream_class,
+		event_id);
+
+	if (eevent_class) {
+		bt_ctf_event_class_put(eevent_class);
+		fprintf(ctx->efd, "[error] %s: duplicate event with ID %" PRId64 " in same stream\n",
+			__func__, event_id);
+		ret = -EEXIST;
+		goto error;
+	}
+
+	eevent_class = bt_ctf_stream_class_get_event_class_by_name(stream_class,
+		event_name);
+
+	if (eevent_class) {
+		bt_ctf_event_class_put(eevent_class);
+		eevent_class = NULL;
+		fprintf(ctx->efd, "[error] %s: duplicate event with name \"%s\" in same stream\n",
+			__func__, event_name);
+		ret = -EEXIST;
+		goto error;
+	}
+
+	g_free(event_name);
+	ret = bt_ctf_stream_class_add_event_class(stream_class, event_class);
+	bt_ctf_event_class_put(event_class);
+	event_class = NULL;
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot add event class to stream class\n",
+			__func__);
+		goto error;
+	}
+
+end:
+	return 0;
+
+error:
+	if (event_name) {
+		g_free(event_name);
+	}
+
+	if (event_class) {
+		bt_ctf_event_class_put(event_class);
+	}
+
+	/* stream_class is borrowed; it still belongs to the hash table */
+
+	return ret;
+}
 
 static
 int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
@@ -3246,7 +3617,7 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			if (g_hash_table_lookup(ctx->stream_classes, (gpointer) id)) {
 				fprintf(ctx->efd, "[error] %s: duplicate stream with ID %" PRId64 "\n",
 					__func__, id);
-				ret = -EPERM;
+				ret = -EEXIST;
 				goto error;
 			}
 
@@ -3381,78 +3752,6 @@ error:
 }
 
 static
-int reset_stream_decl_types(struct ctx *ctx,
-	struct bt_ctf_stream_class *stream_class)
-{
-	int ret = 0;
-	_BT_CTF_FIELD_TYPE_INIT(decl);
-
-	/* packet context */
-	decl = bt_ctf_field_type_structure_create();
-
-	if (!decl) {
-		fprintf(ctx->efd, "[error] %s: cannot create initial, empty packet context structure\n",
-			__func__);
-		ret = -ENOMEM;
-		goto error;
-	}
-
-	ret = bt_ctf_stream_class_set_packet_context_type(stream_class, decl);
-	_BT_CTF_FIELD_TYPE_PUT(decl);
-
-	if (ret) {
-		fprintf(ctx->efd, "[error] %s: cannot set initial, empty packet context structure\n",
-			__func__);
-		goto error;
-	}
-
-	/* event header */
-	decl = bt_ctf_field_type_structure_create();
-
-	if (!decl) {
-		fprintf(ctx->efd, "[error] %s: cannot create initial, empty event header structure\n",
-			__func__);
-		ret = -ENOMEM;
-		goto error;
-	}
-
-	ret = bt_ctf_stream_class_set_event_header_type(stream_class, decl);
-	_BT_CTF_FIELD_TYPE_PUT(decl);
-
-	if (ret) {
-		fprintf(ctx->efd, "[error] %s: cannot set initial, empty event header structure\n",
-			__func__);
-		goto error;
-	}
-
-	/* event context */
-	decl = bt_ctf_field_type_structure_create();
-
-	if (!decl) {
-		fprintf(ctx->efd, "[error] %s: cannot create initial, empty event context structure\n",
-			__func__);
-		ret = -ENOMEM;
-		goto error;
-	}
-
-	ret = bt_ctf_stream_class_set_event_context_type(stream_class, decl);
-	_BT_CTF_FIELD_TYPE_PUT(decl);
-
-	if (ret) {
-		fprintf(ctx->efd, "[error] %s: cannot set initial, empty event context structure\n",
-			__func__);
-		goto error;
-	}
-
-	return 0;
-
-error:
-	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(decl);
-
-	return ret;
-}
-
-static
 int visit_stream_decl(struct ctx *ctx, struct ctf_node *node)
 {
 	int64_t id;
@@ -3462,33 +3761,21 @@ int visit_stream_decl(struct ctx *ctx, struct ctf_node *node)
 	struct bt_ctf_stream_class *stream_class = NULL;
 
 	if (node->visited) {
-		return 0;
+		goto end;
 	}
 
-	node->visited = 1;
-	stream_class = bt_ctf_stream_class_create(NULL);
+	node->visited = TRUE;
+	stream_class = create_reset_stream_class(ctx);
 
 	if (!stream_class) {
-		fprintf(ctx->efd, "[error] %s: cannot create stream class\n",
-			__func__);
-		ret = -ENOMEM;
-		goto error;
-	}
-
-	/*
-	 * Set packet context, event header, and event context to empty
-	 * structures tu override the default ones.
-	 */
-	ret = reset_stream_decl_types(ctx, stream_class);
-
-	if (ret) {
+		ret = -EINVAL;
 		goto error;
 	}
 
 	ret = ctx_push_scope(ctx);
 
 	if (ret) {
-		fprintf("[error] %s: cannot push scope\n", __func__);
+		fprintf(ctx->efd, "[error] %s: cannot push scope\n", __func__);
 		goto error;
 	}
 
@@ -3562,6 +3849,7 @@ int visit_stream_decl(struct ctx *ctx, struct ctf_node *node)
 		stream_class);
 	stream_class = NULL;
 
+end:
 	return 0;
 
 error:
@@ -3745,10 +4033,10 @@ int visit_trace_decl(struct ctx *ctx, struct ctf_node *node)
 	struct ctf_node *iter;
 
 	if (node->visited) {
-		return 0;
+		goto end;
 	}
 
-	node->visited = 1;
+	node->visited = TRUE;
 
 	if (ctx->is_trace_visited) {
 		fprintf(ctx->efd, "[error] %s: duplicate \"trace\" block\n",
@@ -3760,7 +4048,7 @@ int visit_trace_decl(struct ctx *ctx, struct ctf_node *node)
 	ret = ctx_push_scope(ctx);
 
 	if (ret) {
-		fprintf("[error] %s: cannot push scope\n", __func__);
+		fprintf(ctx->efd, "[error] %s: cannot push scope\n", __func__);
 		goto error;
 	}
 
@@ -3798,6 +4086,7 @@ int visit_trace_decl(struct ctx *ctx, struct ctf_node *node)
 
 	ctx->is_trace_visited = TRUE;
 
+end:
 	return 0;
 
 error:
@@ -3812,10 +4101,10 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 	struct ctf_node *entry_node;
 
 	if (node->visited) {
-		return 0;
+		goto end;
 	}
 
-	node->visited = 1;
+	node->visited = TRUE;
 
 	bt_list_for_each_entry(entry_node, &node->u.env.declaration_list, siblings) {
 		if (entry_node->type != NODE_CTF_EXPRESSION) {
@@ -3873,7 +4162,7 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 				goto error;
 			}
 
-			printf_verbose("env.%s = %" PRIu64 "\n", left, v);
+			printf_verbose("env.%s = %" PRId64 "\n", left, v);
 			ret = bt_ctf_trace_add_environment_field_integer(ctx->trace,
 				left, v);
 
@@ -3891,6 +4180,7 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 		left = NULL;
 	}
 
+end:
 	return 0;
 
 error:
@@ -4256,7 +4546,7 @@ int visit_clock_decl(struct ctx *ctx, struct ctf_node *clock_node)
 		return 0;
 	}
 
-	clock_node->visited = 1;
+	clock_node->visited = TRUE;
 	clock = _bt_ctf_clock_create();
 
 	if (!clock) {
@@ -4326,7 +4616,7 @@ int visit_root_decl(struct ctx *ctx, struct ctf_node *root_decl_node)
 		goto end;
 	}
 
-	root_decl_node->visited = 1;
+	root_decl_node->visited = TRUE;
 
 	switch (root_decl_node->type) {
 	case NODE_TYPEDEF:
@@ -4531,16 +4821,16 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 			}
 		}
 
-#if 0
+		/* events */
 		bt_list_for_each_entry(iter, &node->u.root.event, siblings) {
-			ret = ctf_event_visit(fd, depth + 1, iter,
-		    			      trace->root_declaration_scope, trace);
+			ret = visit_event_decl(ctx, iter);
+
 			if (ret) {
-				fprintf(fd, "[error] %s: event declaration error\n", __func__);
+				fprintf(ctx->efd, "[error] %s: error while visiting event declaration\n",
+					__func__);
 				goto error;
 			}
 		}
-#endif
 		break;
 	}
 
