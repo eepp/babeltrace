@@ -54,14 +54,26 @@
 #define _IS_SET(set, mask)	(*(set) & (mask))
 #define _SET(set, mask)		(*(set) |= (mask))
 
-#define _CLOCK_NAME_SET			_BV(0)
-#define _CLOCK_UUID_SET			_BV(1)
-#define _CLOCK_FREQ_SET			_BV(2)
-#define _CLOCK_PRECISION_SET		_BV(3)
-#define _CLOCK_OFFSET_S_SET		_BV(4)
-#define _CLOCK_OFFSET_SET		_BV(5)
-#define _CLOCK_ABSOLUTE_SET		_BV(6)
-#define _CLOCK_DESCRIPTION_SET		_BV(6)
+enum {
+	_CLOCK_NAME_SET =		_BV(0),
+	_CLOCK_UUID_SET =		_BV(1),
+	_CLOCK_FREQ_SET =		_BV(2),
+	_CLOCK_PRECISION_SET =		_BV(3),
+	_CLOCK_OFFSET_S_SET =		_BV(4),
+	_CLOCK_OFFSET_SET =		_BV(5),
+	_CLOCK_ABSOLUTE_SET =		_BV(6),
+	_CLOCK_DESCRIPTION_SET =	_BV(7),
+};
+
+enum {
+	_INTEGER_ALIGN_SET =		_BV(0),
+	_INTEGER_SIZE_SET =		_BV(1),
+	_INTEGER_BASE_SET =		_BV(2),
+	_INTEGER_ENCODING_SET =		_BV(3),
+	_INTEGER_BYTE_ORDER_SET =	_BV(4),
+	_INTEGER_SIGNED_SET =		_BV(5),
+	_INTEGER_MAP_SET =		_BV(6),
+};
 
 #define fprintf_dbg(fd, fmt, args...)	fprintf(fd, "%s: " fmt, __func__, ## args)
 
@@ -338,9 +350,8 @@ char *concatenate_unary_strings(struct bt_list_head *head)
 	return g_string_free(str, FALSE);
 }
 
-#if 0
 static
-GQuark get_map_clock_name_value(struct bt_list_head *head)
+const char *get_map_clock_name_value(struct bt_list_head *head)
 {
 	struct ctf_node *node;
 	const char *name = NULL;
@@ -353,37 +364,45 @@ GQuark get_map_clock_name_value(struct bt_list_head *head)
 			|| node->u.unary_expression.type != UNARY_STRING
 			|| !((node->u.unary_expression.link != UNARY_LINK_UNKNOWN)
 				^ (i == 0)))
-			return 0;
+			return NULL;
+
 		/* needs to be chained with . */
 		switch (node->u.unary_expression.link) {
 		case UNARY_DOTLINK:
 			break;
+
 		case UNARY_ARROWLINK:
 		case UNARY_DOTDOTDOT:
-			return 0;
+			return NULL;
+
 		default:
 			break;
 		}
+
 		src_string = node->u.unary_expression.u.string;
+
 		switch (i) {
 		case 0:	if (strcmp("clock", src_string) != 0) {
-				return 0;
+				return NULL;
 			}
 			break;
+
 		case 1:	name = src_string;
 			break;
+
 		case 2:	if (strcmp("value", src_string) != 0) {
-				return 0;
+				return NULL;
 			}
 			break;
 		default:
-			return 0;	/* extra identifier, unknown */
+			return NULL;	/* extra identifier, unknown */
 		}
+
 		i++;
 	}
-	return g_quark_from_string(name);
+
+	return name;
 }
-#endif
 
 static
 int is_unary_unsigned(struct bt_list_head *head)
@@ -478,6 +497,50 @@ int get_unary_uuid(struct bt_list_head *head, unsigned char *uuid)
 		ret = babeltrace_uuid_parse(src_string, uuid);
 	}
 	return ret;
+}
+
+
+static
+enum bt_ctf_byte_order byte_order_from_unary_expr(FILE *efd,
+		struct ctf_node *unary_expr)
+{
+	if (unary_expr->u.unary_expression.type != UNARY_STRING) {
+		fprintf(efd, "[error] %s: \"byte_order\" attribute: expecting string\n", __func__);
+		return BT_CTF_BYTE_ORDER_UNKNOWN;
+	}
+
+	if (!strcmp(unary_expr->u.unary_expression.u.string, "be") ||
+			!strcmp(unary_expr->u.unary_expression.u.string, "network")) {
+		return BT_CTF_BYTE_ORDER_BIG_ENDIAN;
+	} else if (!strcmp(unary_expr->u.unary_expression.u.string, "le")) {
+		return BT_CTF_BYTE_ORDER_LITTLE_ENDIAN;
+	} else if (!strcmp(unary_expr->u.unary_expression.u.string, "native")) {
+		return BT_CTF_BYTE_ORDER_NATIVE;
+	} else {
+		fprintf(efd, "[error] %s: unexpected string \"%s\" (should be \"be\", \"le\", \"network\", or \"native\")\n",
+			__func__, unary_expr->u.unary_expression.u.string);
+		return BT_CTF_BYTE_ORDER_UNKNOWN;
+	}
+}
+
+static
+enum bt_ctf_byte_order get_real_byte_order(struct ctx *ctx,
+		struct ctf_node *unary_expr)
+{
+	enum bt_ctf_byte_order bo =
+		byte_order_from_unary_expr(ctx->efd, unary_expr);
+
+	if (bo == BT_CTF_BYTE_ORDER_NATIVE) {
+		return bt_ctf_trace_get_byte_order(ctx->trace);
+	} else {
+		return bo;
+	}
+}
+
+static
+int is_align_valid(uint64_t align)
+{
+    return (align != 0) && !(align & (align - 1));
 }
 
 #if 0
@@ -1450,29 +1513,6 @@ int get_boolean(FILE *efd, struct ctf_node *unary_expr)
 	}
 }
 
-static
-enum bt_ctf_byte_order byte_order_from_unary_expr(FILE *efd,
-		struct ctf_node *unary_expr)
-{
-	if (unary_expr->u.unary_expression.type != UNARY_STRING) {
-		fprintf(efd, "[error] %s: \"byte_order\" attribute: expecting string\n", __func__);
-		return BT_CTF_BYTE_ORDER_UNKNOWN;
-	}
-
-	if (!strcmp(unary_expr->u.unary_expression.u.string, "be") ||
-			!strcmp(unary_expr->u.unary_expression.u.string, "network")) {
-		return BT_CTF_BYTE_ORDER_BIG_ENDIAN;
-	} else if (!strcmp(unary_expr->u.unary_expression.u.string, "le")) {
-		return BT_CTF_BYTE_ORDER_LITTLE_ENDIAN;
-	} else if (!strcmp(unary_expr->u.unary_expression.u.string, "native")) {
-		return BT_CTF_BYTE_ORDER_NATIVE;
-	} else {
-		fprintf(efd, "[error] %s: unexpected string \"%s\" (should be \"be\", \"le\", \"network\", or \"native\")\n",
-			__func__, unary_expr->u.unary_expression.u.string);
-		return BT_CTF_BYTE_ORDER_UNKNOWN;
-	}
-}
-
 #if 0
 static
 int get_trace_byte_order(FILE *fd, int depth, struct ctf_node *unary_expression)
@@ -1525,184 +1565,283 @@ int get_byte_order(FILE *fd, int depth, struct ctf_node *unary_expression,
 #endif
 
 static
-struct bt_ctf_field_type *visit_integer_decl(struct ctx *ctx,
-	struct bt_list_head *expressions)
+int visit_integer_decl(struct ctx *ctx,
+	struct bt_list_head *expressions,
+	struct bt_ctf_field_type **integer_decl)
 {
 	struct ctf_node *expression;
-	uint64_t alignment = 1, size = 0;
-	int byte_order = bt_ctf_trace_get_byte_order(ctx->trace);
+	uint64_t alignment = 1, size;
+	enum bt_ctf_byte_order byte_order = bt_ctf_trace_get_byte_order(ctx->trace);
 	int signedness = 0;
-	int has_alignment = 0, has_size = 0;
-	int base = 0;
-
-#if 0
+	enum bt_ctf_integer_base base = BT_CTF_INTEGER_BASE_DECIMAL;
 	enum ctf_string_encoding encoding = CTF_STRING_NONE;
-	struct ctf_clock *clock = NULL;
-	struct declaration_integer *integer_declaration;
+	struct bt_ctf_clock *mapped_clock = NULL;
+	int set = 0;
+	int ret = 0;
 
 	bt_list_for_each_entry(expression, expressions, siblings) {
 		struct ctf_node *left, *right;
 
 		left = _bt_list_first_entry(&expression->u.ctf_expression.left, struct ctf_node, siblings);
 		right = _bt_list_first_entry(&expression->u.ctf_expression.right, struct ctf_node, siblings);
-		if (left->u.unary_expression.type != UNARY_STRING)
-			return NULL;
+
+		if (left->u.unary_expression.type != UNARY_STRING) {
+			return -EINVAL;
+		}
+
 		if (!strcmp(left->u.unary_expression.u.string, "signed")) {
-			signedness = get_boolean(fd, right);
-			if (signedness < 0)
-				return NULL;
+			if (_IS_SET(&set, _INTEGER_SIGNED_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"signed\" in integer declaration\n",
+					__func__);
+				return -EPERM;
+			}
+
+			signedness = get_boolean(ctx->efd, right);
+
+			if (signedness < 0) {
+				return -EINVAL;
+			}
+
+			_SET(&set, _INTEGER_SIGNED_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "byte_order")) {
-			byte_order = get_byte_order(fd, depth, right, trace);
-			if (byte_order < 0)
-				return NULL;
+			if (_IS_SET(&set, _INTEGER_BYTE_ORDER_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"byte_order\" in integer declaration\n",
+					__func__);
+				return -EPERM;
+			}
+
+			byte_order = get_real_byte_order(ctx, right);
+
+			if (byte_order == BT_CTF_BYTE_ORDER_UNKNOWN) {
+				fprintf(ctx->efd, "[error] %s: invalid \"byte_order\" attribute in integer declaration\n",
+					__func__);
+				return -EINVAL;
+			}
+
+			_SET(&set, _INTEGER_BYTE_ORDER_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "size")) {
-			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
-				fprintf(fd, "[error] %s: size: expecting unsigned constant\n",
+			if (_IS_SET(&set, _INTEGER_SIZE_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"size\" in integer declaration\n",
 					__func__);
-				return NULL;
+				return -EPERM;
 			}
+
+			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
+				fprintf(ctx->efd, "[error] %s: invalid \"size\" attribute in integer declaration: expecting unsigned constant\n",
+					__func__);
+				return -EINVAL;
+			}
+
 			size = right->u.unary_expression.u.unsigned_constant;
-			if (!size) {
-				fprintf(fd, "[error] %s: integer size: expecting non-zero constant\n",
+
+			if (size == 0) {
+				fprintf(ctx->efd, "[error] %s: invalid \"size\" attribute in integer declaration: expecting positive constant\n",
 					__func__);
-				return NULL;
+				return -EINVAL;
 			}
-			has_size = 1;
+
+			_SET(&set, _INTEGER_SIZE_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "align")) {
+			if (_IS_SET(&set, _INTEGER_ALIGN_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"align\" in integer declaration\n",
+					__func__);
+				return -EPERM;
+			}
+
 			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
-				fprintf(fd, "[error] %s: align: expecting unsigned constant\n",
+				fprintf(ctx->efd, "[error] %s: invalid \"align\" attribute in integer declaration: expecting unsigned constant\n",
 					__func__);
-				return NULL;
+				return -EINVAL;
 			}
+
 			alignment = right->u.unary_expression.u.unsigned_constant;
-			/* Make sure alignment is a power of two */
-			if (alignment == 0 || (alignment & (alignment - 1)) != 0) {
-				fprintf(fd, "[error] %s: align: expecting power of two\n",
+
+			if (!is_align_valid(alignment)) {
+				fprintf(ctx->efd, "[error] %s: invalid \"align\" attribute in integer declaration: expecting power of two\n",
 					__func__);
-				return NULL;
+				return -EINVAL;
 			}
-			has_alignment = 1;
+
+			_SET(&set, _INTEGER_ALIGN_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "base")) {
+			if (_IS_SET(&set, _INTEGER_BASE_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"base\" in integer declaration\n",
+					__func__);
+				return -EPERM;
+			}
+
 			switch (right->u.unary_expression.type) {
 			case UNARY_UNSIGNED_CONSTANT:
 				switch (right->u.unary_expression.u.unsigned_constant) {
 				case 2:
-				case 8:
-				case 10:
-				case 16:
-					base = right->u.unary_expression.u.unsigned_constant;
+					base = BT_CTF_INTEGER_BASE_BINARY;
 					break;
+
+				case 8:
+					base = BT_CTF_INTEGER_BASE_OCTAL;
+					break;
+
+				case 10:
+					base = BT_CTF_INTEGER_BASE_DECIMAL;
+					break;
+
+				case 16:
+					base = BT_CTF_INTEGER_BASE_HEXADECIMAL;
+					break;
+
 				default:
-					fprintf(fd, "[error] %s: base not supported (%" PRIu64 ")\n",
+					fprintf(ctx->efd, "[error] %s: invalid \"base\" attribute in integer declaration: %" PRIu64 "\n",
 						__func__, right->u.unary_expression.u.unsigned_constant);
-				return NULL;
+					return -EINVAL;
 				}
 				break;
+
 			case UNARY_STRING:
 			{
 				char *s_right = concatenate_unary_strings(&expression->u.ctf_expression.right);
+
 				if (!s_right) {
-					fprintf(fd, "[error] %s: unexpected unary expression for integer base\n", __func__);
+					fprintf(ctx->efd, "[error] %s: unexpected unary expression for integer declaration's \"base\" attribute\n",
+						__func__);
 					g_free(s_right);
-					return NULL;
+					return -EINVAL;
 				}
-				if (!strcmp(s_right, "decimal") || !strcmp(s_right, "dec") || !strcmp(s_right, "d")
-				    || !strcmp(s_right, "i") || !strcmp(s_right, "u")) {
-					base = 10;
-				} else if (!strcmp(s_right, "hexadecimal") || !strcmp(s_right, "hex")
-				    || !strcmp(s_right, "x") || !strcmp(s_right, "X")
-				    || !strcmp(s_right, "p")) {
-					base = 16;
-				} else if (!strcmp(s_right, "octal") || !strcmp(s_right, "oct")
-				    || !strcmp(s_right, "o")) {
-					base = 8;
-				} else if (!strcmp(s_right, "binary") || !strcmp(s_right, "b")) {
-					base = 2;
+
+				if (!strcmp(s_right, "decimal") ||
+						!strcmp(s_right, "dec") ||
+						!strcmp(s_right, "d") ||
+						!strcmp(s_right, "i") ||
+						!strcmp(s_right, "u")) {
+					base = BT_CTF_INTEGER_BASE_DECIMAL;
+				} else if (!strcmp(s_right, "hexadecimal") ||
+						!strcmp(s_right, "hex") ||
+						!strcmp(s_right, "x") ||
+						!strcmp(s_right, "X") ||
+						!strcmp(s_right, "p")) {
+					base = BT_CTF_INTEGER_BASE_HEXADECIMAL;
+				} else if (!strcmp(s_right, "octal") ||
+						!strcmp(s_right, "oct") ||
+						!strcmp(s_right, "o")) {
+					base = BT_CTF_INTEGER_BASE_OCTAL;
+				} else if (!strcmp(s_right, "binary") ||
+						!strcmp(s_right, "b")) {
+					base = BT_CTF_INTEGER_BASE_BINARY;
 				} else {
-					fprintf(fd, "[error] %s: unexpected expression for integer base (%s)\n", __func__, s_right);
+					fprintf(ctx->efd, "[error] %s: unexpected unary expression for integer declaration's \"base\" attribute: \"%s\"\n",
+						__func__, s_right);
 					g_free(s_right);
-					return NULL;
+					return -EINVAL;
 				}
 
 				g_free(s_right);
 				break;
 			}
+
 			default:
-				fprintf(fd, "[error] %s: base: expecting unsigned constant or unary string\n",
+				fprintf(ctx->efd, "[error] %s: invalid \"base\" attribute in integer declaration: expecting unsigned constant or unary string\n",
 					__func__);
-				return NULL;
+				return -EINVAL;
 			}
+
+			_SET(&set, _INTEGER_BASE_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "encoding")) {
-			char *s_right;
+			if (_IS_SET(&set, _INTEGER_ENCODING_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"encoding\" in integer declaration\n",
+					__func__);
+				return -EPERM;
+			}
 
 			if (right->u.unary_expression.type != UNARY_STRING) {
-				fprintf(fd, "[error] %s: encoding: expecting unary string\n",
+				fprintf(ctx->efd, "[error] %s: invalid \"encoding\" attribute in integer declaration: expecting unary string\n",
 					__func__);
-				return NULL;
+				return -EINVAL;
 			}
-			s_right = concatenate_unary_strings(&expression->u.ctf_expression.right);
+
+			char *s_right = concatenate_unary_strings(&expression->u.ctf_expression.right);
+
 			if (!s_right) {
-				fprintf(fd, "[error] %s: unexpected unary expression for integer base\n", __func__);
+				fprintf(ctx->efd, "[error] %s: unexpected unary expression for integer declaration's \"encoding\" attribute\n",
+					__func__);
 				g_free(s_right);
-				return NULL;
+				return -EINVAL;
 			}
-			if (!strcmp(s_right, "UTF8")
-			    || !strcmp(s_right, "utf8")
-			    || !strcmp(s_right, "utf-8")
-			    || !strcmp(s_right, "UTF-8"))
+
+			if (!strcmp(s_right, "UTF8") ||
+					!strcmp(s_right, "utf8") ||
+					!strcmp(s_right, "utf-8") ||
+					!strcmp(s_right, "UTF-8")) {
 				encoding = CTF_STRING_UTF8;
-			else if (!strcmp(s_right, "ASCII")
-			    || !strcmp(s_right, "ascii"))
+			} else if (!strcmp(s_right, "ASCII") ||
+					!strcmp(s_right, "ascii")) {
 				encoding = CTF_STRING_ASCII;
-			else if (!strcmp(s_right, "none"))
+			} else if (!strcmp(s_right, "none")) {
 				encoding = CTF_STRING_NONE;
-			else {
-				fprintf(fd, "[error] %s: unknown string encoding \"%s\"\n", __func__, s_right);
+			} else {
+				fprintf(ctx->efd, "[error] %s: invalid \"encoding\" attribute in integer declaration: unknown encoding \"%s\"\n",
+					__func__, s_right);
 				g_free(s_right);
-				return NULL;
+				return -EINVAL;
 			}
+
 			g_free(s_right);
+			_SET(&set, _INTEGER_ENCODING_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "map")) {
-			GQuark clock_name;
+			if (_IS_SET(&set, _INTEGER_MAP_SET)) {
+				fprintf(ctx->efd, "[error] %s: duplicate attribute \"map\" in integer declaration\n",
+					__func__);
+				return -EPERM;
+			}
 
 			if (right->u.unary_expression.type != UNARY_STRING) {
-				fprintf(fd, "[error] %s: map: expecting identifier\n",
+				fprintf(ctx->efd, "[error] %s: invalid \"map\" attribute in integer declaration: expecting unary string\n",
 					__func__);
-				return NULL;
+				return -EINVAL;
 			}
-			/* currently only support clock.name.value */
-			clock_name = get_map_clock_name_value(&expression->u.ctf_expression.right);
-			if (!clock_name) {
-				char *s_right;
 
-				s_right = concatenate_unary_strings(&expression->u.ctf_expression.right);
+			const char *clock_name =
+				get_map_clock_name_value(&expression->u.ctf_expression.right);
+
+			if (!clock_name) {
+				char *s_right = concatenate_unary_strings(&expression->u.ctf_expression.right);
+
 				if (!s_right) {
-					fprintf(fd, "[error] %s: unexpected unary expression for integer map\n", __func__);
+					fprintf(ctx->efd, "[error] %s: unexpected unary expression for integer declaration's \"map\" attribute\n",
+						__func__);
 					g_free(s_right);
-					return NULL;
+					return -EINVAL;
 				}
-				fprintf(fd, "[warning] %s: unknown map %s in integer declaration\n", __func__,
-					s_right);
+
+				fprintf(ctx->efd, "[error] %s: invalid \"map\" attribute in integer declaration: unknown clock: \"%s\"\n",
+					__func__, s_right);
+				_SET(&set, _INTEGER_MAP_SET);
 				g_free(s_right);
 				continue;
 			}
-			clock = trace_clock_lookup(trace, clock_name);
-			if (!clock) {
-				fprintf(fd, "[error] %s: map: unable to find clock %s declaration\n",
-					__func__, g_quark_to_string(clock_name));
-				return NULL;
+
+			mapped_clock = bt_ctf_trace_get_clock_by_name(ctx->trace,
+				clock_name);
+
+			if (!mapped_clock) {
+				fprintf(ctx->efd, "[error] %s: invalid \"map\" attribute in integer declaration: cannot find clock \"%s\"\n",
+					__func__, clock_name);
+				return -EINVAL;
 			}
+
+			_SET(&set, _INTEGER_MAP_SET);
 		} else {
-			fprintf(fd, "[warning] %s: unknown attribute name %s\n",
-				__func__, left->u.unary_expression.u.string);
-			/* Fall-through after warning */
+			fprintf(ctx->efd, "[warning] %s: unknown attribute \"%s\" in integer declaration\n",
+				__func__,
+				left->u.unary_expression.u.string);
 		}
 	}
-	if (!has_size) {
-		fprintf(fd, "[error] %s: missing size attribute\n", __func__);
-		return NULL;
+
+	if (!_IS_SET(&set, _INTEGER_SIZE_SET)) {
+		fprintf(ctx->efd, "[error] %s: missing \"size\" attribute in integer declaration\n",
+			__func__);
+		return -EPERM;
 	}
-	if (!has_alignment) {
+
+	if (!_IS_SET(&set, _INTEGER_ALIGN_SET)) {
 		if (size % CHAR_BIT) {
 			/* bit-packed alignment */
 			alignment = 1;
@@ -1711,13 +1850,34 @@ struct bt_ctf_field_type *visit_integer_decl(struct ctx *ctx,
 			alignment = CHAR_BIT;
 		}
 	}
-	integer_declaration = bt_integer_declaration_new(size,
-				byte_order, signedness, alignment,
-				base, encoding, clock);
-	return &integer_declaration->p;
-#endif
 
-	return NULL;
+	*integer_decl = bt_ctf_field_type_integer_create((unsigned int) size);
+
+	if (!*integer_decl) {
+		fprintf(ctx->efd, "[error] %s: cannot create integer declaration\n",
+			__func__);
+		return -ENOMEM;
+	}
+
+	ret = bt_ctf_field_type_integer_set_signed(*integer_decl, signedness);
+	ret &= bt_ctf_field_type_integer_set_base(*integer_decl, base);
+	ret &= bt_ctf_field_type_integer_set_encoding(*integer_decl, encoding);
+	ret &= bt_ctf_field_type_set_alignment(*integer_decl,
+		(unsigned int) alignment);
+	ret &= bt_ctf_field_type_set_byte_order(*integer_decl, byte_order);
+
+	if (mapped_clock) {
+		// TODO: bt_ctf_field_type_integer_set_mapped_clock()
+	}
+
+	if (ret) {
+		fprintf(ctx->efd, "[error] %s: cannot configure integer declaration\n",
+			__func__);
+		bt_ctf_field_type_put(*integer_decl);
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 #if 0
@@ -3289,7 +3449,7 @@ int visit_clock(struct ctx *ctx, struct ctf_node *clock_node)
 	struct bt_ctf_clock *clock = _bt_ctf_clock_create();
 
 	if (!clock) {
-		fprintf(ctx->efd, "[error] %s: cannot create clock IR\n", __func__);
+		fprintf(ctx->efd, "[error] %s: cannot create clock\n", __func__);
 		ret = -ENOMEM;
 		goto error;
 	}
