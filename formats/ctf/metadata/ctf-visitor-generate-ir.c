@@ -3,6 +3,8 @@
  *
  * Common Trace Format metadata visitor (generates CTF IR structures).
  *
+ * Based on older ctf-visitor-generate-io-struct.c.
+ *
  * Copyright 2010 - Mathieu Desnoyers <mathieu.desnoyers@efficios.com>
  * Copyright 2015 - Philippe Proulx <philippe.proulx@efficios.com>
  *
@@ -38,10 +40,6 @@
 #include <babeltrace/compat/uuid.h>
 #include <babeltrace/endian.h>
 #include <babeltrace/ctf/events-internal.h>
-#include "ctf-scanner.h"
-#include "ctf-parser.h"
-#include "ctf-ast.h"
-
 #include <babeltrace/ctf-ir/trace.h>
 #include <babeltrace/ctf-ir/trace-internal.h>
 #include <babeltrace/ctf-ir/stream-class.h>
@@ -51,6 +49,10 @@
 #include <babeltrace/ctf-ir/event-types-internal.h>
 #include <babeltrace/ctf-ir/clock.h>
 #include <babeltrace/ctf-ir/clock-internal.h>
+
+#include "ctf-scanner.h"
+#include "ctf-parser.h"
+#include "ctf-ast.h"
 
 /* bit value (left shift) */
 #define _BV(_val)		(1 << (_val))
@@ -204,9 +206,8 @@ enum {
 
 /*
  * Declaration scope of a visitor context. This represents a TSDL
- * lexical scope, so that aliases and named
- * structures/variants/enumerations may be registered and looked up
- * hierarchically.
+ * lexical scope, so that aliases and named structures, variants,
+ * and enumerations may be registered and looked up hierarchically.
  */
 struct ctx_decl_scope {
 	/*
@@ -227,13 +228,13 @@ struct ctx {
 	/* trace being filled (weak ref.) */
 	struct bt_ctf_trace *trace;
 
-	/* error stream */
+	/* error stream to use during visit */
 	FILE *efd;
 
 	/* current declaration scope (top of the stack) */
 	struct ctx_decl_scope *current_scope;
 
-	/* trace declaration is visited */
+	/* true if trace declaration is visited */
 	int is_trace_visited;
 
 	/* trace attributes */
@@ -443,8 +444,6 @@ struct bt_ctf_field_type *ctx_decl_scope_lookup_variant(
 /**
  * Registers a prefixed type alias within a declaration scope.
  *
- * Reference count is not incremented (weak ref).
- *
  * @param scope		Declaration scope
  * @param prefix	Prefix character
  * @param name		Alias name (non-NULL)
@@ -480,6 +479,8 @@ int ctx_decl_scope_register_prefix_alias(struct ctx_decl_scope *scope,
 
 	g_hash_table_insert(scope->decl_map,
 		(gpointer) (unsigned long) qname, decl);
+
+	/* hash table's reference */
 	bt_ctf_field_type_get(decl);
 
 	return 0;
@@ -490,8 +491,6 @@ error:
 
 /**
  * Registers a type alias within a declaration scope.
- *
- * Reference count is not incremented (weak ref).
  *
  * @param scope	Declaration scope
  * @param name	Alias name (non-NULL)
@@ -509,8 +508,6 @@ int ctx_decl_scope_register_alias(struct ctx_decl_scope *scope,
 /**
  * Registers an enumeration declaration within a declaration scope.
  *
- * Reference count is not incremented (weak ref).
- *
  * @param scope	Declaration scope
  * @param name	Enumeration name (non-NULL)
  * @param decl	Enumeration declaration to register
@@ -527,8 +524,6 @@ int ctx_decl_scope_register_enum(struct ctx_decl_scope *scope,
 /**
  * Registers a structure declaration within a declaration scope.
  *
- * Reference count is not incremented (weak ref).
- *
  * @param scope	Declaration scope
  * @param name	Structure name (non-NULL)
  * @param decl	Structure declaration to register
@@ -544,8 +539,6 @@ int ctx_decl_scope_register_struct(struct ctx_decl_scope *scope,
 
 /**
  * Registers a variant declaration within a declaration scope.
- *
- * Reference count is not incremented (weak ref).
  *
  * @param scope	Declaration scope
  * @param name	Variant name (non-NULL)
@@ -686,8 +679,7 @@ end:
 }
 
 static
-int visit_type_specifier_list(struct ctx *ctx,
-	struct ctf_node *ts_list,
+int visit_type_specifier_list(struct ctx *ctx, struct ctf_node *ts_list,
 	struct bt_ctf_field_type **decl);
 
 static
@@ -3083,7 +3075,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			}
 
 			ret = get_unary_unsigned(&node->u.ctf_expression.right,
-				(uint64_t*) &id);
+				(uint64_t *) &id);
 
 			if (ret || id < 0) {
 				_PERROR("%s", "unexpected unary expression for event declaration's \"id\" attribute");
@@ -3106,7 +3098,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 				goto error;
 			}
 			ret = get_unary_unsigned(&node->u.ctf_expression.right,
-				(uint64_t*) stream_id);
+				(uint64_t *) stream_id);
 
 			if (ret || *stream_id < 0) {
 				_PERROR("%s", "unexpected unary expression for event declaration's \"stream_id\" attribute");
@@ -3671,7 +3663,7 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			}
 
 			ret = get_unary_unsigned(&node->u.ctf_expression.right,
-				(uint64_t*) &id);
+				(uint64_t *) &id);
 
 			if (ret || id < 0) {
 				_PERROR("%s", "unexpected unary expression for stream declaration's \"id\" attribute");
@@ -4182,7 +4174,7 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 			int64_t v;
 
 			if (is_unary_unsigned(&entry_node->u.ctf_expression.right)) {
-				ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, (uint64_t*) &v);
+				ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, (uint64_t *) &v);
 			} else {
 				ret = get_unary_signed(&entry_node->u.ctf_expression.right, &v);
 			}
@@ -4679,7 +4671,7 @@ end:
 }
 
 int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
-		struct bt_ctf_trace **trace)
+	struct bt_ctf_trace **trace)
 {
 	int ret = 0;
 	struct ctx *ctx = NULL;
