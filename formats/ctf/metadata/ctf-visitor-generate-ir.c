@@ -2017,13 +2017,21 @@ int visit_variant_decl(struct ctx *ctx, const char *name,
 		 * else owns it. Set its tag now.
 		 */
 
-		// TODO: FIXME: set tag
+		ret = bt_ctf_field_type_variant_set_tag_name(
+			untagged_variant_decl, tag);
+
+		if (ret) {
+			goto error;
+		}
+
 		_BT_CTF_FIELD_TYPE_MOVE(*variant_decl, untagged_variant_decl);
 	}
 
 	assert(!untagged_variant_decl);
+	assert(*variant_decl);
 
 	return 0;
+
 error:
 	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(untagged_variant_decl);
 	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(*variant_decl);
@@ -3125,7 +3133,6 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			}
 
 			assert(decl);
-
 			ret = bt_ctf_event_class_set_context_type(event_class,
 				decl);
 			_BT_CTF_FIELD_TYPE_PUT(decl);
