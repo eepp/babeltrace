@@ -61,7 +61,7 @@
 /* set bit in a set of bits */
 #define _SET(_set, _mask)	(*(_set) |= (_mask))
 
-/* bits for verifying existing attributes */
+/* bits for verifying existing attributes in various declarations */
 enum {
 	_CLOCK_NAME_SET =		_BV(0),
 	_CLOCK_UUID_SET =		_BV(1),
@@ -251,11 +251,11 @@ struct ctx {
 /**
  * Creates a new declaration scope.
  *
- * @param parent_scope	Parent scope (NULL if creating a root scope)
+ * @param par_scope	Parent scope (NULL if creating a root scope)
  * @returns		New declaration scope, or NULL on error
  */
 static
-struct ctx_decl_scope *ctx_decl_scope_create(struct ctx_decl_scope *parent_scope)
+struct ctx_decl_scope *ctx_decl_scope_create(struct ctx_decl_scope *par_scope)
 {
 	struct ctx_decl_scope *scope;
 
@@ -267,7 +267,7 @@ struct ctx_decl_scope *ctx_decl_scope_create(struct ctx_decl_scope *parent_scope
 
 	scope->decl_map = g_hash_table_new_full(g_direct_hash, g_direct_equal,
 		NULL, (GDestroyNotify) bt_ctf_field_type_put);
-	scope->parent_scope = parent_scope;
+	scope->parent_scope = par_scope;
 
 end:
 	return scope;
@@ -344,7 +344,6 @@ struct bt_ctf_field_type *ctx_decl_scope_lookup_prefix_alias(
 
 	assert(scope);
 	assert(name);
-
 	qname = get_prefixed_named_quark(prefix, name);
 
 	if (!qname) {
@@ -577,8 +576,13 @@ struct ctx *ctx_create(struct bt_ctf_trace *trace, FILE *efd)
 		goto error;
 	}
 
-	ctx->stream_classes = g_hash_table_new_full(g_direct_hash, g_direct_equal,
-		NULL, (GDestroyNotify) bt_ctf_stream_class_put);
+	ctx->stream_classes = g_hash_table_new_full(g_direct_hash,
+		g_direct_equal, NULL, (GDestroyNotify) bt_ctf_stream_class_put);
+
+	if (!ctx->stream_classes) {
+		goto error;
+	}
+
 	ctx->trace = trace;
 	ctx->efd = efd;
 	ctx->current_scope = scope;
@@ -589,6 +593,10 @@ struct ctx *ctx_create(struct bt_ctf_trace *trace, FILE *efd)
 error:
 	if (ctx) {
 		g_free(ctx);
+	}
+
+	if (scope) {
+		ctx_decl_scope_destroy(scope);
 	}
 
 	return NULL;
@@ -639,24 +647,15 @@ int ctx_push_scope(struct ctx *ctx)
 
 	if (!new_scope) {
 		ret = -ENOMEM;
-		goto error;
+		goto end;
 	}
 
 	ctx->current_scope = new_scope;
 
-	return 0;
-
-error:
+end:
 	return ret;
 }
 
-/**
- * Pops a declaration scope from the top of a visitor context's
- * declaration scope stack.
- *
- * @param ctx	Visitor context
- * @returns	0 on success, or a negative value on error
- */
 static
 void ctx_pop_scope(struct ctx *ctx)
 {
@@ -699,13 +698,6 @@ int is_unary_string(struct bt_list_head *head)
 	return ret;
 }
 
-/**
- * Concatenates strings of a unary expression into a single one.
- *
- * @param head	Head of unary expression list
- * @returns	Concatenated string (to be freed using g_free()), or
- *		NULL on error
- */
 static
 char *concatenate_unary_strings(struct bt_list_head *head)
 {
@@ -713,7 +705,7 @@ char *concatenate_unary_strings(struct bt_list_head *head)
 	GString *str;
 	struct ctf_node *node;
 
-	str = g_string_new("");
+	str = g_string_new(NULL);
 
 	bt_list_for_each_entry(node, head, siblings) {
 		char *src_string;
@@ -722,8 +714,10 @@ char *concatenate_unary_strings(struct bt_list_head *head)
 			node->type != NODE_UNARY_EXPRESSION ||
 			node->u.unary_expression.type != UNARY_STRING ||
 			!(
-				(node->u.unary_expression.link != UNARY_LINK_UNKNOWN) ^
-				(i == 0)
+				(
+					node->u.unary_expression.link !=
+					UNARY_LINK_UNKNOWN
+				) ^ (i == 0)
 			)
 		) {
 			goto error;
@@ -751,6 +745,7 @@ char *concatenate_unary_strings(struct bt_list_head *head)
 		i++;
 	}
 
+	/* destroys the container, returns the underlying string */
 	return g_string_free(str, FALSE);
 
 error:
@@ -767,15 +762,13 @@ const char *get_map_clock_name_value(struct bt_list_head *head)
 
 	bt_list_for_each_entry(node, head, siblings) {
 		char *src_string;
+		int uexpr_type = node->u.unary_expression.type;
+		int uexpr_link = node->u.unary_expression.link;
+		int cond = node->type != NODE_UNARY_EXPRESSION ||
+			uexpr_type != UNARY_STRING ||
+			!((uexpr_link != UNARY_LINK_UNKNOWN) ^ (i == 0));
 
-		if (
-			node->type != NODE_UNARY_EXPRESSION ||
-			node->u.unary_expression.type != UNARY_STRING ||
-			!(
-				(node->u.unary_expression.link != UNARY_LINK_UNKNOWN) ^
-				(i == 0)
-			)
-		) {
+		if (cond) {
 			goto error;
 		}
 
@@ -796,7 +789,7 @@ const char *get_map_clock_name_value(struct bt_list_head *head)
 
 		switch (i) {
 		case 0:
-			if (strcmp("clock", src_string) != 0) {
+			if (strcmp("clock", src_string)) {
 				goto error;
 			}
 			break;
@@ -806,7 +799,7 @@ const char *get_map_clock_name_value(struct bt_list_head *head)
 			break;
 
 		case 2:
-			if (strcmp("value", src_string) != 0) {
+			if (strcmp("value", src_string)) {
 				goto error;
 			}
 			break;
@@ -852,10 +845,13 @@ int get_unary_unsigned(struct bt_list_head *head, uint64_t *value)
 	struct ctf_node *node;
 
 	bt_list_for_each_entry(node, head, siblings) {
-		if (node->type != NODE_UNARY_EXPRESSION ||
-				node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT ||
-				node->u.unary_expression.link != UNARY_LINK_UNKNOWN ||
-				i != 0) {
+		int uexpr_type = node->u.unary_expression.type;
+		int uexpr_link = node->u.unary_expression.link;
+		int cond = node->type != NODE_UNARY_EXPRESSION ||
+			uexpr_type != UNARY_UNSIGNED_CONSTANT ||
+			uexpr_link != UNARY_LINK_UNKNOWN || i != 0;
+
+		if (cond) {
 			ret = -EINVAL;
 			goto end;
 		}
@@ -895,23 +891,23 @@ int get_unary_signed(struct bt_list_head *head, int64_t *value)
 	struct ctf_node *node;
 
 	bt_list_for_each_entry(node, head, siblings) {
-		if (
-			node->type != NODE_UNARY_EXPRESSION ||
-			node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT ||
-			(
-				node->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT &&
-				node->u.unary_expression.type != UNARY_SIGNED_CONSTANT
-			) ||
-			node->u.unary_expression.link != UNARY_LINK_UNKNOWN ||
-			i != 0
-		) {
+		int uexpr_type = node->u.unary_expression.type;
+		int uexpr_link = node->u.unary_expression.link;
+		int cond = node->type != NODE_UNARY_EXPRESSION ||
+			(uexpr_type != UNARY_UNSIGNED_CONSTANT) ||
+			(uexpr_type != UNARY_UNSIGNED_CONSTANT &&
+				uexpr_type != UNARY_SIGNED_CONSTANT) ||
+			uexpr_link != UNARY_LINK_UNKNOWN || i != 0;
+
+		if (cond) {
 			ret = -EINVAL;
 			goto end;
 		}
 
 		switch (node->u.unary_expression.type) {
 		case UNARY_UNSIGNED_CONSTANT:
-			*value = (int64_t) node->u.unary_expression.u.unsigned_constant;
+			*value = (int64_t)
+				node->u.unary_expression.u.unsigned_constant;
 			break;
 
 		case UNARY_SIGNED_CONSTANT:
@@ -938,16 +934,18 @@ int get_unary_uuid(struct bt_list_head *head, unsigned char *uuid)
 	struct ctf_node *node;
 
 	bt_list_for_each_entry(node, head, siblings) {
+		int uexpr_type = node->u.unary_expression.type;
+		int uexpr_link = node->u.unary_expression.link;
+
 		if (node->type != NODE_UNARY_EXPRESSION ||
-				node->u.unary_expression.type != UNARY_STRING ||
-				node->u.unary_expression.link != UNARY_LINK_UNKNOWN ||
+				uexpr_type != UNARY_STRING ||
+				uexpr_link != UNARY_LINK_UNKNOWN ||
 				i != 0) {
 			ret = -EINVAL;
 			goto end;
 		}
 
 		const char *src_string = node->u.unary_expression.u.string;
-
 		ret = babeltrace_uuid_parse(src_string, uuid);
 
 		if (ret) {
@@ -980,21 +978,20 @@ int get_boolean(FILE *efd, struct ctf_node *unary_expr)
 		break;
 
 	case UNARY_STRING:
-		if (!strcmp(unary_expr->u.unary_expression.u.string, "true")) {
+	{
+		const char *str = unary_expr->u.unary_expression.u.string;
+
+		if (!strcmp(str, "true") || !strcmp(str, "TRUE")) {
 			ret = TRUE;
-		} else if (!strcmp(unary_expr->u.unary_expression.u.string, "TRUE")) {
-			ret = TRUE;
-		} else if (!strcmp(unary_expr->u.unary_expression.u.string, "false")) {
-			ret = FALSE;
-		} else if (!strcmp(unary_expr->u.unary_expression.u.string, "FALSE")) {
+		} else if (!strcmp(str, "false") || !strcmp(str, "FALSE")) {
 			ret = FALSE;
 		} else {
-			_FPERROR(efd, "unexpected string \"%s\"",
-				unary_expr->u.unary_expression.u.string);
+			_FPERROR(efd, "unexpected string \"%s\"", str);
 			ret = -EINVAL;
 			goto end;
 		}
 		break;
+	}
 
 	default:
 		_FPERROR(efd, "%s", "unexpected unary expression type");
@@ -1010,23 +1007,26 @@ static
 enum bt_ctf_byte_order byte_order_from_unary_expr(FILE *efd,
 	struct ctf_node *unary_expr)
 {
+	const char *str;
 	enum bt_ctf_byte_order bo = BT_CTF_BYTE_ORDER_UNKNOWN;
 
 	if (unary_expr->u.unary_expression.type != UNARY_STRING) {
-		_FPERROR(efd, "%s", "\"byte_order\" attribute: expecting string");
+		_FPERROR(efd, "%s",
+			"\"byte_order\" attribute: expecting string");
 		goto end;
 	}
 
-	if (!strcmp(unary_expr->u.unary_expression.u.string, "be") ||
-			!strcmp(unary_expr->u.unary_expression.u.string, "network")) {
+	str = unary_expr->u.unary_expression.u.string;
+
+	if (!strcmp(str, "be") || !strcmp(str, "network")) {
 		bo = BT_CTF_BYTE_ORDER_BIG_ENDIAN;
-	} else if (!strcmp(unary_expr->u.unary_expression.u.string, "le")) {
+	} else if (!strcmp(str, "le")) {
 		bo = BT_CTF_BYTE_ORDER_LITTLE_ENDIAN;
-	} else if (!strcmp(unary_expr->u.unary_expression.u.string, "native")) {
+	} else if (!strcmp(str, "native")) {
 		bo = BT_CTF_BYTE_ORDER_NATIVE;
 	} else {
 		_FPERROR(efd, "unexpected \"byte_order\" attribute value \"%s\"; should be \"be\", \"le\", \"network\", or \"native\"",
-			unary_expr->u.unary_expression.u.string);
+			str);
 		goto end;
 	}
 
@@ -1119,7 +1119,8 @@ int get_type_specifier_name(struct ctx *ctx, struct ctf_node *type_specifier,
 
 	case TYPESPEC_ID_TYPE:
 		if (type_specifier->u.type_specifier.id_type) {
-			g_string_append(str, type_specifier->u.type_specifier.id_type);
+			g_string_append(str,
+				type_specifier->u.type_specifier.id_type);
 		}
 		break;
 
@@ -1188,8 +1189,10 @@ int get_type_specifier_list_name(struct ctx *ctx,
 	int ret;
 	struct ctf_node *iter;
 	int alias_item_nr = 0;
+	struct bt_list_head *head =
+		&type_specifier_list->u.type_specifier_list.head;
 
-	bt_list_for_each_entry(iter, &type_specifier_list->u.type_specifier_list.head, siblings) {
+	bt_list_for_each_entry(iter, head, siblings) {
 		if (alias_item_nr != 0) {
 			g_string_append(str, " ");
 		}
@@ -1216,6 +1219,8 @@ GQuark create_typealias_identifier(struct ctx *ctx,
 	GString *str;
 	GQuark qalias = 0;
 	struct ctf_node *iter;
+	struct bt_list_head *pointers =
+		&node_type_declarator->u.type_declarator.pointers;
 
 	str = g_string_new("");
 	ret = get_type_specifier_list_name(ctx, type_specifier_list, str);
@@ -1225,7 +1230,7 @@ GQuark create_typealias_identifier(struct ctx *ctx,
 		goto end;
 	}
 
-	bt_list_for_each_entry(iter, &node_type_declarator->u.type_declarator.pointers, siblings) {
+	bt_list_for_each_entry(iter, pointers, siblings) {
 		g_string_append(str, " *");
 
 		if (iter->u.pointer.const_qualifier) {
@@ -1260,13 +1265,15 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 
 	/* validate type declarator node */
 	if (node_type_declarator) {
-		if (node_type_declarator->u.type_declarator.type == TYPEDEC_UNKNOWN) {
+		if (node_type_declarator->u.type_declarator.type ==
+				TYPEDEC_UNKNOWN) {
 			ret = -EINVAL;
 			goto error;
 		}
 
 		/* TODO: GCC bitfields not supported yet */
-		if (node_type_declarator->u.type_declarator.bitfield_len != NULL) {
+		if (node_type_declarator->u.type_declarator.bitfield_len !=
+				NULL) {
 			_PERROR("%s", "GCC bitfields are not supported yet");
 			ret = -EPERM;
 			goto error;
@@ -1275,8 +1282,10 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 
 	/* find the right nested declaration if not provided */
 	if (!nested_decl) {
-		if (node_type_declarator &&
-				!bt_list_empty(&node_type_declarator->u.type_declarator.pointers)) {
+		struct bt_list_head *pointers =
+			&node_type_declarator->u.type_declarator.pointers;
+
+		if (node_type_declarator && !bt_list_empty(pointers)) {
 			GQuark qalias;
 			_BT_CTF_FIELD_TYPE_INIT(nested_decl_copy);
 
@@ -1286,8 +1295,9 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 			 */
 			qalias = create_typealias_identifier(ctx,
 				type_specifier_list, node_type_declarator);
-			nested_decl = ctx_decl_scope_lookup_alias(ctx->current_scope,
-				g_quark_to_string(qalias), -1);
+			nested_decl =
+				ctx_decl_scope_lookup_alias(ctx->current_scope,
+					g_quark_to_string(qalias), -1);
 
 			if (!nested_decl) {
 				_PERROR("cannot find typealias \"%s\"",
@@ -1309,7 +1319,8 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 			_BT_CTF_FIELD_TYPE_MOVE(nested_decl, nested_decl_copy);
 
 			/* force integer's base to 16 since it's a pointer */
-			if (bt_ctf_field_type_get_type_id(nested_decl) == CTF_TYPE_INTEGER) {
+			if (bt_ctf_field_type_get_type_id(nested_decl) ==
+					CTF_TYPE_INTEGER) {
 				bt_ctf_field_type_integer_set_base(nested_decl,
 					BT_CTF_INTEGER_BASE_HEXADECIMAL);
 			}
@@ -1333,7 +1344,10 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 
 	if (node_type_declarator->u.type_declarator.type == TYPEDEC_ID) {
 		if (node_type_declarator->u.type_declarator.u.id) {
-			*field_name = g_quark_from_string(node_type_declarator->u.type_declarator.u.id);
+			const char *id =
+				node_type_declarator->u.type_declarator.u.id;
+
+			*field_name = g_quark_from_string(id);
 		} else {
 			*field_name = 0;
 		}
@@ -1344,16 +1358,19 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 		struct ctf_node *first;
 		_BT_CTF_FIELD_TYPE_INIT(decl);
 		_BT_CTF_FIELD_TYPE_INIT(outer_field_decl);
+		struct bt_list_head *length =
+			&node_type_declarator->
+				u.type_declarator.u.nested.length;
 
 		/* create array/sequence, pass nested_decl as child */
-		if (bt_list_empty(&node_type_declarator->u.type_declarator.u.nested.length)) {
-			_PERROR("%s", "expecting length field reference or value");
+		if (bt_list_empty(length)) {
+			_PERROR("%s",
+				"expecting length field reference or value");
 			ret = -EINVAL;
 			goto error;
 		}
 
-		first = _BT_LIST_FIRST_ENTRY(&node_type_declarator->u.type_declarator.u.nested.length,
-			struct ctf_node, siblings);
+		first = _BT_LIST_FIRST_ENTRY(length, struct ctf_node, siblings);
 
 		if (first->type != NODE_UNARY_EXPRESSION) {
 			ret = -EINVAL;
@@ -1373,7 +1390,8 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 			_BT_CTF_FIELD_TYPE_PUT(nested_decl);
 
 			if (!array_decl) {
-				_PERROR("%s", "cannot create array declaration");
+				_PERROR("%s",
+					"cannot create array declaration");
 				ret = -ENOMEM;
 				goto error;
 			}
@@ -1384,25 +1402,23 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 
 		case UNARY_STRING:
 		{
-			/* lookup unsigned integer definition, create sequence */
+			/* lookup unsigned integer definition, create seq. */
 			_BT_CTF_FIELD_TYPE_INIT(seq_decl);
-			char *length_name;
-
-			length_name =
-				concatenate_unary_strings(&node_type_declarator->u.type_declarator.u.nested.length);
+			char *length_name = concatenate_unary_strings(length);
 
 			if (!length_name) {
 				ret = -EINVAL;
 				goto error;
 			}
 
-			seq_decl = bt_ctf_field_type_sequence_create(nested_decl,
-				length_name);
+			seq_decl = bt_ctf_field_type_sequence_create(
+				nested_decl, length_name);
 			g_free(length_name);
 			_BT_CTF_FIELD_TYPE_PUT(nested_decl);
 
 			if (!seq_decl) {
-				_PERROR("%s", "cannot create sequence declaration");
+				_PERROR("%s",
+					"cannot create sequence declaration");
 				ret = -ENOMEM;
 				goto error;
 			}
@@ -1429,7 +1445,8 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 		 */
 		ret = visit_type_declarator(ctx, type_specifier_list,
 			field_name,
-			node_type_declarator->u.type_declarator.u.nested.type_declarator,
+			node_type_declarator->
+				u.type_declarator.u.nested.type_declarator,
 			&outer_field_decl, decl);
 		decl = NULL;
 
@@ -1485,12 +1502,14 @@ int visit_struct_decl_field(struct ctx *ctx,
 		field_name = g_quark_to_string(qfield_name);
 
 		/* check if field with same name already exists */
-		efield_decl = bt_ctf_field_type_structure_get_field_type_by_name(struct_decl,
-			field_name);
+		efield_decl =
+			bt_ctf_field_type_structure_get_field_type_by_name(
+				struct_decl, field_name);
 
 		if (efield_decl) {
 			_BT_CTF_FIELD_TYPE_PUT(efield_decl);
-			_PERROR("duplicate field \"%s\" in structure", field_name);
+			_PERROR("duplicate field \"%s\" in structure",
+				field_name);
 			ret = -EINVAL;
 			goto error;
 		}
@@ -1536,7 +1555,8 @@ int visit_variant_decl_field(struct ctx *ctx,
 
 		if (ret) {
 			assert(!field_decl);
-			_PERROR("%s", "unable to find variant field declaration type");
+			_PERROR("%s",
+				"unable to find variant field declaration type");
 			goto error;
 		}
 
@@ -1544,8 +1564,9 @@ int visit_variant_decl_field(struct ctx *ctx,
 		field_name = g_quark_to_string(qfield_name);
 
 		/* check if field with same name already exists */
-		efield_decl = bt_ctf_field_type_variant_get_field_type_by_name(variant_decl,
-			field_name);
+		efield_decl =
+			bt_ctf_field_type_variant_get_field_type_by_name(
+				variant_decl, field_name);
 
 		if (efield_decl) {
 			_BT_CTF_FIELD_TYPE_PUT(efield_decl);
@@ -1633,7 +1654,8 @@ int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 	if (bt_list_empty(&target->u.typealias_target.type_declarators)) {
 		node = NULL;
 	} else {
-		node = _BT_LIST_FIRST_ENTRY(&target->u.typealias_target.type_declarators,
+		node = _BT_LIST_FIRST_ENTRY(
+			&target->u.typealias_target.type_declarators,
 			struct ctf_node, siblings);
 	}
 
@@ -1650,7 +1672,8 @@ int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 	/* do not allow typedef and typealias of untagged variants */
 	if (bt_ctf_field_type_get_type_id(type_decl) == CTF_TYPE_VARIANT) {
 		if (bt_ctf_field_type_variant_get_tag_name(type_decl)) {
-			_PERROR("%s", "typealias of untagged variant is not allowed");
+			_PERROR("%s",
+				"typealias of untagged variant is not allowed");
 			ret = -EPERM;
 			goto end;
 		}
@@ -1699,7 +1722,8 @@ int visit_struct_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			&entry_node->u._typedef.type_declarators);
 
 		if (ret) {
-			_PERROR("%s", "cannot add typedef in \"struct\" declaration");
+			_PERROR("%s",
+				"cannot add typedef in \"struct\" declaration");
 			goto end;
 		}
 		break;
@@ -1709,7 +1733,8 @@ int visit_struct_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			entry_node->u.typealias.alias);
 
 		if (ret) {
-			_PERROR("%s", "cannot add typealias in \"struct\" declaration");
+			_PERROR("%s",
+				"cannot add typealias in \"struct\" declaration");
 			goto end;
 		}
 		break;
@@ -1717,8 +1742,10 @@ int visit_struct_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 	case NODE_STRUCT_OR_VARIANT_DECLARATION:
 		/* field */
 		ret = visit_struct_decl_field(ctx, struct_decl,
-			entry_node->u.struct_or_variant_declaration.type_specifier_list,
-			&entry_node->u.struct_or_variant_declaration.type_declarators);
+			entry_node->u.struct_or_variant_declaration.
+				type_specifier_list,
+			&entry_node->u.struct_or_variant_declaration.
+				type_declarators);
 
 		if (ret) {
 			goto end;
@@ -1748,7 +1775,8 @@ int visit_variant_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			&entry_node->u._typedef.type_declarators);
 
 		if (ret) {
-			_PERROR("%s", "cannot add typedef in \"variant\" declaration");
+			_PERROR("%s",
+				"cannot add typedef in \"variant\" declaration");
 			goto end;
 		}
 		break;
@@ -1758,7 +1786,8 @@ int visit_variant_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			entry_node->u.typealias.alias);
 
 		if (ret) {
-			_PERROR("%s", "cannot add typealias in \"variant\" declaration");
+			_PERROR("%s",
+				"cannot add typealias in \"variant\" declaration");
 			goto end;
 		}
 		break;
@@ -1766,8 +1795,10 @@ int visit_variant_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 	case NODE_STRUCT_OR_VARIANT_DECLARATION:
 		/* field */
 		ret = visit_variant_decl_field(ctx, variant_decl,
-			entry_node->u.struct_or_variant_declaration.type_specifier_list,
-			&entry_node->u.struct_or_variant_declaration.type_declarators);
+			entry_node->u.struct_or_variant_declaration.
+				type_specifier_list,
+			&entry_node->u.struct_or_variant_declaration.
+				type_declarators);
 
 		if (ret) {
 			goto end;
@@ -1816,7 +1847,8 @@ int visit_struct_decl(struct ctx *ctx, const char *name,
 		struct_decl_copy = bt_ctf_field_type_copy(*struct_decl);
 
 		if (!struct_decl_copy) {
-			_PERROR("%s", "cannot create copy of structure declaration");
+			_PERROR("%s",
+				"cannot create copy of structure declaration");
 			ret = -EINVAL;
 			goto error;
 		}
@@ -1830,8 +1862,8 @@ int visit_struct_decl(struct ctx *ctx, const char *name,
 		if (name) {
 			_BT_CTF_FIELD_TYPE_INIT(estruct_decl);
 
-			estruct_decl = ctx_decl_scope_lookup_struct(ctx->current_scope,
-				name, 1);
+			estruct_decl = ctx_decl_scope_lookup_struct(
+				ctx->current_scope, name, 1);
 
 			if (estruct_decl) {
 				_BT_CTF_FIELD_TYPE_PUT(estruct_decl);
@@ -1900,7 +1932,7 @@ error:
 
 static
 int visit_variant_decl(struct ctx *ctx, const char *name,
-	const char *tag, struct bt_list_head *declaration_list,
+	const char *tag, struct bt_list_head *decl_list,
 	int has_body, struct bt_ctf_field_type **variant_decl)
 {
 	int ret = 0;
@@ -1928,10 +1960,12 @@ int visit_variant_decl(struct ctx *ctx, const char *name,
 		}
 
 		/* make a copy of it */
-		variant_decl_copy = bt_ctf_field_type_copy(untagged_variant_decl);
+		variant_decl_copy = bt_ctf_field_type_copy(
+			untagged_variant_decl);
 
 		if (!variant_decl_copy) {
-			_PERROR("%s", "cannot create copy of structure declaration");
+			_PERROR("%s",
+				"cannot create copy of structure declaration");
 			ret = -EINVAL;
 			goto error;
 		}
@@ -1972,7 +2006,7 @@ int visit_variant_decl(struct ctx *ctx, const char *name,
 			goto error;
 		}
 
-		bt_list_for_each_entry(entry_node, declaration_list, siblings) {
+		bt_list_for_each_entry(entry_node, decl_list, siblings) {
 			ret = visit_variant_decl_entry(ctx, entry_node,
 				untagged_variant_decl);
 
@@ -1985,8 +2019,9 @@ int visit_variant_decl(struct ctx *ctx, const char *name,
 		ctx_pop_scope(ctx);
 
 		if (name) {
-			ret = ctx_decl_scope_register_variant(ctx->current_scope,
-				name, untagged_variant_decl);
+			ret = ctx_decl_scope_register_variant(
+				ctx->current_scope, name,
+				untagged_variant_decl);
 
 			if (ret) {
 				_PERROR("cannot register \"variant %s\" in declaration scope",
@@ -2039,8 +2074,9 @@ int visit_enum_decl_entry(struct ctx *ctx, struct ctf_node *enumerator,
 	struct ctf_node *iter;
 	int64_t start = 0, end = 0;
 	const char *label = enumerator->u.enumerator.id;
+	struct bt_list_head *values = &enumerator->u.enumerator.values;
 
-	bt_list_for_each_entry(iter, &enumerator->u.enumerator.values, siblings) {
+	bt_list_for_each_entry(iter, values, siblings) {
 		int64_t *target;
 
 		if (iter->type != NODE_UNARY_EXPRESSION) {
@@ -2062,7 +2098,8 @@ int visit_enum_decl_entry(struct ctx *ctx, struct ctf_node *enumerator,
 			break;
 
 		case UNARY_UNSIGNED_CONSTANT:
-			*target = (int64_t) iter->u.unary_expression.u.unsigned_constant;
+			*target = (int64_t)
+				iter->u.unary_expression.u.unsigned_constant;
 			break;
 
 		default:
@@ -2141,7 +2178,8 @@ int visit_enum_decl(struct ctx *ctx, const char *name,
 		enum_decl_copy = bt_ctf_field_type_copy(*enum_decl);
 
 		if (!enum_decl_copy) {
-			_PERROR("%s", "cannot create copy of enumeration declaration");
+			_PERROR("%s",
+				"cannot create copy of enumeration declaration");
 			ret = -EINVAL;
 			goto error;
 		}
@@ -2155,8 +2193,8 @@ int visit_enum_decl(struct ctx *ctx, const char *name,
 		if (name) {
 			_BT_CTF_FIELD_TYPE_INIT(eenum_decl);
 
-			eenum_decl = ctx_decl_scope_lookup_enum(ctx->current_scope,
-				name, 1);
+			eenum_decl = ctx_decl_scope_lookup_enum(
+				ctx->current_scope, name, 1);
 
 			if (eenum_decl) {
 				_BT_CTF_FIELD_TYPE_PUT(eenum_decl);
@@ -2168,8 +2206,8 @@ int visit_enum_decl(struct ctx *ctx, const char *name,
 		}
 
 		if (!container_type) {
-			integer_decl = ctx_decl_scope_lookup_alias(ctx->current_scope,
-				"int", -1);
+			integer_decl = ctx_decl_scope_lookup_alias(
+				ctx->current_scope, "int", -1);
 
 			if (!integer_decl) {
 				_PERROR("%s", "cannot find \"int\" type for enumeration");
@@ -2189,7 +2227,8 @@ int visit_enum_decl(struct ctx *ctx, const char *name,
 
 		assert(integer_decl);
 
-		if (bt_ctf_field_type_get_type_id(integer_decl) != CTF_TYPE_INTEGER) {
+		if (bt_ctf_field_type_get_type_id(integer_decl) !=
+				CTF_TYPE_INTEGER) {
 			_PERROR("%s", "container type for enumeration is not an integer");
 			ret = -EINVAL;
 			goto error;
@@ -2306,8 +2345,11 @@ int visit_integer_decl(struct ctx *ctx,
 	bt_list_for_each_entry(expression, expressions, siblings) {
 		struct ctf_node *left, *right;
 
-		left = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.left, struct ctf_node, siblings);
-		right = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.right, struct ctf_node, siblings);
+		left = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.left,
+			struct ctf_node, siblings);
+		right = _BT_LIST_FIRST_ENTRY(
+			&expression->u.ctf_expression.right, struct ctf_node,
+			siblings);
 
 		if (left->u.unary_expression.type != UNARY_STRING) {
 			ret = -EINVAL;
@@ -2316,7 +2358,8 @@ int visit_integer_decl(struct ctx *ctx,
 
 		if (!strcmp(left->u.unary_expression.u.string, "signed")) {
 			if (_IS_SET(&set, _INTEGER_SIGNED_SET)) {
-				_PERROR_DUP_ATTR("signed", "integer declaration");
+				_PERROR_DUP_ATTR("signed",
+					"integer declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2329,9 +2372,11 @@ int visit_integer_decl(struct ctx *ctx,
 			}
 
 			_SET(&set, _INTEGER_SIGNED_SET);
-		} else if (!strcmp(left->u.unary_expression.u.string, "byte_order")) {
+		} else if (!strcmp(left->u.unary_expression.u.string,
+				"byte_order")) {
 			if (_IS_SET(&set, _INTEGER_BYTE_ORDER_SET)) {
-				_PERROR_DUP_ATTR("byte_order", "integer declaration");
+				_PERROR_DUP_ATTR("byte_order",
+					"integer declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2347,12 +2392,14 @@ int visit_integer_decl(struct ctx *ctx,
 			_SET(&set, _INTEGER_BYTE_ORDER_SET);
 		} else if (!strcmp(left->u.unary_expression.u.string, "size")) {
 			if (_IS_SET(&set, _INTEGER_SIZE_SET)) {
-				_PERROR_DUP_ATTR("size", "integer declaration");
+				_PERROR_DUP_ATTR("size",
+					"integer declaration");
 				ret = -EPERM;
 				goto error;
 			}
 
-			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
+			if (right->u.unary_expression.type !=
+					UNARY_UNSIGNED_CONSTANT) {
 				_PERROR("%s", "invalid \"size\" attribute in integer declaration: expecting unsigned constant");
 				ret = -EINVAL;
 				goto error;
@@ -2371,20 +2418,24 @@ int visit_integer_decl(struct ctx *ctx,
 			}
 
 			_SET(&set, _INTEGER_SIZE_SET);
-		} else if (!strcmp(left->u.unary_expression.u.string, "align")) {
+		} else if (!strcmp(left->u.unary_expression.u.string,
+				"align")) {
 			if (_IS_SET(&set, _INTEGER_ALIGN_SET)) {
-				_PERROR_DUP_ATTR("align", "integer declaration");
+				_PERROR_DUP_ATTR("align",
+					"integer declaration");
 				ret = -EPERM;
 				goto error;
 			}
 
-			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
+			if (right->u.unary_expression.type !=
+					UNARY_UNSIGNED_CONSTANT) {
 				_PERROR("%s", "invalid \"align\" attribute in integer declaration: expecting unsigned constant");
 				ret = -EINVAL;
 				goto error;
 			}
 
-			alignment = right->u.unary_expression.u.unsigned_constant;
+			alignment =
+				right->u.unary_expression.u.unsigned_constant;
 
 			if (!is_align_valid(alignment)) {
 				_PERROR("%s", "invalid \"align\" attribute in integer declaration: expecting power of two");
@@ -2402,7 +2453,11 @@ int visit_integer_decl(struct ctx *ctx,
 
 			switch (right->u.unary_expression.type) {
 			case UNARY_UNSIGNED_CONSTANT:
-				switch (right->u.unary_expression.u.unsigned_constant) {
+			{
+				uint64_t constant = right->u.unary_expression.
+					u.unsigned_constant;
+
+				switch (constant) {
 				case 2:
 					base = BT_CTF_INTEGER_BASE_BINARY;
 					break;
@@ -2426,10 +2481,12 @@ int visit_integer_decl(struct ctx *ctx,
 					goto error;
 				}
 				break;
+			}
 
 			case UNARY_STRING:
 			{
-				char *s_right = concatenate_unary_strings(&expression->u.ctf_expression.right);
+				char *s_right = concatenate_unary_strings(
+					&expression->u.ctf_expression.right);
 
 				if (!s_right) {
 					_PERROR("%s", "unexpected unary expression for integer declaration's \"base\" attribute");
@@ -2475,11 +2532,13 @@ int visit_integer_decl(struct ctx *ctx,
 			}
 
 			_SET(&set, _INTEGER_BASE_SET);
-		} else if (!strcmp(left->u.unary_expression.u.string, "encoding")) {
+		} else if (!strcmp(left->u.unary_expression.u.string,
+				"encoding")) {
 			char *s_right;
 
 			if (_IS_SET(&set, _INTEGER_ENCODING_SET)) {
-				_PERROR_DUP_ATTR("encoding", "integer declaration");
+				_PERROR_DUP_ATTR("encoding",
+					"integer declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2490,7 +2549,8 @@ int visit_integer_decl(struct ctx *ctx,
 				goto error;
 			}
 
-			s_right = concatenate_unary_strings(&expression->u.ctf_expression.right);
+			s_right = concatenate_unary_strings(
+				&expression->u.ctf_expression.right);
 
 			if (!s_right) {
 				_PERROR("%s", "unexpected unary expression for integer declaration's \"encoding\" attribute");
@@ -2534,10 +2594,12 @@ int visit_integer_decl(struct ctx *ctx,
 			}
 
 			clock_name =
-				get_map_clock_name_value(&expression->u.ctf_expression.right);
+				get_map_clock_name_value(
+					&expression->u.ctf_expression.right);
 
 			if (!clock_name) {
-				char *s_right = concatenate_unary_strings(&expression->u.ctf_expression.right);
+				char *s_right = concatenate_unary_strings(
+					&expression->u.ctf_expression.right);
 
 				if (!s_right) {
 					_PERROR("%s", "unexpected unary expression for integer declaration's \"map\" attribute");
@@ -2552,8 +2614,8 @@ int visit_integer_decl(struct ctx *ctx,
 				continue;
 			}
 
-			mapped_clock = bt_ctf_trace_get_clock_by_name(ctx->trace,
-				clock_name);
+			mapped_clock = bt_ctf_trace_get_clock_by_name(
+				ctx->trace, clock_name);
 
 			if (!mapped_clock) {
 				_PERROR("invalid \"map\" attribute in integer declaration: cannot find clock \"%s\"",
@@ -2570,7 +2632,8 @@ int visit_integer_decl(struct ctx *ctx,
 	}
 
 	if (!_IS_SET(&set, _INTEGER_SIZE_SET)) {
-		_PERROR("%s", "missing \"size\" attribute in integer declaration");
+		_PERROR("%s",
+			"missing \"size\" attribute in integer declaration");
 		ret = -EPERM;
 		goto error;
 	}
@@ -2602,8 +2665,8 @@ int visit_integer_decl(struct ctx *ctx,
 
 	if (mapped_clock) {
 		/* move clock */
-		ret |= bt_ctf_field_type_integer_set_mapped_clock(*integer_decl,
-			mapped_clock);
+		ret |= bt_ctf_field_type_integer_set_mapped_clock(
+			*integer_decl, mapped_clock);
 		bt_ctf_clock_put(mapped_clock);
 		mapped_clock = NULL;
 	}
@@ -2635,15 +2698,19 @@ int visit_floating_point_number_decl(struct ctx *ctx,
 	int ret = 0;
 	struct ctf_node *expression;
 	uint64_t alignment = 1, exp_dig = 0, mant_dig = 0;
-	enum bt_ctf_byte_order byte_order = bt_ctf_trace_get_byte_order(ctx->trace);
+	enum bt_ctf_byte_order byte_order =
+		bt_ctf_trace_get_byte_order(ctx->trace);
 
 	*float_decl = NULL;
 
 	bt_list_for_each_entry(expression, expressions, siblings) {
 		struct ctf_node *left, *right;
 
-		left = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.left, struct ctf_node, siblings);
-		right = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.right, struct ctf_node, siblings);
+		left = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.left,
+			struct ctf_node, siblings);
+		right = _BT_LIST_FIRST_ENTRY(
+			&expression->u.ctf_expression.right, struct ctf_node,
+			siblings);
 
 		if (left->u.unary_expression.type != UNARY_STRING) {
 			ret = -EINVAL;
@@ -2652,7 +2719,8 @@ int visit_floating_point_number_decl(struct ctx *ctx,
 
 		if (!strcmp(left->u.unary_expression.u.string, "byte_order")) {
 			if (_IS_SET(&set, _FLOAT_BYTE_ORDER_SET)) {
-				_PERROR_DUP_ATTR("byte_order", "floating point number declaration");
+				_PERROR_DUP_ATTR("byte_order",
+					"floating point number declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2666,14 +2734,17 @@ int visit_floating_point_number_decl(struct ctx *ctx,
 			}
 
 			_SET(&set, _FLOAT_BYTE_ORDER_SET);
-		} else if (!strcmp(left->u.unary_expression.u.string, "exp_dig")) {
+		} else if (!strcmp(left->u.unary_expression.u.string,
+				"exp_dig")) {
 			if (_IS_SET(&set, _FLOAT_EXP_DIG_SET)) {
-				_PERROR_DUP_ATTR("exp_dig", "floating point number declaration");
+				_PERROR_DUP_ATTR("exp_dig",
+					"floating point number declaration");
 				ret = -EPERM;
 				goto error;
 			}
 
-			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
+			if (right->u.unary_expression.type !=
+					UNARY_UNSIGNED_CONSTANT) {
 				_PERROR("%s", "invalid \"exp_dig\" attribute in floating point number declaration: expecting unsigned constant");
 				ret = -EINVAL;
 				goto error;
@@ -2688,20 +2759,24 @@ int visit_floating_point_number_decl(struct ctx *ctx,
 			}
 
 			_SET(&set, _FLOAT_EXP_DIG_SET);
-		} else if (!strcmp(left->u.unary_expression.u.string, "mant_dig")) {
+		} else if (!strcmp(left->u.unary_expression.u.string,
+				"mant_dig")) {
 			if (_IS_SET(&set, _FLOAT_MANT_DIG_SET)) {
-				_PERROR_DUP_ATTR("mant_dig", "floating point number declaration");
+				_PERROR_DUP_ATTR("mant_dig",
+					"floating point number declaration");
 				ret = -EPERM;
 				goto error;
 			}
 
-			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
+			if (right->u.unary_expression.type !=
+					UNARY_UNSIGNED_CONSTANT) {
 				_PERROR("%s", "invalid \"mant_dig\" attribute in floating point number declaration: expecting unsigned constant");
 				ret = -EINVAL;
 				goto error;
 			}
 
-			mant_dig = right->u.unary_expression.u.unsigned_constant;
+			mant_dig = right->u.unary_expression.u.
+				unsigned_constant;
 
 			if (!is_align_valid(alignment)) {
 				_PERROR("%s", "invalid \"mant_dig\" attribute in floating point number declaration: expecting power of two");
@@ -2710,20 +2785,24 @@ int visit_floating_point_number_decl(struct ctx *ctx,
 			}
 
 			_SET(&set, _FLOAT_MANT_DIG_SET);
-		} else if (!strcmp(left->u.unary_expression.u.string, "align")) {
+		} else if (!strcmp(left->u.unary_expression.u.string,
+				"align")) {
 			if (_IS_SET(&set, _FLOAT_ALIGN_SET)) {
-				_PERROR_DUP_ATTR("align", "floating point number declaration");
+				_PERROR_DUP_ATTR("align",
+					"floating point number declaration");
 				ret = -EPERM;
 				goto error;
 			}
 
-			if (right->u.unary_expression.type != UNARY_UNSIGNED_CONSTANT) {
+			if (right->u.unary_expression.type !=
+					UNARY_UNSIGNED_CONSTANT) {
 				_PERROR("%s", "invalid \"align\" attribute in floating point number declaration: expecting unsigned constant");
 				ret = -EINVAL;
 				goto error;
 			}
 
-			alignment = right->u.unary_expression.u.unsigned_constant;
+			alignment = right->u.unary_expression.u.
+				unsigned_constant;
 
 			if (!is_align_valid(alignment)) {
 				_PERROR("%s", "invalid \"align\" attribute in floating point number declaration: expecting power of two");
@@ -2763,20 +2842,22 @@ int visit_floating_point_number_decl(struct ctx *ctx,
 	*float_decl = bt_ctf_field_type_floating_point_create();
 
 	if (!*float_decl) {
-		_PERROR("%s", "cannot create floating point number declaration");
+		_PERROR("%s",
+			"cannot create floating point number declaration");
 		ret = -ENOMEM;
 		goto error;
 	}
 
-	ret = bt_ctf_field_type_floating_point_set_exponent_digits(*float_decl,
-		exp_dig);
-	ret |= bt_ctf_field_type_floating_point_set_mantissa_digits(*float_decl,
-		mant_dig);
+	ret = bt_ctf_field_type_floating_point_set_exponent_digits(
+		*float_decl, exp_dig);
+	ret |= bt_ctf_field_type_floating_point_set_mantissa_digits(
+		*float_decl, mant_dig);
 	ret |= bt_ctf_field_type_set_byte_order(*float_decl, byte_order);
 	ret |= bt_ctf_field_type_set_alignment(*float_decl, alignment);
 
 	if (ret) {
-		_PERROR("%s", "cannot configure floating point number declaration");
+		_PERROR("%s",
+			"cannot configure floating point number declaration");
 		ret = -EINVAL;
 		goto error;
 	}
@@ -2804,8 +2885,11 @@ int visit_string_decl(struct ctx *ctx,
 	bt_list_for_each_entry(expression, expressions, siblings) {
 		struct ctf_node *left, *right;
 
-		left = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.left, struct ctf_node, siblings);
-		right = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.right, struct ctf_node, siblings);
+		left = _BT_LIST_FIRST_ENTRY(&expression->u.ctf_expression.left,
+			struct ctf_node, siblings);
+		right = _BT_LIST_FIRST_ENTRY(
+			&expression->u.ctf_expression.right, struct ctf_node,
+			siblings);
 
 		if (left->u.unary_expression.type != UNARY_STRING) {
 			ret = -EINVAL;
@@ -2816,7 +2900,8 @@ int visit_string_decl(struct ctx *ctx,
 			char *s_right;
 
 			if (_IS_SET(&set, _STRING_ENCODING_SET)) {
-				_PERROR_DUP_ATTR("encoding", "string declaration");
+				_PERROR_DUP_ATTR("encoding",
+					"string declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -2827,7 +2912,8 @@ int visit_string_decl(struct ctx *ctx,
 				goto error;
 			}
 
-			s_right = concatenate_unary_strings(&expression->u.ctf_expression.right);
+			s_right = concatenate_unary_strings(
+				&expression->u.ctf_expression.right);
 
 			if (!s_right) {
 				_PERROR("%s", "unexpected unary expression for string declaration's \"encoding\" attribute");
@@ -3031,7 +3117,8 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			&node->u._typedef.type_declarators);
 
 		if (ret) {
-			_PERROR("%s", "cannot add typedef in \"event\" declaration");
+			_PERROR("%s",
+				"cannot add typedef in \"event\" declaration");
 			goto error;
 		}
 		break;
@@ -3085,14 +3172,16 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			ret = bt_ctf_event_class_set_id(event_class, id);
 
 			if (ret) {
-				_PERROR("%s", "cannot set event declaration's ID");
+				_PERROR("%s",
+					"cannot set event declaration's ID");
 				goto error;
 			}
 
 			_SET(set, _EVENT_ID_SET);
 		} else if (!strcmp(left, "stream_id")) {
 			if (_IS_SET(set, _EVENT_STREAM_ID_SET)) {
-				_PERROR_DUP_ATTR("stream_id", "event declaration");
+				_PERROR_DUP_ATTR("stream_id",
+					"event declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -3114,7 +3203,8 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			}
 
 			ret = visit_type_specifier_list(ctx,
-				_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+				_BT_LIST_FIRST_ENTRY(
+					&node->u.ctf_expression.right,
 					struct ctf_node, siblings),
 				&decl);
 
@@ -3124,8 +3214,8 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			}
 
 			assert(decl);
-			ret = bt_ctf_event_class_set_context_type(event_class,
-				decl);
+			ret = bt_ctf_event_class_set_context_type(
+				event_class, decl);
 			_BT_CTF_FIELD_TYPE_PUT(decl);
 
 			if (ret) {
@@ -3142,7 +3232,8 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			}
 
 			ret = visit_type_specifier_list(ctx,
-				_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+				_BT_LIST_FIRST_ENTRY(
+					&node->u.ctf_expression.right,
 					struct ctf_node, siblings),
 				&decl);
 
@@ -3152,9 +3243,8 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			}
 
 			assert(decl);
-
-			ret = bt_ctf_event_class_set_payload_type(event_class,
-				decl);
+			ret = bt_ctf_event_class_set_payload_type(
+				event_class, decl);
 			_BT_CTF_FIELD_TYPE_PUT(decl);
 
 			if (ret) {
@@ -3167,10 +3257,12 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			uint64_t loglevel;
 
 			if (_IS_SET(set, _EVENT_LOGLEVEL_SET)) {
-				_PERROR_DUP_ATTR("loglevel", "event declaration");
+				_PERROR_DUP_ATTR("loglevel",
+					"event declaration");
 				ret = -EPERM;
 				goto error;
 			}
+
 			ret = get_unary_unsigned(&node->u.ctf_expression.right,
 				&loglevel);
 
@@ -3187,12 +3279,14 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			char *right;
 
 			if (_IS_SET(set, _EVENT_MODEL_EMF_URI_SET)) {
-				_PERROR_DUP_ATTR("model.emf.uri", "event declaration");
+				_PERROR_DUP_ATTR("model.emf.uri",
+					"event declaration");
 				ret = -EPERM;
 				goto error;
 			}
 
-			right = concatenate_unary_strings(&node->u.ctf_expression.right);
+			right = concatenate_unary_strings(
+				&node->u.ctf_expression.right);
 
 			if (!right) {
 				_PERROR("%s", "unexpected unary expression for event declaration's \"model.emf.uri\" attribute");
@@ -3237,8 +3331,9 @@ char *get_event_decl_name(struct ctx *ctx, struct ctf_node *node)
 	char *left = NULL;
 	char *name = NULL;
 	struct ctf_node *iter;
+	struct bt_list_head *decl_list = &node->u.event.declaration_list;
 
-	bt_list_for_each_entry(iter, &node->u.event.declaration_list, siblings) {
+	bt_list_for_each_entry(iter, decl_list, siblings) {
 		if (iter->type != NODE_CTF_EXPRESSION) {
 			continue;
 		}
@@ -3250,7 +3345,8 @@ char *get_event_decl_name(struct ctx *ctx, struct ctf_node *node)
 		}
 
 		if (!strcmp(left, "name")) {
-			name = concatenate_unary_strings(&iter->u.ctf_expression.right);
+			name = concatenate_unary_strings(
+				&iter->u.ctf_expression.right);
 
 			if (!name) {
 				_PERROR("%s", "unexpected unary expression for event declaration's \"name\" attribute");
@@ -3436,6 +3532,7 @@ int visit_event_decl(struct ctx *ctx, struct ctf_node *node)
 	struct bt_ctf_event_class *event_class;
 	struct bt_ctf_event_class *eevent_class;
 	struct bt_ctf_stream_class *stream_class;
+	struct bt_list_head *decl_list = &node->u.event.declaration_list;
 
 	if (node->visited) {
 		goto end;
@@ -3445,7 +3542,8 @@ int visit_event_decl(struct ctx *ctx, struct ctf_node *node)
 	event_name = get_event_decl_name(ctx, node);
 
 	if (!event_name) {
-		_PERROR("%s", "missing \"name\" attribute in event declaration");
+		_PERROR("%s",
+			"missing \"name\" attribute in event declaration");
 		ret = -EPERM;
 		goto error;
 	}
@@ -3470,7 +3568,7 @@ int visit_event_decl(struct ctx *ctx, struct ctf_node *node)
 		goto error;
 	}
 
-	bt_list_for_each_entry(iter, &node->u.event.declaration_list, siblings) {
+	bt_list_for_each_entry(iter, decl_list, siblings) {
 		ret = visit_event_decl_entry(ctx, iter, event_class,
 			&stream_id, &set);
 
@@ -3543,8 +3641,10 @@ int visit_event_decl(struct ctx *ctx, struct ctf_node *node)
 
 	if (!_IS_SET(&set, _EVENT_ID_SET)) {
 		/* allow only one event without ID per stream */
-		if (bt_ctf_stream_class_get_event_class_count(stream_class) != 0) {
-			_PERROR("%s", "missing \"id\" field in event declaration");
+		if (bt_ctf_stream_class_get_event_class_count(stream_class) !=
+				0) {
+			_PERROR("%s",
+				"missing \"id\" field in event declaration");
 			ret = -EPERM;
 			goto error;
 		}
@@ -3582,7 +3682,8 @@ int visit_event_decl(struct ctx *ctx, struct ctf_node *node)
 	if (eevent_class) {
 		bt_ctf_event_class_put(eevent_class);
 		eevent_class = NULL;
-		_PERROR("%s", "duplicate event with name \"%s\" in same stream");
+		_PERROR("%s",
+			"duplicate event with name \"%s\" in same stream");
 		ret = -EEXIST;
 		goto error;
 	}
@@ -3628,7 +3729,8 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			&node->u._typedef.type_declarators);
 
 		if (ret) {
-			_PERROR("%s", "cannot add typedef in \"stream\" declaration");
+			_PERROR("%s",
+				"cannot add typedef in \"stream\" declaration");
 			goto error;
 		}
 		break;
@@ -3654,6 +3756,7 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 
 		if (!strcmp(left, "id")) {
 			int64_t id;
+			gpointer ptr;
 
 			if (_IS_SET(set, _STREAM_ID_SET)) {
 				_PERROR_DUP_ATTR("id", "stream declaration");
@@ -3670,7 +3773,10 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 				goto error;
 			}
 
-			if (g_hash_table_lookup(ctx->stream_classes, (gpointer) id)) {
+			ptr = g_hash_table_lookup(ctx->stream_classes,
+				(gpointer) id);
+
+			if (ptr) {
 				_PERROR("duplicate stream with ID %" PRId64,
 					id);
 				ret = -EEXIST;
@@ -3680,7 +3786,8 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			ret = bt_ctf_stream_class_set_id(stream_class, id);
 
 			if (ret) {
-				_PERROR("%s", "cannot set stream declaration's ID");
+				_PERROR("%s",
+					"cannot set stream declaration's ID");
 				goto error;
 			}
 
@@ -3693,7 +3800,8 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			}
 
 			ret = visit_type_specifier_list(ctx,
-				_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+				_BT_LIST_FIRST_ENTRY(
+					&node->u.ctf_expression.right,
 					struct ctf_node, siblings),
 				&decl);
 
@@ -3704,8 +3812,8 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 
 			assert(decl);
 
-			ret = bt_ctf_stream_class_set_event_header_type(stream_class,
-				decl);
+			ret = bt_ctf_stream_class_set_event_header_type(
+				stream_class, decl);
 			_BT_CTF_FIELD_TYPE_PUT(decl);
 
 			if (ret) {
@@ -3722,7 +3830,8 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			}
 
 			ret = visit_type_specifier_list(ctx,
-				_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+				_BT_LIST_FIRST_ENTRY(
+					&node->u.ctf_expression.right,
 					struct ctf_node, siblings),
 				&decl);
 
@@ -3733,8 +3842,8 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 
 			assert(decl);
 
-			ret = bt_ctf_stream_class_set_event_context_type(stream_class,
-				decl);
+			ret = bt_ctf_stream_class_set_event_context_type(
+				stream_class, decl);
 			_BT_CTF_FIELD_TYPE_PUT(decl);
 
 			if (ret) {
@@ -3751,7 +3860,8 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			}
 
 			ret = visit_type_specifier_list(ctx,
-				_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+				_BT_LIST_FIRST_ENTRY(
+					&node->u.ctf_expression.right,
 					struct ctf_node, siblings),
 				&decl);
 
@@ -3762,8 +3872,8 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 
 			assert(decl);
 
-			ret = bt_ctf_stream_class_set_packet_context_type(stream_class,
-				decl);
+			ret = bt_ctf_stream_class_set_packet_context_type(
+				stream_class, decl);
 			_BT_CTF_FIELD_TYPE_PUT(decl);
 
 			if (ret) {
@@ -3807,6 +3917,7 @@ int visit_stream_decl(struct ctx *ctx, struct ctf_node *node)
 	int ret = 0;
 	struct ctf_node *iter;
 	struct bt_ctf_stream_class *stream_class = NULL;
+	struct bt_list_head *decl_list = &node->u.stream.declaration_list;
 
 	if (node->visited) {
 		goto end;
@@ -3827,7 +3938,7 @@ int visit_stream_decl(struct ctx *ctx, struct ctf_node *node)
 		goto error;
 	}
 
-	bt_list_for_each_entry(iter, &node->u.stream.declaration_list, siblings) {
+	bt_list_for_each_entry(iter, decl_list, siblings) {
 		ret = visit_stream_decl_entry(ctx, iter, stream_class, &set);
 
 		if (ret) {
@@ -3847,12 +3958,14 @@ int visit_stream_decl(struct ctx *ctx, struct ctf_node *node)
 			bt_ctf_trace_get_packet_header_type(ctx->trace);
 
 		if (!packet_header_decl) {
-			_PERROR("%s", "cannot get trace packet header declaration");
+			_PERROR("%s",
+				"cannot get trace packet header declaration");
 			goto error;
 		}
 
-		stream_id_decl = bt_ctf_field_type_structure_get_field_type_by_name(
-			packet_header_decl, "stream_id");
+		stream_id_decl =
+			bt_ctf_field_type_structure_get_field_type_by_name(
+				packet_header_decl, "stream_id");
 		_BT_CTF_FIELD_TYPE_PUT(packet_header_decl);
 
 		if (!stream_id_decl) {
@@ -3860,7 +3973,8 @@ int visit_stream_decl(struct ctx *ctx, struct ctf_node *node)
 			goto error;
 		}
 
-		if (bt_ctf_field_type_get_type_id(stream_id_decl) != CTF_TYPE_INTEGER) {
+		if (bt_ctf_field_type_get_type_id(stream_id_decl) !=
+				CTF_TYPE_INTEGER) {
 			_BT_CTF_FIELD_TYPE_PUT(stream_id_decl);
 			_PERROR("%s", "\"stream_id\" field in packet header declaration is not an integer");
 			goto error;
@@ -3870,7 +3984,8 @@ int visit_stream_decl(struct ctx *ctx, struct ctf_node *node)
 	} else {
 		/* allow only _one_ ID-less stream */
 		if (g_hash_table_size(ctx->stream_classes) != 0) {
-			_PERROR("%s", "missing \"id\" field in stream declaration");
+			_PERROR("%s",
+				"missing \"id\" field in stream declaration");
 			ret = -EPERM;
 			goto error;
 		}
@@ -3916,7 +4031,8 @@ int visit_trace_decl_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 			&node->u._typedef.type_declarators);
 
 		if (ret) {
-			_PERROR("%s", "cannot add typedef in \"trace\" declaration");
+			_PERROR("%s",
+				"cannot add typedef in \"trace\" declaration");
 			goto error;
 		}
 		break;
@@ -3926,7 +4042,8 @@ int visit_trace_decl_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 			node->u.typealias.alias);
 
 		if (ret) {
-			_PERROR("%s", "cannot add typealias in \"trace\" declaration");
+			_PERROR("%s",
+				"cannot add typealias in \"trace\" declaration");
 			goto error;
 		}
 		break;
@@ -3985,7 +4102,8 @@ int visit_trace_decl_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 				ctx->trace_uuid);
 
 			if (ret) {
-				_PERROR("%s", "invalid trace declaration's UUID");
+				_PERROR("%s",
+					"invalid trace declaration's UUID");
 				goto error;
 			}
 
@@ -3993,7 +4111,8 @@ int visit_trace_decl_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 		} else if (!strcmp(left, "byte_order")) {
 			/* native byte order is already known at this stage */
 			if (_IS_SET(set, _TRACE_BYTE_ORDER_SET)) {
-				_PERROR_DUP_ATTR("byte_order", "trace declaration");
+				_PERROR_DUP_ATTR("byte_order",
+					"trace declaration");
 				ret = -EPERM;
 				goto error;
 			}
@@ -4007,7 +4126,8 @@ int visit_trace_decl_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 			}
 
 			ret = visit_type_specifier_list(ctx,
-				_BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+				_BT_LIST_FIRST_ENTRY(
+					&node->u.ctf_expression.right,
 					struct ctf_node, siblings),
 				&packet_header_decl);
 
@@ -4060,6 +4180,7 @@ int visit_trace_decl(struct ctx *ctx, struct ctf_node *node)
 	int ret = 0;
 	int set = 0;
 	struct ctf_node *iter;
+	struct bt_list_head *decl_list = &node->u.trace.declaration_list;
 
 	if (node->visited) {
 		goto end;
@@ -4080,7 +4201,7 @@ int visit_trace_decl(struct ctx *ctx, struct ctf_node *node)
 		goto error;
 	}
 
-	bt_list_for_each_entry(iter, &node->u.trace.declaration_list, siblings) {
+	bt_list_for_each_entry(iter, decl_list, siblings) {
 		ret = visit_trace_decl_entry(ctx, iter, &set);
 
 		if (ret) {
@@ -4092,13 +4213,15 @@ int visit_trace_decl(struct ctx *ctx, struct ctf_node *node)
 	ctx_pop_scope(ctx);
 
 	if (!_IS_SET(&set, _TRACE_MAJOR_SET)) {
-		_PERROR("%s", "missing \"major\" attribute in trace declaration");
+		_PERROR("%s",
+			"missing \"major\" attribute in trace declaration");
 		ret = -EPERM;
 		goto error;
 	}
 
 	if (!_IS_SET(&set, _TRACE_MINOR_SET)) {
-		_PERROR("%s", "missing \"minor\" attribute in trace declaration");
+		_PERROR("%s",
+			"missing \"minor\" attribute in trace declaration");
 		ret = -EPERM;
 		goto error;
 	}
@@ -4124,6 +4247,7 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 	int ret = 0;
 	char *left = NULL;
 	struct ctf_node *entry_node;
+	struct bt_list_head *decl_list = &node->u.env.declaration_list;
 
 	if (node->visited) {
 		goto end;
@@ -4131,14 +4255,18 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 
 	node->visited = TRUE;
 
-	bt_list_for_each_entry(entry_node, &node->u.env.declaration_list, siblings) {
+	bt_list_for_each_entry(entry_node, decl_list, siblings) {
+		struct bt_list_head *right_head =
+			&entry_node->u.ctf_expression.right;
+
 		if (entry_node->type != NODE_CTF_EXPRESSION) {
 			_PERROR("%s", "wrong expression in environment entry");
 			ret = -EPERM;
 			goto error;
 		}
 
-		left = concatenate_unary_strings(&entry_node->u.ctf_expression.left);
+		left = concatenate_unary_strings(
+			&entry_node->u.ctf_expression.left);
 
 		if (!left) {
 			_PERROR("%s", "cannot get environment entry name");
@@ -4146,10 +4274,8 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 			goto error;
 		}
 
-		if (is_unary_string(&entry_node->u.ctf_expression.right)) {
-			char *right;
-
-			right = concatenate_unary_strings(&entry_node->u.ctf_expression.right);
+		if (is_unary_string(right_head)) {
+			char *right = concatenate_unary_strings(right_head);
 
 			if (!right) {
 				_PERROR("unexpected unary expression for environment entry's value (\"%s\")",
@@ -4159,8 +4285,8 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 			}
 
 			printf_verbose("env.%s = \"%s\"\n", left, right);
-			ret = bt_ctf_trace_add_environment_field(ctx->trace,
-				left, right);
+			ret = bt_ctf_trace_add_environment_field(
+				ctx->trace, left, right);
 			g_free(right);
 
 			if (ret) {
@@ -4168,14 +4294,15 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 					left);
 				goto error;
 			}
-		} else if (is_unary_unsigned(&entry_node->u.ctf_expression.right) ||
-				is_unary_signed(&entry_node->u.ctf_expression.right)) {
+		} else if (is_unary_unsigned(right_head) ||
+				is_unary_signed(right_head)) {
 			int64_t v;
 
-			if (is_unary_unsigned(&entry_node->u.ctf_expression.right)) {
-				ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, (uint64_t *) &v);
+			if (is_unary_unsigned(right_head)) {
+				ret = get_unary_unsigned(right_head,
+					(uint64_t *) &v);
 			} else {
-				ret = get_unary_signed(&entry_node->u.ctf_expression.right, &v);
+				ret = get_unary_signed(right_head, &v);
 			}
 
 			if (ret) {
@@ -4186,8 +4313,8 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 			}
 
 			printf_verbose("env.%s = %" PRId64 "\n", left, v);
-			ret = bt_ctf_trace_add_environment_field_integer(ctx->trace,
-				left, v);
+			ret = bt_ctf_trace_add_environment_field_integer(
+				ctx->trace, left, v);
 
 			if (ret) {
 				_PERROR("environment: cannot add entry \"%s\" to trace",
@@ -4221,12 +4348,14 @@ int set_trace_byte_order(struct ctx *ctx, struct ctf_node *trace_node)
 	int set = 0;
 	char *left = NULL;
 	struct ctf_node *node;
+	struct bt_list_head *decl_list = &trace_node->u.trace.declaration_list;
 
-	bt_list_for_each_entry(node, &trace_node->u.trace.declaration_list, siblings) {
+	bt_list_for_each_entry(node, decl_list, siblings) {
 		if (node->type == NODE_CTF_EXPRESSION) {
 			struct ctf_node *right_node;
 
-			left = concatenate_unary_strings(&node->u.ctf_expression.left);
+			left = concatenate_unary_strings(
+				&node->u.ctf_expression.left);
 
 			if (!left) {
 				ret = -EINVAL;
@@ -4237,13 +4366,15 @@ int set_trace_byte_order(struct ctx *ctx, struct ctf_node *trace_node)
 				enum bt_ctf_byte_order bo;
 
 				if (_IS_SET(&set, _TRACE_BYTE_ORDER_SET)) {
-					_PERROR_DUP_ATTR("byte_order", "trace declaration");
+					_PERROR_DUP_ATTR("byte_order",
+						"trace declaration");
 					ret = -EPERM;
 					goto error;
 				}
 
 				_SET(&set, _TRACE_BYTE_ORDER_SET);
-				right_node = _BT_LIST_FIRST_ENTRY(&node->u.ctf_expression.right,
+				right_node = _BT_LIST_FIRST_ENTRY(
+					&node->u.ctf_expression.right,
 					struct ctf_node, siblings);
 				bo = byte_order_from_unary_expr(ctx->efd,
 					right_node);
@@ -4258,7 +4389,8 @@ int set_trace_byte_order(struct ctx *ctx, struct ctf_node *trace_node)
 					goto error;
 				}
 
-				ret = bt_ctf_trace_set_byte_order(ctx->trace, bo);
+				ret = bt_ctf_trace_set_byte_order(
+					ctx->trace, bo);
 
 				if (ret) {
 					_PERROR("cannot set trace's byte order (%d)",
@@ -4316,7 +4448,8 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			goto error;
 		}
 
-		right = concatenate_unary_strings(&entry_node->u.ctf_expression.right);
+		right = concatenate_unary_strings(
+			&entry_node->u.ctf_expression.right);
 
 		if (!right) {
 			_PERROR("%s", "unexpected unary expression for clock declaration's \"name\" attribute");
@@ -4367,7 +4500,8 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			goto error;
 		}
 
-		right = concatenate_unary_strings(&entry_node->u.ctf_expression.right);
+		right = concatenate_unary_strings(
+			&entry_node->u.ctf_expression.right);
 
 		if (!right) {
 			_PERROR("%s", "unexpected unary expression for clock's \"description\" attribute");
@@ -4394,7 +4528,8 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			goto error;
 		}
 
-		ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, &freq);
+		ret = get_unary_unsigned(
+			&entry_node->u.ctf_expression.right, &freq);
 
 		if (ret) {
 			_PERROR("%s", "unexpected unary expression for clock declaration's \"freq\" attribute");
@@ -4419,7 +4554,8 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			goto error;
 		}
 
-		ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, &precision);
+		ret = get_unary_unsigned(
+			&entry_node->u.ctf_expression.right, &precision);
 
 		if (ret) {
 			_PERROR("%s", "unexpected unary expression for clock declaration's \"precision\" attribute");
@@ -4444,7 +4580,8 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			goto error;
 		}
 
-		ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, &offset_s);
+		ret = get_unary_unsigned(
+			&entry_node->u.ctf_expression.right, &offset_s);
 
 		if (ret) {
 			_PERROR("%s", "unexpected unary expression for clock declaration's \"offset_s\" attribute");
@@ -4469,7 +4606,8 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			goto error;
 		}
 
-		ret = get_unary_unsigned(&entry_node->u.ctf_expression.right, &offset);
+		ret = get_unary_unsigned(
+			&entry_node->u.ctf_expression.right, &offset);
 
 		if (ret) {
 			_PERROR("%s", "unexpected unary expression for clock declaration's \"offset\" attribute");
@@ -4494,7 +4632,8 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			goto error;
 		}
 
-		right = _BT_LIST_FIRST_ENTRY(&entry_node->u.ctf_expression.right,
+		right = _BT_LIST_FIRST_ENTRY(
+			&entry_node->u.ctf_expression.right,
 			struct ctf_node, siblings);
 		ret = get_boolean(ctx->efd, right);
 
@@ -4537,6 +4676,7 @@ int visit_clock_decl(struct ctx *ctx, struct ctf_node *clock_node)
 	int set = 0;
 	struct bt_ctf_clock *clock;
 	struct ctf_node *entry_node;
+	struct bt_list_head *decl_list = &clock_node->u.clock.declaration_list;
 
 	if (clock_node->visited) {
 		return 0;
@@ -4551,7 +4691,7 @@ int visit_clock_decl(struct ctx *ctx, struct ctf_node *clock_node)
 		goto error;
 	}
 
-	bt_list_for_each_entry(entry_node, &clock_node->u.clock.declaration_list, siblings) {
+	bt_list_for_each_entry(entry_node, decl_list, siblings) {
 		ret = visit_clock_decl_entry(ctx, entry_node, clock, &set);
 
 		if (ret) {
@@ -4560,7 +4700,8 @@ int visit_clock_decl(struct ctx *ctx, struct ctf_node *clock_node)
 	}
 
 	if (!_IS_SET(&set, _CLOCK_NAME_SET)) {
-		_PERROR("%s", "missing \"name\" attribute in clock declaration");
+		_PERROR("%s",
+			"missing \"name\" attribute in clock declaration");
 		ret = -EPERM;
 		goto error;
 	}
@@ -4838,8 +4979,6 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		goto error;
 	}
 
-<<<<<<< HEAD
-=======
 	/* add stream classes to trace now */
 	ret = add_stream_classes_to_trace(ctx);
 
@@ -4847,21 +4986,6 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		_PERROR("%s", "cannot add stream classes to trace");
 	}
 
-	{
-		GString *xml = g_string_new(NULL);
-		ret = bt_ctf_trace_to_xml(ctx->trace, xml);
-
-		if (ret) {
-			_PERROR("%s", "DAYUM CANNOT GET XML");
-			g_string_free(xml, TRUE);
-			goto error;
-		}
-
-		printf("%s\n", xml->str);
-		g_string_free(xml, TRUE);
-	}
-
->>>>>>> 0930ef9... moar
 	ctx_destroy(ctx);
 	printf_verbose("done!\n");
 
