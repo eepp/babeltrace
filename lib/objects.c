@@ -382,6 +382,179 @@ bool (* const compare_funcs[])(const struct bt_object *,
 };
 
 static
+enum bt_object_status bt_object_null_visit(struct bt_object *object,
+	struct bt_object_visit_cbs *cbs, void *data)
+{
+	enum bt_object_status ret = BT_OBJECT_STATUS_OK;
+
+	if (cbs->visit_null) {
+		if (!cbs->visit_null(data)) {
+			ret = BT_OBJECT_STATUS_CANCELLED;
+		}
+	}
+
+	return ret;
+}
+
+static
+enum bt_object_status bt_object_bool_visit(struct bt_object *object,
+	struct bt_object_visit_cbs *cbs, void *data)
+{
+	enum bt_object_status ret = BT_OBJECT_STATUS_OK;
+
+	if (cbs->visit_bool) {
+		if (!cbs->visit_bool(object, data)) {
+			ret = BT_OBJECT_STATUS_CANCELLED;
+		}
+	}
+
+	return ret;
+}
+
+static
+enum bt_object_status bt_object_integer_visit(struct bt_object *object,
+	struct bt_object_visit_cbs *cbs, void *data)
+{
+	enum bt_object_status ret = BT_OBJECT_STATUS_OK;
+
+	if (cbs->visit_integer) {
+		if (!cbs->visit_integer(object, data)) {
+			ret = BT_OBJECT_STATUS_CANCELLED;
+		}
+	}
+
+	return ret;
+}
+
+static
+enum bt_object_status bt_object_float_visit(struct bt_object *object,
+	struct bt_object_visit_cbs *cbs, void *data)
+{
+	enum bt_object_status ret = BT_OBJECT_STATUS_OK;
+
+	if (cbs->visit_float) {
+		if (!cbs->visit_float(object, data)) {
+			ret = BT_OBJECT_STATUS_CANCELLED;
+		}
+	}
+
+	return ret;
+}
+
+static
+enum bt_object_status bt_object_string_visit(struct bt_object *object,
+	struct bt_object_visit_cbs *cbs, void *data)
+{
+	enum bt_object_status ret = BT_OBJECT_STATUS_OK;
+
+	if (cbs->visit_string) {
+		if (!cbs->visit_string(object, data)) {
+			ret = BT_OBJECT_STATUS_CANCELLED;
+		}
+	}
+
+	return ret;
+}
+
+static
+enum bt_object_status bt_object_array_visit(struct bt_object *object,
+	struct bt_object_visit_cbs *cbs, void *data)
+{
+	int x;
+	enum bt_object_status ret = BT_OBJECT_STATUS_OK;
+	const struct bt_object_array *array_obj =
+		BT_OBJECT_TO_ARRAY(object);
+
+	if (cbs->visit_array_begin) {
+		if (!cbs->visit_array_begin(object, data)) {
+			ret = BT_OBJECT_STATUS_CANCELLED;
+			goto end;
+		}
+	}
+
+	for (x = 0; x < array_obj->garray->len; ++x) {
+		struct bt_object *element_obj =
+			g_ptr_array_index(array_obj->garray, x);
+
+		ret = bt_object_visit(element_obj, cbs, data);
+
+		if (ret != BT_OBJECT_STATUS_OK) {
+			goto end;
+		}
+	}
+
+	if (cbs->visit_array_end) {
+		if (!cbs->visit_array_end(object, data)) {
+			ret = BT_OBJECT_STATUS_CANCELLED;
+			goto end;
+		}
+	}
+
+end:
+	return ret;
+}
+
+static
+enum bt_object_status bt_object_map_visit(struct bt_object *object,
+	struct bt_object_visit_cbs *cbs, void *data)
+{
+	GHashTableIter iter;
+	gpointer key, element_obj;
+	enum bt_object_status ret = BT_OBJECT_STATUS_OK;
+	const struct bt_object_map *map_obj =
+		BT_OBJECT_TO_MAP(object);
+
+	if (cbs->visit_map_begin) {
+		if (!cbs->visit_map_begin(object, data)) {
+			ret = BT_OBJECT_STATUS_CANCELLED;
+			goto end;
+		}
+	}
+
+	g_hash_table_iter_init(&iter, map_obj->ght);
+
+	while (g_hash_table_iter_next(&iter, &key, &element_obj)) {
+		if (cbs->visit_map_key) {
+			const char *key_str =
+				g_quark_to_string((unsigned long) key);
+
+			if (!cbs->visit_map_key(key_str, data)) {
+				ret = BT_OBJECT_STATUS_CANCELLED;
+				goto end;
+			}
+		}
+
+		ret = bt_object_visit(element_obj, cbs, data);
+
+		if (ret != BT_OBJECT_STATUS_OK) {
+			goto end;
+		}
+	}
+
+	if (cbs->visit_map_end) {
+		if (!cbs->visit_map_end(object, data)) {
+			ret = BT_OBJECT_STATUS_CANCELLED;
+			goto end;
+		}
+	}
+
+end:
+	return ret;
+}
+
+static
+enum bt_object_status (* const visit_funcs[])(struct bt_object *,
+		struct bt_object_visit_cbs *, void *) = {
+	[BT_OBJECT_TYPE_NULL] =		bt_object_null_visit,
+	[BT_OBJECT_TYPE_BOOL] =		bt_object_bool_visit,
+	[BT_OBJECT_TYPE_INTEGER] =	bt_object_integer_visit,
+	[BT_OBJECT_TYPE_FLOAT] =	bt_object_float_visit,
+	[BT_OBJECT_TYPE_STRING] =	bt_object_string_visit,
+	[BT_OBJECT_TYPE_ARRAY] =	bt_object_array_visit,
+	[BT_OBJECT_TYPE_MAP] =		bt_object_map_visit,
+};
+
+static
 void bt_object_destroy(struct bt_ctf_ref *ref_count)
 {
 	struct bt_object *object;
@@ -1096,6 +1269,22 @@ bool bt_object_compare(const struct bt_object *object_a,
 	}
 
 	ret = compare_funcs[object_a->type](object_a, object_b);
+
+end:
+	return ret;
+}
+
+enum bt_object_status bt_object_visit(struct bt_object *object,
+	struct bt_object_visit_cbs *cbs, void *data)
+{
+	enum bt_object_status ret = BT_OBJECT_STATUS_OK;
+
+	if (!object || !cbs) {
+		ret = BT_OBJECT_STATUS_ERROR;
+		goto end;
+	}
+
+	ret = visit_funcs[object->type](object, cbs, data);
 
 end:
 	return ret;

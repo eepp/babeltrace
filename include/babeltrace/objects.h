@@ -181,6 +181,63 @@ enum bt_object_status {
 struct bt_object;
 
 /**
+ * Traversal callbacks, to be used with bt_object_visit().
+ *
+ * The functions of this structure will be called during an object
+ * visit. When one of their parameters is an object, it's always
+ * a \em weak reference: you must pass it to bt_object_get() to get
+ * your own reference.
+ *
+ * The last parameter of each function is private user data.
+ *
+ * The functions must return \c true to continue the visit, or \c false
+ * to cancel it.
+ */
+struct bt_object_visit_cbs {
+	/** Called when visiting a null object. */
+	bool (* visit_null)(void *);
+
+	/** Called when visiting a boolean object. */
+	bool (* visit_bool)(struct bt_object *, void *);
+
+	/** Called when visiting an integer object. */
+	bool (* visit_integer)(struct bt_object *, void *);
+
+	/** Called when visiting a floating point number object. */
+	bool (* visit_float)(struct bt_object *, void *);
+
+	/** Called when visiting a string object. */
+	bool (* visit_string)(struct bt_object *, void *);
+
+	/**
+	 * Called when visiting an array object, before visiting its
+	 * element objects individually.
+	 */
+	bool (* visit_array_begin)(struct bt_object *, void *);
+
+	/**
+	 * Called when visiting an array object, after having visited
+	 * its element objects individually.
+	 */
+	bool (* visit_array_end)(struct bt_object *, void *);
+
+	/**
+	 * Called when visiting a map object, before visiting its
+	 * element objects individually.
+	 */
+	bool (* visit_map_begin)(struct bt_object *, void *);
+
+	/** Called when visiting a map object's key. */
+	bool (* visit_map_key)(const char *, void *);
+
+	/**
+	 * Called when visiting a map object, after having visited
+	 * its element objects individually.
+	 */
+	bool (* visit_map_end)(struct bt_object *, void *);
+};
+
+/**
  * The null object singleton.
  *
  * Use this everytime you need a null objet. The null objet singleton
@@ -910,6 +967,46 @@ extern struct bt_object *bt_object_copy(const struct bt_object *object);
  */
 extern bool bt_object_compare(const struct bt_object *object_a,
 	const struct bt_object *object_b);
+
+/**
+ * Visits the object \p object deeply, calling user functions of
+ * \p cbs for each visited object.
+ *
+ * When an array object is visited, the user function
+ * \c visit_array_begin() is called first, then each element is
+ * visited (in order), then \c visit_array_end() is called.
+ *
+ * When a map object is visited, the user function
+ * \c visit_map_begin() is called first, then \c visit_map_key() is
+ * called in alternance with the appropriate user function for the
+ * entry's object, then \c visit_map_end() is called.
+ *
+ * All the objects passed to the user functions are \em weak references:
+ * you must pass them to bt_object_get() to get your own references.
+ *
+ * User functions set to \c NULL will not be called: the visit will
+ * continue with the following item to visit.
+ *
+ * The user functions must return \c true to continue the visit, or
+ * \c false to cancel it.
+ *
+ * @param object	Object to visit
+ * @param cbs		User functions to call back
+ * @param data		User data passed to the user functions
+ * @returns		\link bt_object_status::BT_OBJECT_STATUS_OK
+ *			<code>BT_OBJECT_STATUS_OK</code>\endlink if
+ *			there's no error and the traversal was not
+ *			cancelled by the user function,
+ *			\link bt_object_status::BT_OBJECT_STATUS_CANCELLED
+ *			<code>BT_OBJECT_STATUS_CANCELLED</code>\endlink
+ *			if the function was cancelled by the user
+ *			function, or
+ *			\link bt_object_status::BT_OBJECT_STATUS_ERROR
+ *			<code>BT_OBJECT_STATUS_ERROR</code>\endlink on
+ *			any other error
+ */
+extern enum bt_object_status bt_object_visit(struct bt_object *object,
+	struct bt_object_visit_cbs *cbs, void *data);
 
 #ifdef __cplusplus
 }
