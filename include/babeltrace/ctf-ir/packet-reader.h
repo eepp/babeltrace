@@ -307,6 +307,11 @@ enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_get_context(
  * count is incremented. The user is responsible for calling
  * bt_ctf_event_put() on it.
  *
+ * The returned event remains valid while no packet reader function is
+ * called with \p ctx. If a copy is needed for further processing,
+ * get one using bt_ctf_event_copy(), which performs a deep copy of
+ * an event.
+ *
  * @param ctx		Packet reader context
  * @param event		Returned event
  * @returns		One of #bt_ctf_ir_packet_reader_status values
