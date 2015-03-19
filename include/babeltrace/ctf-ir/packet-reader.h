@@ -275,6 +275,7 @@ enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_reset(
  * @param packet_header	Returned packet header
  * @returns		One of #bt_ctf_ir_packet_reader_status values
  */
+BT_HIDDEN
 enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_get_header(
 	struct bt_ctf_ir_packet_reader_ctx *ctx,
 	struct bt_ctf_field **packet_header);
@@ -294,6 +295,7 @@ enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_get_header(
  * @returns			One of #bt_ctf_ir_packet_reader_status
  * 				values
  */
+BT_HIDDEN
 enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_get_context(
 	struct bt_ctf_ir_packet_reader_ctx *ctx,
 	struct bt_ctf_field **packet_context);
@@ -309,6 +311,7 @@ enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_get_context(
  * @param event		Returned event
  * @returns		One of #bt_ctf_ir_packet_reader_status values
  */
+BT_HIDDEN
 enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_get_next_event(
 	struct bt_ctf_ir_packet_reader_ctx *ctx,
 	struct bt_ctf_event **event);
