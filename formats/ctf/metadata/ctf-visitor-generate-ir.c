@@ -132,7 +132,7 @@ enum {
 #define _BT_LIST_FIRST_ENTRY(_ptr, _type, _member)	\
 	bt_list_entry((_ptr)->next, _type, _member)
 
-/* generic "put and set to NULL" */
+/* generic "put and set to NULL"; use _BT_CTF_FIELD_TYPE_PUT for field types */
 #define _BT_CTF_PUT(_what, _var)				\
 	do {							\
 		assert(_var);					\
@@ -610,9 +610,7 @@ struct ctx *ctx_create(struct bt_ctf_trace *trace, FILE *efd)
 	return ctx;
 
 error:
-	if (ctx) {
-		g_free(ctx);
-	}
+	g_free(ctx);
 
 	if (scope) {
 		ctx_decl_scope_destroy(scope);
@@ -1259,7 +1257,6 @@ GQuark create_typealias_identifier(struct ctx *ctx,
 
 	str_c = g_string_free(str, FALSE);
 	qalias = g_quark_from_string(str_c);
-
 	g_free(str_c);
 
 end:
@@ -1634,7 +1631,8 @@ int visit_typedef(struct ctx *ctx, struct ctf_node *type_specifier_list,
 		}
 
 		/* do not allow typedef and typealias of untagged variants */
-		if (bt_ctf_field_type_get_type_id(type_decl) == CTF_TYPE_VARIANT) {
+		if (bt_ctf_field_type_get_type_id(type_decl) ==
+				CTF_TYPE_VARIANT) {
 			if (bt_ctf_field_type_variant_get_tag_name(type_decl)) {
 				_PERROR("%s", "typedef of untagged variant is not allowed");
 				ret = -EPERM;
@@ -3364,10 +3362,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 	return 0;
 
 error:
-	if (left) {
-		g_free(left);
-	}
-
+	g_free(left);
 	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(decl);
 
 	return ret;
@@ -3413,10 +3408,7 @@ char *get_event_decl_name(struct ctx *ctx, struct ctf_node *node)
 	return name;
 
 error:
-	if (left) {
-		g_free(left);
-	}
-
+	g_free(left);
 	return NULL;
 }
 
@@ -3717,7 +3709,8 @@ int visit_event_decl(struct ctx *ctx, struct ctf_node *node)
 
 	if (eevent_class) {
 		_BT_CTF_PUT(event_class, eevent_class);
-		_PERROR("%s", "duplicate event with ID %" PRId64 " in same stream");
+		_PERROR("%s",
+			"duplicate event with ID %" PRId64 " in same stream");
 		ret = -EEXIST;
 		goto error;
 	}
@@ -3746,10 +3739,7 @@ end:
 	return 0;
 
 error:
-	if (event_name) {
-		g_free(event_name);
-	}
-
+	g_free(event_name);
 	_BT_CTF_PUT_IF_EXISTS(event_class, event_class);
 
 	/* stream_class is borrowed; it still belongs to the hash table */
@@ -3942,10 +3932,7 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 	return 0;
 
 error:
-	if (left) {
-		g_free(left);
-	}
-
+	g_free(left);
 	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(decl);
 
 	return ret;
@@ -4205,10 +4192,7 @@ int visit_trace_decl_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 	return 0;
 
 error:
-	if (left) {
-		g_free(left);
-	}
-
+	g_free(left);
 	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(packet_header_decl);
 
 	return ret;
@@ -4374,9 +4358,7 @@ end:
 	return 0;
 
 error:
-	if (left) {
-		g_free(left);
-	}
+	g_free(left);
 
 	return ret;
 }
@@ -4453,9 +4435,7 @@ int set_trace_byte_order(struct ctx *ctx, struct ctf_node *trace_node)
 	return 0;
 
 error:
-	if (left) {
-		g_free(left);
-	}
+	g_free(left);
 
 	return ret;
 }
@@ -4702,9 +4682,7 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 	return 0;
 
 error:
-	if (left) {
-		g_free(left);
-	}
+	g_free(left);
 
 	return ret;
 }
