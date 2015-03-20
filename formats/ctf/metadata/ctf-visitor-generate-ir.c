@@ -49,6 +49,7 @@
 #include <babeltrace/ctf-ir/event-types-internal.h>
 #include <babeltrace/ctf-ir/clock.h>
 #include <babeltrace/ctf-ir/clock-internal.h>
+#include <babeltrace/objects.h>
 
 #include "ctf-scanner.h"
 #include "ctf-parser.h"
@@ -131,6 +132,22 @@ enum {
 #define _BT_LIST_FIRST_ENTRY(_ptr, _type, _member)	\
 	bt_list_entry((_ptr)->next, _type, _member)
 
+/* generic "put and set to NULL" */
+#define _BT_CTF_PUT(_what, _var)				\
+	do {							\
+		assert(_var);					\
+		bt_ctf_ ## _what ## _put(_var);			\
+		(_var) = NULL;					\
+	} while (0)
+
+/* generic "put and set to NULL if not NULL" */
+#define _BT_CTF_PUT_IF_EXISTS(_what, _var)			\
+	do {							\
+		if (_var) {					\
+			_BT_CTF_PUT(_what, _var);		\
+		}						\
+	} while (0)
+
 /*
  * The following macros MUST be used whenever a
  * struct bt_ctf_field_type * must be declared:
@@ -154,7 +171,7 @@ enum {
 	do {							\
 		assert(_field);					\
 		bt_ctf_field_type_put(_field);			\
-		_field = NULL;					\
+		(_field) = NULL;				\
 	} while (0)
 
 #define _BT_CTF_FIELD_TYPE_MOVE(_dst, _src)			\
@@ -2668,8 +2685,7 @@ int visit_integer_decl(struct ctx *ctx,
 		/* move clock */
 		ret |= bt_ctf_field_type_integer_set_mapped_clock(
 			*integer_decl, mapped_clock);
-		bt_ctf_clock_put(mapped_clock);
-		mapped_clock = NULL;
+		_BT_CTF_PUT(clock, mapped_clock);
 	}
 
 	if (ret) {
@@ -2681,10 +2697,7 @@ int visit_integer_decl(struct ctx *ctx,
 	return 0;
 
 error:
-	if (mapped_clock) {
-		bt_ctf_clock_put(mapped_clock);
-	}
-
+	_BT_CTF_PUT_IF_EXISTS(clock, mapped_clock);
 	_BT_CTF_FIELD_TYPE_PUT_IF_EXISTS(*integer_decl);
 
 	return ret;
@@ -3256,6 +3269,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 			_SET(set, _EVENT_FIELDS_SET);
 		} else if (!strcmp(left, "loglevel")) {
 			uint64_t loglevel;
+			struct bt_object *obj;
 
 			if (_IS_SET(set, _EVENT_LOGLEVEL_SET)) {
 				_PERROR_DUP_ATTR("loglevel",
@@ -3273,11 +3287,28 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 				goto error;
 			}
 
-			// TODO: FIXME: set log level here
+			obj = bt_object_integer_create_init(loglevel);
+
+			if (!obj) {
+				_PERROR("%s", "cannot create \"loglevel\" event class' attribute");
+				ret = -EINVAL;
+				goto error;
+			}
+
+			ret = bt_ctf_event_class_set_attribute(event_class,
+				"loglevel", obj);
+			BT_OBJECT_PUT(obj);
+
+			if (ret) {
+				_PERROR("%s", "cannot set \"loglevel\" event class' attribute");
+				ret = -EINVAL;
+				goto error;
+			}
 
 			_SET(set, _EVENT_LOGLEVEL_SET);
 		} else if (!strcmp(left, "model.emf.uri")) {
 			char *right;
+			struct bt_object *obj;
 
 			if (_IS_SET(set, _EVENT_MODEL_EMF_URI_SET)) {
 				_PERROR_DUP_ATTR("model.emf.uri",
@@ -3295,9 +3326,25 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 				goto error;
 			}
 
-			// TODO: FIXME: set model EMF URI here
-
+			obj = bt_object_string_create_init(right);
 			g_free(right);
+
+			if (!obj) {
+				_PERROR("%s", "cannot create \"loglevel\" event class' attribute");
+				ret = -EINVAL;
+				goto error;
+			}
+
+			ret = bt_ctf_event_class_set_attribute(event_class,
+				"model.emf.uri", obj);
+			BT_OBJECT_PUT(obj);
+
+			if (ret) {
+				_PERROR("%s", "cannot set \"loglevel\" event class' attribute");
+				ret = -EINVAL;
+				goto error;
+			}
+
 			_SET(set, _EVENT_MODEL_EMF_URI_SET);
 		} else {
 			_PWARNING("unknown attribute \"%s\" in event declaration",
@@ -3514,9 +3561,7 @@ struct bt_ctf_stream_class *create_reset_stream_class(struct ctx *ctx)
 	return stream_class;
 
 error:
-	if (stream_class) {
-		bt_ctf_stream_class_put(stream_class);
-	}
+	_BT_CTF_PUT_IF_EXISTS(stream_class, stream_class);
 
 	return NULL;
 }
@@ -3597,7 +3642,7 @@ int visit_event_decl(struct ctx *ctx, struct ctf_node *node)
 
 			if (ret) {
 				_PERROR("%s", "cannot set stream's ID");
-				bt_ctf_stream_class_put(new_stream_class);
+				_BT_CTF_PUT(stream_class, new_stream_class);
 				goto error;
 			}
 
@@ -3671,7 +3716,7 @@ int visit_event_decl(struct ctx *ctx, struct ctf_node *node)
 		event_id);
 
 	if (eevent_class) {
-		bt_ctf_event_class_put(eevent_class);
+		_BT_CTF_PUT(event_class, eevent_class);
 		_PERROR("%s", "duplicate event with ID %" PRId64 " in same stream");
 		ret = -EEXIST;
 		goto error;
@@ -3681,8 +3726,7 @@ int visit_event_decl(struct ctx *ctx, struct ctf_node *node)
 		event_name);
 
 	if (eevent_class) {
-		bt_ctf_event_class_put(eevent_class);
-		eevent_class = NULL;
+		_BT_CTF_PUT(event_class, eevent_class);
 		_PERROR("%s",
 			"duplicate event with name \"%s\" in same stream");
 		ret = -EEXIST;
@@ -3691,8 +3735,7 @@ int visit_event_decl(struct ctx *ctx, struct ctf_node *node)
 
 	g_free(event_name);
 	ret = bt_ctf_stream_class_add_event_class(stream_class, event_class);
-	bt_ctf_event_class_put(event_class);
-	event_class = NULL;
+	_BT_CTF_PUT(event_class, event_class);
 
 	if (ret) {
 		_PERROR("%s", "cannot add event class to stream class");
@@ -3707,9 +3750,7 @@ error:
 		g_free(event_name);
 	}
 
-	if (event_class) {
-		bt_ctf_event_class_put(event_class);
-	}
+	_BT_CTF_PUT_IF_EXISTS(event_class, event_class);
 
 	/* stream_class is borrowed; it still belongs to the hash table */
 
@@ -4012,9 +4053,7 @@ end:
 	return 0;
 
 error:
-	if (stream_class) {
-		bt_ctf_stream_class_put(stream_class);
-	}
+	_BT_CTF_PUT_IF_EXISTS(stream_class, stream_class);
 
 	return ret;
 }
@@ -4286,7 +4325,7 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 			}
 
 			printf_verbose("env.%s = \"%s\"\n", left, right);
-			ret = bt_ctf_trace_add_environment_field(
+			ret = bt_ctf_trace_set_environment_field_string(
 				ctx->trace, left, right);
 			g_free(right);
 
@@ -4314,7 +4353,7 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 			}
 
 			printf_verbose("env.%s = %" PRId64 "\n", left, v);
-			ret = bt_ctf_trace_add_environment_field_integer(
+			ret = bt_ctf_trace_set_environment_field_integer(
 				ctx->trace, left, v);
 
 			if (ret) {
@@ -4721,9 +4760,7 @@ int visit_clock_decl(struct ctx *ctx, struct ctf_node *clock_node)
 	}
 
 error:
-	if (clock) {
-		bt_ctf_clock_put(clock);
-	}
+	_BT_CTF_PUT_IF_EXISTS(clock, clock);
 
 	return ret;
 }
@@ -4987,6 +5024,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		_PERROR("%s", "cannot add stream classes to trace");
 	}
 
+#if 0
 	{
 		GString *xml = g_string_new(NULL);
 		ret = bt_ctf_trace_to_xml(ctx->trace, xml);
@@ -5000,6 +5038,7 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		printf("%s\n", xml->str);
 		g_string_free(xml, TRUE);
 	}
+#endif
 
 	ctx_destroy(ctx);
 	printf_verbose("done!\n");
@@ -5013,9 +5052,7 @@ error:
 		ctx_destroy(ctx);
 	}
 
-	if (*trace) {
-		bt_ctf_trace_put(*trace);
-	}
+	_BT_CTF_PUT_IF_EXISTS(trace, *trace);
 
 	return ret;
 }
