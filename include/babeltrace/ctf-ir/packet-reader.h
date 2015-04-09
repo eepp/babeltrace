@@ -128,39 +128,42 @@ struct bt_ctf_ir_packet_reader_ops {
 	 * the complete packet must be the previous offset plus the
 	 * last returned value of \p buffer_len.
 	 *
-	 * \p buffer_len must be set to one of the following values:
+	 * The function must return one of the following statuses:
 	 *
-	 *   - <b>Positive value</b> (1 or more): size of returned
-	 *     buffer.
-	 *   - <b>0 or #BT_CTF_IR_PACKET_READER_STATUS_AGAIN</b>:
+	 *   - <b>#BT_CTF_IR_PACKET_READER_STATUS_OK</b>: everything
+	 *     is okay, i.e. \p buffer_len is set to a positive value
+	 *     reflecting the number of available bytes in the buffer
+	 *     starting at the address written in \p buffer.
+	 *   - <b>#BT_CTF_IR_PACKET_READER_STATUS_AGAIN</b>:
 	 *     no data is available right now. In this case, the packet
-	 *     reader function called by the user will return
-	 *     #BT_CTF_IR_PACKET_READER_STATUS_AGAIN and it is the
+	 *     reader function called by the user will also return
+	 *     #BT_CTF_IR_PACKET_READER_STATUS_AGAIN, and it is the
 	 *     user's responsability to make sure enough data becomes
 	 *     available before calling the same packet reader function
 	 *     again.
 	 *   - <b>#BT_CTF_IR_PACKET_READER_STATUS_EOP</b>: the end of
 	 *     the packet was reached, and no more events are available.
 	 *     In this case, the packet reader function called by the
-	 *     user will return #BT_CTF_IR_PACKET_READER_STATUS_EOP.
+	 *     user will also return
+	 *     #BT_CTF_IR_PACKET_READER_STATUS_EOP.
 	 *   - <b>#BT_CTF_IR_PACKET_READER_STATUS_ERROR</b>: a fatal
 	 *     error occured during this operation. In this case, the
-	 *     packet reader function called by the user will return
-	 *     #BT_CTF_IR_PACKET_READER_STATUS_ERROR.
+	 *     packet reader function called by the user will also
+	 *     return #BT_CTF_IR_PACKET_READER_STATUS_ERROR.
 	 *
-	 * If \p buffer_len is not set to a positive value, this
-	 * function's return value (buffer address) is not considered.
+	 * If #BT_CTF_IR_PACKET_READER_STATUS_OK is not returned,
+	 * the values of \p buffer_len and \p buffer are not
+	 * considered by the caller.
 	 *
 	 * @param requested_len	Requested buffer length (bytes)
-	 * @param buffer_len	Returned buffer's length, or a status
-	 * 			code (see description above)
+	 * @param buffer_len	Returned buffer's length (bytes)
+	 * @param buffer	Returned buffer
 	 * @param data		User data
-	 * @returns		Buffer address, with at least
-	 * 			\p buffer_len bytes available if
-	 *			\p buffer_len is positive
+	 * @returns		Status code (see description above)
 	 */
-	const void *(* get_next_buffer)(size_t requested_len,
-		int* buffer_len, void *data);
+	enum bt_ctf_ir_packet_reader_status (* get_next_buffer)(
+		size_t requested_len, size_t *buffer_len,
+		void * const *buffer, void *data);
 
 	/**
 	 * Moves the current packet offset.
@@ -203,11 +206,35 @@ struct bt_ctf_ir_packet_reader_ctx {
 	/* back-end operations */
 	struct bt_ctf_ir_packet_reader_ops ops;
 
+	/* trace (our own ref) */
+	struct bt_ctf_trace *trace;
+
+	/* current packet header (our own ref) */
+	struct bt_ctf_field *header;
+
+	/* current packet context (our own ref) */
+	struct bt_ctf_field *context;
+
+	/* packet header is complete */
+	bool header_is_complete;
+
+	/* packet context is complete */
+	bool context_is_complete;
+
+	/* current user buffer */
+	const void *buf;
+
+	/* current user buffer's size */
+	size_t buf_size;
+
+	/* maximum request length */
+	size_t max_request_len;
+
 	/* current offset in packet (bits) */
 	size_t bit_offset;
 
 	/* user data */
-	void *data;
+	void *user_data;
 };
 
 /**
