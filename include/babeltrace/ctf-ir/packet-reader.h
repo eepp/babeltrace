@@ -159,7 +159,7 @@ struct bt_ctf_ir_packet_reader_ops {
 	 *			\p buffer_len is positive
 	 */
 	const void *(* get_next_buffer)(size_t requested_len,
-		int* allocated_len, void *data);
+		int* buffer_len, void *data);
 
 	/**
 	 * Moves the current packet offset.
