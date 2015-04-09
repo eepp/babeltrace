@@ -54,6 +54,7 @@
 #include <babeltrace/ctf-ir/trace.h>
 #include <babeltrace/ctf-ir/event-fields.h>
 #include <babeltrace/ctf-ir/event.h>
+#include <babeltrace/babeltrace-internal.h>
 
 /**
  * Packet reader API status code.
