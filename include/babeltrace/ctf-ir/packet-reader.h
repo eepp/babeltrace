@@ -215,23 +215,29 @@ struct bt_ctf_ir_packet_reader_ctx {
 	/* current packet context (our own ref) */
 	struct bt_ctf_field *context;
 
+	/* current event (our own ref) */
+	struct bt_ctf_event *event;
+
 	/* packet header is complete */
 	bool header_is_complete;
 
 	/* packet context is complete */
 	bool context_is_complete;
 
+	/* event is complete */
+	bool event_is_complete;
+
 	/* current user buffer */
 	const void *buf;
 
-	/* current user buffer's size */
+	/* current user buffer's size (bytes) */
 	size_t buf_size;
 
-	/* maximum request length */
+	/* maximum request length (bytes) */
 	size_t max_request_len;
 
 	/* current offset in packet (bits) */
-	size_t bit_offset;
+	size_t at;
 
 	/* user data */
 	void *user_data;
