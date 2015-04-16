@@ -40,12 +40,12 @@
  *   - packet indexes
  *   - stream merging
  *
- * To use this API, you must first create a #bt_ctf_ir_packet_reader_ops
+ * To use this API, you must first create a #bt_ctf_packet_reader_ops
  * structure and fill it with the appropriate operations for your
  * specific back-end, and then pass it to
- * bt_ctf_ir_packet_reader_create() along with your user data.
+ * bt_ctf_packet_reader_create() along with your user data.
  *
- * Call bt_ctf_ir_packet_reader_destroy() when you are done with the
+ * Call bt_ctf_packet_reader_destroy() when you are done with the
  * packet reader.
  */
 
@@ -59,42 +59,42 @@
 /**
  * Packet reader API status code.
  */
-enum bt_ctf_ir_packet_reader_status {
+enum bt_ctf_packet_reader_status {
 	/**
 	 * End of packet.
 	 *
 	 * The packet reader function called by the user reached the
 	 * end of the packet; there's no more events to be read.
 	 */
-	BT_CTF_IR_PACKET_READER_STATUS_EOP =	-4,
+	BT_CTF_PACKET_READER_STATUS_EOP =	-4,
 
 	/**
 	 * There is no data available right now, try again later.
 	 *
 	 * Some condition resulted in the
-	 * bt_ctf_ir_packet_reader_ops::get_next_buffer() user function
+	 * bt_ctf_packet_reader_ops::get_next_buffer() user function
 	 * not having access to any data now. You should retry calling
 	 * the last called packet reader function once the situation is
 	 * resolved.
 	 */
-	BT_CTF_IR_PACKET_READER_STATUS_AGAIN =	-3,
+	BT_CTF_PACKET_READER_STATUS_AGAIN =	-3,
 
 	/** Invalid argument. */
-	BT_CTF_IR_PACKET_READER_STATUS_INVAL =	-2,
+	BT_CTF_PACKET_READER_STATUS_INVAL =	-2,
 
 	/** General error. */
-	BT_CTF_IR_PACKET_READER_STATUS_ERROR =	-1,
+	BT_CTF_PACKET_READER_STATUS_ERROR =	-1,
 
 	/** Everything okay. */
-	BT_CTF_IR_PACKET_READER_STATUS_OK =	0,
+	BT_CTF_PACKET_READER_STATUS_OK =	0,
 };
 
 /**
  * Seek operation's reference position.
  */
-enum bt_ctf_ir_packet_reader_seek_origin {
+enum bt_ctf_packet_reader_seek_origin {
 	/** Beginning of packet. */
-	BT_CTF_IR_PACKET_READER_SEEK_SET = 0,
+	BT_CTF_PACKET_READER_SEEK_SET = 0,
 };
 
 /**
@@ -103,7 +103,7 @@ enum bt_ctf_ir_packet_reader_seek_origin {
  * Those user functions are called by the packet reader functions to
  * request back-end actions.
  */
-struct bt_ctf_ir_packet_reader_ops {
+struct bt_ctf_packet_reader_ops {
 	/**
 	 * Returns the next buffer to be used by the packet reader to
 	 * deserialize binary data.
@@ -130,28 +130,28 @@ struct bt_ctf_ir_packet_reader_ops {
 	 *
 	 * The function must return one of the following statuses:
 	 *
-	 *   - <b>#BT_CTF_IR_PACKET_READER_STATUS_OK</b>: everything
+	 *   - <b>#BT_CTF_PACKET_READER_STATUS_OK</b>: everything
 	 *     is okay, i.e. \p buffer_len is set to a positive value
 	 *     reflecting the number of available bytes in the buffer
 	 *     starting at the address written in \p buffer.
-	 *   - <b>#BT_CTF_IR_PACKET_READER_STATUS_AGAIN</b>:
+	 *   - <b>#BT_CTF_PACKET_READER_STATUS_AGAIN</b>:
 	 *     no data is available right now. In this case, the packet
 	 *     reader function called by the user will also return
-	 *     #BT_CTF_IR_PACKET_READER_STATUS_AGAIN, and it is the
+	 *     #BT_CTF_PACKET_READER_STATUS_AGAIN, and it is the
 	 *     user's responsability to make sure enough data becomes
 	 *     available before calling the same packet reader function
 	 *     again.
-	 *   - <b>#BT_CTF_IR_PACKET_READER_STATUS_EOP</b>: the end of
+	 *   - <b>#BT_CTF_PACKET_READER_STATUS_EOP</b>: the end of
 	 *     the packet was reached, and no more events are available.
 	 *     In this case, the packet reader function called by the
 	 *     user will also return
-	 *     #BT_CTF_IR_PACKET_READER_STATUS_EOP.
-	 *   - <b>#BT_CTF_IR_PACKET_READER_STATUS_ERROR</b>: a fatal
+	 *     #BT_CTF_PACKET_READER_STATUS_EOP.
+	 *   - <b>#BT_CTF_PACKET_READER_STATUS_ERROR</b>: a fatal
 	 *     error occured during this operation. In this case, the
 	 *     packet reader function called by the user will also
-	 *     return #BT_CTF_IR_PACKET_READER_STATUS_ERROR.
+	 *     return #BT_CTF_PACKET_READER_STATUS_ERROR.
 	 *
-	 * If #BT_CTF_IR_PACKET_READER_STATUS_OK is not returned,
+	 * If #BT_CTF_PACKET_READER_STATUS_OK is not returned,
 	 * the values of \p buffer_len and \p buffer are not
 	 * considered by the caller.
 	 *
@@ -161,7 +161,7 @@ struct bt_ctf_ir_packet_reader_ops {
 	 * @param data		User data
 	 * @returns		Status code (see description above)
 	 */
-	enum bt_ctf_ir_packet_reader_status (* get_next_buffer)(
+	enum bt_ctf_packet_reader_status (* get_next_buffer)(
 		size_t requested_len, size_t *buffer_len,
 		void * const *buffer, void *data);
 
@@ -174,17 +174,17 @@ struct bt_ctf_ir_packet_reader_ops {
 	 * This function shall set the byte offset within the current
 	 * packet, as follows:
 	 *
-	 *   - If \p whence is #BT_CTF_IR_PACKET_READER_SEEK_SET,
+	 *   - If \p whence is #BT_CTF_PACKET_READER_SEEK_SET,
 	 *     the byte offset within the packet shall be set to
 	 *     \p offset bytes.
 	 *
-	 * Currently, only #BT_CTF_IR_PACKET_READER_SEEK_SET is valid
+	 * Currently, only #BT_CTF_PACKET_READER_SEEK_SET is valid
 	 * for \p whence.
 	 *
 	 * Upon successful completion, the resulting offset, as measured
 	 * in bytes from the beginning of the packet, shall be returned.
 	 * If the resulting packet offset is invalid for the given
-	 * back-end, #BT_CTF_IR_PACKET_READER_STATUS_INVAL must be
+	 * back-end, #BT_CTF_PACKET_READER_STATUS_INVAL must be
 	 * returned, which cancels the seek operation. In this case,
 	 * the packet offset shall remain unchanged.
 	 *
@@ -193,55 +193,16 @@ struct bt_ctf_ir_packet_reader_ops {
 	 * @param data		User data
 	 * @returns		Resulting offset, as measured in bytes,
 	 * 			from the beginning of the packet, or
-	 * 			#BT_CTF_IR_PACKET_READER_STATUS_INVAL
+	 * 			#BT_CTF_PACKET_READER_STATUS_INVAL
 	 * 			when it is not possible to seek
 	 */
 	int (* seek)(int offset,
-		enum bt_ctf_ir_packet_reader_seek_origin whence,
+		enum bt_ctf_packet_reader_seek_origin whence,
 		void *data);
 };
 
 /* Packet reader context */
-struct bt_ctf_ir_packet_reader_ctx {
-	/* back-end operations */
-	struct bt_ctf_ir_packet_reader_ops ops;
-
-	/* trace (our own ref) */
-	struct bt_ctf_trace *trace;
-
-	/* current packet header (our own ref) */
-	struct bt_ctf_field *header;
-
-	/* current packet context (our own ref) */
-	struct bt_ctf_field *context;
-
-	/* current event (our own ref) */
-	struct bt_ctf_event *event;
-
-	/* packet header is complete */
-	bool header_is_complete;
-
-	/* packet context is complete */
-	bool context_is_complete;
-
-	/* event is complete */
-	bool event_is_complete;
-
-	/* current user buffer */
-	const void *buf;
-
-	/* current user buffer's size (bytes) */
-	size_t buf_size;
-
-	/* maximum request length (bytes) */
-	size_t max_request_len;
-
-	/* current offset in packet (bits) */
-	size_t at;
-
-	/* user data */
-	void *user_data;
-};
+struct bt_ctf_packet_reader_ctx;
 
 /**
  * Creates a packet reader.
@@ -253,7 +214,7 @@ struct bt_ctf_ir_packet_reader_ctx {
  *
  * @param trace			Trace to read
  * @param max_request_len	Maximum buffer length to request to
- * 				bt_ctf_ir_packet_reader_ops::get_next_buffer()
+ * 				bt_ctf_packet_reader_ops::get_next_buffer()
  * 				at a time; set to 0 for the
  * 				implementation to make this decision
  * @param ops			Back-end operations
@@ -262,9 +223,9 @@ struct bt_ctf_ir_packet_reader_ctx {
  * 				\c NULL on error
  */
 BT_HIDDEN
-struct bt_ctf_ir_packet_reader_ctx *bt_ctf_ir_packet_reader_create(
+struct bt_ctf_packet_reader_ctx *bt_ctf_packet_reader_create(
 	struct bt_ctf_trace *trace, size_t max_request_len,
-	struct bt_ctf_ir_packet_reader_ops ops, void *data);
+	struct bt_ctf_packet_reader_ops ops, void *data);
 
 /**
  * Destroys a packet reader, freeing all internal resources.
@@ -274,13 +235,13 @@ struct bt_ctf_ir_packet_reader_ctx *bt_ctf_ir_packet_reader_create(
  * @param ctx	Packet reader context
  */
 BT_HIDDEN
-void bt_ctf_ir_packet_reader_destroy(struct bt_ctf_ir_packet_reader_ctx *ctx);
+void bt_ctf_packet_reader_destroy(struct bt_ctf_packet_reader_ctx *ctx);
 
 /**
  * Resets a packet reader.
  *
  * The packet reader's offset is reset to 0, so that the next call to
- * bt_ctf_ir_packet_reader_ops::get_next_buffer() is assumed to be
+ * bt_ctf_packet_reader_ops::get_next_buffer() is assumed to be
  * at offset 0.
  *
  * This function is used to switch the back-end's data source to a
@@ -289,11 +250,11 @@ void bt_ctf_ir_packet_reader_destroy(struct bt_ctf_ir_packet_reader_ctx *ctx);
  * user data.
  *
  * @param ctx	Packet reader context
- * @returns	One of #bt_ctf_ir_packet_reader_status values
+ * @returns	One of #bt_ctf_packet_reader_status values
  */
 BT_HIDDEN
-enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_reset(
-	struct bt_ctf_ir_packet_reader_ctx *ctx);
+enum bt_ctf_packet_reader_status bt_ctf_packet_reader_reset(
+	struct bt_ctf_packet_reader_ctx *ctx);
 
 /**
  * Returns the packet header.
@@ -307,11 +268,11 @@ enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_reset(
  *
  * @param ctx		Packet reader context
  * @param packet_header	Returned packet header
- * @returns		One of #bt_ctf_ir_packet_reader_status values
+ * @returns		One of #bt_ctf_packet_reader_status values
  */
 BT_HIDDEN
-enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_get_header(
-	struct bt_ctf_ir_packet_reader_ctx *ctx,
+enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_header(
+	struct bt_ctf_packet_reader_ctx *ctx,
 	struct bt_ctf_field **packet_header);
 
 /**
@@ -326,12 +287,12 @@ enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_get_header(
  *
  * @param ctx			Packet reader context
  * @param packet_context	Returned packet context
- * @returns			One of #bt_ctf_ir_packet_reader_status
+ * @returns			One of #bt_ctf_packet_reader_status
  * 				values
  */
 BT_HIDDEN
-enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_get_context(
-	struct bt_ctf_ir_packet_reader_ctx *ctx,
+enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_context(
+	struct bt_ctf_packet_reader_ctx *ctx,
 	struct bt_ctf_field **packet_context);
 
 /**
@@ -348,11 +309,11 @@ enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_get_context(
  *
  * @param ctx		Packet reader context
  * @param event		Returned event
- * @returns		One of #bt_ctf_ir_packet_reader_status values
+ * @returns		One of #bt_ctf_packet_reader_status values
  */
 BT_HIDDEN
-enum bt_ctf_ir_packet_reader_status bt_ctf_ir_packet_reader_get_next_event(
-	struct bt_ctf_ir_packet_reader_ctx *ctx,
+enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_next_event(
+	struct bt_ctf_packet_reader_ctx *ctx,
 	struct bt_ctf_event **event);
 
 #endif /* BABELTRACE_CTF_IR_PACKET_READER_H */
