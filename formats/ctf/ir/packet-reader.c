@@ -29,10 +29,10 @@
 #include <glib.h>
 
 /*
- * Hello, fellow developer, and welcome to another free computer
- * engineering lesson!
+ * Hello, fellow developer, and welcome to another free lesson of
+ * computer engineering!
  *
- * Today, we'll learn how to implement a CTF packet reader which is
+ * Today, you will learn how to implement a CTF packet reader which is
  * versatile enough to stop in the middle of the decoding of a CTF
  * event when no more data is available, and resume later when data
  * becomes available again.
@@ -46,7 +46,8 @@
  * bt_ctf_ir_packet_reader_get_next_event()) will also return this
  * status code to the caller and no bytes will be read. The caller is
  * then responsible for making sure that some data becomes available
- * to its back-end, and needs to call the same function again to resume.
+ * to its back-end, and needs to call the same function again to resume
+ * the decoding process.
  *
  * The ultimate job of this packet reader is converting a sequence of
  * bytes (the binary CTF packet) to CTF IR fields. When a buffer is
@@ -55,7 +56,7 @@
  * of an arbitrary size. One solution would be to copy the buffers
  * returned from get_next_buffer() until we have enough data to
  * decode a whole event. This copy is, however, unnecessary, since the
- * "temporary data" could be the fields currently being built.
+ * "temporary data" can be held by the fields currently being built.
  *
  * There are a few challenges with this approach:
  *
@@ -80,9 +81,271 @@
  * The current solution for challenge #2 is to keep a current visit
  * stack in the packet reader context. The top of the stack always
  * contains the current parent field of the next field to be visited.
- * This parent field will be either a structure, an array, or a
- * sequence.
+ * This parent field will be either a structure, a variant, an array,
+ * or a sequence. The top of the stack also contains the index, within
+ * the parent field, of the next field to be visited. When this field is
+ * an atomic, readable field (integer, floating point number,
+ * enumeration, or string byte), and there's enough data left in the
+ * user-provided buffer to decode it, depending on its size and
+ * alignment, it is decoded, and the appropriate field is created with
+ * this value. The basic field is then appended to the current parent
+ * field. It the next field to read is a compound type (structure,
+ * variant, array, sequence), the (empty) field is created, and pushed
+ * on the visit stack as the new current parent field. In some cases,
+ * the current position within the user-provided buffer could be updated
+ * because of custom alignment of compound types.
+ *
+ * Let's try an example. For the sake of simplicity, we'll use field
+ * sizes and alignments which are multiples of 8 bits (always fit in
+ * whole bytes). Keep in mind, however, that this technique also works
+ * with sizes and alignments which are multiple of one bit.
+ *
+ * The root field to create is:
+ *
+ *     struct              align = 8
+ *         a: int          align = 8     size = 16
+ *         b: int          align = 32    size = 32
+ *         c: int          align = 8     size = 8
+ *         d: struct       align = 64
+ *             e: float    align = 32    size = 32
+ *             f: array    length = 5
+ *                 int     align = 8     size = 32
+ *             g: int      align = 8     size = 64
+ *         h: float        align = 32    size = 32
+ *         j: array        length = 3
+ *             enum        align = 8     size = 8
+ *         k: int          align = 64    size = 64
+ *
+ * The bytes to decode are (x means one byte of padding):
+ *
+ *      0 | i i             | a
+ *      2 | x x             |
+ *      4 | i i i i         | b
+ *      8 | i               | c
+ *      9 | x x x x x x x   |
+ *     16 | f f f f         | d.e
+ *     20 | i i i i         | d.f[0]
+ *     24 | i i i i         | d.f[1]
+ *     28 | i i i i         | d.f[2]
+ *     32 | i i i i         | d.f[3]
+ *     36 | i i i i         | d.f[4]
+ *     40 | i i i i i i i i | d.g
+ *     48 | f f f f         | h
+ *     52 | e               | j[0]
+ *     53 | e               | j[1]
+ *     54 | e               | j[2]
+ *     55 | x               |
+ *     56 | i i i i i i i i | k
+ *
+ * Total buffer size is 64 bytes.
+ *
+ * We'll now simulate a complete decoding process. Three calls to the
+ * packet reader API will be needed to finish the decoding, since two
+ * calls will be interrupted by the back-end returning the infamous
+ * BT_CTF_IR_PACKET_READER_STATUS_AGAIN status code. Assume the maximum
+ * length to request to the user back-end is 16 bytes.
+ *
+ * Let's do this, in 28 easy steps:
+ *
+ *   1.  User calls the packet reader API function.
+ *   2.  Root field is a structure. Create a structure field, and push
+ *       it on the currently empty stack, as the current parent field.
+ *       Set current index to 0.
+ *
+ *       Current stack is:
+ *
+ *           Structure (root)    Index = 0    <-- top
 
+ *   3.  We need to read a 2-byte integer. Do we have at least 2 bytes
+ *       left in the user-provided buffer? No, 0 bytes are left.
+ *       Request 16 bytes from the user. User returns 16 bytes. Set
+ *       current buffer position to 0. Read 2 bytes, create integer
+ *       field, set its value, and append it to the current parent
+ *       field. Set current index to 1. Set current buffer position
+ *       to 2.
+ *   4.  We need to read a 4-byte integer after having skipped 2 bytes
+ *       of padding. Do we have at least 6 bytes left in the buffer?
+ *       Yes, 14 bytes are left. Set current buffer position to 4. Read
+ *       4 bytes, create integer field, set its value, and append it to
+ *       the current parent field. Set current index to 2. Set current
+ *       buffer position to 6.
+ *   5.  We need to read a 1-byte integer. Do we have at least 1 byte
+ *       left in the buffer? Yes, 10 bytes are left. Read 1 byte, create
+ *       integer field, set its value, and append it to the current
+ *       parent field. Set current index to 3. Set current buffer
+ *       position to 9.
+ *   6.  Field at index 3 is a structure. Create a structure field.
+ *       Append it to the current parent field. Push it on the stack
+ *       as the current parent field. Set current field index to 0. We
+ *       need to skip 9 bytes of padding. Do we have at least 9 bytes
+ *       left in the buffer? Yes, 9 bytes are left. Set current buffer
+ *       position to 16.
+ *
+ *       Current stack is:
+ *
+ *           Structure (d)       Index = 0    <-- top
+ *           Structure (root)    Index = 3
+ *
+ *   7.  We need to read a 4-byte floating point number. Do we have at
+ *       least 4 bytes left in the buffer? No, 0 bytes are left.
+ *       Request 16 bytes from the user. User returns the
+ *       BT_CTF_IR_PACKET_READER_STATUS_AGAIN status code. Packet reader
+ *       API function returns BT_CTF_IR_PACKET_READER_STATUS_AGAIN to
+ *       the user.
+ *   8.  User makes sure some data becomes available to its back-end.
+ *       User calls the packet reader API function to continue.
+ *   9.  We need to read a 4-byte floating point number. Do we have at
+ *       least 4 bytes left in the buffer? No, 0 bytes are left.
+ *       Request 16 bytes to the user. User returns 10 bytes. Set
+ *       current buffer position to 0. Read 4 bytes, create floating
+ *       point number field, set its value, and append it to the
+ *       current parent field. Set current index to 1. Set current
+ *       buffer position to 4.
+ *   10. Field at index 1 is an array. Create an array field. Append it
+ *       to the current parent field. Push it on the stack as the
+ *       current parent field. Set current index to 0.
+ *
+ *       Current stack is:
+ *
+ *           Array     (d.f)     Index = 0    <-- top
+ *           Structure (d)       Index = 1
+ *           Structure (root)    Index = 3
+ *
+ *   11. We need to read a 4-byte integer. Do we have at least 4 bytes
+ *       left in the buffer? Yes, 6 bytes are left. Read 4 bytes, create
+ *       integer field, set its value, and append it to the current
+ *       parent field. Set current index to 1. Set current buffer
+ *       position to 8.
+ *   12. We need to read a 4-byte integer. Do we have at least 4 bytes
+ *       left in the buffer? No, 2 bytes are left. Read 2 bytes,
+ *       append them to the (empty) stitch buffer. Set current buffer
+ *       position to 14. Request 16 bytes from the user. User returns
+ *       14 bytes. Set current buffer position to 0. Read 2 bytes,
+ *       append them to the stitch buffer. Create integer field, set its
+ *       value (from the decoded stitch buffer), reset the stitch
+ *       buffer, and append the field to the current parent field. Set
+ *       current index to 2. Set current buffer position to 2.
+ *   13. We need to read a 4-byte integer. Do we have at least 4 bytes
+ *       left in the buffer? Yes, 12 bytes are left. Read 4 bytes,
+ *       create integer field, set its value, and append it to the
+ *       current parent field. Set current index to 3. Set current
+ *       buffer position to 6.
+ *   14. We need to read a 4-byte integer. Do we have at least 4 bytes
+ *       left in the buffer? Yes, 8 bytes are left. Read 4 bytes,
+ *       create integer field, set its value, and append it to the
+ *       current parent field. Set current index to 4. Set current
+ *       buffer position to 10.
+ *   15. We need to read a 4-byte integer. Do we have at least 4 bytes
+ *       left in the buffer? Yes, 4 bytes are left. Read 4 bytes,
+ *       create integer field, set its value, and append it to the
+ *       current parent field. Set current index to 5. Set current
+ *       buffer position to 14.
+ *   16. Current index equals parent field's length (5): pop stack's
+ *       top entry. Set current index to 2.
+ *
+ *       Current stack is:
+ *
+ *           Structure (d)       Index = 2    <-- top
+ *           Structure (root)    Index = 3
+ *
+ *   17. We need to read an 8-byte integer. Do we have at least 8 bytes
+ *       left in the buffer? No, 0 bytes are left. Request 16 bytes from
+ *       the user. User returns the BT_CTF_IR_PACKET_READER_STATUS_AGAIN
+ *       status code. Packet reader API function returns
+ *       BT_CTF_IR_PACKET_READER_STATUS_AGAIN to the user.
+ *   18. User makes sure some data becomes available to its back-end.
+ *       User calls the packet reader API function to continue.
+ *   19. We need to read an 8-byte integer. Do we have at least 8 bytes
+ *       left in the buffer? No, 0 bytes are left. Request 16 bytes from
+ *       the user. User returns 16 bytes. Set current buffer position to
+ *       0. Read 8 bytes, create integer field, set its value, and
+ *       append it to the current parent field. Set current index to
+ *       3. Set current buffer position to 8.
+ *   20. Current index equals parent field's length (3): pop stack's
+ *       top entry. Set current index to 4.
+ *
+ *       Current stack is:
+ *
+ *           Structure (root)    Index = 4    <-- top
+ *
+ *   21. We need to read a 4-byte floating point number. Do we have at
+ *       least 4 bytes left in the buffer? Yes, 8 bytes are left.
+ *       Read 4 bytes, create floating point number field, set its
+ *       value, and append it to the current parent field. Set current
+ *       index to 5. Set current buffer position to 12.
+ *   22. Field at index 5 is an array. Create an array field. Append it
+ *       to the current parent field. Push it on the stack as the
+ *       current parent field. Set current index to 0.
+ *
+ *       Current stack is:
+ *
+ *           Array     (j)       Index = 0    <-- top
+ *           Structure (root)    Index = 5
+ *
+ *   23. We need to read a 1-byte enumeration. Do we have at least 1
+ *       byte left in the buffer? Yes, 4 bytes are left. Read 1 byte,
+ *       create enumeration field, set its value, and append it to the
+ *       current parent field. Set current index to 1. Set current
+ *       buffer position to 13.
+ *   24. We need to read a 1-byte enumeration. Do we have at least 1
+ *       byte left in the buffer? Yes, 3 bytes are left. Read 1 byte,
+ *       create enumeration field, set its value, and append it to the
+ *       current parent field. Set current index to 2. Set current
+ *       buffer position to 14.
+ *   25. We need to read a 1-byte enumeration. Do we have at least 1
+ *       byte left in the buffer? Yes, 2 bytes are left. Read 1 byte,
+ *       create enumeration field, set its value, and append it to the
+ *       current parent field. Set current index to 3. Set current
+ *       buffer position to 15.
+ *   26. Current index equals parent field's length (3): pop stack's
+ *       top entry. Set current index to 6.
+ *
+ *       Current stack is:
+ *
+ *           Structure (root)    Index = 6    <-- top
+ *
+ *   27. We need to read an 8-byte integer after having skipped 1 byte
+ *       of padding. Do we have at least 9 bytes left in the buffer?
+ *       No, 1 byte is left. Skip this 1 byte as padding. Request 8
+ *       bytes from the user. User returns 8 bytes. Set current buffer
+ *       position to 0. Read 8 bytes, create integer field, set its
+ *       value, and append it to the current parent field. Set current
+ *       index to 7. Set current buffer position to 8.
+ *   28. Current index equals parent field's length (7): pop stack's
+ *       top entry. Current stack is empty. Return popped field to
+ *       user.
+ *
+ * We didn't explore how string fields are decoded yet. Get hold of
+ * yourself, here it is. A CTF string is a special type since it is
+ * considered a basic type as per the CTF specifications, yet it really
+ * is a sequence of individual bytes. Of course, this device handles
+ * strings one byte at a time, thus the stitch buffer is never needed.
+ *
+ * Let's say we need to read a 28-byte string, that is, 27 printable
+ * bytes followed by one null byte. We begin by creating an empty
+ * string field, and then we push it on top of the stack. The current
+ * index for this stack entry is meaningless. Assume the maximum length
+ * to request to the user back-end is 16 bytes.
+ *
+ * 16 bytes are requested and returned. A null byte is searched for in
+ * the returned buffer. None is found, so the whole 16-byte block is
+ * appended to the current string field. Since no null byte was found,
+ * the string field remains incomplete. 16 bytes are requested and
+ * returned. A null byte is searched for in the returned buffer, and
+ * is found at position 11. Bytes from position 0 to 10 are appended
+ * to the current string field. Since a null byte was found, the
+ * string field is considered complete, and it is popped off the
+ * stack. Byte 11, the null byte, is skipped, so the current buffer
+ * position is set to 12.
+ *
+ * Our 28-step example did not look into variants either. They are
+ * pretty easy, in fact. When one is hit, create the variant field, and
+ * push it as the current parent field. Continue the loop. When the
+ * current parent field is a variant, try reading its currently selected
+ * field. When done, pop the variant.
+ *
+ *                          - T H E   E N D -
+ */
 
 struct stack_entry {
 	/*
