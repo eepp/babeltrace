@@ -1,5 +1,5 @@
 /*
- * BabelTrace - CTF IR: Packet reader
+ * Babeltrace - CTF IR: Packet reader
  *
  * Copyright (c) 2015 EfficiOS Inc. and Linux Foundation
  * Copyright (c) 2015 Philippe Proulx <pproulx@efficios.com>
