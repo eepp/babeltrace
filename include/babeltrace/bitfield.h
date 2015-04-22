@@ -236,7 +236,7 @@ do {									\
 
 #endif
 
-#define _bt_bitfield_read_le(_ptr, type, _start, _length, _vptr)	\
+#define _bt_bitfield_read_le(_ptr, type, _start, _length, _vptr, _cont)	\
 do {									\
 	typeof(*(_vptr)) *__vptr = (_vptr);				\
 	typeof(*__vptr) __v;						\
@@ -248,7 +248,8 @@ do {									\
 	unsigned long end, cshift; /* cshift is "complement shift" */	\
 									\
 	if (!__length) {						\
-		*__vptr = 0;						\
+		if (!_cont)						\
+			*__vptr = 0;					\
 		break;							\
 	}								\
 									\
@@ -257,7 +258,9 @@ do {									\
 	end_unit = (end + (ts - 1)) / ts;				\
 									\
 	this_unit = end_unit - 1;					\
-	if (_bt_is_signed_type(typeof(__v))				\
+	if (_cont)							\
+		__v = *__vptr;						\
+	else if (_bt_is_signed_type(typeof(__v))			\
 	    && (__ptr[this_unit] & ((type) 1 << ((end % ts ? : ts) - 1)))) \
 		__v = ~(typeof(__v)) 0;					\
 	else								\
@@ -303,7 +306,7 @@ do {									\
 	*__vptr = __v;							\
 } while (0)
 
-#define _bt_bitfield_read_be(_ptr, type, _start, _length, _vptr)	\
+#define _bt_bitfield_read_be(_ptr, type, _start, _length, _vptr, _cont)	\
 do {									\
 	typeof(*(_vptr)) *__vptr = (_vptr);				\
 	typeof(*__vptr) __v;						\
@@ -315,7 +318,8 @@ do {									\
 	unsigned long end, cshift; /* cshift is "complement shift" */	\
 									\
 	if (!__length) {						\
-		*__vptr = 0;						\
+		if (!_cont)						\
+			*__vptr = 0;					\
 		break;							\
 	}								\
 									\
@@ -324,7 +328,9 @@ do {									\
 	end_unit = (end + (ts - 1)) / ts;				\
 									\
 	this_unit = start_unit;						\
-	if (_bt_is_signed_type(typeof(__v))				\
+	if (_cont)							\
+		__v = *__vptr;						\
+	else if (_bt_is_signed_type(typeof(__v))			\
 	    && (__ptr[this_unit] & ((type) 1 << (ts - (__start % ts) - 1)))) \
 		__v = ~(typeof(__v)) 0;					\
 	else								\
@@ -379,24 +385,42 @@ do {									\
 #if (BYTE_ORDER == LITTLE_ENDIAN)
 
 #define bt_bitfield_read(_ptr, type, _start, _length, _vptr)		\
-	_bt_bitfield_read_le(_ptr, type, _start, _length, _vptr)
+	_bt_bitfield_read_le(_ptr, type, _start, _length, _vptr, 0)
 
 #define bt_bitfield_read_le(_ptr, type, _start, _length, _vptr)		\
-	_bt_bitfield_read_le(_ptr, type, _start, _length, _vptr)
-	
+	_bt_bitfield_read_le(_ptr, type, _start, _length, _vptr, 0)
+
 #define bt_bitfield_read_be(_ptr, type, _start, _length, _vptr)		\
-	_bt_bitfield_read_be(_ptr, unsigned char, _start, _length, _vptr)
+	_bt_bitfield_read_be(_ptr, unsigned char, _start, _length, _vptr, 0)
+
+#define bt_bitfield_readx(_ptr, type, _start, _length, _vptr, _cont)	\
+	_bt_bitfield_read_le(_ptr, type, _start, _length, _vptr, _cont)
+
+#define bt_bitfield_readx_le(_ptr, type, _start, _length, _vptr, _cont)	\
+	_bt_bitfield_read_le(_ptr, type, _start, _length, _vptr, _cont)
+
+#define bt_bitfield_readx_be(_ptr, type, _start, _length, _vptr, _cont)	\
+	_bt_bitfield_read_be(_ptr, unsigned char, _start, _length, _vptr, _cont)
 
 #elif (BYTE_ORDER == BIG_ENDIAN)
 
 #define bt_bitfield_read(_ptr, type, _start, _length, _vptr)		\
-	_bt_bitfield_read_be(_ptr, type, _start, _length, _vptr)
+	_bt_bitfield_read_be(_ptr, type, _start, _length, _vptr, 0)
 
 #define bt_bitfield_read_le(_ptr, type, _start, _length, _vptr)		\
-	_bt_bitfield_read_le(_ptr, unsigned char, _start, _length, _vptr)
-	
+	_bt_bitfield_read_le(_ptr, unsigned char, _start, _length, _vptr, 0)
+
 #define bt_bitfield_read_be(_ptr, type, _start, _length, _vptr)		\
-	_bt_bitfield_read_be(_ptr, type, _start, _length, _vptr)
+	_bt_bitfield_read_be(_ptr, type, _start, _length, _vptr, 0)
+
+#define bt_bitfield_readx(_ptr, type, _start, _length, _vptr, _cont)	\
+	_bt_bitfield_read_be(_ptr, type, _start, _length, _vptr, _cont)
+
+#define bt_bitfield_readx_le(_ptr, type, _start, _length, _vptr, _cont)	\
+	_bt_bitfield_read_le(_ptr, unsigned char, _start, _length, _vptr, _cont)
+
+#define bt_bitfield_readx_be(_ptr, type, _start, _length, _vptr, _cont)	\
+	_bt_bitfield_read_be(_ptr, type, _start, _length, _vptr, _cont)
 
 #else /* (BYTE_ORDER == PDP_ENDIAN) */
 
