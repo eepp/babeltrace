@@ -45,7 +45,7 @@
  * This packet reader depends on a user-provided back-end, implementing
  * a function used by this reader to request more bytes of the current
  * packet. This user function, get_next_buffer(), might return the
- * BT_CTF_PACKET_READER_STATUS_AGAIN status code, in which case
+ * BT_CTF_STREAM_READER_STATUS_AGAIN status code, in which case
  * the packet reader function (either bt_ctf_packet_reader_get_header(),
  * bt_ctf_packet_reader_get_context(), or
  * bt_ctf_packet_reader_get_next_event()) will also return this
@@ -69,19 +69,19 @@
  *      user buffer, and we need to read an 8-byte integer, how do we
  *      do this?
  *   2. If we have to stop in the middle of a decoding process because
- *      get_next_buffer() returned BT_CTF_PACKET_READER_STATUS_AGAIN,
+ *      get_next_buffer() returned BT_CTF_STREAM_READER_STATUS_AGAIN,
  *      how do we remember where we were in the current field, and how
  *      do we continue from there?
  *
- * The solution for challenge #1 is easy: keep a "stitch buffer" with a
- * size equal to the maximum atomic field size (64-bit integer in this
- * version). When the next atomic field's size is larger than what's
- * left in the current user buffer, copy the remaining buffer bits
- * to the stitch buffer, incrementing the current stitch buffer's
- * internal position. Repeat this until the stitch buffer's occupied
- * size is equal to the next atomic field's size. Then, decode the
- * field from the stitch buffer. The stitch buffer should only be
- * used in stitch situations.
+ * The solution for challenge #1 is easy: the bt_bitfield_readx_*()
+ * functions take a _cont flag which can be set to 1 to continue the
+ * bitfield decoding process using a previous result. When the next
+ * atomic field's size is larger than what's left in the current user
+ * buffer, call bt_bitfield_readx_*() with _cont set to 0 to begin the
+ * bitfield decoding process, and save the temporary result. Call
+ * this function again with _cont set to 1 until the total read size
+ * is equal to the atomic field's size. The last result is the atomic
+ * field's value.
  *
  * The current solution for challenge #2 is to keep a current visit
  * stack in the packet reader context. The top of the stack always
@@ -155,8 +155,8 @@
  * We'll now simulate a complete decoding process. Three calls to the
  * packet reader API will be needed to finish the decoding, since two
  * calls will be interrupted by the back-end returning the infamous
- * BT_CTF_PACKET_READER_STATUS_AGAIN status code. Assume the maximum
- * length to request to the user back-end is 16 bytes.
+ * BT_CTF_STREAM_READER_STATUS_AGAIN status code. Assume the maximum
+ * length to request to the user back-end is 128 bits.
  *
  * Let's do this, in 28 easy steps:
  *
@@ -169,51 +169,51 @@
  *
  *           Structure (root)    Index = 0    <-- top
 
- *   3.  We need to read a 2-byte integer. Do we have at least 2 bytes
- *       left in the user-provided buffer? No, 0 bytes are left.
- *       Request 16 bytes from the user. User returns 16 bytes. Set
- *       current buffer position to 0. Read 2 bytes, create integer
+ *   3.  We need to read a 16-bit integer. Do we have at least 16 bits
+ *       left in the user-provided buffer? No, 0 bits are left.
+ *       Request 128 bits from the user. User returns 128 bits. Set
+ *       current buffer position to 0. Read 16 bits, create integer
  *       field, set its value, and append it to the current parent
  *       field. Set current index to 1. Set current buffer position
- *       to 2.
- *   4.  We need to read a 4-byte integer after having skipped 2 bytes
- *       of padding. Do we have at least 6 bytes left in the buffer?
- *       Yes, 14 bytes are left. Set current buffer position to 4. Read
- *       4 bytes, create integer field, set its value, and append it to
+ *       to 16.
+ *   4.  We need to read a 32-bit integer after having skipped 16 bits
+ *       of padding. Do we have at least 48 bits left in the buffer?
+ *       Yes, 112 bits are left. Set current buffer position to 32. Read
+ *       32 bits, create integer field, set its value, and append it to
  *       the current parent field. Set current index to 2. Set current
- *       buffer position to 6.
- *   5.  We need to read a 1-byte integer. Do we have at least 1 byte
- *       left in the buffer? Yes, 10 bytes are left. Read 1 byte, create
+ *       buffer position to 64.
+ *   5.  We need to read an 8-bit integer. Do we have at least 8 bits
+ *       left in the buffer? Yes, 64 bits are left. Read 8 bits, create
  *       integer field, set its value, and append it to the current
  *       parent field. Set current index to 3. Set current buffer
- *       position to 9.
+ *       position to 72.
  *   6.  Field at index 3 is a structure. Create a structure field.
  *       Append it to the current parent field. Push it on the stack
  *       as the current parent field. Set current field index to 0. We
- *       need to skip 9 bytes of padding. Do we have at least 9 bytes
- *       left in the buffer? Yes, 9 bytes are left. Set current buffer
- *       position to 16.
+ *       need to skip 42 bits of padding. Do we have at least 42 bits
+ *       left in the buffer? Yes, 42 bits are left. Set current buffer
+ *       position to 128.
  *
  *       Current stack is:
  *
  *           Structure (d)       Index = 0    <-- top
  *           Structure (root)    Index = 3
  *
- *   7.  We need to read a 4-byte floating point number. Do we have at
- *       least 4 bytes left in the buffer? No, 0 bytes are left.
- *       Request 16 bytes from the user. User returns the
- *       BT_CTF_PACKET_READER_STATUS_AGAIN status code. Packet reader
+ *   7.  We need to read a 32-bit floating point number. Do we have at
+ *       least 32 bits left in the buffer? No, 0 bits are left.
+ *       Request 128 bits from the user. User returns the
+ *       BT_CTF_STREAM_READER_STATUS_AGAIN status code. Packet reader
  *       API function returns BT_CTF_PACKET_READER_STATUS_AGAIN to
  *       the user.
  *   8.  User makes sure some data becomes available to its back-end.
  *       User calls the packet reader API function to continue.
- *   9.  We need to read a 4-byte floating point number. Do we have at
- *       least 4 bytes left in the buffer? No, 0 bytes are left.
- *       Request 16 bytes to the user. User returns 10 bytes. Set
- *       current buffer position to 0. Read 4 bytes, create floating
+ *   9.  We need to read a 32-bit floating point number. Do we have at
+ *       least 32 bits left in the buffer? No, 0 bits are left.
+ *       Request 128 bits to the user. User returns 80 bits. Set
+ *       current buffer position to 0. Read 32 bits, create floating
  *       point number field, set its value, and append it to the
  *       current parent field. Set current index to 1. Set current
- *       buffer position to 4.
+ *       buffer position to 32.
  *   10. Field at index 1 is an array. Create an array field. Append it
  *       to the current parent field. Push it on the stack as the
  *       current parent field. Set current index to 0.
@@ -224,35 +224,36 @@
  *           Structure (d)       Index = 1
  *           Structure (root)    Index = 3
  *
- *   11. We need to read a 4-byte integer. Do we have at least 4 bytes
- *       left in the buffer? Yes, 6 bytes are left. Read 4 bytes, create
+ *   11. We need to read a 32-bit integer. Do we have at least 32 bits
+ *       left in the buffer? Yes, 48 bits are left. Read 32 bits, create
  *       integer field, set its value, and append it to the current
  *       parent field. Set current index to 1. Set current buffer
- *       position to 8.
- *   12. We need to read a 4-byte integer. Do we have at least 4 bytes
- *       left in the buffer? No, 2 bytes are left. Read 2 bytes,
- *       append them to the (empty) stitch buffer. Set current buffer
- *       position to 14. Request 16 bytes from the user. User returns
- *       14 bytes. Set current buffer position to 0. Read 2 bytes,
- *       append them to the stitch buffer. Create integer field, set its
- *       value (from the decoded stitch buffer), reset the stitch
- *       buffer, and append the field to the current parent field. Set
- *       current index to 2. Set current buffer position to 2.
- *   13. We need to read a 4-byte integer. Do we have at least 4 bytes
- *       left in the buffer? Yes, 12 bytes are left. Read 4 bytes,
+ *       position to 64.
+ *   12. We need to read a 32-bit integer. Do we have at least 32 bits
+ *       left in the buffer? No, 16 bits are left. Read 16 bits,
+ *       call bt_bitfield_readx_*() with _cont set to 0 to get a partial
+ *       result. Set current buffer position to 80. Request 128 bits
+ *       from the user. User returns 112 bits. Set current buffer
+ *       position to 0. Read 16 bits, call bt_bitfield_readx_*() with
+ *       _cont set to 1 and the previous result. Create integer field,
+ *       set its value (from the last decoded result), and append the
+ *       field to the current parent field. Set current index to 2. Set
+ *       current buffer position to 16.
+ *   13. We need to read a 32-bit integer. Do we have at least 32 bits
+ *       left in the buffer? Yes, 96 bits are left. Read 32 bits,
  *       create integer field, set its value, and append it to the
  *       current parent field. Set current index to 3. Set current
- *       buffer position to 6.
- *   14. We need to read a 4-byte integer. Do we have at least 4 bytes
- *       left in the buffer? Yes, 8 bytes are left. Read 4 bytes,
+ *       buffer position to 48.
+ *   14. We need to read a 32-bit integer. Do we have at least 32 bits
+ *       left in the buffer? Yes, 64 bits are left. Read 32 bits,
  *       create integer field, set its value, and append it to the
  *       current parent field. Set current index to 4. Set current
- *       buffer position to 10.
- *   15. We need to read a 4-byte integer. Do we have at least 4 bytes
- *       left in the buffer? Yes, 4 bytes are left. Read 4 bytes,
+ *       buffer position to 80.
+ *   15. We need to read a 32-bit integer. Do we have at least 32 bits
+ *       left in the buffer? Yes, 32 bits are left. Read 32 bits,
  *       create integer field, set its value, and append it to the
  *       current parent field. Set current index to 5. Set current
- *       buffer position to 14.
+ *       buffer position to 112.
  *   16. Current index equals parent field's length (5): pop stack's
  *       top entry. Set current index to 2.
  *
@@ -261,19 +262,19 @@
  *           Structure (d)       Index = 2    <-- top
  *           Structure (root)    Index = 3
  *
- *   17. We need to read an 8-byte integer. Do we have at least 8 bytes
- *       left in the buffer? No, 0 bytes are left. Request 16 bytes from
- *       the user. User returns the BT_CTF_PACKET_READER_STATUS_AGAIN
+ *   17. We need to read a 64-bit integer. Do we have at least 64 bits
+ *       left in the buffer? No, 0 bits are left. Request 128 bits from
+ *       the user. User returns the BT_CTF_STREAM_READER_STATUS_AGAIN
  *       status code. Packet reader API function returns
  *       BT_CTF_PACKET_READER_STATUS_AGAIN to the user.
  *   18. User makes sure some data becomes available to its back-end.
  *       User calls the packet reader API function to continue.
- *   19. We need to read an 8-byte integer. Do we have at least 8 bytes
- *       left in the buffer? No, 0 bytes are left. Request 16 bytes from
- *       the user. User returns 16 bytes. Set current buffer position to
- *       0. Read 8 bytes, create integer field, set its value, and
+ *   19. We need to read a 64-bit integer. Do we have at least 64 bits
+ *       left in the buffer? No, 0 bits are left. Request 128 bits from
+ *       the user. User returns 128 bits. Set current buffer position to
+ *       0. Read 64 bits, create integer field, set its value, and
  *       append it to the current parent field. Set current index to
- *       3. Set current buffer position to 8.
+ *       3. Set current buffer position to 64.
  *   20. Current index equals parent field's length (3): pop stack's
  *       top entry. Set current index to 4.
  *
@@ -281,11 +282,11 @@
  *
  *           Structure (root)    Index = 4    <-- top
  *
- *   21. We need to read a 4-byte floating point number. Do we have at
- *       least 4 bytes left in the buffer? Yes, 8 bytes are left.
- *       Read 4 bytes, create floating point number field, set its
+ *   21. We need to read a 32-bit floating point number. Do we have at
+ *       least 32 bits left in the buffer? Yes, 64 bits are left.
+ *       Read 32 bits, create floating point number field, set its
  *       value, and append it to the current parent field. Set current
- *       index to 5. Set current buffer position to 12.
+ *       index to 5. Set current buffer position to 96.
  *   22. Field at index 5 is an array. Create an array field. Append it
  *       to the current parent field. Push it on the stack as the
  *       current parent field. Set current index to 0.
@@ -295,21 +296,21 @@
  *           Array     (j)       Index = 0    <-- top
  *           Structure (root)    Index = 5
  *
- *   23. We need to read a 1-byte enumeration. Do we have at least 1
- *       byte left in the buffer? Yes, 4 bytes are left. Read 1 byte,
+ *   23. We need to read an 8-bit enumeration. Do we have at least 8
+ *       bits left in the buffer? Yes, 32 bits are left. Read 8 bit,
  *       create enumeration field, set its value, and append it to the
  *       current parent field. Set current index to 1. Set current
- *       buffer position to 13.
- *   24. We need to read a 1-byte enumeration. Do we have at least 1
- *       byte left in the buffer? Yes, 3 bytes are left. Read 1 byte,
+ *       buffer position to 104.
+ *   24. We need to read an 8-bit enumeration. Do we have at least 8
+ *       bits left in the buffer? Yes, 24 bits are left. Read 8 bit,
  *       create enumeration field, set its value, and append it to the
  *       current parent field. Set current index to 2. Set current
- *       buffer position to 14.
- *   25. We need to read a 1-byte enumeration. Do we have at least 1
- *       byte left in the buffer? Yes, 2 bytes are left. Read 1 byte,
+ *       buffer position to 112.
+ *   25. We need to read an 8-bit enumeration. Do we have at least 8
+ *       bits left in the buffer? Yes, 16 bits are left. Read 8 bit,
  *       create enumeration field, set its value, and append it to the
  *       current parent field. Set current index to 3. Set current
- *       buffer position to 15.
+ *       buffer position to 120.
  *   26. Current index equals parent field's length (3): pop stack's
  *       top entry. Set current index to 6.
  *
@@ -317,13 +318,13 @@
  *
  *           Structure (root)    Index = 6    <-- top
  *
- *   27. We need to read an 8-byte integer after having skipped 1 byte
- *       of padding. Do we have at least 9 bytes left in the buffer?
- *       No, 1 byte is left. Skip this 1 byte as padding. Request 8
- *       bytes from the user. User returns 8 bytes. Set current buffer
- *       position to 0. Read 8 bytes, create integer field, set its
+ *   27. We need to read a 64-bit integer after having skipped 8 bits
+ *       of padding. Do we have at least 72 bits left in the buffer?
+ *       No, 8 bits is left. Skip this 8 bit as padding. Request 64
+ *       bits from the user. User returns 64 bits. Set current buffer
+ *       position to 0. Read 64 bits, create integer field, set its
  *       value, and append it to the current parent field. Set current
- *       index to 7. Set current buffer position to 8.
+ *       index to 7. Set current buffer position to 64.
  *   28. Current index equals parent field's length (7): pop stack's
  *       top entry. Current stack is empty. Return popped field to
  *       user.
@@ -335,8 +336,7 @@
  * We didn't explore how string fields are decoded yet. Get hold of
  * yourself, here it is. A CTF string is a special type since it is
  * considered a basic type as per the CTF specifications, yet it really
- * is a sequence of individual bytes. Of course, this device handles
- * strings one byte at a time, thus the stitch buffer is never needed.
+ * is a sequence of individual bytes.
  *
  * Let's say we need to read a 28-byte string, that is, 27 printable
  * bytes followed by one null byte. We begin by creating an empty
@@ -369,7 +369,7 @@
  * Packet reading
  * ==============
  *
- * So this demonstrated how to transform bytes into fields with decoding
+ * So this demonstrated how to transform bits into fields with decoding
  * interrupt support. The process of decoding a whole CTF packet uses
  * this, but we also introduce a decoding state.
  *
@@ -386,7 +386,7 @@
  * The first step is thus decoding the packet header. Since we don't
  * know the packet size yet (this information, if it exists, is in the
  * packet context, which immediately follows the packet header), though,
- * we need to be careful in how many bytes to request from the user.
+ * we need to be careful in how many bits to request from the user.
  * Assume a packet header size of 24 bytes, which is typical, and a
  * maximum size to request of 4096 bytes. We must not request more than
  * the packet header size, because we don't know what follows yet (this
@@ -399,10 +399,34 @@
  *     one variant field): request only what's needed for the next
  *     atomic field until the whole packet header is read.
  *
- * Once we have the stream ID, we can find the stream, and thus the
- * packet context type. We also need to request the bytes of one
- * atomic field at a time.
+ * Requesting just enough when the packet size is unknown is important,
+ * because requesting too much could result in having requested bits
+ * that belong to the next packet, or bits that do not exist, and there
+ * is no way to tell the user that we requested too much.
  *
+ * Once we have the stream ID, we can find the stream, and thus the
+ * packet context type. We proceed with decoding the packet context.
+ * Again: request the whole packet context size if it's fixed, otherwise
+ * one atomic field at a time, until we get either the `content_size` or
+ * the `packet_size` field (which sets how many bits we need to read in
+ * the whole packet), or the end of the packet context.
+ *
+ * Once there, we have everything we need to start decoding events.
+ * If we know the packet size, we will request the maximum request size
+ * to the stream reader until this size is reached. Otherwise, we
+ * always request the maximum request size until the stream reader
+ * returns BT_CTF_STREAM_READER_STATUS_EOS (end of stream), in which
+ * case we return BT_CTF_PACKET_READER_STATUS_EOP to the caller.
+ *
+ * When the packet reader context is created, we're at the initial
+ * state: nothing is decoded yet. We always have to go through the
+ * packet header and context decoding states before reading events, so
+ * even if the first API call is bt_ctf_packet_reader_get_next_event(),
+ * the packet reader will still decode the packet header and context
+ * before eventually decoding the first event, and returning it. Then
+ * subsequent calls to bt_ctf_packet_reader_get_header() and
+ * bt_ctf_packet_reader_get_context() will simply return the previously
+ * decoded fields.
  *
  *                          - T H E   E N D -
  */
