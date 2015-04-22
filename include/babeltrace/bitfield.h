@@ -215,7 +215,7 @@ do {									\
 
 #define bt_bitfield_write_le(ptr, type, _start, _length, _v)		\
 	_bt_bitfield_write_le(ptr, type, _start, _length, _v)
-	
+
 #define bt_bitfield_write_be(ptr, type, _start, _length, _v)		\
 	_bt_bitfield_write_be(ptr, unsigned char, _start, _length, _v)
 
@@ -226,7 +226,7 @@ do {									\
 
 #define bt_bitfield_write_le(ptr, type, _start, _length, _v)		\
 	_bt_bitfield_write_le(ptr, unsigned char, _start, _length, _v)
-	
+
 #define bt_bitfield_write_be(ptr, type, _start, _length, _v)		\
 	_bt_bitfield_write_be(ptr, type, _start, _length, _v)
 
