@@ -23,12 +23,6 @@
  * SOFTWARE.
  */
 
-#include <stdint.h>
-#include <stddef.h>
-#include <assert.h>
-#include <babeltrace/ctf-ir/packet-reader.h>
-#include <glib.h>
-
 /*
  * Hello, fellow developer, and welcome to another free lesson of
  * computer engineering!
@@ -111,24 +105,24 @@
  *
  * The root field to create is:
  *
- *     struct              align = 8
- *         a: int          align = 8     size = 16
- *         b: int          align = 32    size = 32
- *         c: int          align = 8     size = 8
- *         d: struct       align = 64
- *             e: float    align = 32    size = 32
- *             f: array    length = 5
- *                 int     align = 8     size = 32
- *             g: int      align = 8     size = 64
- *         h: float        align = 32    size = 32
- *         j: array        length = 3
- *             enum        align = 8     size = 8
- *         k: int          align = 64    size = 64
+ *     struct            align = 8
+ *       a: int	         align = 8     size = 16
+ *       b: int	         align = 32    size = 32
+ *       c: int	         align = 8     size = 8
+ *       d: struct       align = 64
+ *           e: float    align = 32    size = 32
+ *           f: array    length = 5
+ *             int       align = 8     size = 32
+ *           g: int      align = 8     size = 64
+ *       h: float        align = 32    size = 32
+ *       j: array        length = 3
+ *           enum        align = 8     size = 8
+ *       k: int          align = 64    size = 64
  *
  * The bytes to decode are (`x` means one byte of padding):
  *
  *     +--------+-----------------+-------------+
- *     | Offset | Bytes           | Field       |
+ *     | Offset | Bytes	          | Field       |
  *     +========+=================+=============+
  *     |      0 | i i             | root.a      |
  *     |      2 | x x             |             |
@@ -168,7 +162,7 @@
  *       Current stack is:
  *
  *           Structure (root)    Index = 0    <-- top
-
+ *
  *   3.  We need to read a 16-bit integer. Do we have at least 16 bits
  *       left in the user-provided buffer? No, 0 bits are left.
  *       Request 128 bits from the user. User returns 128 bits. Set
@@ -431,6 +425,15 @@
  *                          - T H E   E N D -
  */
 
+#include <stdint.h>
+#include <stddef.h>
+#include <assert.h>
+#include <babeltrace/ctf-ir/packet-reader.h>
+#include <babeltrace/bitfield.h>
+#include <babeltrace/ctf-ir/event-types.h>
+#include <babeltrace/ctf-ir/event-fields.h>
+#include <glib.h>
+
 struct stack_entry {
 	/*
 	 * Current base field, one of:
@@ -441,10 +444,16 @@ struct stack_entry {
 	 *   * variant
 	 *   * string
 	 */
-	struct bt_ctf_field *cur_base;
+	struct bt_ctf_field *base;
+
+	/* current base field type */
+	struct bt_ctf_field_type *base_type;
+
+	/* length of base field */
+	int64_t base_len;
 
 	/* index of next field to read */
-	uint64_t cur_index;
+	int64_t index;
 };
 
 struct stack {
@@ -453,16 +462,21 @@ struct stack {
 };
 
 enum decoding_state {
-	DECODING_STATE_INIT,
+	DECODING_STATE_HEADER_INIT,
 	DECODING_STATE_HEADER,
+	DECODING_STATE_CONTEXT_INIT,
 	DECODING_STATE_CONTEXT,
-	DECODING_STATE_EVENT,
+	DECODING_STATE_EVENT_HEADER_INIT,
+	DECODING_STATE_EVENT_HEADER,
 	DECODING_STATE_DONE,
 };
 
 struct bt_ctf_packet_reader_ctx {
 	/* back-end operations */
-	struct bt_ctf_packet_reader_ops ops;
+	struct bt_ctf_stream_reader_ops ops;
+
+	/* current field being decoded */
+	struct bt_ctf_field *cur_field;
 
 	/* trace (our own ref) */
 	struct bt_ctf_trace *trace;
@@ -473,6 +487,12 @@ struct bt_ctf_packet_reader_ctx {
 	/* current packet context (our own ref) */
 	struct bt_ctf_field *context;
 
+	/* index of "packet_size" field in context (-1 if it doesn't exist) */
+	int packet_size_field_index;
+
+	/* index of "packet_size" field in context (-1 if it doesn't exist) */
+	int content_size_field_index;
+
 	/* current event (our own ref) */
 	struct bt_ctf_event *event;
 
@@ -482,23 +502,35 @@ struct bt_ctf_packet_reader_ctx {
 	/* current user buffer */
 	const void *buf;
 
-	/* current user buffer's size (bytes) */
-	size_t buf_size;
+	/* current user buffer's size (bits) */
+	size_t buf_len;
 
 	/* current offset in user buffer (bits) */
 	size_t at;
 
-	/* maximum request length (bytes) */
+	/* maximum request length (bits) */
 	size_t max_request_len;
 
 	/* current offset in packet (bits) */
 	size_t at_packet;
 
-	/* current packet size (bits) (-1 if unknown) */
+	/* decode atomic fields one at a time */
+	bool step_by_step;
 
+	/* current packet size (bits) (-1 if unknown) */
+	size_t packet_size;
+
+	/* current content size (bits) (-1 if unknown) */
+	size_t content_size;
 
 	/* user data */
 	void *user_data;
+
+	/* current integer value */
+	union {
+		int64_t s;
+		uint64_t u;
+	} intval;
 };
 
 static
@@ -506,7 +538,8 @@ void stack_entry_free_func(gpointer data)
 {
 	struct stack_entry *entry = data;
 
-	bt_ctf_field_put(entry->cur_base);
+	bt_ctf_field_put(entry->base);
+	bt_ctf_field_type_put(entry->base_type);
 	g_free(entry);
 }
 
@@ -544,7 +577,8 @@ void stack_destroy(struct stack *stack)
 }
 
 static
-int stack_push(struct stack *stack, struct bt_ctf_field *base)
+int stack_push(struct stack *stack, struct bt_ctf_field *base,
+	struct bt_ctf_field_type base_type, int64_t base_len)
 {
 	int ret = 0;
 	struct stack_entry *entry;
@@ -558,14 +592,17 @@ int stack_push(struct stack *stack, struct bt_ctf_field *base)
 		goto end;
 	}
 
-	entry->cur_base = base;
-	bt_ctf_field_get(entry->cur_base);
+	entry->base = base;
+	bt_ctf_field_get(entry->base);
+	entry->base_type = base_type;
+	bt_ctf_field_type_get(entry->base_type);
+	entry->base_len = base_len;
 
 end:
 	return ret;
 }
 
-static
+static inline
 unsigned int stack_size(struct stack *stack)
 {
 	assert(stack);
@@ -581,7 +618,7 @@ void stack_pop(struct stack *stack)
 	g_ptr_array_remove_index(stack->entries, stack->entries->len - 1);
 }
 
-static
+static inline
 struct stack_entry *stack_top(struct stack *stack)
 {
 	assert(stack);
@@ -590,20 +627,546 @@ struct stack_entry *stack_top(struct stack *stack)
 	return g_ptr_array_index(stack->entries, stack->entries->len - 1);
 }
 
-/*
- * This is the entry point for converting bits to a complete
- * CTF IR field.
- */
-static
-int unserialize_field(struct bt_ctf_packet_reader_ctx *ctx,
-	struct bt_ctf_field_type *type)
+static inline
+bool has_enough_bits(struct bt_ctf_packet_reader_ctx *ctx, size_t len)
 {
-	return BT_CTF_PACKET_READER_STATUS_OK;
+	return (ctx->buffer_len - ctx->at) >= len;
+}
+
+static
+enum bt_ctf_stream_reader_status request_bits(
+	struct bt_ctf_packet_reader_ctx *ctx, size_t request_len)
+{
+	void *buffer;
+	size_t buffer_len;
+	size_t buffer_offset;
+	enum bt_ctf_stream_reader_status status;
+
+	status = ctx->ops.get_next_buffer(request_len, &buffer_len,
+		&buffer_offset, &buffer, ctx->user_data);
+
+	if (status == BT_CTF_STREAM_READER_STATUS_OK) {
+		ctx->buf = buffer;
+		ctx->buf_len = buffer_len;
+		ctx->at = buffer_offset;
+	}
+
+	return status;
+}
+
+static inline
+int64_t get_field_length(struct bt_ctf_packet_reader_ctx *ctx,
+	struct bt_ctf_field_type *field_type)
+{
+	int64_t length;
+
+	switch (bt_ctf_field_type_get_type_id(field_type)) {
+	case CTF_TYPE_STRUCT:
+		length = (int64_t) bt_ctf_field_type_structure_get_field_count(
+			field_type);
+		break;
+
+	case CTF_TYPE_VARIANT:
+		length = (int64_t) bt_ctf_field_type_variant_get_field_count(
+			field_type);
+		break;
+
+	case CTF_TYPE_ARRAY:
+		length = bt_ctf_field_type_array_get_length(field_type);
+		break;
+
+	default:
+		length = -1;
+	}
+
+end:
+	return length;
+}
+
+static inline
+int get_atomic_field_size(struct bt_ctf_field_type *field_type)
+{
+	int size;
+
+	switch (bt_ctf_field_type_get_type_id(field_type)) {
+	case CTF_TYPE_INTEGER:
+		size = bt_ctf_field_type_integer_get_size(field_type);
+		break;
+
+	case CTF_TYPE_FLOAT:
+	{
+		int exp_dig, mant_dig;
+
+		exp_dig =
+			bt_ctf_field_type_floating_point_get_exponent_digits(
+				field_type);
+		mant_dig =
+			bt_ctf_field_type_floating_point_get_mantissa_digits(
+				field_type);
+
+		if (exp_dig < 0 || mant_dig < 0) {
+			size = -1;
+		}
+		break;
+
+	case CTF_TYPE_ENUM:
+	{
+		struct bt_ctf_field_type *int_type;
+
+		int_type = bt_ctf_field_type_enumeration_get_container_type(
+			field_type);
+
+		if (!int_type) {
+			size = -1;
+			goto end;
+		}
+
+		size = get_atomic_field_size(int_type);
+		bt_ctf_field_type_put(int_type);
+		break;
+	}
+
+	case CTF_TYPE_STRING:
+		size = 8;
+		break;
+
+	default:
+		size = -1;
+		break;
+	}
+
+end:
+	return size;
+}
+
+static inline
+enum bt_ctf_packet_reader_status pr_status_from_sr_status(
+	enum bt_ctf_stream_reader_status sr_status)
+{
+	enum bt_ctf_packet_reader_status pr_status;
+
+	switch (sr_status) {
+	case BT_CTF_STREAM_READER_STATUS_AGAIN:
+		pr_status = BT_CTF_PACKET_READER_STATUS_AGAIN;
+		break;
+
+	case BT_CTF_STREAM_READER_STATUS_ERROR:
+		pr_status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		break;
+
+	case BT_CTF_STREAM_READER_STATUS_INVAL:
+		pr_status = BT_CTF_PACKET_READER_STATUS_INVAL;
+		break;
+
+	case BT_CTF_STREAM_READER_STATUS_EOS:
+		pr_status = BT_CTF_PACKET_READER_STATUS_EOP;
+		break;
+
+	default:
+		pr_status = BT_CTF_PACKET_READER_STATUS_OK;
+		break;
+	}
+
+	return pr_status;
+}
+
+static inline
+enum bt_ctf_packet_reader_status decode_integer(
+	struct bt_ctf_packet_reader_ctx *ctx, struct bt_ctf_field *field,
+	struct bt_ctf_field_type *field_type, int read_len)
+{
+	int ret;
+	int signd;
+	enum bt_ctf_byte_order bo;
+	enum bt_ctf_packet_reader_status status =
+		BT_CTF_PACKET_READER_STATUS_OK;
+
+	signd = bt_ctf_field_type_integer_get_signed(field_type);
+
+	if (signd < 0) {
+		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		goto end;
+	}
+
+	bo = bt_ctf_field_type_get_byte_order(field_type);
+
+	if (bo == BT_CTF_BYTE_ORDER_BIG_ENDIAN ||
+			bo == BT_CTF_BYTE_ORDER_NETWORK) {
+		if (signd) {
+			int64_t v;
+
+			bt_bitfield_read_be(ctx->buf, uint8_t,
+				ctx->at, read_len, &v);
+			ret = bt_ctf_field_signed_integer_set_value(
+				field, v);
+		} else {
+			uint64_t v;
+
+			bt_bitfield_read_be(ctx->buf, uint8_t,
+				ctx->at, read_len, &v);
+			ret = bt_ctf_field_unsigned_integer_set_value(
+				field, v);
+		}
+	} else if (bo == BT_CTF_BYTE_ORDER_LITTLE_ENDIAN) {
+		if (signd) {
+			int64_t v;
+
+			bt_bitfield_read_le(ctx->buf, uint8_t,
+				ctx->at, read_len, &v);
+			ret = bt_ctf_field_signed_integer_set_value(
+				field, v);
+		} else {
+			uint64_t v;
+
+			bt_bitfield_read_le(ctx->buf, uint8_t,
+				ctx->at, read_len, &v);
+			ret = bt_ctf_field_unsigned_integer_set_value(
+				field, v);
+		}
+	} else {
+		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		goto end;
+	}
+
+	if (ret < 0) {
+		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		goto end;
+	}
+
+end:
+	return status;
+}
+
+static inline
+enum bt_ctf_packet_reader_status decode_float(
+	struct bt_ctf_packet_reader_ctx *ctx, struct bt_ctf_field *field,
+	struct bt_ctf_field_type *field_type, int read_len)
+{
+	int ret;
+	double dblval;
+	enum bt_ctf_byte_order bo;
+	enum bt_ctf_packet_reader_status status =
+		BT_CTF_PACKET_READER_STATUS_OK;
+
+	bo = bt_ctf_field_type_get_byte_order(field_type);
+
+	switch (read_len) {
+	case 32:
+	{
+		uint32_t uv;
+		float v;
+
+		if (bo == BT_CTF_BYTE_ORDER_BIG_ENDIAN ||
+				bo == BT_CTF_BYTE_ORDER_NETWORK) {
+			bt_bitfield_read_be(ctx->buf, uint8_t,
+					ctx->at, read_len, &uv);
+		} else if (bo == BT_CTF_BYTE_ORDER_LITTLE_ENDIAN) {
+			bt_bitfield_read_le(ctx->buf, uint8_t,
+					ctx->at, read_len, &uv);
+		} else {
+			status = BT_CTF_PACKET_READER_STATUS_ERROR;
+			goto end;
+		}
+		break;
+
+		v = *((float *) &uv);
+		dblval = (double) v;
+		break;
+	}
+
+	case 64:
+	{
+		uint64_t uv;
+
+		if (bo == BT_CTF_BYTE_ORDER_BIG_ENDIAN ||
+				bo == BT_CTF_BYTE_ORDER_NETWORK) {
+			bt_bitfield_read_be(ctx->buf, uint8_t,
+					ctx->at, read_len, &uv);
+		} else if (bo == BT_CTF_BYTE_ORDER_LITTLE_ENDIAN) {
+			bt_bitfield_read_le(ctx->buf, uint8_t,
+					ctx->at, read_len, &uv);
+		} else {
+			status = BT_CTF_PACKET_READER_STATUS_ERROR;
+			goto end;
+		}
+		break;
+
+		dblval = *((double *) &uv);
+		break;
+	}
+
+	default:
+		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		goto end;
+	}
+
+	ret = bt_ctf_field_floating_point_set_value(field, dblval);
+
+	if (ret < 0) {
+		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		goto end;
+	}
+
+end:
+	return status;
+}
+
+static inline
+enum bt_ctf_packet_reader_status decode_atomic_field(
+	struct bt_ctf_packet_reader_ctx *ctx, struct bt_ctf_field *field,
+	struct bt_ctf_field_type *field_type)
+{
+	int read_len;
+	enum bt_ctf_packet_reader_status status =
+		BT_CTF_PACKET_READER_STATUS_OK;
+
+	read_len = get_atomic_field_size(field_type);
+
+	if (read_len < 0) {
+		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		goto end;
+	}
+
+	/* request bits if needed */
+	if (!has_enough_bits(ctx, read_len)) {
+		enum bt_ctf_stream_reader_status sr_status;
+		size_t request_len;
+
+		if (ctx->step_by_step) {
+			request_len = read_len;
+		} else {
+			request_len = ctx->max_request_len;
+		}
+
+		sr_status = request_bits(ctx, request_len);
+
+		status = pr_status_from_sr_status(sr_status);
+		goto end;
+	}
+
+	/* read atomic field */
+	switch (bt_ctf_field_type_get_type_id(field_type)) {
+	case CTF_TYPE_INTEGER:
+		status = decode_integer(ctx, field, field_type, read_len);
+
+		if (status != BT_CTF_PACKET_READER_STATUS_OK) {
+			goto end;
+		}
+		break;
+
+	case CTF_TYPE_FLOAT:
+		status = decode_float(ctx, field, field_type, read_len);
+
+		if (status != BT_CTF_PACKET_READER_STATUS_OK) {
+			goto end;
+		}
+		break;
+
+	default:
+		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		goto end;
+	}
+
+	/* update current buffer position */
+	ctx->at += read_len;
+
+end:
+	return status;
+}
+
+static inline
+enum bt_ctf_packet_reader_status decode(struct bt_ctf_packet_reader_ctx *ctx)
+{
+	int ret;
+	enum bt_ctf_packet_reader_status status =
+		BT_CTF_PACKET_READER_STATUS_OK;
+	struct bt_ctf_field *next_field = NULL;
+	struct bt_ctf_field_type *next_field_type = NULL;
+	struct stack_entry *top;
+	int64_t field_length;
+
+	top = stack_top(ctx->stack);
+
+	/* are we done decoding the fields of the base field? */
+	if (top->index == top->base_len) {
+		/* decoded the whole root field? */
+		if (stack_size(ctx->stack) == 1) {
+			/* save as current field */
+			ctx->cur_field = top->base;
+			bt_ctf_field_get(ctx->cur_field);
+		}
+
+		stack_pop(ctx->stack);
+		goto end;
+	}
+
+	/* create next field */
+	switch (bt_ctf_field_type_get_type_id(top->base_type)) {
+	case CTF_TYPE_STRUCT:
+		next_field = bt_ctf_field_structure_get_field_by_index(
+			top->base, top->index);
+		break;
+
+	case CTF_TYPE_ARRAY:
+		next_field = bt_ctf_field_array_get_field(
+			top->base, top->index);
+		break;
+
+	default:
+		break;
+	}
+
+	if (!next_field) {
+		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		goto end;
+	}
+
+	/* get next field's type */
+	next_field_type = bt_ctf_field_get_type(next_field);
+
+	if (!next_field_type) {
+		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		goto end;
+	}
+
+	/* if next field type is a compound type, push on stack and continue */
+	switch (bt_ctf_field_type_get_type_id(next_field_type)) {
+	case CTF_TYPE_STRUCT:
+	case CTF_TYPE_ARRAY:
+		field_length = get_field_length(next_field_type);
+		ret = stack_push(ctx->stack, next_field, next_field_type,
+			field_length);
+		bt_ctf_field_put(next_field);
+		next_field = NULL;
+		bt_ctf_field_type_put(next_field_type);
+		next_field_type = NULL;
+
+		if (ret) {
+			status = BT_CTF_PACKET_READER_STATUS_ERROR;
+			goto end;
+		}
+
+		goto end;
+
+	default:
+		break;
+	}
+
+	/* next field type is an atomic type: try decoding it */
+	status = decode_atomic_field(ctx, next_field, next_field_type);
+
+end:
+	if (next_field) {
+		bt_ctf_field_put(next_field);
+	}
+
+	if (next_field_type) {
+		bt_ctf_field_type_put(next_field_type);
+	}
+
+	return status;
+}
+
+static inline
+enum bt_ctf_packet_reader_status handle_state(
+	struct bt_ctf_packet_reader_ctx *ctx)
+{
+	int ret;
+	int64_t length;
+	struct bt_ctf_field_type *field_type = NULL;
+	struct bt_ctf_field *field = NULL;
+	enum bt_ctf_packet_reader_status status;
+
+	switch (ctx->state) {
+	case DECODING_STATE_HEADER_INIT:
+		assert(stack_size(ctx->stack) == 0);
+		assert(!ctx->header);
+		ctx->packet_size_field_index = -1;
+		ctx->content_size_field_index = -1;
+		ctx->packet_size = -1;
+		ctx->content_size = -1;
+		ctx->step_by_step = true;
+		ctx->cur_field = NULL;
+		field_type = bt_ctf_trace_get_packet_header_type(ctx->trace);
+
+		if (!field_type) {
+			status = BT_CTF_STREAM_READER_STATUS_ERROR;
+			goto end;
+		}
+
+		field = bt_ctf_field_create(field_type);
+
+		if (!field) {
+			status = BT_CTF_STREAM_READER_STATUS_ERROR;
+			goto end;
+		}
+
+		length = get_field_length(ctx, field_type);
+
+		if (length < 0) {
+			status = BT_CTF_STREAM_READER_STATUS_ERROR;
+			goto end;
+		}
+
+		ret = stack_push(ctx->stack, field, field_type, length);
+		bt_ctf_field_put(field);
+		field = NULL;
+		bt_ctf_field_type_put(field_type);
+		field_type = NULL;
+
+		if (ret) {
+			status = BT_CTF_STREAM_READER_STATUS_ERROR;
+			goto end;
+		}
+
+		ctx->state = DECODING_STATE_HEADER;
+		break;
+
+	case DECODING_STATE_HEADER:
+		while (!ctx->cur_field) {
+			status = decode(ctx);
+
+			switch (status) {
+			case BT_CTF_PACKET_READER_STATUS_AGAIN:
+			case BT_CTF_PACKET_READER_STATUS_ERROR:
+				goto end;
+
+			default:
+				break;
+			}
+		}
+
+		/* move current field to packet header */
+		ctx->header = ctx->cur_field;
+		ctx->cur_field = NULL;
+
+		/* next state: initialize packet context decoding */
+		ctx->state = DECODING_STATE_CONTEXT_INIT;
+
+		/* everything good */
+		status = BT_CTF_PACKET_READER_STATUS_OK;
+		break;
+
+	default:
+		/* we should explicitely handle all the states */
+		assert(false);
+	}
+
+end:
+	if (field_type) {
+		bt_ctf_field_type_put(field_type);
+	}
+
+	if (field) {
+		bt_ctf_field_put(field);
+	}
+
+	return status;
 }
 
 struct bt_ctf_packet_reader_ctx *bt_ctf_packet_reader_create(
 	struct bt_ctf_trace *trace, size_t max_request_len,
-	struct bt_ctf_packet_reader_ops ops, void *data)
+	struct bt_ctf_stream_reader_ops ops, void *data)
 {
 	struct bt_ctf_packet_reader_ctx *ctx = NULL;
 
@@ -619,6 +1182,13 @@ struct bt_ctf_packet_reader_ctx *bt_ctf_packet_reader_create(
 	ctx->state = DECODING_STATE_INIT;
 	bt_ctf_trace_get(ctx->trace);
 	ctx->user_data = data;
+	ctx->stack = stack_new();
+
+	if (!ctx->stack) {
+		bt_ctf_packet_reader_destroy(ctx);
+		ctx = NULL;
+		goto end;
+	}
 
 end:
 	return ctx;
@@ -627,31 +1197,34 @@ end:
 void bt_ctf_packet_reader_destroy(struct bt_ctf_packet_reader_ctx *ctx)
 {
 	bt_ctf_trace_put(ctx->trace);
+	stack_destroy(ctx->stack);
 	g_free(ctx);
 }
 
 enum bt_ctf_packet_reader_status bt_ctf_packet_reader_reset(
 	struct bt_ctf_packet_reader_ctx *ctx)
 {
-	return 0;
+	return BT_CTF_PACKET_READER_STATUS_OK;
 }
 
 static
 enum bt_ctf_packet_reader_status decode_packet_header(
 	struct bt_ctf_packet_reader_ctx *ctx)
 {
-	enum bt_ctf_packet_reader_status ret;
+	enum bt_ctf_packet_reader_status status;
 
-	/* packet header already decoded? */
-	if (ctx->header_is_complete) {
-		ret = BT_CTF_PACKET_READER_STATUS_OK;
-		goto end;
+	/* continue decoding packet header if needed */
+	while (!ctx->header) {
+		status = handle_state(ctx);
+
+		if (status == BT_CTF_PACKET_READER_STATUS_AGAIN ||
+				status == BT_CTF_PACKET_READER_STATUS_ERROR) {
+			goto end;
+		}
 	}
 
-	/* continue decoding packet header */
-
 end:
-	return ret;
+	return status;
 }
 
 enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_header(
@@ -660,11 +1233,10 @@ enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_header(
 {
 	enum bt_ctf_packet_reader_status status;
 
-	/* decode packet header*/
+	/* continue decoding packet header */
 	status = decode_packet_header(ctx);
 
-	/* packet header completely decoded? */
-	if (status == BT_CTF_PACKET_READER_STATUS_OK) {
+	if (ctx->header) {
 		*packet_header = ctx->header;
 		bt_ctf_field_get(*packet_header);
 	}
@@ -676,18 +1248,20 @@ static
 enum bt_ctf_packet_reader_status decode_packet_context(
 	struct bt_ctf_packet_reader_ctx *ctx)
 {
-	enum bt_ctf_packet_reader_status ret;
+	enum bt_ctf_packet_reader_status status;
 
-	/* packet context already decoded? */
-	if (ctx->context_is_complete) {
-		ret = BT_CTF_PACKET_READER_STATUS_OK;
-		goto end;
+	/* continue decoding packet context if needed */
+	while (!ctx->context) {
+		status = handle_state(ctx);
+
+		if (status == BT_CTF_PACKET_READER_STATUS_AGAIN ||
+				status == BT_CTF_PACKET_READER_STATUS_ERROR) {
+			goto end;
+		}
 	}
 
-	/* continue decoding packet context */
-
 end:
-	return ret;
+	return status;
 }
 
 enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_context(
@@ -696,11 +1270,10 @@ enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_context(
 {
 	enum bt_ctf_packet_reader_status status;
 
-	/* decode packet header*/
+	/* continue decoding packet context */
 	status = decode_packet_context(ctx);
 
-	/* packet header completely decoded? */
-	if (status == BT_CTF_PACKET_READER_STATUS_OK) {
+	if (ctx->context) {
 		*packet_context = ctx->context;
 		bt_ctf_field_get(*packet_context);
 	}

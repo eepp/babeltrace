@@ -15,7 +15,6 @@ libctf_ir_la_SOURCES = \
 	visitor.c \
 	packet-reader.c \
 	utils.c
->>>>>>> wip
 
 libctf_ir_la_LIBADD = \
 	$(top_builddir)/lib/libbabeltrace.la
