@@ -216,7 +216,7 @@ struct bt_ctf_stream_reader_ops {
 	 */
 	enum bt_ctf_packet_reader_status (* get_next_buffer)(
 		size_t requested_len, size_t *buffer_len,
-		size_t *buffer_offset, void * const *buffer, void *data);
+		size_t *buffer_offset, void **buffer, void *data);
 
 	/**
 	 * Moves the current packet offset.
@@ -237,7 +237,7 @@ struct bt_ctf_stream_reader_ops {
 	 * Upon successful completion, the resulting offset, as measured
 	 * in bits from the beginning of the packet, shall be returned.
 	 * If the resulting packet offset is invalid for the given
-	 * back-end, #BT_CTF_PACKET_READER_STATUS_INVAL must be
+	 * back-end, #BT_CTF_STREAM_READER_STATUS_INVAL must be
 	 * returned, which cancels the seek operation. In this case,
 	 * the packet offset shall remain unchanged.
 	 *
@@ -250,7 +250,7 @@ struct bt_ctf_stream_reader_ops {
 	 * 			when it is not possible to seek
 	 */
 	int64_t (* seek)(int64_t offset,
-		enum bt_ctf_packet_reader_seek_origin whence,
+		enum bt_ctf_stream_reader_seek_origin whence,
 		void *data);
 };
 
@@ -275,7 +275,6 @@ struct bt_ctf_packet_reader_ctx;
  * @returns			New packet reader context on success, or
  * 				\c NULL on error
  */
-BT_HIDDEN
 struct bt_ctf_packet_reader_ctx *bt_ctf_packet_reader_create(
 	struct bt_ctf_trace *trace, size_t max_request_len,
 	struct bt_ctf_stream_reader_ops ops, void *data);
@@ -287,7 +286,6 @@ struct bt_ctf_packet_reader_ctx *bt_ctf_packet_reader_create(
  *
  * @param ctx	Packet reader context
  */
-BT_HIDDEN
 void bt_ctf_packet_reader_destroy(struct bt_ctf_packet_reader_ctx *ctx);
 
 /**
@@ -305,7 +303,6 @@ void bt_ctf_packet_reader_destroy(struct bt_ctf_packet_reader_ctx *ctx);
  * @param ctx	Packet reader context
  * @returns	One of #bt_ctf_packet_reader_status values
  */
-BT_HIDDEN
 enum bt_ctf_packet_reader_status bt_ctf_packet_reader_reset(
 	struct bt_ctf_packet_reader_ctx *ctx);
 
@@ -323,7 +320,6 @@ enum bt_ctf_packet_reader_status bt_ctf_packet_reader_reset(
  * @param packet_header	Returned packet header
  * @returns		One of #bt_ctf_packet_reader_status values
  */
-BT_HIDDEN
 enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_header(
 	struct bt_ctf_packet_reader_ctx *ctx,
 	struct bt_ctf_field **packet_header);
@@ -343,7 +339,6 @@ enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_header(
  * @returns			One of #bt_ctf_packet_reader_status
  * 				values
  */
-BT_HIDDEN
 enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_context(
 	struct bt_ctf_packet_reader_ctx *ctx,
 	struct bt_ctf_field **packet_context);
@@ -364,7 +359,6 @@ enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_context(
  * @param event		Returned event
  * @returns		One of #bt_ctf_packet_reader_status values
  */
-BT_HIDDEN
 enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_next_event(
 	struct bt_ctf_packet_reader_ctx *ctx,
 	struct bt_ctf_event **event);
