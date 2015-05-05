@@ -854,48 +854,52 @@ enum bt_ctf_packet_reader_status decode_float(
 	enum bt_ctf_packet_reader_status status =
 		BT_CTF_PACKET_READER_STATUS_OK;
 
+	union {
+		uint32_t u;
+		float f;
+	} f32;
+
+	union {
+		uint64_t u;
+		double f;
+	} f64;
+
 	bo = bt_ctf_field_type_get_byte_order(field_type);
 
 	switch (read_len) {
 	case 32:
 	{
-		uint32_t uv;
-		float v;
-
 		if (bo == BT_CTF_BYTE_ORDER_BIG_ENDIAN ||
 				bo == BT_CTF_BYTE_ORDER_NETWORK) {
 			bt_bitfield_read_be(ctx->buf, uint8_t,
-					ctx->at, read_len, &uv);
+					ctx->at, read_len, &f32.u);
 		} else if (bo == BT_CTF_BYTE_ORDER_LITTLE_ENDIAN) {
 			bt_bitfield_read_le(ctx->buf, uint8_t,
-					ctx->at, read_len, &uv);
+					ctx->at, read_len, &f32.u);
 		} else {
 			status = BT_CTF_PACKET_READER_STATUS_ERROR;
 			goto end;
 		}
 
-		v = *((float *) &uv);
-		dblval = (double) v;
+		dblval = (double) f32.f;
 		break;
 	}
 
 	case 64:
 	{
-		uint64_t uv;
-
 		if (bo == BT_CTF_BYTE_ORDER_BIG_ENDIAN ||
 				bo == BT_CTF_BYTE_ORDER_NETWORK) {
 			bt_bitfield_read_be(ctx->buf, uint8_t,
-					ctx->at, read_len, &uv);
+					ctx->at, read_len, &f64.u);
 		} else if (bo == BT_CTF_BYTE_ORDER_LITTLE_ENDIAN) {
 			bt_bitfield_read_le(ctx->buf, uint8_t,
-					ctx->at, read_len, &uv);
+					ctx->at, read_len, &f64.u);
 		} else {
 			status = BT_CTF_PACKET_READER_STATUS_ERROR;
 			goto end;
 		}
 
-		dblval = *((double *) &uv);
+		dblval = f64.f;
 		break;
 	}
 
@@ -1218,7 +1222,8 @@ static
 enum bt_ctf_packet_reader_status decode_packet_header(
 	struct bt_ctf_packet_reader_ctx *ctx)
 {
-	enum bt_ctf_packet_reader_status status;
+	enum bt_ctf_packet_reader_status status =
+		BT_CTF_PACKET_READER_STATUS_OK;
 
 	/* continue decoding packet header if needed */
 	while (!ctx->header) {
@@ -1255,7 +1260,8 @@ static
 enum bt_ctf_packet_reader_status decode_packet_context(
 	struct bt_ctf_packet_reader_ctx *ctx)
 {
-	enum bt_ctf_packet_reader_status status;
+	enum bt_ctf_packet_reader_status status =
+		BT_CTF_PACKET_READER_STATUS_OK;
 
 	/* continue decoding packet context if needed */
 	while (!ctx->context) {
