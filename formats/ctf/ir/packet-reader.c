@@ -478,26 +478,36 @@ struct bt_ctf_packet_reader_ctx {
 	/* visit stack */
 	struct stack *stack;
 
-	/* current field being decoded */
+	/*
+	 * Current field being decoded.
+	 *
+	 * This variable is only used for communication between the
+	 * decoding functions and the state handling function. It must
+	 * be NULL whenever a packet reader API function is entered or
+	 * exited.
+	 */
 	struct bt_ctf_field *cur_field;
 
 	/* trace (our own ref) */
 	struct bt_ctf_trace *trace;
 
 	/* current packet header (our own ref) */
-	struct bt_ctf_field *header;
+	struct bt_ctf_field *trace_packet_header;
 
 	/* current packet context (our own ref) */
-	struct bt_ctf_field *context;
+	struct bt_ctf_field *stream_packet_context;
 
-	/* index of "packet_size" field in context (-1 if it doesn't exist) */
-	int packet_size_field_index;
+	/* current event header context (our own ref) */
+	struct bt_ctf_field *stream_event_header;
 
-	/* index of "packet_size" field in context (-1 if it doesn't exist) */
-	int content_size_field_index;
+	/* current event header context (our own ref) */
+	struct bt_ctf_field *stream_event_context;
 
-	/* current event (our own ref) */
-	struct bt_ctf_event *event;
+	/* current event header context (our own ref) */
+	struct bt_ctf_field *event_context;
+
+	/* current event header context (our own ref) */
+	struct bt_ctf_field *event_payload;
 
 	/* current decoding state */
 	enum decoding_state state;
@@ -1087,9 +1097,7 @@ enum bt_ctf_packet_reader_status handle_state(
 	switch (ctx->state) {
 	case DECODING_STATE_HEADER_INIT:
 		assert(stack_size(ctx->stack) == 0);
-		assert(!ctx->header);
-		ctx->packet_size_field_index = -1;
-		ctx->content_size_field_index = -1;
+		assert(!ctx->trace_packet_header);
 		ctx->packet_size = -1;
 		ctx->content_size = -1;
 		ctx->step_by_step = true;
@@ -1144,7 +1152,7 @@ enum bt_ctf_packet_reader_status handle_state(
 		}
 
 		/* move current field to packet header */
-		ctx->header = ctx->cur_field;
+		ctx->trace_packet_header = ctx->cur_field;
 		ctx->cur_field = NULL;
 
 		/* next state: initialize packet context decoding */
@@ -1204,11 +1212,14 @@ end:
 void bt_ctf_packet_reader_destroy(struct bt_ctf_packet_reader_ctx *ctx)
 {
 	bt_ctf_trace_put(ctx->trace);
-	bt_ctf_field_put(ctx->header);
-	bt_ctf_field_put(ctx->context);
+	bt_ctf_field_put(ctx->trace_packet_header);
+	bt_ctf_field_put(ctx->stream_packet_context);
+	bt_ctf_field_put(ctx->stream_event_header);
+	bt_ctf_field_put(ctx->stream_event_context);
+	bt_ctf_field_put(ctx->event_context);
+	bt_ctf_field_put(ctx->event_payload);
 	assert(!ctx->cur_field);
 	stack_destroy(ctx->stack);
-	bt_ctf_event_put(ctx->event);
 	g_free(ctx);
 }
 
@@ -1226,7 +1237,7 @@ enum bt_ctf_packet_reader_status decode_packet_header(
 		BT_CTF_PACKET_READER_STATUS_OK;
 
 	/* continue decoding packet header if needed */
-	while (!ctx->header) {
+	while (!ctx->trace_packet_header) {
 		status = handle_state(ctx);
 
 		if (status == BT_CTF_PACKET_READER_STATUS_AGAIN ||
@@ -1248,8 +1259,8 @@ enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_header(
 	/* continue decoding packet header */
 	status = decode_packet_header(ctx);
 
-	if (ctx->header) {
-		*packet_header = ctx->header;
+	if (ctx->trace_packet_header) {
+		*packet_header = ctx->trace_packet_header;
 		bt_ctf_field_get(*packet_header);
 	}
 
@@ -1264,7 +1275,7 @@ enum bt_ctf_packet_reader_status decode_packet_context(
 		BT_CTF_PACKET_READER_STATUS_OK;
 
 	/* continue decoding packet context if needed */
-	while (!ctx->context) {
+	while (!ctx->stream_packet_context) {
 		status = handle_state(ctx);
 
 		if (status == BT_CTF_PACKET_READER_STATUS_AGAIN ||
@@ -1286,8 +1297,8 @@ enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_context(
 	/* continue decoding packet context */
 	status = decode_packet_context(ctx);
 
-	if (ctx->context) {
-		*packet_context = ctx->context;
+	if (ctx->stream_packet_context) {
+		*packet_context = ctx->stream_packet_context;
 		bt_ctf_field_get(*packet_context);
 	}
 
