@@ -461,14 +461,24 @@ struct stack {
 	GPtrArray *entries;
 };
 
-enum decoding_state {
-	DECODING_STATE_HEADER_INIT,
-	DECODING_STATE_HEADER,
-	DECODING_STATE_CONTEXT_INIT,
-	DECODING_STATE_CONTEXT,
-	DECODING_STATE_EVENT_HEADER_INIT,
-	DECODING_STATE_EVENT_HEADER,
-	DECODING_STATE_DONE,
+enum global_decoding_state {
+	GDS_TRACE_PACKET_HEADER_INIT,
+	GDS_TRACE_PACKET_HEADER,
+	GDS_STREAM_PACKET_CONTEXT_INIT,
+	GDS_STREAM_PACKET_CONTEXT,
+	GDS_STREAM_EVENT_HEADER_INIT,
+	GDS_STREAM_EVENT_HEADER,
+	GDS_STREAM_EVENT_CONTEXT_INIT,
+	GDS_STREAM_EVENT_CONTEXT,
+	GDS_EVENT_CONTEXT_INIT,
+	GDS_EVENT_CONTEXT,
+	GDS_EVENT_PAYLOAD_INIT,
+	GDS_EVENT_PAYLOAD,
+	GDS_DONE,
+};
+
+enum field_decoding_state {
+
 };
 
 struct bt_ctf_packet_reader_ctx {
@@ -510,7 +520,7 @@ struct bt_ctf_packet_reader_ctx {
 	struct bt_ctf_field *event_payload;
 
 	/* current decoding state */
-	enum decoding_state state;
+	enum global_decoding_state state;
 
 	/* current user buffer */
 	const void *buf;
@@ -1056,10 +1066,11 @@ enum bt_ctf_packet_reader_status decode(struct bt_ctf_packet_reader_ctx *ctx)
 		field_length = get_field_length(ctx, next_field_type);
 		ret = stack_push(ctx->stack, next_field, next_field_type,
 			field_length);
-		top->index++;
 
 		if (ret) {
 			status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		} else {
+			top->index++;
 		}
 
 		goto end;
@@ -1095,9 +1106,10 @@ enum bt_ctf_packet_reader_status handle_state(
 		BT_CTF_PACKET_READER_STATUS_OK;
 
 	switch (ctx->state) {
-	case DECODING_STATE_HEADER_INIT:
+	case GDS_TRACE_PACKET_HEADER_INIT:
 		assert(stack_size(ctx->stack) == 0);
 		assert(!ctx->trace_packet_header);
+		assert(!ctx->cur_field);
 		ctx->packet_size = -1;
 		ctx->content_size = -1;
 		ctx->step_by_step = true;
@@ -1134,10 +1146,10 @@ enum bt_ctf_packet_reader_status handle_state(
 			goto end;
 		}
 
-		ctx->state = DECODING_STATE_HEADER;
+		ctx->state = DECODING_STATE_TRACE_PACKET_HEADER;
 		break;
 
-	case DECODING_STATE_HEADER:
+	case GDS_TRACE_PACKET_HEADER:
 		while (!ctx->cur_field) {
 			status = decode(ctx);
 
@@ -1156,7 +1168,7 @@ enum bt_ctf_packet_reader_status handle_state(
 		ctx->cur_field = NULL;
 
 		/* next state: initialize packet context decoding */
-		ctx->state = DECODING_STATE_CONTEXT_INIT;
+		ctx->state = DECODING_STATE_STREAM_PACKET_CONTEXT_INIT;
 
 		/* everything good */
 		status = BT_CTF_PACKET_READER_STATUS_OK;
@@ -1194,7 +1206,7 @@ struct bt_ctf_packet_reader_ctx *bt_ctf_packet_reader_create(
 	ctx->ops = ops;
 	ctx->max_request_len = max_request_len;
 	ctx->trace = trace;
-	ctx->state = DECODING_STATE_HEADER_INIT;
+	ctx->state = DECODING_STATE_TRACE_PACKET_HEADER_INIT;
 	bt_ctf_trace_get(ctx->trace);
 	ctx->user_data = data;
 	ctx->stack = stack_new();
