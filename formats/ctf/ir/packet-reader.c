@@ -1393,32 +1393,38 @@ enum bt_ctf_packet_reader_status handle_gd_state(
 		case ENTITY_TRACE_PACKET_HEADER:
 			field_type =
 				bt_ctf_trace_get_packet_header_type(ctx->trace);
+			ctx->step_by_step = true;
 			break;
 
 		case ENTITY_STREAM_PACKET_CONTEXT:
 			field_type =
 				bt_ctf_stream_class_get_packet_context_type(
 					ctx->stream_class);
+			ctx->step_by_step = true;
 			break;
 
 		case ENTITY_STREAM_EVENT_HEADER:
 			field_type = bt_ctf_stream_class_get_event_header_type(
 				ctx->stream_class);
+			ctx->step_by_step = false;
 			break;
 
 		case ENTITY_STREAM_EVENT_CONTEXT:
 			field_type = bt_ctf_stream_class_get_event_context_type(
 				ctx->stream_class);
+			ctx->step_by_step = false;
 			break;
 
 		case ENTITY_EVENT_CONTEXT:
 			field_type = bt_ctf_event_class_get_context_type(
 				ctx->event_class);
+			ctx->step_by_step = false;
 			break;
 
 		case ENTITY_EVENT_PAYLOAD:
 			field_type = bt_ctf_event_class_get_payload_type(
 				ctx->event_class);
+			ctx->step_by_step = false;
 			break;
 		}
 
@@ -1458,7 +1464,6 @@ enum bt_ctf_packet_reader_status handle_gd_state(
 		assert(!ctx->cur_field);
 		ctx->packet_size = -1;
 		ctx->content_size = -1;
-		ctx->step_by_step = true;
 		ctx->fd_state = FDS_SKIP_PADDING;
 		ctx->gd_state = GDS_DECODE;
 		ctx->skip_base_padding = true;
