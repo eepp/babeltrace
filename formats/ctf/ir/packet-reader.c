@@ -432,8 +432,27 @@
 #include <babeltrace/bitfield.h>
 #include <babeltrace/ctf-ir/event-types.h>
 #include <babeltrace/ctf-ir/event-fields.h>
+#include <babeltrace/ctf-ir/stream-class.h>
+#include <babeltrace/align.h>
 #include <glib.h>
 
+#define MIN(a, b) \
+	({				\
+		typeof (a) _a = (a);	\
+		typeof (b) _b = (b);	\
+		_a < _b ? _a : _b;	\
+	})
+
+#define MAX(a, b) \
+	({				\
+		typeof (a) _a = (a);	\
+		typeof (b) _b = (b);	\
+		_a > _b ? _a : _b;	\
+	})
+
+/*
+ * A stack entry.
+ */
 struct stack_entry {
 	/*
 	 * Current base field, one of:
@@ -442,7 +461,6 @@ struct stack_entry {
 	 *   * array
 	 *   * sequence
 	 *   * variant
-	 *   * string
 	 */
 	struct bt_ctf_field *base;
 
@@ -456,31 +474,84 @@ struct stack_entry {
 	int64_t index;
 };
 
+/*
+ * Visit stack.
+ */
 struct stack {
 	/* entries (struct stack_entry *) (top is last element) */
 	GPtrArray *entries;
 };
 
+/*
+ * Global decoding state, as such:
+ *
+ *   * GDS_INIT: initializes the context to begin the decoding of an
+ *     an entity. The entity to decode is ctx->entity. This state
+ *     creates the first field for this entity's field type, and pushes
+ *     it to the visit stack as its root entry.
+ *   * GDS_DECODE: decode phase. The field decoding state handler is
+ *     called here as long as it needs to continue, that is, as long as
+ *     there's something on the visit stack.
+ */
 enum global_decoding_state {
-	GDS_TRACE_PACKET_HEADER_INIT,
-	GDS_TRACE_PACKET_HEADER,
-	GDS_STREAM_PACKET_CONTEXT_INIT,
-	GDS_STREAM_PACKET_CONTEXT,
-	GDS_STREAM_EVENT_HEADER_INIT,
-	GDS_STREAM_EVENT_HEADER,
-	GDS_STREAM_EVENT_CONTEXT_INIT,
-	GDS_STREAM_EVENT_CONTEXT,
-	GDS_EVENT_CONTEXT_INIT,
-	GDS_EVENT_CONTEXT,
-	GDS_EVENT_PAYLOAD_INIT,
-	GDS_EVENT_PAYLOAD,
+	GDS_INIT,
+	GDS_DECODE,
 	GDS_DONE,
 };
 
-enum field_decoding_state {
-
+/*
+ * Decoding entities.
+ */
+enum decoding_entity {
+	ENTITY_TRACE_PACKET_HEADER,
+	ENTITY_STREAM_PACKET_CONTEXT,
+	ENTITY_STREAM_EVENT_HEADER,
+	ENTITY_STREAM_EVENT_CONTEXT,
+	ENTITY_EVENT_CONTEXT,
+	ENTITY_EVENT_PAYLOAD,
 };
 
+/*
+ * Field decoding state, as such:
+ *
+ *   * FDS_INIT: checks the current situation and takes an action.
+ *     If there's no more field to decode for the current base, pops
+ *     the stack and continues. If there's no more entry in the stack,
+ *     sets the context's current field and stops. Otherwise, creates
+ *     the next field to decode and changes to FDS_SKIP_PADDING.
+ *   * FDS_SKIP_PADDING: skips the padding before the next field to
+ *     decode. If padding was skipped for a compound type, goes back
+ *     to FDS_INIT. Otherwise, goes to FDS_DECODE_ATOMIC_FIELD_BEGIN.
+ *   * FDS_DECODE_ATOMIC_FIELD_BEGIN: begins decoding an atomic field,
+ *     possibly decoding it entirely, in which case it goes back to
+ *     FDS_INIT.
+ *   * FDS_DECODE_ATOMIC_FIELD_CONTINUE: continues decoding an atomic
+ *     field. When done, sets the next field's value to the decoded
+ *     value, and goes back to FDS_INIT.
+ */
+enum field_decoding_state {
+	FDS_INIT,
+	FDS_SKIP_PADDING,
+	FDS_DECODE_ATOMIC_FIELD_BEGIN,
+	FDS_DECODE_ATOMIC_FIELD_CONTINUE,
+};
+
+/*
+ * State machine action, returned by state handlers:
+ *
+ *   * SMA_CONTINUE: stay in the current state.
+ *   * SMA_DONE: current state is done.
+ *   * SMA_ERROR: error.
+ */
+enum state_machine_action {
+	SMA_CONTINUE,
+	SMA_DONE,
+	SMA_ERROR,
+};
+
+/*
+ * Packet reader context, where everything important lives.
+ */
 struct bt_ctf_packet_reader_ctx {
 	/* back-end operations */
 	struct bt_ctf_stream_reader_ops ops;
@@ -489,7 +560,7 @@ struct bt_ctf_packet_reader_ctx {
 	struct stack *stack;
 
 	/*
-	 * Current field being decoded.
+	 * Current entity field being decoded.
 	 *
 	 * This variable is only used for communication between the
 	 * decoding functions and the state handling function. It must
@@ -498,8 +569,20 @@ struct bt_ctf_packet_reader_ctx {
 	 */
 	struct bt_ctf_field *cur_field;
 
+	/* current atomic field being decoded */
+	struct bt_ctf_field *cur_atomic_field;
+
+	/* type of current field being decoded */
+	struct bt_ctf_field_type *cur_atomic_field_type;
+
 	/* trace (our own ref) */
 	struct bt_ctf_trace *trace;
+
+	/* current stream class */
+	struct bt_ctf_stream_class *stream_class;
+
+	/* current event class */
+	struct bt_ctf_event_class *event_class;
 
 	/* current packet header (our own ref) */
 	struct bt_ctf_field *trace_packet_header;
@@ -519,8 +602,17 @@ struct bt_ctf_packet_reader_ctx {
 	/* current event header context (our own ref) */
 	struct bt_ctf_field *event_payload;
 
-	/* current decoding state */
-	enum global_decoding_state state;
+	/* current global decoding state */
+	enum global_decoding_state gd_state;
+
+	/* current entity being decoded */
+	enum decoding_entity entity;
+
+	/* current field decoding state */
+	enum field_decoding_state fd_state;
+
+	/* true to skip the padding of the current base field */
+	bool skip_base_padding;
 
 	/* current user buffer */
 	const void *buf;
@@ -535,7 +627,7 @@ struct bt_ctf_packet_reader_ctx {
 	size_t max_request_len;
 
 	/* current offset in packet (bits) */
-	size_t at_packet;
+	size_t packet_at;
 
 	/* decode atomic fields one at a time */
 	bool step_by_step;
@@ -652,9 +744,15 @@ struct stack_entry *stack_top(struct stack *stack)
 }
 
 static inline
+size_t available_bits(struct bt_ctf_packet_reader_ctx *ctx)
+{
+	return ctx->buf_len - ctx->at;
+}
+
+static inline
 bool has_enough_bits(struct bt_ctf_packet_reader_ctx *ctx, size_t len)
 {
-	return (ctx->buf_len - ctx->at) >= len;
+	return available_bits(ctx) >= len;
 }
 
 static
@@ -963,6 +1061,7 @@ enum bt_ctf_packet_reader_status decode_atomic_field(
 		if (ctx->step_by_step) {
 			request_len = read_len;
 		} else {
+			// TODO: min(ctx->max_request_len, content_size)
 			request_len = ctx->max_request_len;
 		}
 
@@ -1005,15 +1104,15 @@ end:
 }
 
 static inline
-enum bt_ctf_packet_reader_status decode(struct bt_ctf_packet_reader_ctx *ctx)
+enum state_machine_action handle_fds_init(struct bt_ctf_packet_reader_ctx *ctx,
+	enum bt_ctf_packet_reader_status &status)
 {
-	int ret;
-	enum bt_ctf_packet_reader_status status =
-		BT_CTF_PACKET_READER_STATUS_OK;
-	struct bt_ctf_field *next_field = NULL;
 	struct bt_ctf_field_type *next_field_type = NULL;
+	enum state_machine_action action = SMA_CONTINUE;
+	struct bt_ctf_field *next_field = NULL;
 	struct stack_entry *top;
 	int64_t field_length;
+	int ret;
 
 	top = stack_top(ctx->stack);
 
@@ -1024,6 +1123,7 @@ enum bt_ctf_packet_reader_status decode(struct bt_ctf_packet_reader_ctx *ctx)
 			/* save as current field */
 			ctx->cur_field = top->base;
 			bt_ctf_field_get(ctx->cur_field);
+			action = SMA_DONE;
 		}
 
 		stack_pop(ctx->stack);
@@ -1047,7 +1147,7 @@ enum bt_ctf_packet_reader_status decode(struct bt_ctf_packet_reader_ctx *ctx)
 	}
 
 	if (!next_field) {
-		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		action = SMA_ERROR;
 		goto end;
 	}
 
@@ -1055,32 +1155,44 @@ enum bt_ctf_packet_reader_status decode(struct bt_ctf_packet_reader_ctx *ctx)
 	next_field_type = bt_ctf_field_get_type(next_field);
 
 	if (!next_field_type) {
-		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		action = SMA_ERROR;
 		goto end;
 	}
 
-	/* if next field type is a compound type, push on stack and continue */
 	switch (bt_ctf_field_type_get_type_id(next_field_type)) {
 	case CTF_TYPE_STRUCT:
 	case CTF_TYPE_ARRAY:
+	case CTF_TYPE_SEQUENCE:
+	case CTF_TYPE_VARIANT:
 		field_length = get_field_length(ctx, next_field_type);
 		ret = stack_push(ctx->stack, next_field, next_field_type,
 			field_length);
 
 		if (ret) {
-			status = BT_CTF_PACKET_READER_STATUS_ERROR;
-		} else {
-			top->index++;
-		}
+			action = SMA_ERROR;
+			goto end;
 
-		goto end;
+		top->index++;
+		ctx->skip_base_padding = true;
+		break;
+
+	case CTF_TYPE_INTEGER:
+	case CTF_TYPE_FLOAT:
+	case CTF_TYPE_ENUM:
+	case CTF_TYPE_STRING:
+		ctx->skip_base_padding = false;
+		ctx->cur_atomic_field = next_field;
+		next_field = NULL;
+		ctx->cur_atomic_field_type = next_field_type;
+		next_field_type = NULL;
+		break;
 
 	default:
+		assert(false);
 		break;
 	}
 
-	/* next field type is an atomic type: try decoding it */
-	status = decode_atomic_field(ctx, top, next_field, next_field_type);
+	ctx->fd_state = FDS_SKIP_PADDING;
 
 end:
 	if (next_field) {
@@ -1091,50 +1203,247 @@ end:
 		bt_ctf_field_type_put(next_field_type);
 	}
 
-	return status;
+	return action;
 }
 
 static inline
-enum bt_ctf_packet_reader_status handle_state(
+enum state_machine_action handle_fds_skip_padding(
+	struct bt_ctf_packet_reader_ctx *ctx,
+	enum bt_ctf_packet_reader_status *status)
+{
+	size_t available;
+	unsigned int skip;
+	size_t request_len;
+	int field_alignment;
+	struct stack_entry *top;
+	size_t aligned_packet_at;
+	bt_ctf_field_type *field_type;
+	enum bt_ctf_stream_reader_status sr_status;
+	enum state_machine_action action = SMA_CONTINUE;
+
+	*status = BT_CTF_PACKET_READER_STATUS_OK;
+	top = stack_top(ctx->stack);
+
+	if (ctx->skip_base_padding) {
+		top = stack_top(ctx->stack);
+		field_type = top->base_type;
+	} else {
+		field_type = ctx->cur_atomic_field_type;
+	}
+
+	/* get field's alignment */
+	field_alignment = bt_ctf_field_type_get_alignment(field_type);
+
+	if (field_alignment < 0) {
+		action = SMA_ERROR;
+		goto end;
+	}
+
+	/* compute how many bits we need to skip */
+	aligned_packet_at = ALIGN(ctx->packet_at, field_alignment);
+	skip = aligned_packet_at - ctx->packet_at;
+
+	/* nothing to skip? done */
+	if (skip == 0) {
+		if (ctx->skip_base_padding) {
+			ctx->fd_state = FDS_INIT;
+		} else {
+			ctx->fd_state = FDS_DECODE_ATOMIC_FIELD_BEGIN;
+		}
+
+		goto end;
+	}
+
+	/* consume as many bits as possible in what's left */
+	available = available_bits(ctx);
+
+	if (available >= skip) {
+		ctx->at += skip;
+
+		if (ctx->skip_base_padding) {
+			ctx->fd_state = FDS_INIT;
+		} else {
+			ctx->fd_state = FDS_DECODE_ATOMIC_FIELD_BEGIN;
+		}
+
+		goto end;
+	} else {
+		ctx->at += available;
+		skip -= available;
+	}
+
+	/* request some bits since we don't have enough to consume */
+	if (ctx->step_by_step) {
+		request_len = skip;
+	} else {
+		// TODO: min(ctx->max_request_len, content_size)
+		request_len = ctx->max_request_len;
+	}
+
+	sr_status = request_bits(ctx, request_len);
+	*status = pr_status_from_sr_status(sr_status);
+
+	if (*status == BT_CTF_PACKET_READER_STATUS_ERROR) {
+		action = SMA_ERROR;
+		goto end;
+	}
+
+end:
+	return action;
+}
+
+static inline
+enum state_machine_action handle_fds_decode_atomic_field_begin(
+	struct bt_ctf_packet_reader_ctx *ctx,
+	enum bt_ctf_packet_reader_status *status)
+{
+	int64_t length;
+	size_t available;
+	enum state_machine_action action = SMA_CONTINUE;
+
+	length = get_field_length(ctx->cur_atomic_field_type);
+	available = available_bits(ctx);
+
+	if (available == 0) {
+		enum bt_ctf_stream_reader_status sr_status;
+		size_t request_len;
+
+		if (ctx->step_by_step) {
+			request_len = length;
+		} else {
+			// TODO: min(ctx->max_request_len, content_size)
+			request_len = ctx->max_request_len;
+		}
+
+		sr_status = request_bits(ctx, request_len);
+		*status = pr_status_from_sr_status(sr_status);
+
+		if (*status == BT_CTF_PACKET_READER_STATUS_ERROR) {
+			action = SMA_ERROR;
+		}
+
+		goto end;
+	}
+
+	switch (bt_ctf_field_type_get_type_id(top->base_type)) {
+	case CTF_TYPE_INTEGER:
+		// HERE
+
+	case CTF_TYPE_FLOAT:
+		// HERE
+
+	case CTF_TYPE_ENUM:
+		// HERE
+
+	case CTF_TYPE_STRING:
+		// HERE
+
+	default:
+		assert(false);
+	}
+
+
+
+end:
+	return action
+}
+
+static inline
+enum state_machine_action handle_fd_state(struct bt_ctf_packet_reader_ctx *ctx,
+	enum bt_ctf_packet_reader_status *status)
+{
+	enum state_machine_action action;
+
+	switch (ctx->fd_state)
+	{
+	case FDS_INIT:
+		action = handle_fds_init(ctx, status);
+		break;
+
+	case FDS_SKIP_PADDING:
+		action = handle_fds_skip_padding(ctx, status);
+		break;
+
+	case FDS_DECODE_ATOMIC_FIELD_BEGIN:
+		action = handle_fds_decode_atomic_field_begin(ctx, status);
+		break;
+	}
+
+	return action;
+}
+
+static inline
+enum bt_ctf_packet_reader_status handle_gd_state(
 	struct bt_ctf_packet_reader_ctx *ctx)
 {
 	int ret;
 	int64_t length;
-	struct bt_ctf_field_type *field_type = NULL;
+	struct stack_entry *top;
+	enum state_machine_action action;
 	struct bt_ctf_field *field = NULL;
-	enum bt_ctf_packet_reader_status status =
-		BT_CTF_PACKET_READER_STATUS_OK;
+	enum bt_ctf_packet_reader_status status;
+	struct bt_ctf_field_type *field_type = NULL;
 
-	switch (ctx->state) {
-	case GDS_TRACE_PACKET_HEADER_INIT:
-		assert(stack_size(ctx->stack) == 0);
-		assert(!ctx->trace_packet_header);
-		assert(!ctx->cur_field);
-		ctx->packet_size = -1;
-		ctx->content_size = -1;
-		ctx->step_by_step = true;
-		ctx->cur_field = NULL;
-		field_type = bt_ctf_trace_get_packet_header_type(ctx->trace);
+	*status = BT_CTF_PACKET_READER_STATUS_OK;
+
+	switch (ctx->gd_state) {
+	case GDS_INIT:
+		/* get the appropriate field type for the current entity */
+		switch (ctx->entity) {
+		case ENTITY_TRACE_PACKET_HEADER:
+			field_type =
+				bt_ctf_trace_get_packet_header_type(ctx->trace);
+			break;
+
+		case ENTITY_STREAM_PACKET_CONTEXT:
+			field_type =
+				bt_ctf_stream_class_get_packet_context_type(
+					ctx->stream_class);
+			break;
+
+		case ENTITY_STREAM_EVENT_HEADER:
+			field_type = bt_ctf_stream_class_get_event_header_type(
+				ctx->stream_class);
+			break;
+
+		case ENTITY_STREAM_EVENT_CONTEXT:
+			field_type = bt_ctf_stream_class_get_event_context_type(
+				ctx->stream_class);
+			break;
+
+		case ENTITY_EVENT_CONTEXT:
+			field_type = bt_ctf_event_class_get_context_type(
+				ctx->event_class);
+			break;
+
+		case ENTITY_EVENT_PAYLOAD:
+			field_type = bt_ctf_event_class_get_payload_type(
+				ctx->event_class);
+			break;
+		}
 
 		if (!field_type) {
-			status = BT_CTF_STREAM_READER_STATUS_ERROR;
+			status = BT_CTF_PACKET_READER_STATUS_ERROR;
 			goto end;
 		}
 
+		/* create the root field of the current entity */
 		field = bt_ctf_field_create(field_type);
 
 		if (!field) {
-			status = BT_CTF_STREAM_READER_STATUS_ERROR;
+			status = BT_CTF_PACKET_READER_STATUS_ERROR;
 			goto end;
 		}
 
 		length = get_field_length(ctx, field_type);
 
 		if (length < 0) {
-			status = BT_CTF_STREAM_READER_STATUS_ERROR;
+			status = BT_CTF_PACKET_READER_STATUS_ERROR;
 			goto end;
 		}
 
+		/* push root field on stack */
+		assert(stack_size(ctx->stack) == 0);
 		ret = stack_push(ctx->stack, field, field_type, length);
 		bt_ctf_field_put(field);
 		field = NULL;
@@ -1142,41 +1451,71 @@ enum bt_ctf_packet_reader_status handle_state(
 		field_type = NULL;
 
 		if (ret) {
-			status = BT_CTF_STREAM_READER_STATUS_ERROR;
+			status = BT_CTF_PACKET_READER_STATUS_ERROR;
 			goto end;
 		}
 
-		ctx->state = DECODING_STATE_TRACE_PACKET_HEADER;
+		assert(!ctx->cur_field);
+		ctx->packet_size = -1;
+		ctx->content_size = -1;
+		ctx->step_by_step = true;
+		ctx->fd_state = FDS_SKIP_PADDING;
+		ctx->gd_state = GDS_DECODE;
+		ctx->skip_base_padding = true;
 		break;
 
-	case GDS_TRACE_PACKET_HEADER:
-		while (!ctx->cur_field) {
-			status = decode(ctx);
+	case GDS_DECODE:
+		action = handle_fd_state(ctx, &status);
 
-			switch (status) {
-			case BT_CTF_PACKET_READER_STATUS_AGAIN:
-			case BT_CTF_PACKET_READER_STATUS_ERROR:
-				goto end;
+		switch (action) {
+		case SMA_ERROR:
+			status = BT_CTF_PACKET_READER_STATUS_ERROR;
+			goto end;
 
-			default:
+		case SMA_DONE:
+			ctx->gd_state = GDS_INIT;
+
+			/* move current field to appropriate member */
+			assert(ctx->cur_field);
+			switch (ctx->entity) {
+			case ENTITY_TRACE_PACKET_HEADER:
+				ctx->trace_packet_header = ctx->cur_field;
+				ctx->entity = ENTITY_STREAM_PACKET_CONTEXT;
+				break;
+
+			case ENTITY_STREAM_PACKET_CONTEXT:
+				ctx->stream_packet_context = ctx->cur_field;
+				ctx->entity = ENTITY_STREAM_EVENT_HEADER;
+				break;
+
+			case ENTITY_STREAM_EVENT_HEADER:
+				ctx->stream_event_header = ctx->cur_field;
+				ctx->entity = ENTITY_STREAM_EVENT_CONTEXT;
+				break;
+
+			case ENTITY_STREAM_EVENT_CONTEXT:
+				ctx->stream_event_context = ctx->cur_field;
+				ctx->entity = ENTITY_EVENT_CONTEXT;
+				break;
+
+			case ENTITY_EVENT_CONTEXT:
+				ctx->event_context = ctx->cur_field;
+				ctx->entity = ENTITY_EVENT_PAYLOAD;
+				break;
+
+			case ENTITY_EVENT_PAYLOAD:
+				ctx->event_payload = ctx->cur_field;
+				ctx->entity = ENTITY_STREAM_EVENT_HEADER;
 				break;
 			}
+
+			ctx->cur_field = NULL;
+			break;
+
+		case SMA_CONTINUE:
+			break;
 		}
-
-		/* move current field to packet header */
-		ctx->trace_packet_header = ctx->cur_field;
-		ctx->cur_field = NULL;
-
-		/* next state: initialize packet context decoding */
-		ctx->state = DECODING_STATE_STREAM_PACKET_CONTEXT_INIT;
-
-		/* everything good */
-		status = BT_CTF_PACKET_READER_STATUS_OK;
 		break;
-
-	default:
-		/* we should explicitely handle all the states */
-		assert(false);
 	}
 
 end:
@@ -1188,7 +1527,7 @@ end:
 		bt_ctf_field_put(field);
 	}
 
-	return status;
+	return action;
 }
 
 struct bt_ctf_packet_reader_ctx *bt_ctf_packet_reader_create(
@@ -1206,7 +1545,9 @@ struct bt_ctf_packet_reader_ctx *bt_ctf_packet_reader_create(
 	ctx->ops = ops;
 	ctx->max_request_len = max_request_len;
 	ctx->trace = trace;
-	ctx->state = DECODING_STATE_TRACE_PACKET_HEADER_INIT;
+	ctx->gd_state = GDS_TRACE_PACKET_HEADER_INIT;
+	ctx->entity = ENTITY_TRACE_PACKET_HEADER;
+	ctx->fd_state = FDS_INIT;
 	bt_ctf_trace_get(ctx->trace);
 	ctx->user_data = data;
 	ctx->stack = stack_new();
@@ -1223,6 +1564,8 @@ end:
 
 void bt_ctf_packet_reader_destroy(struct bt_ctf_packet_reader_ctx *ctx)
 {
+	bt_ctf_field_put(ctx->cur_atomic_field);
+	bt_ctf_field_type_put(ctx->cur_atomic_field_type);
 	bt_ctf_trace_put(ctx->trace);
 	bt_ctf_field_put(ctx->trace_packet_header);
 	bt_ctf_field_put(ctx->stream_packet_context);
@@ -1250,8 +1593,9 @@ enum bt_ctf_packet_reader_status decode_packet_header(
 
 	/* continue decoding packet header if needed */
 	while (!ctx->trace_packet_header) {
-		status = handle_state(ctx);
+		status = handle_gd_state(ctx);
 
+		/* no more data available, or error */
 		if (status == BT_CTF_PACKET_READER_STATUS_AGAIN ||
 				status == BT_CTF_PACKET_READER_STATUS_ERROR) {
 			goto end;
@@ -1288,8 +1632,9 @@ enum bt_ctf_packet_reader_status decode_packet_context(
 
 	/* continue decoding packet context if needed */
 	while (!ctx->stream_packet_context) {
-		status = handle_state(ctx);
+		status = handle_gd_state(ctx);
 
+		/* no more data available, or error */
 		if (status == BT_CTF_PACKET_READER_STATUS_AGAIN ||
 				status == BT_CTF_PACKET_READER_STATUS_ERROR) {
 			goto end;
