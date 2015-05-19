@@ -31,18 +31,11 @@
  *
  * This is an internal common API used by CTF reader plugins. It allows
  * a binary CTF packet to be deserialized as CTF IR data structures
- * using a user-provided back-end (stream reader).
- *
- * This API only deals with \em individual packets, in that it does not
- * care about:
- *
- *   - sequences of packets
- *   - packet indexes
- *   - stream merging
+ * using a user-provided stream reader.
  *
  * To use this API, you must first create a #bt_ctf_stream_reader_ops
  * structure and fill it with the appropriate operations for your
- * specific back-end, and then pass it to
+ * specific stream reader, and then pass it to
  * bt_ctf_packet_reader_create() along with your user data.
  *
  * Call bt_ctf_packet_reader_destroy() when you are done with the
@@ -66,10 +59,7 @@ enum bt_ctf_stream_reader_status {
 	 * End of stream.
 	 *
 	 * The stream reader function called by the packet reader
-	 * function reached the end of the stream. In normal situations,
-	 * this happens when reading a packet with no packet size
-	 * information. The packet is thus decoded until the stream
-	 * reader returns this status code.
+	 * function reached the end of the stream.
 	 */
 	BT_CTF_STREAM_READER_STATUS_EOS =	-4,
 
@@ -99,12 +89,17 @@ enum bt_ctf_stream_reader_status {
  */
 enum bt_ctf_packet_reader_status {
 	/**
-	 * End of packet.
+	 * End of stream.
 	 *
-	 * The packet reader function called by the user reached the
-	 * end of the packet; there's no more events to be read.
+	 * The stream reader function called by the packet reader
+	 * function reached the end of the stream.
 	 */
-	BT_CTF_PACKET_READER_STATUS_EOP =	-4,
+	BT_CTF_PACKET_READER_STATUS_EOS =		-5,
+
+	/**
+	 * Packet header, packet context, or event not available.
+	 */
+	BT_CTF_PACKET_READER_STATUS_NOENT =		-4,
 
 	/**
 	 * There is no data available right now, try again later.
@@ -115,16 +110,16 @@ enum bt_ctf_packet_reader_status {
 	 * the last called packet reader function once the situation is
 	 * resolved.
 	 */
-	BT_CTF_PACKET_READER_STATUS_AGAIN =	-3,
+	BT_CTF_PACKET_READER_STATUS_AGAIN =		-3,
 
 	/** Invalid argument. */
-	BT_CTF_PACKET_READER_STATUS_INVAL =	-2,
+	BT_CTF_PACKET_READER_STATUS_INVAL =		-2,
 
 	/** General error. */
-	BT_CTF_PACKET_READER_STATUS_ERROR =	-1,
+	BT_CTF_PACKET_READER_STATUS_ERROR =		-1,
 
 	/** Everything okay. */
-	BT_CTF_PACKET_READER_STATUS_OK =	0,
+	BT_CTF_PACKET_READER_STATUS_OK =		0,
 };
 
 /**
@@ -167,15 +162,15 @@ struct bt_ctf_stream_reader_ops {
 	 *  begin                        end (included)
 	 * </pre>
 	 *
-	 * The returned buffer's ownership is the back-end defined by
-	 * the user, in that it won't be freed by the packet reader
-	 * functions. The returned buffer won't be modified by the
-	 * packet reader functions.
+	 * The returned buffer's ownership is the stream reader, in that
+	 * it won't be freed by the packet reader functions. The
+	 * returned buffer won't be modified by the packet reader
+	 * functions either.
 	 *
 	 * When this function is called for the first time for a given
-	 * packet, the offset within the packet is considered to be 0.
+	 * stream, the offset within the stream is considered to be 0.
 	 * The next times this function is called, the returned buffer's
-	 * offset within the complete packet must be the previous offset
+	 * offset within the complete stream must be the previous offset
 	 * plus the last returned value of \p buffer_len.
 	 *
 	 * The function must return one of the following statuses:
@@ -193,9 +188,17 @@ struct bt_ctf_stream_reader_ops {
 	 *     available before calling the same packet reader function
 	 *     again to continue the decoding process.
 	 *   - <b>#BT_CTF_STREAM_READER_STATUS_EOS</b>: the end of
-	 *     the stream was reached, and no more events are available.
-	 *     In this case, the packet reader function called by the
-	 *     user will return #BT_CTF_PACKET_READER_STATUS_EOP.
+	 *     the stream was reached, and no more data will ever be
+	 *     available for this stream. In this case, the packet
+	 *     reader function called by the user will return
+	 *     #BT_CTF_PACKET_READER_STATUS_EOS. This must not be
+	 *     returned when returning at least one bit of data to the
+	 *     caller, i.e. this must be returned when there's
+	 *     absolutely nothing left; should the request length be
+	 *     larger than what's left in the stream, this function must
+	 *     return what's left, setting \p buffer_len to the number
+	 *     of remaining bits, and return
+	 *     #BT_CTF_STREAM_READER_STATUS_EOS on the following call.
 	 *   - <b>#BT_CTF_STREAM_READER_STATUS_ERROR</b>: a fatal
 	 *     error occured during this operation. In this case, the
 	 *     packet reader function called by the user will
@@ -203,7 +206,7 @@ struct bt_ctf_stream_reader_ops {
 	 *
 	 * If #BT_CTF_STREAM_READER_STATUS_OK is not returned,
 	 * the values of \p buffer_len, \p buffer_offset, and \p buffer
-	 * are not considered by the caller.
+	 * are ignored by the caller.
 	 *
 	 * @param requested_len	Requested buffer length (bits)
 	 * @param buffer_len	Returned buffer's length (bits)
@@ -214,44 +217,9 @@ struct bt_ctf_stream_reader_ops {
 	 * @param data		User data
 	 * @returns		Status code (see description above)
 	 */
-	enum bt_ctf_packet_reader_status (* get_next_buffer)(
+	enum bt_ctf_packet_reader_status (* get_next_bits)(
 		size_t requested_len, size_t *buffer_len,
 		size_t *buffer_offset, void **buffer, void *data);
-
-	/**
-	 * Moves the current packet offset.
-	 *
-	 * Set this member to \c NULL if seek operations are not
-	 * possible for the given back-end.
-	 *
-	 * This function shall set the bit offset within the current
-	 * packet, as follows:
-	 *
-	 *   - If \p whence is #BT_CTF_STREAM_READER_SEEK_SET,
-	 *     the bit offset within the packet shall be set to
-	 *     \p offset bits.
-	 *
-	 * Currently, only #BT_CTF_STREAM_READER_SEEK_SET is valid
-	 * for \p whence.
-	 *
-	 * Upon successful completion, the resulting offset, as measured
-	 * in bits from the beginning of the packet, shall be returned.
-	 * If the resulting packet offset is invalid for the given
-	 * back-end, #BT_CTF_STREAM_READER_STATUS_INVAL must be
-	 * returned, which cancels the seek operation. In this case,
-	 * the packet offset shall remain unchanged.
-	 *
-	 * @param offset	Number of bits to offset from origin
-	 * @param whence	Reference position
-	 * @param data		User data
-	 * @returns		Resulting offset, as measured in bits,
-	 * 			from the beginning of the packet, or
-	 * 			#BT_CTF_STREAM_READER_STATUS_INVAL
-	 * 			when it is not possible to seek
-	 */
-	int64_t (* seek)(int64_t offset,
-		enum bt_ctf_stream_reader_seek_origin whence,
-		void *data);
 };
 
 /* Packet reader context */
@@ -260,18 +228,18 @@ struct bt_ctf_packet_reader_ctx;
 /**
  * Creates a packet reader.
  *
- * When created, the packet offset is assumed to be 0.
- *
  * Upon successful completion, the reference count of \p trace is
  * incremented.
  *
  * @param trace			Trace to read
- * @param max_request_len	Maximum buffer length to request to
- * 				bt_ctf_stream_reader_ops::get_next_buffer()
+ * @param max_request_len	Maximum buffer length, in bits, to
+ *                              request to
+ * 				bt_ctf_stream_reader_ops::get_next_bits()
  * 				at a time; set to 0 for the
  * 				implementation to make this decision
- * @param ops			Back-end operations
- * @param data			User data (given to back-end operations)
+ * @param ops			Stream reader operations
+ * @param data			User data (passed to stream reader
+ *                              operations)
  * @returns			New packet reader context on success, or
  * 				\c NULL on error
  */
@@ -289,32 +257,18 @@ struct bt_ctf_packet_reader_ctx *bt_ctf_packet_reader_create(
 void bt_ctf_packet_reader_destroy(struct bt_ctf_packet_reader_ctx *ctx);
 
 /**
- * Resets a packet reader.
- *
- * The packet reader's offset is reset to 0, so that the next call to
- * bt_ctf_stream_reader_ops::get_next_buffer() is assumed to be
- * at offset 0.
- *
- * This function is used to switch the back-end's data source to a
- * new packet behind the scenes, avoiding the allocation of a new
- * packet reader sharing the same trace, back-end operations, and
- * user data.
- *
- * @param ctx	Packet reader context
- * @returns	One of #bt_ctf_packet_reader_status values
- */
-enum bt_ctf_packet_reader_status bt_ctf_packet_reader_reset(
-	struct bt_ctf_packet_reader_ctx *ctx);
-
-/**
  * Returns the packet header.
  *
  * If the packet header is not decoded yet, it is first read and
  * decoded, then returned.
  *
- * Upon successful completion, the returned packet header's reference
- * count is incremented. The user is responsible for calling
- * bt_ctf_field_put() on it.
+ * Upon successful completion, #BT_CTF_STREAM_READER_STATUS_OK is
+ * returned, and the returned packet header's reference count is
+ * incremented. The user is responsible for calling bt_ctf_field_put()
+ * on it.
+ *
+ * If there's no available packet header for the packet reader's
+ * registered trace, #BT_CTF_PACKET_READER_STATUS_NOENT is returned.
  *
  * @param ctx		Packet reader context
  * @param packet_header	Returned packet header
@@ -330,9 +284,13 @@ enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_header(
  * If the packet context is not decoded yet, it is first read and
  * decoded, then returned.
  *
- * Upon successful completion, the returned packet context's reference
- * count is incremented. The user is responsible for calling
- * bt_ctf_field_put() on it.
+ * Upon successful completion, #BT_CTF_STREAM_READER_STATUS_OK is
+ * returned, and the returned packet context's reference count is
+ * incremented. The user is responsible for calling bt_ctf_field_put()
+ * on it.
+ *
+ * If there's no available packet context for the packet reader's
+ * current stream, #BT_CTF_PACKET_READER_STATUS_NOENT is returned.
  *
  * @param ctx			Packet reader context
  * @param packet_context	Returned packet context
@@ -344,16 +302,20 @@ enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_context(
 	struct bt_ctf_field **packet_context);
 
 /**
- * Reads, decodes and returns the next event within the packet.
+ * Reads, decodes and returns the next event within the current packet.
  *
- * Upon successful completion, the returned event's reference
- * count is incremented. The user is responsible for calling
- * bt_ctf_event_put() on it.
+
+ * Upon successful completion, #BT_CTF_STREAM_READER_STATUS_OK is
+ * returned, and the returned event's reference count is incremented.
+ * The user is responsible for calling bt_ctf_event_put() on it.
  *
- * The returned event remains valid while no packet reader function is
- * called with \p ctx. If a copy is needed for further processing,
- * get one using bt_ctf_event_copy(), which performs a deep copy of
- * an event.
+ * If there's no more events within the current packet,
+ * #BT_CTF_PACKET_READER_STATUS_NOENT is returned.
+ *
+ * The returned event, if any, remains valid as long as no packet reader
+ * function is called with \p ctx. If a copy is needed for further
+ * processing, get one using bt_ctf_event_copy(), which performs a deep
+ * copy of an event.
  *
  * @param ctx		Packet reader context
  * @param event		Returned event
@@ -362,5 +324,21 @@ enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_context(
 enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_next_event(
 	struct bt_ctf_packet_reader_ctx *ctx,
 	struct bt_ctf_event **event);
+
+/**
+ * Asks the stream reader to read as many bits as needed for its
+ * current position to reach the end of the current packet.
+ *
+ * Once the stream reader's position reaches the end of the current
+ * packet, this function returns #BT_CTF_STREAM_READER_STATUS_OK and
+ * the packet reader's internal state is reset, prepared to read the
+ * next packet. Further calls to this function would skip the next
+ * packet, and so on.
+ *
+ * @param ctx		Packet reader context
+ * @returns		One of #bt_ctf_packet_reader_status values
+ */
+enum bt_ctf_packet_reader_status bt_ctf_packet_reader_goto_next_packet(
+	struct bt_ctf_packet_reader_ctx *ctx);
 
 #endif /* BABELTRACE_CTF_IR_PACKET_READER_H */

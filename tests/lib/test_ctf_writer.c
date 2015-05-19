@@ -2648,7 +2648,7 @@ struct my_data {
 	size_t at;
 };
 
-enum bt_ctf_packet_reader_status my_get_next_buffer(size_t requested_len,
+enum bt_ctf_packet_reader_status my_get_next_bits(size_t requested_len,
 	size_t *buffer_len, size_t *buffer_offset, void **buffer,
 	void *data)
 {
@@ -2656,16 +2656,16 @@ enum bt_ctf_packet_reader_status my_get_next_buffer(size_t requested_len,
 		0xc1, 0x1f, 0xfc, 0xc1,					/* magic */
 		0xe9, 0xa2, 0xdc, 0xf1, 0x71, 0x05, 0x41, 0xd9,		/* uuid */
 		0xab, 0x48, 0xfb, 0x3f, 0xbf, 0x76, 0x58, 0x4d,		/* uuid */
-		0x99, 0x0e, 0x49, 0x40,					/* some_float */
+		0x99, 0x0e, 0x49, 0x40,					/* yeahyeah */
 		0x01, 0x00, 0x00, 0x00,					/* stream_id */
 	};
 
 	struct my_data *my_data = data;
 
-	*buffer_len = requested_len;
+	*buffer_len = 1;
 	*buffer_offset = my_data->at;
-	*buffer = &pkt_data[my_data->at / 8];
-	my_data->at += requested_len;
+	*buffer = pkt_data;
+	my_data->at++;
 
 	return BT_CTF_STREAM_READER_STATUS_OK;
 }
@@ -2676,8 +2676,7 @@ void just_test(void)
 		.at = 0,
 	};
 	struct bt_ctf_stream_reader_ops ops = {
-		.get_next_buffer = my_get_next_buffer,
-		.seek = NULL,
+		.get_next_bits = my_get_next_bits,
 	};
 	struct bt_ctf_packet_reader_ctx *ctx;
 	enum bt_ctf_packet_reader_status status;
@@ -2686,17 +2685,15 @@ void just_test(void)
 	struct bt_ctf_field_type *magic = bt_ctf_field_type_integer_create(32);
 	struct bt_ctf_field_type *uuid_int = bt_ctf_field_type_integer_create(8);
 	struct bt_ctf_field_type *uuid_array = bt_ctf_field_type_array_create(uuid_int, 16);
-	struct bt_ctf_field_type *some_float = bt_ctf_field_type_floating_point_create();
-	bt_ctf_field_type_floating_point_set_mantissa_digits(some_float, 24);
-	bt_ctf_field_type_floating_point_set_exponent_digits(some_float, 8);
+	struct bt_ctf_field_type *yeahyeah = bt_ctf_field_type_integer_create(32);
 	struct bt_ctf_field_type *stream_id = bt_ctf_field_type_integer_create(32);
 	struct bt_ctf_field_type *packet_header = bt_ctf_field_type_structure_create();
 	bt_ctf_field_type_structure_add_field(packet_header, magic, "magic");
 	bt_ctf_field_type_structure_add_field(packet_header, uuid_array, "uuid");
-	bt_ctf_field_type_structure_add_field(packet_header, some_float, "some_float");
+	bt_ctf_field_type_structure_add_field(packet_header, yeahyeah, "yeahyeah");
 	bt_ctf_field_type_structure_add_field(packet_header, stream_id, "stream_id");
 	bt_ctf_field_type_put(stream_id);
-	bt_ctf_field_type_put(some_float);
+	bt_ctf_field_type_put(yeahyeah);
 	bt_ctf_field_type_put(uuid_array);
 	bt_ctf_field_type_put(uuid_int);
 	bt_ctf_field_type_put(magic);
