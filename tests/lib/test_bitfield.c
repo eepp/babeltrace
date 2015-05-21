@@ -338,8 +338,24 @@ int print_encodings(unsigned long src, unsigned int shift, unsigned int len)
 	return 0;
 }
 
+void test(void)
+{
+	long long s;
+	unsigned long long u;
+	uint8_t t[] = {0b01101101, 0b00110110, 0b11010001};
+
+	bt_bitfield_read_le(t, uint8_t, 0, 11, &u);
+	printf("%x\n", u);
+	bt_bitfield_read_le(t, uint8_t, 11, 13, &u);
+	printf("%x\n", u);
+}
+
 int main(int argc, char **argv)
 {
+	test();
+
+	return 0;
+
 	if (argc > 1) {
 		/* Print encodings */
 		unsigned long src;

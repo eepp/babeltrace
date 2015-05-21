@@ -1,5 +1,5 @@
 /*
- * Babeltrace - CTF IR: Packet reader
+ * Babeltrace - CTF IR: Stream reader
  *
  * Copyright (c) 2015 EfficiOS Inc. and Linux Foundation
  * Copyright (c) 2015 Philippe Proulx <pproulx@efficios.com>
@@ -27,7 +27,7 @@
  * Hello, fellow developer, and welcome to another free lesson of
  * computer engineering!
  *
- * Today, you will learn how to implement a CTF packet reader which is
+ * Today, you will learn how to implement a CTF stream reader which is
  * versatile enough to stop in the middle of the decoding of a CTF
  * event when no more data is available, and resume later when data
  * becomes available again.
@@ -36,26 +36,27 @@
  * Decoding fields
  * ===============
  *
- * This packet reader depends on a user-provided back-end, implementing
- * a function used by this reader to request more bytes of the current
- * packet. This user function, get_next_buffer(), might return the
- * BT_CTF_STREAM_READER_STATUS_AGAIN status code, in which case
- * the packet reader function (either bt_ctf_packet_reader_get_header(),
- * bt_ctf_packet_reader_get_context(), or
- * bt_ctf_packet_reader_get_next_event()) will also return this
+ * This stream reader depends on user-provided medium operations,
+ * implementing a function used by this reader to request more bytes of
+ * the stream to decode. This user function, get_next_bytes(), might
+ * return the BT_CTF_MEDIUM_STATUS_AGAIN status code, in which case
+ * the stream reader function (either bt_ctf_stream_reader_get_header(),
+ * bt_ctf_stream_reader_get_context(), bt_ctf_stream_reader_get_next_event(),
+ * or bt_ctf_stream_reader_goto_next_packet()) will return an analogous
  * status code to the caller and no bytes will be read. The caller is
  * then responsible for making sure that some data becomes available
- * to its back-end, and needs to call the same function again to resume
- * the decoding process.
+ * from its medium, and needs to call the same stream reader function
+ * again to resume the decoding process.
  *
- * The ultimate job of this packet reader is converting a sequence of
- * bytes (the binary CTF packet) to CTF IR fields. When a buffer is
- * successfully returned by get_next_buffer(), the previous one is
- * not available anymore. Also, get_next_buffer() may return a buffer
+ * The ultimate job of this stream reader is to convert a sequence of
+ * bytes (the binary CTF stream) to CTF IR fields. When a buffer is
+ * successfully returned by get_next_bytes(), the previous one is
+ * not available anymore. Also, get_next_bytes() may return a buffer
  * of an arbitrary size. One solution would be to copy the buffers
- * returned from get_next_buffer() until we have enough data to
+ * returned from get_next_bytes() until we have enough data to
  * decode a whole event. This copy is, however, unnecessary, since the
- * "temporary data" can be held by the fields currently being built.
+ * "temporary data" can be held by the values of the fields currently
+ * being built.
  *
  * There are a few challenges with this approach:
  *
@@ -63,36 +64,31 @@
  *      user buffer, and we need to read an 8-byte integer, how do we
  *      do this?
  *   2. If we have to stop in the middle of a decoding process because
- *      get_next_buffer() returned BT_CTF_STREAM_READER_STATUS_AGAIN,
- *      how do we remember where we were in the current field, and how
- *      do we continue from there?
+ *      get_next_bytes() returned BT_CTF_MEDIUM_STATUS_AGAIN, how do we
+ *      remember where we were in the current field, and how do we
+ *      continue from there later?
  *
- * The solution for challenge #1 is easy: the bt_bitfield_readx_*()
- * functions take a _cont flag which can be set to 1 to continue the
- * bitfield decoding process using a previous result. When the next
- * atomic field's size is larger than what's left in the current user
- * buffer, call bt_bitfield_readx_*() with _cont set to 0 to begin the
- * bitfield decoding process, and save the temporary result. Call
- * this function again with _cont set to 1 until the total read size
- * is equal to the atomic field's size. The last result is the atomic
- * field's value.
+ *
+ * The solution for challenge #1 is easy: keep a stitch buffer, in which
+ * bytes from different buffers are appended until everything is there
+ * to decode a whole basic field.
  *
  * The current solution for challenge #2 is to keep a current visit
- * stack in the packet reader context. The top of the stack always
+ * stack in the stream reader context. The top of the stack always
  * contains the current parent field of the next field to be visited.
  * This parent field will be either a structure, a variant, an array,
  * or a sequence. The top of the stack also contains the index, within
  * the parent field, of the next field to be visited. When this field is
- * an atomic, readable field (integer, floating point number,
- * enumeration, or string byte), and there's enough data left in the
- * user-provided buffer to decode it, depending on its size and
- * alignment, it is decoded, and the appropriate field is created with
- * this value. The basic field is then appended to the current parent
- * field. It the next field to read is a compound type (structure,
- * variant, array, sequence), the (empty) field is created, and pushed
- * on the visit stack as the new current parent field. In some cases,
- * the current position within the user-provided buffer could be updated
- * because of custom alignment of compound types.
+ * a basic, readable field (integer, floating point number, enumeration,
+ * or string byte), and there's enough data left in the medium buffer
+ * to decode it, depending on its size and alignment, it is decoded,
+ * and the appropriate field is created with this value. The basic field
+ * is then appended to the current parent field. It the next field to
+ * read is a compound type (structure, variant, array, sequence), the
+ * (empty) field is created, and pushed on the visit stack as the new
+ * current parent field. In some cases, the current position within the
+ * medium buffer could be updated because of custom alignment of
+ * compound types.
  *
  *
  * Example
@@ -147,14 +143,14 @@
  * Total buffer size is 64 bytes.
  *
  * We'll now simulate a complete decoding process. Three calls to the
- * packet reader API will be needed to finish the decoding, since two
- * calls will be interrupted by the back-end returning the infamous
- * BT_CTF_STREAM_READER_STATUS_AGAIN status code. Assume the maximum
- * length to request to the user back-end is 128 bits.
+ * stream reader API will be needed to finish the decoding, since two
+ * calls will be interrupted by the medium returning the infamous
+ * BT_CTF_MEDIUM_STATUS_AGAIN status code. Assume the maximum length to
+ * request to the user back-end is 16 bytes.
  *
  * Let's do this, in 28 easy steps:
  *
- *   1.  User calls the packet reader API function.
+ *   1.  User calls the stream reader API function.
  *   2.  Root field is a structure. Create a structure field, and push
  *       it on the currently empty stack, as the current parent field.
  *       Set current index to 0.
@@ -163,51 +159,51 @@
  *
  *           Structure (root)    Index = 0    <-- top
  *
- *   3.  We need to read a 16-bit integer. Do we have at least 16 bits
- *       left in the user-provided buffer? No, 0 bits are left.
- *       Request 128 bits from the user. User returns 128 bits. Set
- *       current buffer position to 0. Read 16 bits, create integer
+ *   3.  We need to read a 2-byte integer. Do we have at least 2 bytes
+ *       left in the user-provided buffer? No, 0 bytes are left.
+ *       Request 16 bytes from the user. User returns 16 bytes. Set
+ *       current buffer position to 0. Read 2 bytes, create integer
  *       field, set its value, and append it to the current parent
  *       field. Set current index to 1. Set current buffer position
- *       to 16.
- *   4.  We need to read a 32-bit integer after having skipped 16 bits
- *       of padding. Do we have at least 48 bits left in the buffer?
- *       Yes, 112 bits are left. Set current buffer position to 32. Read
- *       32 bits, create integer field, set its value, and append it to
+ *       to 2.
+ *   4.  We need to read a 4-byte integer after having skipped 2 bytes
+ *       of padding. Do we have at least 6 bytes left in the buffer?
+ *       Yes, 14 bytes are left. Set current buffer position to 4. Read
+ *       4 bytes, create integer field, set its value, and append it to
  *       the current parent field. Set current index to 2. Set current
- *       buffer position to 64.
- *   5.  We need to read an 8-bit integer. Do we have at least 8 bits
- *       left in the buffer? Yes, 64 bits are left. Read 8 bits, create
+ *       buffer position to 8.
+ *   5.  We need to read a 1-byte integer. Do we have at least 1 byte
+ *       left in the buffer? Yes, 8 bytes are left. Read 1 byte, create
  *       integer field, set its value, and append it to the current
  *       parent field. Set current index to 3. Set current buffer
- *       position to 72.
+ *       position to 9.
  *   6.  Field at index 3 is a structure. Create a structure field.
  *       Append it to the current parent field. Push it on the stack
  *       as the current parent field. Set current field index to 0. We
- *       need to skip 42 bits of padding. Do we have at least 42 bits
- *       left in the buffer? Yes, 42 bits are left. Set current buffer
- *       position to 128.
+ *       need to skip 5 bytes of padding. Do we have at least 5 bytes
+ *       left in the buffer? Yes, 5 bytes are left. Set current buffer
+ *       position to 16.
  *
  *       Current stack is:
  *
  *           Structure (d)       Index = 0    <-- top
  *           Structure (root)    Index = 3
  *
- *   7.  We need to read a 32-bit floating point number. Do we have at
- *       least 32 bits left in the buffer? No, 0 bits are left.
- *       Request 128 bits from the user. User returns the
- *       BT_CTF_STREAM_READER_STATUS_AGAIN status code. Packet reader
- *       API function returns BT_CTF_PACKET_READER_STATUS_AGAIN to
+ *   7.  We need to read a 4-byte floating point number. Do we have at
+ *       least 4 bytes left in the buffer? No, 0 bytes are left.
+ *       Request 16 bytes from the user. User returns the
+ *       BT_CTF_MEDIUM_STATUS_AGAIN status code. Stream reader
+ *       API function returns BT_CTF_MEDIUM_STATUS_AGAIN to
  *       the user.
- *   8.  User makes sure some data becomes available to its back-end.
- *       User calls the packet reader API function to continue.
- *   9.  We need to read a 32-bit floating point number. Do we have at
- *       least 32 bits left in the buffer? No, 0 bits are left.
- *       Request 128 bits to the user. User returns 80 bits. Set
- *       current buffer position to 0. Read 32 bits, create floating
+ *   8.  User makes sure some data becomes available from its medium.
+ *       User calls the same stream reader API function to continue.
+ *   9.  We need to read a 4-byte floating point number. Do we have at
+ *       least 4 bytes left in the buffer? No, 0 bytes are left.
+ *       Request 16 bytes to the user. User returns 10 bytes. Set
+ *       current buffer position to 0. Read 4 bytes, create floating
  *       point number field, set its value, and append it to the
  *       current parent field. Set current index to 1. Set current
- *       buffer position to 32.
+ *       buffer position to 4.
  *   10. Field at index 1 is an array. Create an array field. Append it
  *       to the current parent field. Push it on the stack as the
  *       current parent field. Set current index to 0.
@@ -218,36 +214,36 @@
  *           Structure (d)       Index = 1
  *           Structure (root)    Index = 3
  *
- *   11. We need to read a 32-bit integer. Do we have at least 32 bits
- *       left in the buffer? Yes, 48 bits are left. Read 32 bits, create
+ *   11. We need to read a 4-byte integer. Do we have at least 4 bytes
+ *       left in the buffer? Yes, 6 bytes are left. Read 4 bytes, create
  *       integer field, set its value, and append it to the current
  *       parent field. Set current index to 1. Set current buffer
- *       position to 64.
- *   12. We need to read a 32-bit integer. Do we have at least 32 bits
- *       left in the buffer? No, 16 bits are left. Read 16 bits,
- *       call bt_bitfield_readx_*() with _cont set to 0 to get a partial
- *       result. Set current buffer position to 80. Request 128 bits
- *       from the user. User returns 112 bits. Set current buffer
- *       position to 0. Read 16 bits, call bt_bitfield_readx_*() with
- *       _cont set to 1 and the previous result. Create integer field,
- *       set its value (from the last decoded result), and append the
- *       field to the current parent field. Set current index to 2. Set
- *       current buffer position to 16.
- *   13. We need to read a 32-bit integer. Do we have at least 32 bits
- *       left in the buffer? Yes, 96 bits are left. Read 32 bits,
+ *       position to 8.
+ *   12. We need to read a 4-byte integer. Do we have at least 4 bytes
+ *       left in the buffer? No, 2 bytes are left. Read 2 bytes,
+ *       and append them to the stitch buffer. Set current buffer
+ *       position to 10. Request 16 bytes from the user. User returns
+ *       14 bytes. Set current buffer position to 0. Read 2 bytes, and
+ *       append them to the stitch buffer. Decode the 4-byte integer
+ *       in the stitch buffer. Create integer field, set its value
+ *       (from the last decoded result), and append the field to the
+ *       current parent field. Set current index to 2. Set current
+ *       buffer position to 2.
+ *   13. We need to read a 4-byte integer. Do we have at least 4 bytes
+ *       left in the buffer? Yes, 12 bytes are left. Read 4 bytes,
  *       create integer field, set its value, and append it to the
  *       current parent field. Set current index to 3. Set current
- *       buffer position to 48.
- *   14. We need to read a 32-bit integer. Do we have at least 32 bits
- *       left in the buffer? Yes, 64 bits are left. Read 32 bits,
+ *       buffer position to 6.
+ *   14. We need to read a 4-byte integer. Do we have at least 4 bytes
+ *       left in the buffer? Yes, 8 bytes are left. Read 4 bytes,
  *       create integer field, set its value, and append it to the
  *       current parent field. Set current index to 4. Set current
- *       buffer position to 80.
- *   15. We need to read a 32-bit integer. Do we have at least 32 bits
- *       left in the buffer? Yes, 32 bits are left. Read 32 bits,
+ *       buffer position to 10.
+ *   15. We need to read a 4-byte integer. Do we have at least 4 bytes
+ *       left in the buffer? Yes, 4 bytes are left. Read 4 bytes,
  *       create integer field, set its value, and append it to the
  *       current parent field. Set current index to 5. Set current
- *       buffer position to 112.
+ *       buffer position to 14.
  *   16. Current index equals parent field's length (5): pop stack's
  *       top entry. Set current index to 2.
  *
@@ -256,19 +252,19 @@
  *           Structure (d)       Index = 2    <-- top
  *           Structure (root)    Index = 3
  *
- *   17. We need to read a 64-bit integer. Do we have at least 64 bits
- *       left in the buffer? No, 0 bits are left. Request 128 bits from
- *       the user. User returns the BT_CTF_STREAM_READER_STATUS_AGAIN
- *       status code. Packet reader API function returns
- *       BT_CTF_PACKET_READER_STATUS_AGAIN to the user.
- *   18. User makes sure some data becomes available to its back-end.
- *       User calls the packet reader API function to continue.
- *   19. We need to read a 64-bit integer. Do we have at least 64 bits
- *       left in the buffer? No, 0 bits are left. Request 128 bits from
- *       the user. User returns 128 bits. Set current buffer position to
- *       0. Read 64 bits, create integer field, set its value, and
+ *   17. We need to read an 8-byte integer. Do we have at least 8 bytes
+ *       left in the buffer? No, 0 bytes are left. Request 16 bytes from
+ *       the user. User returns the BT_CTF_MEDIUM_STATUS_AGAIN status
+ *       code. Stream reader API function returns
+ *       BT_CTF_MEDIUM_STATUS_AGAIN to the user.
+ *   18. User makes sure some data becomes available from its medium.
+ *       User calls the same stream reader API function to continue.
+ *   19. We need to read an 8-byte integer. Do we have at least 8 bytes
+ *       left in the buffer? No, 0 bytes are left. Request 16 bytes from
+ *       the user. User returns 16 bytes. Set current buffer position to
+ *       0. Read 8 bytes, create integer field, set its value, and
  *       append it to the current parent field. Set current index to
- *       3. Set current buffer position to 64.
+ *       3. Set current buffer position to 8.
  *   20. Current index equals parent field's length (3): pop stack's
  *       top entry. Set current index to 4.
  *
@@ -276,11 +272,11 @@
  *
  *           Structure (root)    Index = 4    <-- top
  *
- *   21. We need to read a 32-bit floating point number. Do we have at
- *       least 32 bits left in the buffer? Yes, 64 bits are left.
- *       Read 32 bits, create floating point number field, set its
+ *   21. We need to read a 4-byte floating point number. Do we have at
+ *       least 4 bytes left in the buffer? Yes, 8 bytes are left.
+ *       Read 4 bytes, create floating point number field, set its
  *       value, and append it to the current parent field. Set current
- *       index to 5. Set current buffer position to 96.
+ *       index to 5. Set current buffer position to 12.
  *   22. Field at index 5 is an array. Create an array field. Append it
  *       to the current parent field. Push it on the stack as the
  *       current parent field. Set current index to 0.
@@ -290,21 +286,21 @@
  *           Array     (j)       Index = 0    <-- top
  *           Structure (root)    Index = 5
  *
- *   23. We need to read an 8-bit enumeration. Do we have at least 8
- *       bits left in the buffer? Yes, 32 bits are left. Read 8 bit,
+ *   23. We need to read a 1-byte enumeration. Do we have at least 1
+ *       byte left in the buffer? Yes, 4 bytes are left. Read 1 byte,
  *       create enumeration field, set its value, and append it to the
  *       current parent field. Set current index to 1. Set current
- *       buffer position to 104.
- *   24. We need to read an 8-bit enumeration. Do we have at least 8
- *       bits left in the buffer? Yes, 24 bits are left. Read 8 bit,
+ *       buffer position to 13.
+ *   24. We need to read a 1-byte enumeration. Do we have at least 1
+ *       byte left in the buffer? Yes, 3 bytes are left. Read 1 byte,
  *       create enumeration field, set its value, and append it to the
  *       current parent field. Set current index to 2. Set current
- *       buffer position to 112.
- *   25. We need to read an 8-bit enumeration. Do we have at least 8
- *       bits left in the buffer? Yes, 16 bits are left. Read 8 bit,
+ *       buffer position to 14.
+ *   25. We need to read a 1-byte enumeration. Do we have at least 1
+ *       byte left in the buffer? Yes, 2 bytes are left. Read 1 byte,
  *       create enumeration field, set its value, and append it to the
  *       current parent field. Set current index to 3. Set current
- *       buffer position to 120.
+ *       buffer position to 14.
  *   26. Current index equals parent field's length (3): pop stack's
  *       top entry. Set current index to 6.
  *
@@ -312,13 +308,13 @@
  *
  *           Structure (root)    Index = 6    <-- top
  *
- *   27. We need to read a 64-bit integer after having skipped 8 bits
- *       of padding. Do we have at least 72 bits left in the buffer?
- *       No, 8 bits is left. Skip this 8 bit as padding. Request 64
- *       bits from the user. User returns 64 bits. Set current buffer
- *       position to 0. Read 64 bits, create integer field, set its
+ *   27. We need to read an 8-byte integer after having skipped 1 byte
+ *       of padding. Do we have at least 9 bytes left in the buffer?
+ *       No, 1 byte is left. Skip this byte as padding. Request 16
+ *       bytes from the user. User returns 8 bytes. Set current buffer
+ *       position to 0. Read 8 bytes, create integer field, set its
  *       value, and append it to the current parent field. Set current
- *       index to 7. Set current buffer position to 64.
+ *       index to 7. Set current buffer position to 8.
  *   28. Current index equals parent field's length (7): pop stack's
  *       top entry. Current stack is empty. Return popped field to
  *       user.
@@ -334,15 +330,14 @@
  *
  * Let's say we need to read a 28-byte string, that is, 27 printable
  * bytes followed by one null byte. We begin by creating an empty
- * string field, and then we push it on top of the stack. The current
- * index for this stack entry is meaningless. Assume the maximum length
- * to request to the user back-end is 16 bytes.
+ * string field, and then we set it as the current basic field. Assume
+ * the maximum length to request to the user back-end is 16 bytes.
  *
  * 16 bytes are requested and returned. A null byte is searched for in
  * the returned buffer. None is found, so the whole 16-byte block is
  * appended to the current string field. Since no null byte was found,
- * the string field remains incomplete. 16 bytes are requested and
- * returned. A null byte is searched for in the returned buffer, and
+ * the string field remains incomplete. 16 bytes are requested again,
+ * and returned. A null byte is searched for in the returned buffer, and
  * is found at position 11. Bytes from position 0 to 10 are appended
  * to the current string field. Since a null byte was found, the
  * string field is considered complete, and it is popped off the
@@ -362,6 +357,8 @@
  *
  * Packet reading
  * ==============
+ *
+ * TODO: this whole subsection is to be rewritten.
  *
  * So this demonstrated how to transform bits into fields with decoding
  * interrupt support. The process of decoding a whole CTF packet uses
@@ -409,8 +406,8 @@
  * If we know the packet size, we will request the maximum request size
  * to the stream reader until this size is reached. Otherwise, we
  * always request the maximum request size until the stream reader
- * returns BT_CTF_STREAM_READER_STATUS_EOS (end of stream), in which
- * case we return BT_CTF_PACKET_READER_STATUS_EOP to the caller.
+ * returns BT_CTF_MEDIUM_STATUS_EOS (end of stream), in which
+ * case we return BT_CTF_STREAM_READER_STATUS_EOP to the caller.
  *
  * When the packet reader context is created, we're at the initial
  * state: nothing is decoded yet. We always have to go through the
@@ -428,6 +425,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <assert.h>
+#include <string.h>
 #include <babeltrace/ctf-ir/packet-reader.h>
 #include <babeltrace/bitfield.h>
 #include <babeltrace/ctf-ir/event-types.h>
@@ -435,6 +433,11 @@
 #include <babeltrace/ctf-ir/stream-class.h>
 #include <babeltrace/align.h>
 #include <glib.h>
+
+#define BYTES_TO_BITS(x)		((x) * 8)
+#define BITS_TO_BYTES_FLOOR(x)		((x) >> 3)
+#define BITS_TO_BYTES_CEIL(x)		(((x) + 7) >> 3)
+#define IN_BYTE_OFFSET(at)		((at) & 7)
 
 /*
  * A stack entry.
@@ -447,10 +450,12 @@ struct stack_entry {
 	 *   * array
 	 *   * sequence
 	 *   * variant
+	 *
+	 * Field is owned by this.
 	 */
 	struct bt_ctf_field *base;
 
-	/* current base field type */
+	/* current base field type (owned by this) */
 	struct bt_ctf_field_type *base_type;
 
 	/* length of base field */
@@ -538,7 +543,7 @@ enum state_machine_action {
 /*
  * Packet reader context, where everything important lives.
  */
-struct bt_ctf_packet_reader_ctx {
+struct bt_ctf_stream_reader_ctx {
 	/* visit stack */
 	struct stack *stack;
 
@@ -556,9 +561,14 @@ struct bt_ctf_packet_reader_ctx {
 	struct {
 		struct bt_ctf_field *field;
 		struct bt_ctf_field_type *field_type;
-		size_t at;
-
 	} cur_basic;
+
+	/* stitch buffer stuff */
+	struct {
+		uint8_t buf[16];
+		size_t offset;
+		size_t length;
+	} stitch;
 
 	/* trace and classes (owned by this) */
 	struct {
@@ -594,32 +604,24 @@ struct bt_ctf_packet_reader_ctx {
 
 	/* user buffer stuff */
 	struct {
-		const void *addr;
+		const uint8_t *addr;
 		size_t stream_offset;
-		size_t offset;
 		size_t at;
 		size_t length;
 	} buf;
 
 	/* stream reader stuff */
 	struct {
-		struct bt_ctf_stream_reader_ops ops;
+		struct bt_ctf_medium_ops ops;
 		size_t max_request_len;
 		void *user_data;
-	} stream_reader;
+	} medium;
 
 	/* current packet size (bits) (-1 if unknown) */
 	size_t cur_packet_size;
 
 	/* current content size (bits) (-1 if unknown) */
 	size_t cur_content_size;
-
-	/* temporary value */
-	union {
-		int64_t s64;
-		uint64_t u64;
-		uint8_t b;
-	} tmpval;
 };
 
 static
@@ -724,99 +726,101 @@ bool stack_empty(struct stack *stack)
 }
 
 static inline
-enum bt_ctf_packet_reader_status pr_status_from_sr_status(
-	enum bt_ctf_stream_reader_status sr_status)
+enum bt_ctf_stream_reader_status sr_status_from_m_status(
+	enum bt_ctf_medium_status m_status)
 {
-	enum bt_ctf_packet_reader_status pr_status;
+	enum bt_ctf_stream_reader_status sr_status;
 
-	switch (sr_status) {
-	case BT_CTF_STREAM_READER_STATUS_AGAIN:
-		pr_status = BT_CTF_PACKET_READER_STATUS_AGAIN;
+	switch (m_status) {
+	case BT_CTF_MEDIUM_STATUS_AGAIN:
+		sr_status = BT_CTF_STREAM_READER_STATUS_AGAIN;
 		break;
 
-	case BT_CTF_STREAM_READER_STATUS_ERROR:
-		pr_status = BT_CTF_PACKET_READER_STATUS_ERROR;
+	case BT_CTF_MEDIUM_STATUS_ERROR:
+		sr_status = BT_CTF_STREAM_READER_STATUS_ERROR;
 		break;
 
-	case BT_CTF_STREAM_READER_STATUS_INVAL:
-		pr_status = BT_CTF_PACKET_READER_STATUS_INVAL;
+	case BT_CTF_MEDIUM_STATUS_INVAL:
+		sr_status = BT_CTF_STREAM_READER_STATUS_INVAL;
 		break;
 
-	case BT_CTF_STREAM_READER_STATUS_EOS:
-		pr_status = BT_CTF_PACKET_READER_STATUS_EOS;
+	case BT_CTF_MEDIUM_STATUS_EOS:
+		sr_status = BT_CTF_STREAM_READER_STATUS_EOS;
 		break;
 
 	default:
-		pr_status = BT_CTF_PACKET_READER_STATUS_OK;
+		sr_status = BT_CTF_STREAM_READER_STATUS_OK;
 		break;
 	}
 
-	return pr_status;
+	return sr_status;
 }
 
 static inline
-size_t available_bits(struct bt_ctf_packet_reader_ctx *ctx)
+size_t available_bits(struct bt_ctf_stream_reader_ctx *ctx)
 {
-	return ctx->buf.stream_offset + ctx->buf.length - ctx->buf.at;
+	return ctx->buf.length - ctx->buf.at;
 }
 
 static inline
-bool has_enough_bits(struct bt_ctf_packet_reader_ctx *ctx, size_t len)
+void consume_bits(struct bt_ctf_stream_reader_ctx *ctx, size_t incr)
+{
+	ctx->buf.at += incr;
+}
+
+static inline
+bool has_enough_bits(struct bt_ctf_stream_reader_ctx *ctx, size_t len)
 {
 	return available_bits(ctx) >= len;
 }
 
 static
-enum bt_ctf_packet_reader_status request_bits(
-	struct bt_ctf_packet_reader_ctx *ctx)
+enum bt_ctf_stream_reader_status request_bytes(
+	struct bt_ctf_stream_reader_ctx *ctx)
 {
-	void *buffer;
+	uint8_t *buffer;
 	size_t buffer_len;
-	size_t buffer_offset;
-	enum bt_ctf_stream_reader_status sr_status;
+	enum bt_ctf_medium_status m_status;
 
-	sr_status = ctx->stream_reader.ops.get_next_bits(
-		ctx->stream_reader.max_request_len,
-		&buffer_len, &buffer_offset, &buffer,
-		ctx->stream_reader.user_data);
+	m_status = ctx->medium.ops.get_next_bytes(ctx->medium.max_request_len,
+		&buffer_len, &buffer, ctx->medium.user_data);
 
-	if (sr_status == BT_CTF_STREAM_READER_STATUS_OK) {
-		ctx->buf.stream_offset += ctx->buf.length;
-		ctx->buf.offset = buffer_offset;
-		ctx->buf.at = ctx->buf.offset;
-		ctx->buf.length = buffer_len;
+	if (m_status == BT_CTF_MEDIUM_STATUS_OK) {
+		ctx->buf.stream_offset += BYTES_TO_BITS(ctx->buf.length);
+		ctx->buf.at = 0;
+		ctx->buf.length = BYTES_TO_BITS(buffer_len);
 		ctx->buf.addr = buffer;
 	}
 
-	return pr_status_from_sr_status(sr_status);
+	return sr_status_from_m_status(m_status);
 }
 
 static inline
-enum bt_ctf_packet_reader_status ensure_available_bits(
-	struct bt_ctf_packet_reader_ctx *ctx)
+enum bt_ctf_stream_reader_status ensure_available_bits(
+	struct bt_ctf_stream_reader_ctx *ctx)
 {
-	enum bt_ctf_packet_reader_status status =
-		BT_CTF_PACKET_READER_STATUS_OK;
+	enum bt_ctf_stream_reader_status status =
+		BT_CTF_STREAM_READER_STATUS_OK;
 
 	if (available_bits(ctx) == 0) {
 		/*
-		 * This cannot return BT_CTF_PACKET_READER_STATUS_OK
+		 * This cannot return BT_CTF_STREAM_READER_STATUS_OK
 		 * and no bits.
 		 */
-		status = request_bits(ctx);
+		status = request_bytes(ctx);
 	}
 
 	return status;
 }
 
 static inline
-size_t stream_at(struct bt_ctf_packet_reader_ctx *ctx)
+size_t stream_at(struct bt_ctf_stream_reader_ctx *ctx)
 {
-	return ctx->buf.stream_offset + ctx->buf.at - ctx->buf.offset;
+	return ctx->buf.stream_offset + ctx->buf.at;
 }
 
 static inline
-int64_t get_field_length(struct bt_ctf_packet_reader_ctx *ctx,
+int64_t get_field_length(struct bt_ctf_stream_reader_ctx *ctx,
 	struct bt_ctf_field_type *field_type)
 {
 	int64_t length;
@@ -902,22 +906,58 @@ end:
 	return size;
 }
 
+static
+void stitch_reset(struct bt_ctf_stream_reader_ctx *ctx)
+{
+	ctx->stitch.offset = 0;
+	ctx->stitch.length = 0;
+}
+
+static
+void stitch_append_from_buf(struct bt_ctf_stream_reader_ctx *ctx, size_t length)
+{
+	size_t stitch_byte_at =
+		BITS_TO_BYTES_FLOOR(ctx->stitch.offset + ctx->stitch.length);
+	size_t buf_byte_at = BITS_TO_BYTES_FLOOR(ctx->buf.at);
+	size_t nb_bytes = BITS_TO_BYTES_CEIL(length);
+
+	assert(nb_bytes > 0);
+	memcpy(&ctx->stitch.buf[stitch_byte_at], ctx->buf.addr + buf_byte_at,
+		nb_bytes);
+	ctx->stitch.length += length;
+	consume_bits(ctx, length);
+}
+
+static
+void stitch_append_from_remaining_buf(struct bt_ctf_stream_reader_ctx *ctx)
+{
+	stitch_append_from_buf(ctx, available_bits(ctx));
+}
+
+static
+void stitch_set_from_remaining_buf(struct bt_ctf_stream_reader_ctx *ctx)
+{
+	stitch_reset(ctx);
+	ctx->stitch.offset = IN_BYTE_OFFSET(ctx->buf.at);
+	stitch_append_from_remaining_buf(ctx);
+}
+
 #if 0
 static inline
-enum bt_ctf_packet_reader_status decode_integer(
-	struct bt_ctf_packet_reader_ctx *ctx, struct bt_ctf_field *field,
+enum bt_ctf_stream_reader_status decode_integer(
+	struct bt_ctf_stream_reader_ctx *ctx, struct bt_ctf_field *field,
 	struct bt_ctf_field_type *field_type, int read_len)
 {
 	int ret;
 	int signd;
 	enum bt_ctf_byte_order bo;
-	enum bt_ctf_packet_reader_status status =
-		BT_CTF_PACKET_READER_STATUS_OK;
+	enum bt_ctf_stream_reader_status status =
+		BT_CTF_STREAM_READER_STATUS_OK;
 
 	signd = bt_ctf_field_type_integer_get_signed(field_type);
 
 	if (signd < 0) {
-		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		status = BT_CTF_STREAM_READER_STATUS_ERROR;
 		goto end;
 	}
 
@@ -957,12 +997,12 @@ enum bt_ctf_packet_reader_status decode_integer(
 				field, v);
 		}
 	} else {
-		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		status = BT_CTF_STREAM_READER_STATUS_ERROR;
 		goto end;
 	}
 
 	if (ret < 0) {
-		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		status = BT_CTF_STREAM_READER_STATUS_ERROR;
 		goto end;
 	}
 
@@ -971,15 +1011,15 @@ end:
 }
 
 static inline
-enum bt_ctf_packet_reader_status decode_float(
-	struct bt_ctf_packet_reader_ctx *ctx, struct bt_ctf_field *field,
+enum bt_ctf_stream_reader_status decode_float(
+	struct bt_ctf_stream_reader_ctx *ctx, struct bt_ctf_field *field,
 	struct bt_ctf_field_type *field_type, int read_len)
 {
 	int ret;
 	double dblval;
 	enum bt_ctf_byte_order bo;
-	enum bt_ctf_packet_reader_status status =
-		BT_CTF_PACKET_READER_STATUS_OK;
+	enum bt_ctf_stream_reader_status status =
+		BT_CTF_STREAM_READER_STATUS_OK;
 
 	union {
 		uint32_t u;
@@ -1004,7 +1044,7 @@ enum bt_ctf_packet_reader_status decode_float(
 			bt_bitfield_read_le(ctx->buf, uint8_t,
 					ctx->at, read_len, &f32.u);
 		} else {
-			status = BT_CTF_PACKET_READER_STATUS_ERROR;
+			status = BT_CTF_STREAM_READER_STATUS_ERROR;
 			goto end;
 		}
 
@@ -1022,7 +1062,7 @@ enum bt_ctf_packet_reader_status decode_float(
 			bt_bitfield_read_le(ctx->buf, uint8_t,
 					ctx->at, read_len, &f64.u);
 		} else {
-			status = BT_CTF_PACKET_READER_STATUS_ERROR;
+			status = BT_CTF_STREAM_READER_STATUS_ERROR;
 			goto end;
 		}
 
@@ -1031,14 +1071,14 @@ enum bt_ctf_packet_reader_status decode_float(
 	}
 
 	default:
-		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		status = BT_CTF_STREAM_READER_STATUS_ERROR;
 		goto end;
 	}
 
 	ret = bt_ctf_field_floating_point_set_value(field, dblval);
 
 	if (ret < 0) {
-		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		status = BT_CTF_STREAM_READER_STATUS_ERROR;
 		goto end;
 	}
 
@@ -1047,24 +1087,24 @@ end:
 }
 
 static inline
-enum bt_ctf_packet_reader_status decode_atomic_field(
-	struct bt_ctf_packet_reader_ctx *ctx, struct stack_entry *top,
+enum bt_ctf_stream_reader_status decode_atomic_field(
+	struct bt_ctf_stream_reader_ctx *ctx, struct stack_entry *top,
 	struct bt_ctf_field *field, struct bt_ctf_field_type *field_type)
 {
 	int read_len;
-	enum bt_ctf_packet_reader_status status =
-		BT_CTF_PACKET_READER_STATUS_OK;
+	enum bt_ctf_stream_reader_status status =
+		BT_CTF_STREAM_READER_STATUS_OK;
 
 	read_len = get_basic_field_size(field_type);
 
 	if (read_len <= 0) {
-		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		status = BT_CTF_STREAM_READER_STATUS_ERROR;
 		goto end;
 	}
 
 	/* request bits if needed */
 	if (!has_enough_bits(ctx, read_len)) {
-		enum bt_ctf_stream_reader_status sr_status;
+		enum bt_ctf_medium_status m_status;
 		size_t request_len;
 
 		if (ctx->step_by_step) {
@@ -1074,8 +1114,8 @@ enum bt_ctf_packet_reader_status decode_atomic_field(
 			request_len = ctx->max_request_len;
 		}
 
-		sr_status = request_bits(ctx, request_len);
-		status = pr_status_from_sr_status(sr_status);
+		m_status = request_bits(ctx, request_len);
+		status = sr_status_from_m_status(m_status);
 		goto end;
 	}
 
@@ -1084,7 +1124,7 @@ enum bt_ctf_packet_reader_status decode_atomic_field(
 	case CTF_TYPE_INTEGER:
 		status = decode_integer(ctx, field, field_type, read_len);
 
-		if (status != BT_CTF_PACKET_READER_STATUS_OK) {
+		if (status != BT_CTF_STREAM_READER_STATUS_OK) {
 			goto end;
 		}
 		break;
@@ -1092,13 +1132,13 @@ enum bt_ctf_packet_reader_status decode_atomic_field(
 	case CTF_TYPE_FLOAT:
 		status = decode_float(ctx, field, field_type, read_len);
 
-		if (status != BT_CTF_PACKET_READER_STATUS_OK) {
+		if (status != BT_CTF_STREAM_READER_STATUS_OK) {
 			goto end;
 		}
 		break;
 
 	default:
-		status = BT_CTF_PACKET_READER_STATUS_ERROR;
+		status = BT_CTF_STREAM_READER_STATUS_ERROR;
 		goto end;
 	}
 
@@ -1114,8 +1154,8 @@ end:
 #endif
 
 static inline
-enum state_machine_action handle_fds_init(struct bt_ctf_packet_reader_ctx *ctx,
-	enum bt_ctf_packet_reader_status *status)
+enum state_machine_action handle_fds_init(struct bt_ctf_stream_reader_ctx *ctx,
+	enum bt_ctf_stream_reader_status *status)
 {
 	struct bt_ctf_field_type *next_field_type = NULL;
 	enum state_machine_action action = SMA_CONTINUE;
@@ -1124,7 +1164,7 @@ enum state_machine_action handle_fds_init(struct bt_ctf_packet_reader_ctx *ctx,
 	int64_t field_length;
 	int ret;
 
-	*status = BT_CTF_PACKET_READER_STATUS_OK;
+	*status = BT_CTF_STREAM_READER_STATUS_OK;
 	top = stack_top(ctx->stack);
 
 	/* are we done decoding the fields of the base field? */
@@ -1222,8 +1262,8 @@ end:
 
 static inline
 enum state_machine_action handle_fds_skip_padding(
-	struct bt_ctf_packet_reader_ctx *ctx,
-	enum bt_ctf_packet_reader_status *status)
+	struct bt_ctf_stream_reader_ctx *ctx,
+	enum bt_ctf_stream_reader_status *status)
 {
 	int field_alignment;
 	unsigned int skip_bits;
@@ -1231,7 +1271,7 @@ enum state_machine_action handle_fds_skip_padding(
 	struct bt_ctf_field_type *field_type;
 	enum state_machine_action action = SMA_CONTINUE;
 
-	*status = BT_CTF_PACKET_READER_STATUS_OK;
+	*status = BT_CTF_STREAM_READER_STATUS_OK;
 
 	if (ctx->state.skip_base_padding) {
 		struct stack_entry *top = stack_top(ctx->stack);
@@ -1266,8 +1306,8 @@ enum state_machine_action handle_fds_skip_padding(
 
 	*status = ensure_available_bits(ctx);
 
-	if (*status != BT_CTF_PACKET_READER_STATUS_OK) {
-		if (*status == BT_CTF_PACKET_READER_STATUS_ERROR) {
+	if (*status != BT_CTF_STREAM_READER_STATUS_OK) {
+		if (*status == BT_CTF_STREAM_READER_STATUS_ERROR) {
 			action = SMA_ERROR;
 		}
 
@@ -1275,32 +1315,16 @@ enum state_machine_action handle_fds_skip_padding(
 	}
 
 	/* consume as many bits as possible in what's left */
-	ctx->buf.at += MIN(available_bits(ctx), skip_bits);
+	consume_bits(ctx, MIN(available_bits(ctx), skip_bits));
 
 end:
 	return action;
 }
 
 static inline
-int set_integer_field_value(struct bt_ctf_packet_reader_ctx *ctx, int signd)
-{
-	int ret;
-
-	if (signd) {
-		ret = bt_ctf_field_signed_integer_set_value(
-			ctx->cur_basic.field, ctx->tmpval.s64);
-	} else {
-		ret = bt_ctf_field_unsigned_integer_set_value(
-			ctx->cur_basic.field, ctx->tmpval.u64);
-	}
-
-	return ret;
-}
-
-static inline
 enum state_machine_action handle_fds_decode_integer_field_continue(
-	struct bt_ctf_packet_reader_ctx *ctx,
-	enum bt_ctf_packet_reader_status *status)
+	struct bt_ctf_stream_reader_ctx *ctx,
+	enum bt_ctf_stream_reader_status *status)
 {
 	int signd;
 	size_t available;
@@ -1312,8 +1336,8 @@ enum state_machine_action handle_fds_decode_integer_field_continue(
 	field_length = get_basic_field_size(ctx->cur_basic.field_type);
 	*status = ensure_available_bits(ctx);
 
-	if (*status != BT_CTF_PACKET_READER_STATUS_OK) {
-		if (*status == BT_CTF_PACKET_READER_STATUS_ERROR) {
+	if (*status != BT_CTF_STREAM_READER_STATUS_OK) {
+		if (*status == BT_CTF_STREAM_READER_STATUS_ERROR) {
 			action = SMA_ERROR;
 		}
 
@@ -1381,8 +1405,8 @@ end:
 
 static inline
 enum state_machine_action handle_fds_decode_integer_field_begin(
-	struct bt_ctf_packet_reader_ctx *ctx,
-	enum bt_ctf_packet_reader_status *status)
+	struct bt_ctf_stream_reader_ctx *ctx,
+	enum bt_ctf_stream_reader_status *status)
 {
 	int signd;
 	size_t available;
@@ -1394,8 +1418,8 @@ enum state_machine_action handle_fds_decode_integer_field_begin(
 	field_length = get_basic_field_size(ctx->cur_basic.field_type);
 	*status = ensure_available_bits(ctx);
 
-	if (*status != BT_CTF_PACKET_READER_STATUS_OK) {
-		if (*status == BT_CTF_PACKET_READER_STATUS_ERROR) {
+	if (*status != BT_CTF_STREAM_READER_STATUS_OK) {
+		if (*status == BT_CTF_STREAM_READER_STATUS_ERROR) {
 			action = SMA_ERROR;
 		}
 
@@ -1463,8 +1487,8 @@ end:
 
 static inline
 enum state_machine_action handle_fds_decode_basic_field(
-	struct bt_ctf_packet_reader_ctx *ctx,
-	enum bt_ctf_packet_reader_status *status)
+	struct bt_ctf_stream_reader_ctx *ctx,
+	enum bt_ctf_stream_reader_status *status)
 {
 	switch (bt_ctf_field_type_get_type_id(ctx->cur_basic.field_type)) {
 	case CTF_TYPE_INTEGER:
@@ -1493,8 +1517,8 @@ enum state_machine_action handle_fds_decode_basic_field(
 }
 
 static inline
-enum state_machine_action handle_fd_state(struct bt_ctf_packet_reader_ctx *ctx,
-	enum bt_ctf_packet_reader_status *status)
+enum state_machine_action handle_fd_state(struct bt_ctf_stream_reader_ctx *ctx,
+	enum bt_ctf_stream_reader_status *status)
 {
 	enum state_machine_action action;
 
@@ -1525,7 +1549,7 @@ enum state_machine_action handle_fd_state(struct bt_ctf_packet_reader_ctx *ctx,
 
 static inline
 struct bt_ctf_field_type *get_ctx_entity_field_type(
-	struct bt_ctf_packet_reader_ctx *ctx)
+	struct bt_ctf_stream_reader_ctx *ctx)
 {
 	struct bt_ctf_field_type *field_type = NULL;
 
@@ -1566,7 +1590,7 @@ struct bt_ctf_field_type *get_ctx_entity_field_type(
 }
 
 static inline
-void move_last_decoded_entity_to_entity(struct bt_ctf_packet_reader_ctx *ctx)
+void move_last_decoded_entity_to_entity(struct bt_ctf_stream_reader_ctx *ctx)
 {
 	struct bt_ctf_field **dest_entity;
 
@@ -1610,17 +1634,17 @@ void move_last_decoded_entity_to_entity(struct bt_ctf_packet_reader_ctx *ctx)
 }
 
 static inline
-enum bt_ctf_packet_reader_status handle_gd_state(
-	struct bt_ctf_packet_reader_ctx *ctx)
+enum bt_ctf_stream_reader_status handle_gd_state(
+	struct bt_ctf_stream_reader_ctx *ctx)
 {
 	int ret;
 	int64_t length;
 	enum state_machine_action action;
 	struct bt_ctf_field *field = NULL;
-	enum bt_ctf_packet_reader_status status;
+	enum bt_ctf_stream_reader_status status;
 	struct bt_ctf_field_type *field_type = NULL;
 
-	status = BT_CTF_PACKET_READER_STATUS_OK;
+	status = BT_CTF_STREAM_READER_STATUS_OK;
 
 	switch (ctx->state.global) {
 	case GDS_INIT:
@@ -1628,7 +1652,7 @@ enum bt_ctf_packet_reader_status handle_gd_state(
 		field_type = get_ctx_entity_field_type(ctx);
 
 		if (!field_type) {
-			status = BT_CTF_PACKET_READER_STATUS_ERROR;
+			status = BT_CTF_STREAM_READER_STATUS_ERROR;
 			goto end;
 		}
 
@@ -1636,14 +1660,14 @@ enum bt_ctf_packet_reader_status handle_gd_state(
 		field = bt_ctf_field_create(field_type);
 
 		if (!field) {
-			status = BT_CTF_PACKET_READER_STATUS_ERROR;
+			status = BT_CTF_STREAM_READER_STATUS_ERROR;
 			goto end;
 		}
 
 		length = get_field_length(ctx, field_type);
 
 		if (length < 0) {
-			status = BT_CTF_PACKET_READER_STATUS_ERROR;
+			status = BT_CTF_STREAM_READER_STATUS_ERROR;
 			goto end;
 		}
 
@@ -1656,7 +1680,7 @@ enum bt_ctf_packet_reader_status handle_gd_state(
 		field_type = NULL;
 
 		if (ret) {
-			status = BT_CTF_PACKET_READER_STATUS_ERROR;
+			status = BT_CTF_STREAM_READER_STATUS_ERROR;
 			goto end;
 		}
 
@@ -1673,7 +1697,7 @@ enum bt_ctf_packet_reader_status handle_gd_state(
 
 		switch (action) {
 		case SMA_ERROR:
-			status = BT_CTF_PACKET_READER_STATUS_ERROR;
+			status = BT_CTF_STREAM_READER_STATUS_ERROR;
 			goto end;
 
 		case SMA_DONE:
@@ -1701,13 +1725,13 @@ end:
 	return status;
 }
 
-struct bt_ctf_packet_reader_ctx *bt_ctf_packet_reader_create(
+struct bt_ctf_stream_reader_ctx *bt_ctf_packet_reader_create(
 	struct bt_ctf_trace *trace, size_t max_request_len,
 	struct bt_ctf_stream_reader_ops ops, void *data)
 {
-	struct bt_ctf_packet_reader_ctx *ctx = NULL;
+	struct bt_ctf_stream_reader_ctx *ctx = NULL;
 
-	ctx = g_new0(struct bt_ctf_packet_reader_ctx, 1);
+	ctx = g_new0(struct bt_ctf_stream_reader_ctx, 1);
 
 	if (!ctx) {
 		goto end;
@@ -1739,7 +1763,7 @@ end:
 	return ctx;
 }
 
-void bt_ctf_packet_reader_destroy(struct bt_ctf_packet_reader_ctx *ctx)
+void bt_ctf_packet_reader_destroy(struct bt_ctf_stream_reader_ctx *ctx)
 {
 	bt_ctf_field_put(ctx->cur_basic.field);
 	bt_ctf_field_type_put(ctx->cur_basic.field_type);
@@ -1758,19 +1782,19 @@ void bt_ctf_packet_reader_destroy(struct bt_ctf_packet_reader_ctx *ctx)
 }
 
 static
-enum bt_ctf_packet_reader_status decode_packet_header(
-	struct bt_ctf_packet_reader_ctx *ctx)
+enum bt_ctf_stream_reader_status decode_packet_header(
+	struct bt_ctf_stream_reader_ctx *ctx)
 {
-	enum bt_ctf_packet_reader_status status =
-		BT_CTF_PACKET_READER_STATUS_OK;
+	enum bt_ctf_stream_reader_status status =
+		BT_CTF_STREAM_READER_STATUS_OK;
 
 	/* continue decoding packet header if needed */
 	while (!ctx->entities.trace_packet_header) {
 		status = handle_gd_state(ctx);
 
-		if (status == BT_CTF_PACKET_READER_STATUS_AGAIN ||
-				status == BT_CTF_PACKET_READER_STATUS_ERROR ||
-				status == BT_CTF_PACKET_READER_STATUS_EOS) {
+		if (status == BT_CTF_STREAM_READER_STATUS_AGAIN ||
+				status == BT_CTF_STREAM_READER_STATUS_ERROR ||
+				status == BT_CTF_STREAM_READER_STATUS_EOS) {
 			goto end;
 		}
 	}
@@ -1779,11 +1803,11 @@ end:
 	return status;
 }
 
-enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_header(
-	struct bt_ctf_packet_reader_ctx *ctx,
+enum bt_ctf_stream_reader_status bt_ctf_packet_reader_get_header(
+	struct bt_ctf_stream_reader_ctx *ctx,
 	struct bt_ctf_field **packet_header)
 {
-	enum bt_ctf_packet_reader_status status;
+	enum bt_ctf_stream_reader_status status;
 
 	/* continue decoding packet header */
 	status = decode_packet_header(ctx);
@@ -1797,19 +1821,19 @@ enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_header(
 }
 
 static
-enum bt_ctf_packet_reader_status decode_packet_context(
-	struct bt_ctf_packet_reader_ctx *ctx)
+enum bt_ctf_stream_reader_status decode_packet_context(
+	struct bt_ctf_stream_reader_ctx *ctx)
 {
-	enum bt_ctf_packet_reader_status status =
-		BT_CTF_PACKET_READER_STATUS_OK;
+	enum bt_ctf_stream_reader_status status =
+		BT_CTF_STREAM_READER_STATUS_OK;
 
 	/* continue decoding packet context if needed */
 	while (!ctx->entities.stream_packet_context) {
 		status = handle_gd_state(ctx);
 
-		if (status == BT_CTF_PACKET_READER_STATUS_AGAIN ||
-				status == BT_CTF_PACKET_READER_STATUS_ERROR ||
-				status == BT_CTF_PACKET_READER_STATUS_EOS) {
+		if (status == BT_CTF_STREAM_READER_STATUS_AGAIN ||
+				status == BT_CTF_STREAM_READER_STATUS_ERROR ||
+				status == BT_CTF_STREAM_READER_STATUS_EOS) {
 			goto end;
 		}
 	}
@@ -1818,11 +1842,11 @@ end:
 	return status;
 }
 
-enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_context(
-	struct bt_ctf_packet_reader_ctx *ctx,
+enum bt_ctf_stream_reader_status bt_ctf_packet_reader_get_context(
+	struct bt_ctf_stream_reader_ctx *ctx,
 	struct bt_ctf_field **packet_context)
 {
-	enum bt_ctf_packet_reader_status status;
+	enum bt_ctf_stream_reader_status status;
 
 	/* continue decoding packet context */
 	status = decode_packet_context(ctx);
@@ -1835,9 +1859,9 @@ enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_context(
 	return status;
 }
 
-enum bt_ctf_packet_reader_status bt_ctf_packet_reader_get_next_event(
-	struct bt_ctf_packet_reader_ctx *ctx,
+enum bt_ctf_stream_reader_status bt_ctf_packet_reader_get_next_event(
+	struct bt_ctf_stream_reader_ctx *ctx,
 	struct bt_ctf_event **event)
 {
-	return BT_CTF_PACKET_READER_STATUS_NOENT;
+	return BT_CTF_STREAM_READER_STATUS_NOENT;
 }
