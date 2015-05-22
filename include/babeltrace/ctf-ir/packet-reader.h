@@ -155,7 +155,7 @@ struct bt_ctf_medium_ops {
 	 *   - <b>#BT_CTF_MEDIUM_STATUS_OK</b>: everything
 	 *     is okay, i.e. \p buffer_len is set to a positive value
 	 *     reflecting the number of available bytes in the buffer
-	 *     starting at the address written in \p buffer.
+	 *     starting at the address written in \p buffer_addr.
 	 *   - <b>#BT_CTF_MEDIUM_STATUS_AGAIN</b>: no data is available
 	 *     right now. In this case, the stream reader function
 	 *     called by the user will return
@@ -181,17 +181,17 @@ struct bt_ctf_medium_ops {
 	 *     return #BT_CTF_STREAM_READER_STATUS_ERROR.
 	 *
 	 * If #BT_CTF_MEDIUM_STATUS_OK is not returned, the values of
-	 * \p buffer_len and \p buffer are ignored by the caller.
+	 * \p buffer_len and \p buffer_addr are ignored by the caller.
 	 *
 	 * @param requested_len	Requested buffer length (bytes)
 	 * @param buffer_len	Returned buffer's length (bytes)
-	 * @param buffer	Returned buffer
+	 * @param buffer_addr	Returned buffer address
 	 * @param data		User data
 	 * @returns		Status code (see description above)
 	 */
-	enum bt_ctf_stream_reader_status (* get_next_bytes)(
+	enum bt_ctf_medium_status (* get_next_bytes)(
 		size_t requested_len, size_t *buffer_len,
-		uint8_t **buffer, void *data);
+		uint8_t **buffer_addr, void *data);
 };
 
 /* Stream reader context */

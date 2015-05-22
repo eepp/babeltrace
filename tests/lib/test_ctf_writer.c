@@ -2648,9 +2648,8 @@ struct my_data {
 	size_t at;
 };
 
-enum bt_ctf_packet_reader_status my_get_next_bits(size_t requested_len,
-	size_t *buffer_len, size_t *buffer_offset, void **buffer,
-	void *data)
+enum bt_ctf_medium_status my_get_next_bytes(size_t requested_len,
+	size_t *buffer_len, uint8_t **buffer_addr, void *data)
 {
 	static uint8_t pkt_data[] = {
 		0xc1, 0x1f, 0xfc, 0xc1,					/* magic */
@@ -2663,11 +2662,10 @@ enum bt_ctf_packet_reader_status my_get_next_bits(size_t requested_len,
 	struct my_data *my_data = data;
 
 	*buffer_len = 1;
-	*buffer_offset = my_data->at;
-	*buffer = pkt_data;
+	*buffer_addr = &pkt_data[my_data->at];
 	my_data->at++;
 
-	return BT_CTF_STREAM_READER_STATUS_OK;
+	return BT_CTF_MEDIUM_STATUS_OK;
 }
 
 void just_test(void)
@@ -2675,11 +2673,11 @@ void just_test(void)
 	struct my_data my_data = {
 		.at = 0,
 	};
-	struct bt_ctf_stream_reader_ops ops = {
-		.get_next_bits = my_get_next_bits,
+	struct bt_ctf_medium_ops ops = {
+		.get_next_bytes = my_get_next_bytes,
 	};
-	struct bt_ctf_packet_reader_ctx *ctx;
-	enum bt_ctf_packet_reader_status status;
+	struct bt_ctf_stream_reader_ctx *ctx;
+	enum bt_ctf_stream_reader_status status;
 
 	/* create packet header structure */
 	struct bt_ctf_field_type *magic = bt_ctf_field_type_integer_create(32);
@@ -2710,15 +2708,22 @@ void just_test(void)
 	bt_ctf_field_type_put(packet_header);
 
 	/* create packet reader context */
-	ctx = bt_ctf_packet_reader_create(trace, 32 * 8, ops, &my_data);
+	ctx = bt_ctf_stream_reader_create(trace, 32 * 8, ops, &my_data);
 	bt_ctf_trace_put(trace);
 
 	/* get decoded packet header */
 	struct bt_ctf_field *packet_header_instance = NULL;
-	status = bt_ctf_packet_reader_get_header(ctx, &packet_header_instance);
+	status = bt_ctf_stream_reader_get_header(ctx, &packet_header_instance);
 	printf("status: %d\n", status);
+
+	struct bt_ctf_field *magicf = bt_ctf_field_structure_get_field(packet_header_instance, "magic");
+	uint64_t v;
+	bt_ctf_field_unsigned_integer_get_value(magicf, &v);
+	printf("magic: %x\n", v);
+	bt_ctf_field_put(magicf);
+
 	bt_ctf_field_put(packet_header_instance);
-	bt_ctf_packet_reader_destroy(ctx);
+	bt_ctf_stream_reader_destroy(ctx);
 }
 
 int main(int argc, char **argv)
