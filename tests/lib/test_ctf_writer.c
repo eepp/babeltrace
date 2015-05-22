@@ -2644,6 +2644,12 @@ void append_existing_event_class(struct bt_ctf_stream_class *stream_class)
 	bt_ctf_put(event_class);
 }
 
+#include <time.h>
+
+int randrand(int max) {
+	return (rand() % max) + 1;
+}
+
 struct my_data {
 	size_t at;
 };
@@ -2655,21 +2661,25 @@ enum bt_ctf_medium_status my_get_next_bytes(size_t requested_len,
 		0xc1, 0x1f, 0xfc, 0xc1,					/* magic */
 		0xe9, 0xa2, 0xdc, 0xf1, 0x71, 0x05, 0x41, 0xd9,		/* uuid */
 		0xab, 0x48, 0xfb, 0x3f, 0xbf, 0x76, 0x58, 0x4d,		/* uuid */
-		0x99, 0x0e, 0x49, 0x40,					/* yeahyeah */
+		0x99, 0x0e, 0x49, 0xc0,					/* yeahyeah */
 		0x01, 0x00, 0x00, 0x00,					/* stream_id */
 	};
 
 	struct my_data *my_data = data;
 
-	*buffer_len = 1;
+	*buffer_len = randrand(5);
+	printf("len: %d\n", *buffer_len);
 	*buffer_addr = &pkt_data[my_data->at];
-	my_data->at++;
+	my_data->at += *buffer_len;
+	printf("at:  %d\n", my_data->at);
 
 	return BT_CTF_MEDIUM_STATUS_OK;
 }
 
 void just_test(void)
 {
+	srand((unsigned)time(NULL));
+
 	struct my_data my_data = {
 		.at = 0,
 	};
@@ -2684,6 +2694,7 @@ void just_test(void)
 	struct bt_ctf_field_type *uuid_int = bt_ctf_field_type_integer_create(8);
 	struct bt_ctf_field_type *uuid_array = bt_ctf_field_type_array_create(uuid_int, 16);
 	struct bt_ctf_field_type *yeahyeah = bt_ctf_field_type_integer_create(32);
+	bt_ctf_field_type_integer_set_signed(yeahyeah, 1);
 	struct bt_ctf_field_type *stream_id = bt_ctf_field_type_integer_create(32);
 	struct bt_ctf_field_type *packet_header = bt_ctf_field_type_structure_create();
 	bt_ctf_field_type_structure_add_field(packet_header, magic, "magic");
@@ -2716,11 +2727,17 @@ void just_test(void)
 	status = bt_ctf_stream_reader_get_header(ctx, &packet_header_instance);
 	printf("status: %d\n", status);
 
-	struct bt_ctf_field *magicf = bt_ctf_field_structure_get_field(packet_header_instance, "magic");
-	uint64_t v;
-	bt_ctf_field_unsigned_integer_get_value(magicf, &v);
-	printf("magic: %x\n", v);
-	bt_ctf_field_put(magicf);
+	struct bt_ctf_field *f = bt_ctf_field_structure_get_field(packet_header_instance, "magic");
+	uint64_t uv;
+	bt_ctf_field_unsigned_integer_get_value(f, &uv);
+	printf("magic: %x\n", uv);
+	bt_ctf_field_put(f);
+
+	int64_t sv;
+	f = bt_ctf_field_structure_get_field(packet_header_instance, "yeahyeah");
+	bt_ctf_field_signed_integer_get_value(f, &sv);
+	printf("magic: %d\n", sv);
+	bt_ctf_field_put(f);
 
 	bt_ctf_field_put(packet_header_instance);
 	bt_ctf_stream_reader_destroy(ctx);
