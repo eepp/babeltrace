@@ -542,6 +542,51 @@ end:
 	return stream_class;
 }
 
+struct bt_ctf_stream_class *bt_ctf_trace_get_stream_class_by_id(
+		struct bt_ctf_trace *trace, int64_t id)
+{
+	struct bt_ctf_stream_class *stream_class = NULL;
+	int stream_class_count;
+	int i;
+
+	if (!trace || id < 0) {
+		goto end;
+	}
+
+	stream_class_count = bt_ctf_trace_get_stream_class_count(trace);
+
+	for (i = 0; i < stream_class_count; ++i) {
+		int64_t stream_class_candidate_id;
+		struct bt_ctf_stream_class *stream_class_candidate;
+
+		stream_class_candidate =
+			bt_ctf_trace_get_stream_class(trace, i);
+
+		if (!stream_class_candidate) {
+			goto end;
+		}
+
+		stream_class_candidate_id =
+			bt_ctf_stream_class_get_id(stream_class_candidate);
+
+		if (stream_class_candidate_id < 0) {
+			bt_ctf_stream_class_put(stream_class_candidate);
+			goto end;
+		}
+
+		if (id == stream_class_candidate_id) {
+			/* found it! */
+			stream_class = stream_class_candidate;
+			break;
+		}
+
+		bt_ctf_stream_class_put(stream_class_candidate);
+	}
+
+end:
+	return stream_class;
+}
+
 struct bt_ctf_clock *bt_ctf_trace_get_clock_by_name(
 		struct bt_ctf_trace *trace, const char *name)
 {
