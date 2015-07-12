@@ -13,8 +13,8 @@ libctf_ir_la_SOURCES = \
 	trace.c \
 	utils.c \
 	visitor.c \
-	packet-reader.c \
-	utils.c
+	utils.c \
+	ctf-btr.c
 
 libctf_ir_la_LIBADD = \
 	$(top_builddir)/lib/libbabeltrace.la
