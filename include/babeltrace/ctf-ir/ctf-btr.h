@@ -251,8 +251,8 @@ struct bt_ctf_btr_cbs {
 		 *
 		 * @param type		Variant type (weak reference)
 		 * @param data		User data
-		 * @returns		Current selected type or
-		 *			\c NULL on error
+		 * @returns		Current selected type (owned by
+		 *			this) or \c NULL on error
 		 */
 		struct bt_ctf_field_type * (* get_variant_type)(
 			struct bt_ctf_field_type *type, void *data);
@@ -297,7 +297,7 @@ void bt_ctf_btr_destroy(struct bt_ctf_btr *btr);
  * be called next, \em not bt_ctf_btr_decode().
  *
  * @param btr			Binary type reader
- * @param type			Type to decode
+ * @param type			Type to decode (weak reference)
  * @param buf			Buffer
  * @param offset		Offset of first bit from \p buf (bits)
  * @param packet_offset		Offset of \p offset within the CTF

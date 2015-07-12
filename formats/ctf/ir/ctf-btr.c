@@ -89,7 +89,7 @@ struct bt_ctf_btr {
 
 	/* stitch buffer infos */
 	struct {
-		/* actual stitch buffer */
+		/* stitch buffer */
 		uint8_t buf[16];
 
 		/* offset within stitch buffer of first bit */
@@ -326,15 +326,15 @@ size_t buf_at_from_addr(struct bt_ctf_btr *btr)
 	/*
 	 * Considering this:
 	 *
-	 *     ====== offset =====
+	 *     ====== offset ===== (17)
 	 *
 	 *     xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx xxxxxxxx
 	 *     ^
-	 *     addr               ==== at ====
+	 *     addr (0)           ==== at ==== (12)
 	 *
 	 * We want this:
 	 *
-	 *     ===============================
+	 *     =============================== (29)
 	 */
 	return btr->buf.offset + btr->buf.at;
 }
@@ -384,10 +384,6 @@ int get_basic_field_type_size(struct bt_ctf_field_type *field_type)
 		bt_ctf_field_type_put(int_type);
 		break;
 	}
-
-	case CTF_TYPE_STRING:
-		size = 8;
-		break;
 
 	default:
 		size = BT_CTF_BTR_STATUS_ERROR;
@@ -742,6 +738,8 @@ enum bt_ctf_btr_status read_basic_type_and_call_begin(struct bt_ctf_btr *btr,
 			stack_top(btr->stack)->index++;
 			btr->state = BTR_STATE_NEXT_FIELD;
 		}
+
+		goto end;
 	}
 
 	/* we are here; it means we don't have enough data to decode this */
@@ -948,7 +946,7 @@ enum bt_ctf_btr_status read_basic_continue_state(struct bt_ctf_btr *btr)
 
 static inline
 enum bt_ctf_btr_status align_type_state(struct bt_ctf_btr *btr,
-	struct bt_ctf_field_type *field_type, enum btr_state done_state)
+	struct bt_ctf_field_type *field_type, enum btr_state next_state)
 {
 	int field_alignment;
 	size_t skip_bits;
@@ -969,7 +967,7 @@ enum bt_ctf_btr_status align_type_state(struct bt_ctf_btr *btr,
 
 	/* nothing to skip? done */
 	if (skip_bits == 0) {
-		btr->state = done_state;
+		btr->state = next_state;
 		goto end;
 	}
 
@@ -984,7 +982,7 @@ enum bt_ctf_btr_status align_type_state(struct bt_ctf_btr *btr,
 
 	/* are we done now? */
 	if (skip_bits == 0) {
-		btr->state = done_state;
+		btr->state = next_state;
 		goto end;
 	}
 
