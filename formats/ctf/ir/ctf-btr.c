@@ -34,10 +34,11 @@
 #include <babeltrace/align.h>
 #include <glib.h>
 
-#define BYTES_TO_BITS(x)		((x) * 8)
-#define BITS_TO_BYTES_FLOOR(x)		((x) >> 3)
-#define BITS_TO_BYTES_CEIL(x)		(((x) + 7) >> 3)
-#define IN_BYTE_OFFSET(at)		((at) & 7)
+#define DIV8(_x)			((_x) >> 3)
+#define BYTES_TO_BITS(_x)		((_x) * 8)
+#define BITS_TO_BYTES_FLOOR(_x)		DIV8(_x)
+#define BITS_TO_BYTES_CEIL(_x)		DIV8((_x) + 7)
+#define IN_BYTE_OFFSET(_at)		((_at) & 7)
 
 /* a visit stack entry */
 struct stack_entry {
@@ -830,7 +831,7 @@ enum bt_ctf_btr_status read_basic_string_type_and_call(
 	}
 
 	if (!result) {
-		/* no null character yet; append remaining bytes and continue */
+		/* no null character yet */
 		if (btr->user.cbs.types.string) {
 			status = btr->user.cbs.types.string(
 				(const char *) first_chr,
@@ -844,21 +845,13 @@ enum bt_ctf_btr_status read_basic_string_type_and_call(
 
 		consume_bits(btr, BYTES_TO_BITS(available_bytes));
 	} else {
-		/* found the null character, append preceding substring and skip it */
+		/* found the null character */
 		size_t result_len = (size_t) (result - first_chr);
 
-		if (begin && btr->user.cbs.types.string_begin) {
-			status = btr->user.cbs.types.string_begin(
-				btr->cur_basic_field_type, btr->user.data);
-
-			if (status != BT_CTF_BTR_STATUS_OK) {
-				goto end;
-			}
-		}
-
 		if (btr->user.cbs.types.string) {
-			status = btr->user.cbs.types.string((const char *) first_chr,
-				available_bytes, btr->cur_basic_field_type,
+			status = btr->user.cbs.types.string(
+				(const char *) first_chr,
+				result_len, btr->cur_basic_field_type,
 				btr->user.data);
 
 			if (status != BT_CTF_BTR_STATUS_OK) {
@@ -1129,16 +1122,6 @@ enum bt_ctf_btr_status handle_state(struct bt_ctf_btr *btr)
 	switch (btr->state) {
 	case BTR_STATE_NEXT_FIELD:
 		status = next_field_state(btr);
-
-		if (status != BT_CTF_BTR_STATUS_OK) {
-			goto end;
-		} else {
-			if (stack_empty(btr->stack)) {
-				/* done! */
-				btr->state = BTR_STATE_DONE;
-				goto end;
-			}
-		}
 		break;
 
 	case BTR_STATE_ALIGN_BASIC:
@@ -1163,7 +1146,6 @@ enum bt_ctf_btr_status handle_state(struct bt_ctf_btr *btr)
 		break;
 	}
 
-end:
 	return status;
 }
 
@@ -1215,6 +1197,10 @@ size_t bt_ctf_btr_start(struct bt_ctf_btr *btr,
 	size_t offset, size_t packet_offset, size_t sz,
 	enum bt_ctf_btr_status *status)
 {
+	assert(btr);
+	assert(buf);
+	assert(sz > 0);
+	assert(BYTES_TO_BITS(sz) > offset);
 	reset(btr);
 	btr->buf.addr = buf;
 	btr->buf.offset = offset;
@@ -1268,6 +1254,9 @@ size_t bt_ctf_btr_continue(struct bt_ctf_btr *btr,
 	const uint8_t *buf, size_t sz,
 	enum bt_ctf_btr_status *status)
 {
+	assert(btr);
+	assert(buf);
+	assert(sz > 0);
 	btr->buf.addr = buf;
 	btr->buf.offset = 0;
 	btr->buf.at = 0;
