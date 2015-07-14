@@ -30,7 +30,6 @@
 #include <babeltrace/ctf-ir/ref.h>
 #include <babeltrace/ctf/events.h>
 #include <babeltrace/objects.h>
-#include <babeltrace/ctf-ir/packet-reader.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -2644,105 +2643,6 @@ void append_existing_event_class(struct bt_ctf_stream_class *stream_class)
 	bt_ctf_put(event_class);
 }
 
-#include <time.h>
-
-int randrand(int max) {
-	return (rand() % max) + 1;
-}
-
-struct my_data {
-	size_t at;
-};
-
-enum bt_ctf_medium_status my_get_next_bytes(size_t requested_len,
-	size_t *buffer_len, uint8_t **buffer_addr, void *data)
-{
-	static uint8_t pkt_data[] = {
-		0xc1, 0x1f, 0xfc, 0xc1,					/* magic */
-		0xe9, 0xa2, 0xdc, 0xf1, 0x71, 0x05, 0x41, 0xd9,		/* uuid */
-		0xab, 0x48, 0xfb, 0x3f, 0xbf, 0x76, 0x58, 0x4d,		/* uuid */
-		0x99, 0x0e, 0x49, 0xc0,					/* yeahyeah */
-		0x01, 0x00, 0x00, 0x00,					/* stream_id */
-	};
-
-	struct my_data *my_data = data;
-
-	*buffer_len = randrand(5);
-	printf("len: %d\n", *buffer_len);
-	*buffer_addr = &pkt_data[my_data->at];
-	my_data->at += *buffer_len;
-	printf("at:  %d\n", my_data->at);
-
-	return BT_CTF_MEDIUM_STATUS_OK;
-}
-
-void just_test(void)
-{
-	srand((unsigned)time(NULL));
-
-	struct my_data my_data = {
-		.at = 0,
-	};
-	struct bt_ctf_medium_ops ops = {
-		.get_next_bytes = my_get_next_bytes,
-	};
-	struct bt_ctf_stream_reader_ctx *ctx;
-	enum bt_ctf_stream_reader_status status;
-
-	/* create packet header structure */
-	struct bt_ctf_field_type *magic = bt_ctf_field_type_integer_create(32);
-	struct bt_ctf_field_type *uuid_int = bt_ctf_field_type_integer_create(8);
-	struct bt_ctf_field_type *uuid_array = bt_ctf_field_type_array_create(uuid_int, 16);
-	struct bt_ctf_field_type *yeahyeah = bt_ctf_field_type_integer_create(32);
-	bt_ctf_field_type_integer_set_signed(yeahyeah, 1);
-	struct bt_ctf_field_type *stream_id = bt_ctf_field_type_integer_create(32);
-	struct bt_ctf_field_type *packet_header = bt_ctf_field_type_structure_create();
-	bt_ctf_field_type_structure_add_field(packet_header, magic, "magic");
-	bt_ctf_field_type_structure_add_field(packet_header, uuid_array, "uuid");
-	bt_ctf_field_type_structure_add_field(packet_header, yeahyeah, "yeahyeah");
-	bt_ctf_field_type_structure_add_field(packet_header, stream_id, "stream_id");
-	bt_ctf_field_type_put(stream_id);
-	bt_ctf_field_type_put(yeahyeah);
-	bt_ctf_field_type_put(uuid_array);
-	bt_ctf_field_type_put(uuid_int);
-	bt_ctf_field_type_put(magic);
-
-	/* create stream class */
-	struct bt_ctf_stream_class *stream_class = bt_ctf_stream_class_create("my_stream");
-	bt_ctf_stream_class_set_id(stream_class, 1);
-
-	/* create trace */
-	struct bt_ctf_trace *trace = bt_ctf_trace_create();
-	bt_ctf_trace_set_packet_header_type(trace, packet_header);
-	bt_ctf_trace_add_stream_class(trace, stream_class);
-	bt_ctf_stream_class_put(stream_class);
-	bt_ctf_field_type_put(packet_header);
-
-	/* create packet reader context */
-	ctx = bt_ctf_stream_reader_create(trace, 32 * 8, ops, &my_data);
-	bt_ctf_trace_put(trace);
-
-	/* get decoded packet header */
-	struct bt_ctf_field *packet_header_instance = NULL;
-	status = bt_ctf_stream_reader_get_header(ctx, &packet_header_instance);
-	printf("status: %d\n", status);
-
-	struct bt_ctf_field *f = bt_ctf_field_structure_get_field(packet_header_instance, "magic");
-	uint64_t uv;
-	bt_ctf_field_unsigned_integer_get_value(f, &uv);
-	printf("magic: %x\n", uv);
-	bt_ctf_field_put(f);
-
-	int64_t sv;
-	f = bt_ctf_field_structure_get_field(packet_header_instance, "yeahyeah");
-	bt_ctf_field_signed_integer_get_value(f, &sv);
-	printf("magic: %d\n", sv);
-	bt_ctf_field_put(f);
-
-	bt_ctf_field_put(packet_header_instance);
-	bt_ctf_stream_reader_destroy(ctx);
-}
-
 int main(int argc, char **argv)
 {
 	char trace_path[] = "/tmp/ctfwriter_XXXXXX";
@@ -2779,10 +2679,6 @@ int main(int argc, char **argv)
 	int ret;
 	int64_t ret_int64_t;
 	struct bt_object *obj;
-
-	just_test();
-
-	return 0;
 
 	if (argc < 3) {
 		printf("Usage: tests-ctf-writer path_to_ctf_parser_test path_to_babeltrace\n");
