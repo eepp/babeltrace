@@ -268,11 +268,20 @@ void stack_pop(struct stack *stack)
 	g_ptr_array_remove_index(stack->entries, stack->entries->len - 1);
 }
 
+static inline
+bool stack_empty(struct stack *stack)
+{
+	return stack_size(stack) == 0;
+}
+
 static
 void stack_clear(struct stack *stack)
 {
 	assert(stack);
-	g_ptr_array_remove_range(stack->entries, 0, stack_size(stack));
+
+	if (!stack_empty(stack)) {
+		g_ptr_array_remove_range(stack->entries, 0, stack_size(stack));
+	}
 }
 
 static inline
@@ -282,12 +291,6 @@ struct stack_entry *stack_top(struct stack *stack)
 	assert(stack_size(stack));
 
 	return g_ptr_array_index(stack->entries, stack->entries->len - 1);
-}
-
-static inline
-bool stack_empty(struct stack *stack)
-{
-	return stack_size(stack) == 0;
 }
 
 static inline
@@ -981,6 +984,9 @@ enum bt_ctf_btr_status align_type_state(struct bt_ctf_btr *btr,
 	consume_bits(btr, MIN(available_bits(btr), skip_bits));
 
 	/* are we done now? */
+	aligned_packet_at = ALIGN(packet_at(btr), field_alignment);
+	skip_bits = aligned_packet_at - packet_at(btr);
+
 	if (skip_bits == 0) {
 		btr->state = next_state;
 		goto end;

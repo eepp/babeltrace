@@ -302,7 +302,7 @@ void bt_ctf_btr_destroy(struct bt_ctf_btr *btr);
  * @param offset		Offset of first bit from \p buf (bits)
  * @param packet_offset		Offset of \p offset within the CTF
  *				binary packet containing \p type (bits)
- * @param sz			Size of buffer in bytes (from \p offset)
+ * @param sz			Size of buffer in bytes (from \p buf)
  * @param status		Returned status (see description above)
  * ­@returns			Number of consumed bits
  */
