@@ -327,7 +327,7 @@ void test_read_complex_type(void)
 	bt_ctf_field_type_set_alignment(root_e, 1);
 	bt_ctf_field_type_structure_add_field(root, root_e, "e");
 	root_f_elem = bt_ctf_field_type_structure_create();
-	bt_ctf_field_type_set_alignment(root_f_elem, 32);
+	bt_ctf_field_type_set_alignment(root_f_elem, 16);
 	root_f_elem_a = bt_ctf_field_type_integer_create(1);
 	bt_ctf_field_type_integer_set_signed(root_f_elem_a, 0);
 	bt_ctf_field_type_integer_set_base(root_f_elem_a, 10);

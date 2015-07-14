@@ -448,7 +448,7 @@ void stitch_set_from_remaining_buf(struct bt_ctf_btr *btr)
 }
 
 static inline
-enum bt_ctf_btr_status decode_unsigned_bitfield(const uint8_t *buf, size_t at,
+enum bt_ctf_btr_status read_unsigned_bitfield(const uint8_t *buf, size_t at,
 	int64_t field_size, enum bt_ctf_byte_order bo, uint64_t *v)
 {
 	enum bt_ctf_btr_status status = BT_CTF_BTR_STATUS_OK;
@@ -471,7 +471,7 @@ enum bt_ctf_btr_status decode_unsigned_bitfield(const uint8_t *buf, size_t at,
 }
 
 static inline
-enum bt_ctf_btr_status decode_signed_bitfield(const uint8_t *buf, size_t at,
+enum bt_ctf_btr_status read_signed_bitfield(const uint8_t *buf, size_t at,
 	int64_t field_size, enum bt_ctf_byte_order bo, int64_t *v)
 {
 	enum bt_ctf_btr_status status = BT_CTF_BTR_STATUS_OK;
@@ -517,7 +517,7 @@ enum bt_ctf_btr_status read_basic_float_and_call_cb(struct bt_ctf_btr *btr,
 			float f;
 		} f32;
 
-		status = decode_unsigned_bitfield(buf, at, field_size, bo, &v);
+		status = read_unsigned_bitfield(buf, at, field_size, bo, &v);
 
 		if (status != BT_CTF_BTR_STATUS_OK) {
 			goto end;
@@ -535,7 +535,7 @@ enum bt_ctf_btr_status read_basic_float_and_call_cb(struct bt_ctf_btr *btr,
 			double f;
 		} f64;
 
-		status = decode_unsigned_bitfield(buf, at, field_size, bo,
+		status = read_unsigned_bitfield(buf, at, field_size, bo,
 			&f64.u);
 
 		if (status != BT_CTF_BTR_STATUS_OK) {
@@ -584,7 +584,7 @@ enum bt_ctf_btr_status read_basic_int_and_call(struct bt_ctf_btr *btr,
 	if (signd) {
 		int64_t v;
 
-		status = decode_signed_bitfield(buf, at, field_size, bo, &v);
+		status = read_signed_bitfield(buf, at, field_size, bo, &v);
 
 		if (status != BT_CTF_BTR_STATUS_OK) {
 			goto end;
@@ -597,7 +597,7 @@ enum bt_ctf_btr_status read_basic_int_and_call(struct bt_ctf_btr *btr,
 	} else {
 		uint64_t v;
 
-		status = decode_unsigned_bitfield(buf, at, field_size, bo, &v);
+		status = read_unsigned_bitfield(buf, at, field_size, bo, &v);
 
 		if (status != BT_CTF_BTR_STATUS_OK) {
 			goto end;
