@@ -406,7 +406,7 @@ int bt_ctf_field_type_validate(struct bt_ctf_field_type *type)
 			container_of(type, struct bt_ctf_field_type_variant,
 				parent);
 
-		if (variant->tag_name->len == 0 || !variant->tag) {
+		if (variant->tag_name->len == 0) {
 			ret = -1;
 		}
 		break;
