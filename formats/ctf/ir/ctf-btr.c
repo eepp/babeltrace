@@ -188,8 +188,8 @@ int64_t get_compound_field_type_length(struct bt_ctf_btr *btr,
 		break;
 
 	case CTF_TYPE_VARIANT:
-		length = (int64_t) bt_ctf_field_type_variant_get_field_count(
-			field_type);
+		/* variant fields always "contain" a single type */
+		length = 1;
 		break;
 
 	case CTF_TYPE_ARRAY:
@@ -282,6 +282,8 @@ void stack_clear(struct stack *stack)
 	if (!stack_empty(stack)) {
 		g_ptr_array_remove_range(stack->entries, 0, stack_size(stack));
 	}
+
+	assert(stack_empty(stack));
 }
 
 static inline
@@ -499,6 +501,7 @@ static
 enum bt_ctf_btr_status read_basic_float_and_call_cb(struct bt_ctf_btr *btr,
 	const uint8_t *buf, size_t at)
 {
+	int ret;
 	double dblval;
 	int64_t field_size;
 	enum bt_ctf_byte_order bo;
@@ -516,6 +519,12 @@ enum bt_ctf_btr_status read_basic_float_and_call_cb(struct bt_ctf_btr *btr,
 			float f;
 		} f32;
 
+		ret = bt_ctf_field_type_floating_point_get_mantissa_digits(
+			btr->cur_basic_field_type);
+		assert(ret == 24);
+		ret = bt_ctf_field_type_floating_point_get_exponent_digits(
+			btr->cur_basic_field_type);
+		assert(ret == 8);
 		status = read_unsigned_bitfield(buf, at, field_size, bo, &v);
 
 		if (status != BT_CTF_BTR_STATUS_OK) {
@@ -534,6 +543,12 @@ enum bt_ctf_btr_status read_basic_float_and_call_cb(struct bt_ctf_btr *btr,
 			double f;
 		} f64;
 
+		ret = bt_ctf_field_type_floating_point_get_mantissa_digits(
+			btr->cur_basic_field_type);
+		assert(ret == 53);
+		ret = bt_ctf_field_type_floating_point_get_exponent_digits(
+			btr->cur_basic_field_type);
+		assert(ret == 11);
 		status = read_unsigned_bitfield(buf, at, field_size, bo,
 			&f64.u);
 
@@ -962,6 +977,10 @@ enum bt_ctf_btr_status align_type_state(struct bt_ctf_btr *btr,
 		goto end;
 	}
 
+	if (field_alignment == 0) {
+		field_alignment = 1;
+	}
+
 	/* compute how many bits we need to skip */
 	aligned_packet_at = ALIGN(packet_at(btr), field_alignment);
 	skip_bits = aligned_packet_at - packet_at(btr);
@@ -1214,7 +1233,9 @@ size_t bt_ctf_btr_start(struct bt_ctf_btr *btr,
 	btr->buf.sz = BYTES_TO_BITS(sz) - offset;
 	*status = BT_CTF_BTR_STATUS_OK;
 
+	/* set root type */
 	if (is_compound_type(type)) {
+		/* compound type: push on visit stack */
 		int stack_ret;
 
 		if (btr->user.cbs.types.compound_begin) {
@@ -1235,11 +1256,13 @@ size_t bt_ctf_btr_start(struct bt_ctf_btr *btr,
 
 		btr->state = BTR_STATE_ALIGN_COMPOUND;
 	} else {
+		/* basic type: set as current basic type */
 		btr->cur_basic_field_type = type;
 		bt_ctf_field_type_get(btr->cur_basic_field_type);
 		btr->state = BTR_STATE_ALIGN_BASIC;
 	}
 
+	/* run the machine! */
 	while (true) {
 		*status = handle_state(btr);
 
@@ -1270,6 +1293,7 @@ size_t bt_ctf_btr_continue(struct bt_ctf_btr *btr,
 	btr->buf.sz = BYTES_TO_BITS(sz);
 	*status = BT_CTF_BTR_STATUS_OK;
 
+	/* continue running the machine */
 	while (true) {
 		*status = handle_state(btr);
 

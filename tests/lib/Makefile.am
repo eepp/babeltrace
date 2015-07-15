@@ -25,7 +25,8 @@ test_bt_objects_LDADD = $(LIBTAP) \
 
 test_ctf_btr_LDADD = $(LIBTAP) \
 	$(top_builddir)/lib/libbabeltrace.la \
-	$(top_builddir)/formats/ctf/libbabeltrace-ctf.la
+	$(top_builddir)/formats/ctf/libbabeltrace-ctf.la \
+	-lm
 
 noinst_PROGRAMS = test_seek test_bitfield test_ctf_writer test_bt_objects \
 	test_ctf_btr
