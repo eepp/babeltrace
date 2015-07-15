@@ -426,7 +426,7 @@
 #include <stddef.h>
 #include <assert.h>
 #include <string.h>
-#include <babeltrace/ctf-ir/packet-reader.h>
+#include <babeltrace/ctf-ir/stream-reader.h>
 #include <babeltrace/bitfield.h>
 #include <babeltrace/ctf-ir/event-types.h>
 #include <babeltrace/ctf-ir/event-fields.h>

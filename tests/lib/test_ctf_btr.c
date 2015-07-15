@@ -56,6 +56,8 @@ struct expected_event {
 	} value;
 };
 
+#define EE_INIT()	do {i = 0;} while (0)
+
 #define EE_BASE(_type, _ft)					\
 	do {							\
 		expected_events[i].type = (_type);		\
@@ -547,6 +549,18 @@ void test_read_complex_type(void)
 	 *             class: int
 	 *             size: 64
 	 *             signed: true
+	 *       i:
+	 *         class: int
+	 *         size: 4
+	 *         signed: true
+	 *         byte-order: be
+	 *       j:
+	 *         class: float
+	 *         size:
+	 *           exp: 11
+	 *           mant: 53
+	 *         align: 1
+	 *         byte-order: be
 	 */
 
 	struct bt_ctf_field_type *root = NULL;
@@ -624,15 +638,14 @@ void test_read_complex_type(void)
 		0xd3, 0xff, 0x6a, 0x09,
 		0xe6, 0x67, 0xf3, 0xbc,
 		0xd4,
-
 	};
 
 	/*
 	 * The following array is a sequence of sequences of byte counts
 	 * to read. Each sequence of byte counts starts with the
 	 * negative value of the first byte count to read, and ends with
-	 * 0. Each total, including the absolute value of the first
-	 * negative value, must be equal to 157.
+	 * 0. Each sum of sequence, including the absolute value of the
+	 * first, must be equal to 157.
 	 *
 	 * You can use the following Python script to generate such
 	 * a sequence:
@@ -688,9 +701,9 @@ void test_read_complex_type(void)
 	};
 	size_t read_acc;
 	static struct expected_event expected_events[67];
-	struct cb_data cb_data;
 	enum bt_ctf_btr_status status;
 	struct bt_ctf_btr *btr;
+	struct cb_data cb_data;
 	size_t bits;
 	size_t i;
 
@@ -863,7 +876,7 @@ void test_read_complex_type(void)
 	bt_ctf_field_type_structure_add_field(root, root_j, "j");
 
 	/* populate expected events */
-	i = 0;
+	EE_INIT();
 	EE_COMPOUND(EET_STRUCT_BEGIN, root);
 	EE_UNSIGNED_INT(EET_UNSIGNED_INT, root_a, 7261146);
 	EE_SIGNED_INT(EET_SIGNED_INT, root_b, -8);
@@ -1041,7 +1054,7 @@ void test_read_tiny_types()
 	bt_ctf_field_type_set_alignment(int3, 1);
 
 	/* populate expected events */
-	i = 0;
+	EE_INIT();
 	EE_UNSIGNED_INT(EET_UNSIGNED_INT, int3, 5);
 
 	/* fill callback data */
@@ -1061,7 +1074,7 @@ void test_read_tiny_types()
 		"bt_ctf_btr_start() reads the right amount of bits");
 
 	/* read again */
-	i = 0;
+	EE_INIT();
 	EE_UNSIGNED_INT(EET_UNSIGNED_INT, int3, 3);
 	cb_data.index = 0;
 	bits = bt_ctf_btr_start(btr, int3, buf, 4, 4, sizeof(buf), &status);
@@ -1070,7 +1083,7 @@ void test_read_tiny_types()
 		"bt_ctf_btr_start() reads the right amount of bits");
 
 	/* read again */
-	i = 0;
+	EE_INIT();
 	EE_UNSIGNED_INT(EET_UNSIGNED_INT, int3, 4);
 	cb_data.index = 0;
 	bits = bt_ctf_btr_start(btr, int3, buf, 7, 7, sizeof(buf), &status);
