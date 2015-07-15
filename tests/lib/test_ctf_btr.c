@@ -148,6 +148,13 @@ enum bt_ctf_btr_status test_read_complex_type_compound_end_cb(
 }
 
 static
+int64_t test_read_complex_type_get_sequence_length(
+	struct bt_ctf_field_type *type, void *data)
+{
+	return 1;
+}
+
+static
 void test_read_complex_type(void)
 {
 	/*
@@ -261,6 +268,12 @@ void test_read_complex_type(void)
 	struct bt_ctf_field_type *root_f_elem_b = NULL;
 	struct bt_ctf_field_type *root_f_elem_b_int = NULL;
 	struct bt_ctf_field_type *root_f_elem_c = NULL;
+	struct bt_ctf_field_type *root_f_elem_d = NULL;
+	struct bt_ctf_field_type *root_f_elem_d_elem = NULL;
+	struct bt_ctf_field_type *root_f_elem_d_elem_a = NULL;
+	struct bt_ctf_field_type *root_f_elem_d_elem_b = NULL;
+	struct bt_ctf_field_type *root_f_elem_d_elem_c = NULL;
+	struct bt_ctf_field_type *root_f_elem_d_elem_d = NULL;
 	struct bt_ctf_btr_cbs cbs = {
 		.types = {
 			.signed_int = test_read_complex_type_signed_int_cb,
@@ -273,7 +286,7 @@ void test_read_complex_type(void)
 			.compound_end = test_read_complex_type_compound_end_cb,
 		},
 		.query = {
-			.get_sequence_length = NULL,
+			.get_sequence_length = test_read_complex_type_get_sequence_length,
 			.get_variant_type = NULL,
 		},
 	};
@@ -286,7 +299,11 @@ void test_read_complex_type(void)
 		0x75, 0xd3, 0x95, 0xef,
 		0xaf, 0x63, 0x74, 0x66,
 		0x34, 0x6c, 0x69, 0x66,
-		0x65, 0x00,
+		0x65, 0x00, 0xaa, 0x55,
+		0x3a, 0x2f, 0xdd, 0x5e,
+		0xe8, 0xaa, 0x55, 0xaa,
+		0x80, 0x53, 0x54, 0x52,
+		0x69, 0x4e, 0x47, 0x00,
 
 	};
 	struct bt_ctf_btr *btr;
@@ -327,7 +344,7 @@ void test_read_complex_type(void)
 	bt_ctf_field_type_set_alignment(root_e, 1);
 	bt_ctf_field_type_structure_add_field(root, root_e, "e");
 	root_f_elem = bt_ctf_field_type_structure_create();
-	bt_ctf_field_type_set_alignment(root_f_elem, 16);
+	bt_ctf_field_type_set_alignment(root_f_elem, 32);
 	root_f_elem_a = bt_ctf_field_type_integer_create(1);
 	bt_ctf_field_type_integer_set_signed(root_f_elem_a, 0);
 	bt_ctf_field_type_integer_set_base(root_f_elem_a, 10);
@@ -346,13 +363,52 @@ void test_read_complex_type(void)
 	bt_ctf_field_type_structure_add_field(root_f_elem, root_f_elem_b, "b");
 	root_f_elem_c = bt_ctf_field_type_string_create();
 	bt_ctf_field_type_structure_add_field(root_f_elem, root_f_elem_c, "c");
+	root_f_elem_d_elem = bt_ctf_field_type_structure_create();
+	bt_ctf_field_type_set_alignment(root_f_elem_d_elem, 32);
+	root_f_elem_d_elem_a = bt_ctf_field_type_integer_create(5);
+	bt_ctf_field_type_integer_set_signed(root_f_elem_d_elem_a, 0);
+	bt_ctf_field_type_integer_set_base(root_f_elem_d_elem_a, 10);
+	bt_ctf_field_type_set_byte_order(root_f_elem_d_elem_a, BT_CTF_BYTE_ORDER_LITTLE_ENDIAN);
+	bt_ctf_field_type_set_alignment(root_f_elem_d_elem_a, 1);
+	bt_ctf_field_type_structure_add_field(root_f_elem_d_elem, root_f_elem_d_elem_a, "a");
+	root_f_elem_d_elem_b = bt_ctf_field_type_floating_point_create();
+	bt_ctf_field_type_floating_point_set_exponent_digits(root_f_elem_d_elem_b, 8);
+	bt_ctf_field_type_floating_point_set_mantissa_digits(root_f_elem_d_elem_b, 24);
+	bt_ctf_field_type_set_byte_order(root_f_elem_d_elem_b, BT_CTF_BYTE_ORDER_LITTLE_ENDIAN);
+	bt_ctf_field_type_set_alignment(root_f_elem_d_elem_b, 1);
+	bt_ctf_field_type_structure_add_field(root_f_elem_d_elem, root_f_elem_d_elem_b, "b");
+	root_f_elem_d_elem_c = bt_ctf_field_type_integer_create(1);
+	bt_ctf_field_type_integer_set_signed(root_f_elem_d_elem_c, 0);
+	bt_ctf_field_type_integer_set_base(root_f_elem_d_elem_c, 10);
+	bt_ctf_field_type_set_byte_order(root_f_elem_d_elem_c, BT_CTF_BYTE_ORDER_LITTLE_ENDIAN);
+	bt_ctf_field_type_set_alignment(root_f_elem_d_elem_c, 32);
+	bt_ctf_field_type_structure_add_field(root_f_elem_d_elem, root_f_elem_d_elem_c, "c");
+	root_f_elem_d_elem_d = bt_ctf_field_type_string_create();
+	bt_ctf_field_type_structure_add_field(root_f_elem_d_elem, root_f_elem_d_elem_d, "d");
+	root_f_elem_d = bt_ctf_field_type_sequence_create(root_f_elem_d_elem, "the.length");
+	bt_ctf_field_type_structure_add_field(root_f_elem, root_f_elem_d, "d");
 	root_f = bt_ctf_field_type_array_create(root_f_elem, 1);
 	bt_ctf_field_type_structure_add_field(root, root_f, "f");
 
 	btr = bt_ctf_btr_create(cbs, NULL);
 	assert(btr);
-	bits = bt_ctf_btr_start(btr, root, buf, 5, 4357, 34, &status);
+
+	int i;
+	size_t packet_offset = 4357;
+
+
+	bits = bt_ctf_btr_start(btr, root, buf, 5, packet_offset, 1, &status);
 	printf("=> bits decoded: %u\n", (unsigned int) bits);
+	packet_offset += bits;
+
+	for (i = 1; i < 51; ++i) {
+		bits = bt_ctf_btr_continue(btr, &buf[i], 1, &status);
+		printf("=> bits decoded: %u\n", (unsigned int) bits);
+		packet_offset += bits;
+	}
+
+	printf("=> packet offset: %u\n", (unsigned int) packet_offset);
+
 	bt_ctf_btr_destroy(btr);
 
 	/* put type references */
@@ -368,6 +424,12 @@ void test_read_complex_type(void)
 	bt_ctf_field_type_put(root_f_elem_b);
 	bt_ctf_field_type_put(root_f_elem_b_int);
 	bt_ctf_field_type_put(root_f_elem_c);
+	bt_ctf_field_type_put(root_f_elem_d);
+	bt_ctf_field_type_put(root_f_elem_d_elem);
+	bt_ctf_field_type_put(root_f_elem_d_elem_a);
+	bt_ctf_field_type_put(root_f_elem_d_elem_b);
+	bt_ctf_field_type_put(root_f_elem_d_elem_c);
+	bt_ctf_field_type_put(root_f_elem_d_elem_d);
 }
 
 int main(void)

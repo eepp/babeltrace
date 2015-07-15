@@ -421,7 +421,6 @@ void stitch_append_from_buf(struct bt_ctf_btr *btr, size_t sz)
 		return;
 	}
 
-	assert(stitch_at_from_addr(btr) % 8 == 0);
 	stitch_byte_at =
 		BITS_TO_BYTES_FLOOR(stitch_at_from_addr(btr));
 	buf_byte_at = BITS_TO_BYTES_FLOOR(buf_at_from_addr(btr));
@@ -679,8 +678,6 @@ enum bt_ctf_btr_status read_basic_type_and_call_continue(struct bt_ctf_btr *btr,
 			goto end;
 		}
 
-		consume_bits(btr, field_size);
-
 		if (stack_empty(btr->stack)) {
 			/* root is a basic type */
 			btr->state = BTR_STATE_DONE;
@@ -845,11 +842,12 @@ enum bt_ctf_btr_status read_basic_string_type_and_call(
 		}
 
 		consume_bits(btr, BYTES_TO_BITS(available_bytes));
+		btr->state = BTR_STATE_READ_BASIC_CONTINUE;
 	} else {
 		/* found the null character */
 		size_t result_len = (size_t) (result - first_chr);
 
-		if (btr->user.cbs.types.string) {
+		if (btr->user.cbs.types.string && result_len) {
 			status = btr->user.cbs.types.string(
 				(const char *) first_chr,
 				result_len, btr->cur_basic_field_type,
@@ -990,6 +988,8 @@ enum bt_ctf_btr_status align_type_state(struct bt_ctf_btr *btr,
 	if (skip_bits == 0) {
 		btr->state = next_state;
 		goto end;
+	} else {
+		status = BT_CTF_BTR_STATUS_EOF;
 	}
 
 end:
@@ -1250,6 +1250,8 @@ size_t bt_ctf_btr_start(struct bt_ctf_btr *btr,
 		}
 	}
 
+	btr->buf.packet_offset += btr->buf.at;
+
 end:
 	return btr->buf.at;
 }
@@ -1277,6 +1279,8 @@ size_t bt_ctf_btr_continue(struct bt_ctf_btr *btr,
 			break;
 		}
 	}
+
+	btr->buf.packet_offset += btr->buf.at;
 
 	return btr->buf.at;
 }
