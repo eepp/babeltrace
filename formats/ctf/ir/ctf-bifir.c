@@ -288,20 +288,21 @@ enum bt_ctf_stream_reader_status request_bytes(
 	struct bt_ctf_stream_reader_ctx *ctx)
 {
 	uint8_t *buffer_addr;
-	size_t buffer_len;
+	size_t buffer_sz;
 	enum bt_ctf_medium_status m_status;
 
-	m_status = ctx->medium.ops.get_next_bytes(ctx->medium.max_request_len,
-		&buffer_len, &buffer_addr, ctx->medium.user_data);
+	m_status = ctx->medium.medops.get_next_bytes(
+		ctx->medium.max_request_sz, &buffer_addr,
+		&buffer_sz, ctx->medium.data);
 
-	if (m_status == BT_CTF_MEDIUM_STATUS_OK) {
+	if (m_status == BT_CTF_BIFIR_MEDIUM_STATUS_OK) {
 		ctx->buf.stream_offset += ctx->buf.length;
 		ctx->buf.at = 0;
 		ctx->buf.length = BYTES_TO_BITS(buffer_len);
 		ctx->buf.addr = buffer_addr;
 	}
 
-	return sr_status_from_m_status(m_status);
+	return bifir_status_from_m_status(m_status);
 }
 
 static inline
@@ -619,8 +620,8 @@ enum bt_ctf_stream_reader_status decode_atomic_field(
 		if (ctx->step_by_step) {
 			request_len = read_len;
 		} else {
-			// TODO: min(ctx->max_request_len, content_size)
-			request_len = ctx->max_request_len;
+			// TODO: min(ctx->max_request_sz, content_size)
+			request_len = ctx->max_request_sz;
 		}
 
 		m_status = request_bits(ctx, request_len);
@@ -1222,7 +1223,7 @@ end:
 }
 
 struct bt_ctf_stream_reader_ctx *bt_ctf_stream_reader_create(
-	struct bt_ctf_trace *trace, size_t max_request_len,
+	struct bt_ctf_trace *trace, size_t max_request_sz,
 	struct bt_ctf_medium_ops ops, void *data)
 {
 	struct bt_ctf_stream_reader_ctx *ctx = NULL;
@@ -1240,10 +1241,10 @@ struct bt_ctf_stream_reader_ctx *bt_ctf_stream_reader_create(
 	ctx->state.field = FDS_INIT;
 	ctx->medium.ops = ops;
 
-	if (max_request_len == 0) {
-		ctx->medium.max_request_len = 4096;
+	if (max_request_sz == 0) {
+		ctx->medium.max_request_sz = 4096;
 	} else {
-		ctx->medium.max_request_len = max_request_len;
+		ctx->medium.max_request_sz = max_request_sz;
 	}
 
 	ctx->medium.user_data = data;

@@ -174,14 +174,14 @@ struct bt_ctf_bifir_medium_ops {
 	 * of \p buffer_sz and \p buffer_addr are ignored by the caller.
 	 *
 	 * @param request_sz	Requested buffer size (bytes)
-	 * @param buffer_sz	Returned buffer's size (bytes)
 	 * @param buffer_addr	Returned buffer address
+	 * @param buffer_sz	Returned buffer's size (bytes)
 	 * @param data		User data
 	 * @returns		Status code (see description above)
 	 */
 	enum bt_ctf_bifir_medium_status (* request_bytes)(
-		size_t request_sz, size_t *buffer_sz,
-		uint8_t **buffer_addr, void *data);
+		size_t request_sz, uint8_t **buffer_addr,
+		size_t *buffer_sz, void *data);
 };
 
 /* CTF binary file reader */
