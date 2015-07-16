@@ -768,14 +768,6 @@ enum bt_ctf_btr_status read_basic_type_and_call_continue(struct bt_ctf_btr *btr,
 			/* go to next field */
 			stack_top(btr->stack)->index++;
 			btr->state = BTR_STATE_NEXT_FIELD;
-
-			/*
-			 * Update last byte order. This will be set to
-			 * BT_CTF_BYTE_ORDER_UNKNOWN when the current
-			 * type is a string type, but
-			 * validate_contiguous_bo() is always valid
-			 * when comparing with BT_CTF_BYTE_ORDER_UNKNOWN.
-			 */
 			btr->last_bo = btr->cur_bo;
 		}
 		goto end;
@@ -837,14 +829,6 @@ enum bt_ctf_btr_status read_basic_type_and_call_begin(struct bt_ctf_btr *btr,
 			/* go to next field */
 			stack_top(btr->stack)->index++;
 			btr->state = BTR_STATE_NEXT_FIELD;
-
-			/*
-			 * Update last byte order. This will be set to
-			 * BT_CTF_BYTE_ORDER_UNKNOWN when the current
-			 * type is a string type, but
-			 * validate_contiguous_bo() is always valid
-			 * when comparing with BT_CTF_BYTE_ORDER_UNKNOWN.
-			 */
 			btr->last_bo = btr->cur_bo;
 		}
 
@@ -986,6 +970,7 @@ enum bt_ctf_btr_status read_basic_string_type_and_call(
 			/* go to next field */
 			stack_top(btr->stack)->index++;
 			btr->state = BTR_STATE_NEXT_FIELD;
+			btr->last_bo = btr->cur_bo;
 		}
 	}
 
@@ -1056,12 +1041,21 @@ enum bt_ctf_btr_status read_basic_continue_state(struct bt_ctf_btr *btr)
 }
 
 static inline
+size_t bits_to_skip_to_align_to(struct bt_ctf_btr *btr, size_t align)
+{
+	size_t aligned_packet_at;
+
+	aligned_packet_at = ALIGN(packet_at(btr), align);
+
+	return aligned_packet_at - packet_at(btr);
+}
+
+static inline
 enum bt_ctf_btr_status align_type_state(struct bt_ctf_btr *btr,
 	struct bt_ctf_field_type *field_type, enum btr_state next_state)
 {
 	int field_alignment;
 	size_t skip_bits;
-	size_t aligned_packet_at;
 	enum bt_ctf_btr_status status = BT_CTF_BTR_STATUS_OK;
 
 	/* get field's alignment */
@@ -1072,15 +1066,18 @@ enum bt_ctf_btr_status align_type_state(struct bt_ctf_btr *btr,
 		goto end;
 	}
 
+	/*
+	 * 0 means "undefined" for variants; what we really want is 1
+	 * (always aligned)
+	 */
 	if (field_alignment == 0) {
 		field_alignment = 1;
 	}
 
 	/* compute how many bits we need to skip */
-	aligned_packet_at = ALIGN(packet_at(btr), field_alignment);
-	skip_bits = aligned_packet_at - packet_at(btr);
+	skip_bits = bits_to_skip_to_align_to(btr, field_alignment);
 
-	/* nothing to skip? done */
+	/* nothing to skip? aligned */
 	if (skip_bits == 0) {
 		btr->state = next_state;
 		goto end;
@@ -1096,13 +1093,14 @@ enum bt_ctf_btr_status align_type_state(struct bt_ctf_btr *btr,
 	consume_bits(btr, MIN(available_bits(btr), skip_bits));
 
 	/* are we done now? */
-	aligned_packet_at = ALIGN(packet_at(btr), field_alignment);
-	skip_bits = aligned_packet_at - packet_at(btr);
+	skip_bits = bits_to_skip_to_align_to(btr, field_alignment);
 
 	if (skip_bits == 0) {
+		/* yes: go to next state */
 		btr->state = next_state;
 		goto end;
 	} else {
+		/* no: need more data */
 		status = BT_CTF_BTR_STATUS_EOF;
 	}
 
@@ -1134,7 +1132,7 @@ enum bt_ctf_btr_status next_field_state(struct bt_ctf_btr *btr)
 	top = stack_top(btr->stack);
 
 	/* are we done with this base type? */
-	if (top->index == top->base_len) {
+	while (top->index == top->base_len) {
 		if (btr->user.cbs.types.compound_end) {
 			status = btr->user.cbs.types.compound_end(
 				top->base_type, btr->user.data);
@@ -1149,9 +1147,11 @@ enum bt_ctf_btr_status next_field_state(struct bt_ctf_btr *btr)
 		/* are we done with the root type? */
 		if (stack_empty(btr->stack)) {
 			btr->state = BTR_STATE_DONE;
+			goto end;
 		}
 
-		goto end;
+		top = stack_top(btr->stack);
+		top->index++;
 	}
 
 	/* get next field's type */
@@ -1180,6 +1180,7 @@ enum bt_ctf_btr_status next_field_state(struct bt_ctf_btr *btr)
 		break;
 
 	case CTF_TYPE_VARIANT:
+		/* variant types are dynamic: query the user, he should know */
 		next_field_type =
 			btr->user.cbs.query.get_variant_type(
 				top->base_type, btr->user.data);
@@ -1210,9 +1211,6 @@ enum bt_ctf_btr_status next_field_state(struct bt_ctf_btr *btr)
 			status = BT_CTF_BTR_STATUS_ERROR;
 			goto end;
 		}
-
-		/* update previous top's index */
-		top->index++;
 
 		/* next state: align a compound type */
 		btr->state = BTR_STATE_ALIGN_COMPOUND;
@@ -1369,6 +1367,7 @@ size_t bt_ctf_btr_start(struct bt_ctf_btr *btr,
 		}
 	}
 
+	/* update packet offset for next time */
 	btr->buf.packet_offset += btr->buf.at;
 
 end:
@@ -1400,6 +1399,7 @@ size_t bt_ctf_btr_continue(struct bt_ctf_btr *btr,
 		}
 	}
 
+	/* update packet offset for next time */
 	btr->buf.packet_offset += btr->buf.at;
 
 	return btr->buf.at;
