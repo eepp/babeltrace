@@ -697,13 +697,16 @@ void test_read_complex_type(void)
 
 		-15, 11, 20, 12, 19, 14, 9, 14, 19, 13, 11, 0,
 
-		20, 13, 18, 9, 11, 10, 10, 15, 12, 11, 18, 10, 0,
+		-20, 13, 18, 9, 11, 10, 10, 15, 12, 11, 18, 10, 0,
+
+		-63, 9, 11, 1, 4, 3, 66, 0,
 	};
 	size_t read_acc;
 	static struct expected_event expected_events[67];
 	enum bt_ctf_btr_status status;
 	struct bt_ctf_btr *btr;
 	struct cb_data cb_data;
+	int got_end;
 	size_t bits;
 	size_t i;
 
@@ -967,6 +970,7 @@ void test_read_complex_type(void)
 		int read = reads[i];
 
 		if (read < 0) {
+			got_end = 0;
 			read = -read;
 			diag("bt_ctf_btr_start() with %d bytes", read);
 			read_acc = read;
@@ -976,15 +980,20 @@ void test_read_complex_type(void)
 			ok(status == BT_CTF_BTR_STATUS_EOF,
 				"bt_ctf_btr_start() does not have enough bytes");
 		} else if (read == 0) {
-			ok(bits == content_bits,
+			ok(bits == content_bits && got_end,
 				"bt_ctf_btr_start() and bt_ctf_btr_continue() read the right amount of bits");
 		} else {
 			diag("bt_ctf_btr_continue() with %d bytes", read);
 			bits += bt_ctf_btr_continue(btr, &buf[read_acc], read,
 				&status);
-			ok(status == BT_CTF_BTR_STATUS_OK ||
-				status == BT_CTF_BTR_STATUS_EOF,
-				"bt_ctf_btr_continue() succeeds");
+
+			if (status == BT_CTF_BTR_STATUS_EOF) {
+				ok(!got_end, "bt_ctf_btr_continue() needs more bytes");
+			} else {
+				ok(!got_end, "bt_ctf_btr_continue() succeeds");
+				got_end = 1;
+			}
+
 			read_acc += read;
 		}
 	}

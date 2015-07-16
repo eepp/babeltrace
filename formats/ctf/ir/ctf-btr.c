@@ -1,5 +1,5 @@
 /*
- * Babeltrace - CTF binary type reader
+ * Babeltrace - CTF binary type reader (BTR)
  *
  * Copyright (c) 2015 EfficiOS Inc. and Linux Foundation
  * Copyright (c) 2015 Philippe Proulx <pproulx@efficios.com>
@@ -54,7 +54,7 @@ struct stack_entry {
 	 */
 	struct bt_ctf_field_type *base_type;
 
-	/* length of base field (when struct/array/sequence) */
+	/* length of base field (always 1 for variant types) */
 	int64_t base_len;
 
 	/* index of next field to read */
@@ -86,6 +86,21 @@ struct bt_ctf_btr {
 
 	/* current state */
 	enum btr_state state;
+
+	/*
+	 * Last basic field type's byte order.
+	 *
+	 * This is used to detect errors since two contiguous basic
+	 * types for which the common boundary is not the boundary of
+	 * a byte cannot have different byte orders.
+	 *
+	 * This is set to BT_CTF_BYTE_ORDER_UNKNOWN on reset and when
+	 * the last basic field type was a string type.
+	 */
+	enum bt_ctf_byte_order last_bo;
+
+	/* current byte order (copied to last_bo after a successful read) */
+	enum bt_ctf_byte_order cur_bo;
 
 	/* stitch buffer infos */
 	struct {
@@ -188,7 +203,7 @@ int64_t get_compound_field_type_length(struct bt_ctf_btr *btr,
 		break;
 
 	case CTF_TYPE_VARIANT:
-		/* variant fields always "contain" a single type */
+		/* variant field types always "contain" a single type */
 		length = 1;
 		break;
 
@@ -495,7 +510,52 @@ enum bt_ctf_btr_status read_signed_bitfield(const uint8_t *buf, size_t at,
 }
 
 typedef enum bt_ctf_btr_status (* read_basic_and_call_cb_t)(struct bt_ctf_btr *,
-	const uint8_t *, size_t at);
+	const uint8_t *, size_t);
+
+static inline
+enum bt_ctf_btr_status validate_contiguous_bo(struct bt_ctf_btr *btr,
+	enum bt_ctf_byte_order next_bo)
+{
+	enum bt_ctf_btr_status status = BT_CTF_BTR_STATUS_OK;
+
+	/* always valid when at a byte boundary */
+	if (packet_at(btr) % 8 == 0) {
+		goto end;
+	}
+
+	/* always valid if last byte order is unknown */
+	if (btr->last_bo == BT_CTF_BYTE_ORDER_UNKNOWN) {
+		goto end;
+	}
+
+	/* always valid if next byte order is unknown */
+	if (next_bo == BT_CTF_BYTE_ORDER_UNKNOWN) {
+		goto end;
+	}
+
+	/* make sure last byte order is compatible with the next byte order */
+	switch (btr->last_bo) {
+	case BT_CTF_BYTE_ORDER_BIG_ENDIAN:
+	case BT_CTF_BYTE_ORDER_NETWORK:
+		if (next_bo != BT_CTF_BYTE_ORDER_BIG_ENDIAN &&
+				next_bo != BT_CTF_BYTE_ORDER_NETWORK) {
+			status = BT_CTF_BTR_STATUS_ERROR;
+		}
+		break;
+
+	case BT_CTF_BYTE_ORDER_LITTLE_ENDIAN:
+		if (next_bo != BT_CTF_BYTE_ORDER_LITTLE_ENDIAN) {
+			status = BT_CTF_BTR_STATUS_ERROR;
+		}
+		break;
+
+	default:
+		status = BT_CTF_BTR_STATUS_ERROR;
+	}
+
+end:
+	return status;
+}
 
 static
 enum bt_ctf_btr_status read_basic_float_and_call_cb(struct bt_ctf_btr *btr,
@@ -509,6 +569,7 @@ enum bt_ctf_btr_status read_basic_float_and_call_cb(struct bt_ctf_btr *btr,
 
 	field_size = get_basic_field_type_size(btr->cur_basic_field_type);
 	bo = bt_ctf_field_type_get_byte_order(btr->cur_basic_field_type);
+	btr->cur_bo = bo;
 
 	switch (field_size) {
 	case 32:
@@ -540,7 +601,7 @@ enum bt_ctf_btr_status read_basic_float_and_call_cb(struct bt_ctf_btr *btr,
 	{
 		union {
 			uint64_t u;
-			double f;
+			double d;
 		} f64;
 
 		ret = bt_ctf_field_type_floating_point_get_mantissa_digits(
@@ -556,7 +617,7 @@ enum bt_ctf_btr_status read_basic_float_and_call_cb(struct bt_ctf_btr *btr,
 			goto end;
 		}
 
-		dblval = (double) f64.f;
+		dblval = f64.d;
 		break;
 	}
 
@@ -594,6 +655,13 @@ enum bt_ctf_btr_status read_basic_int_and_call(struct bt_ctf_btr *btr,
 	}
 
 	bo = bt_ctf_field_type_get_byte_order(int_type);
+
+	/*
+	 * Update current byte order now because we could be reading
+	 * the integer value of an enumeration type, and thus we know
+	 * here the actual supporting integer type's byte order.
+	 */
+	btr->cur_bo = bo;
 
 	if (signd) {
 		int64_t v;
@@ -700,6 +768,15 @@ enum bt_ctf_btr_status read_basic_type_and_call_continue(struct bt_ctf_btr *btr,
 			/* go to next field */
 			stack_top(btr->stack)->index++;
 			btr->state = BTR_STATE_NEXT_FIELD;
+
+			/*
+			 * Update last byte order. This will be set to
+			 * BT_CTF_BYTE_ORDER_UNKNOWN when the current
+			 * type is a string type, but
+			 * validate_contiguous_bo() is always valid
+			 * when comparing with BT_CTF_BYTE_ORDER_UNKNOWN.
+			 */
+			btr->last_bo = btr->cur_bo;
 		}
 		goto end;
 	}
@@ -718,6 +795,7 @@ enum bt_ctf_btr_status read_basic_type_and_call_begin(struct bt_ctf_btr *btr,
 {
 	size_t available;
 	int64_t field_size;
+	enum bt_ctf_byte_order bo;
 	enum bt_ctf_btr_status status = BT_CTF_BTR_STATUS_OK;
 
 	if (!at_least_one_bit_left(btr)) {
@@ -729,6 +807,13 @@ enum bt_ctf_btr_status read_basic_type_and_call_begin(struct bt_ctf_btr *btr,
 
 	if (field_size < 1) {
 		status = BT_CTF_BTR_STATUS_ERROR;
+		goto end;
+	}
+
+	bo = bt_ctf_field_type_get_byte_order(btr->cur_basic_field_type);
+	status = validate_contiguous_bo(btr, bo);
+
+	if (status != BT_CTF_BTR_STATUS_OK) {
 		goto end;
 	}
 
@@ -752,6 +837,15 @@ enum bt_ctf_btr_status read_basic_type_and_call_begin(struct bt_ctf_btr *btr,
 			/* go to next field */
 			stack_top(btr->stack)->index++;
 			btr->state = BTR_STATE_NEXT_FIELD;
+
+			/*
+			 * Update last byte order. This will be set to
+			 * BT_CTF_BYTE_ORDER_UNKNOWN when the current
+			 * type is a string type, but
+			 * validate_contiguous_bo() is always valid
+			 * when comparing with BT_CTF_BYTE_ORDER_UNKNOWN.
+			 */
+			btr->last_bo = btr->cur_bo;
 		}
 
 		goto end;
@@ -835,8 +929,8 @@ enum bt_ctf_btr_status read_basic_string_type_and_call(
 	result = memchr(first_chr, '\0', available_bytes);
 
 	if (begin && btr->user.cbs.types.string_begin) {
-		status = btr->user.cbs.types.string_begin(btr->cur_basic_field_type,
-			btr->user.data);
+		status = btr->user.cbs.types.string_begin(
+			btr->cur_basic_field_type, btr->user.data);
 
 		if (status != BT_CTF_BTR_STATUS_OK) {
 			goto end;
@@ -858,6 +952,7 @@ enum bt_ctf_btr_status read_basic_string_type_and_call(
 
 		consume_bits(btr, BYTES_TO_BITS(available_bytes));
 		btr->state = BTR_STATE_READ_BASIC_CONTINUE;
+		status = BT_CTF_BTR_STATUS_EOF;
 	} else {
 		/* found the null character */
 		size_t result_len = (size_t) (result - first_chr);
@@ -1213,6 +1308,7 @@ void reset(struct bt_ctf_btr *btr)
 	btr->cur_basic_field_type = NULL;
 	stitch_reset(btr);
 	btr->buf.addr = NULL;
+	btr->last_bo = BT_CTF_BYTE_ORDER_UNKNOWN;
 }
 
 size_t bt_ctf_btr_start(struct bt_ctf_btr *btr,

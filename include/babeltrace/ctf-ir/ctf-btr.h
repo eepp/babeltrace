@@ -2,7 +2,7 @@
 #define BABELTRACE_CTF_BTR_H
 
 /*
- * Babeltrace - CTF binary type reader
+ * Babeltrace - CTF binary type reader (BTR)
  *
  * Copyright (c) 2015 EfficiOS Inc. and Linux Foundation
  * Copyright (c) 2015 Philippe Proulx <pproulx@efficios.com>
@@ -34,12 +34,17 @@
 /**
  * @file ctf-btr.h
  *
- * Event-driven CTF binary type reader.
+ * Event-driven CTF binary type reader (BTR).
  *
  * This is a common, internal API used by CTF reader plugins. It allows
  * a binary CTF IR field type to be decoded from user-provided buffers.
  * As the type is decoded (and, possibly, its nested types), registered
  * user callback functions are called.
+ *
+ * This API is only concerned with reading one CTF type at a time from
+ * one or more buffer of bytes. It does not know CTF dynamic scopes,
+ * events, or streams. Sequence lengths and selected variant types are
+ * requested to the user when needed.
  */
 
 /**

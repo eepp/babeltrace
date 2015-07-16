@@ -1,6 +1,6 @@
 /*
- * Babeltrace - CTF binary type reader
- *
+ * Babeltrace - CTF binary file reader
+ *                  ¯¯     ¯¯   ¯
  * Copyright (c) 2015 EfficiOS Inc. and Linux Foundation
  * Copyright (c) 2015 Philippe Proulx <pproulx@efficios.com>
  *
@@ -23,401 +23,16 @@
  * SOFTWARE.
  */
 
-/*
- * Hello, fellow developer, and welcome to another free lesson of
- * computer engineering!
- *
- * Today, you will learn how to implement a CTF binary type reader which
- * is versatile enough to stop in the middle of the decoding of a CTF
- * type when no more data is available, and resume later when data
- * becomes available again.
- *
- *
- * Decoding fields
- * ===============
- *
- * This CTF type binary reader depends on user-provided medium
- * operations, implementing a function used by this reader to request
- * more bytes of the file to decode. This medium function,
- * request_bytes(), might return the BT_CTF_BTR_MEDIUM_STATUS_AGAIN
- * status code, in which case the type reader function (either
- * bt_ctf_btr_decode() or bt_ctf_btr_continue(), will return an
- * analogous status code to the caller and no bytes will be read. The
- * caller is then responsible for making sure that some data becomes
- * available from its medium, and needs to call bt_ctf_btr_continue()
- * to resume the decoding process.
- *
- * The ultimate job of this type reader is to convert a sequence of
- * bytes (a binary CTF file) to a sequence of user callback function
- * calls. There is one such user callback function per basic CTF type,
- * and two per compound type: one which signals the beginning of the
- * type, and the other signals the end.
- *
- * When a buffer is successfully returned by request_bytes(), the
- * previous one is not available anymore. Also, request_bytes() may
- * return a buffer of an arbitrary size.
- *
- * There are a few challenges with the chosen approach:
- *
- *   1. If there is, for example, 4 bytes left to read in the returned
- *      user buffer, and we need to read an 8-byte integer, how do we
- *      do this?
- *   2. If we have to stop in the middle of a decoding process because
- *      request_bytes() returned BT_CTF_BTR_MEDIUM_STATUS_AGAIN, how do
- *	we remember where we were in the current compound type, and how
- *	do we continue from there later?
- *
- * The solution for challenge #1 is easy: keep a stitch buffer, in which
- * bytes from different buffers are appended until everything is there
- * to decode a whole _basic_ type.
- *
- * The current solution for challenge #2 is to keep a current visit
- * stack in the type reader context. The top of the stack always
- * contains the current parent type of the next type to be visited.
- * This parent type will be either a structure, a variant, an array,
- * or a sequence. The top of the stack also contains the index, within
- * the parent type, of the next type to be visited. When this type is
- * a basic, readable one (integer, floating point number, enumeration,
- * or string byte), and there's enough data left in the medium buffer
- * to decode it, depending on its size and alignment, it is decoded,
- * and the appropriate user callback function is called with its raw
- * value. If the next type to read is a compound type (structure,
- * variant, array, sequence), the begin user callback function for this
- * type is called and then the type is pushed on the visit stack as the
- * new current parent type. In some cases, the current position within
- * the medium buffer could be updated because of custom alignment of
- * compound types.
- *
- *
- * Example
- * -------
- *
- * Let's try an example. For the sake of simplicity, we'll use type
- * sizes and alignments which are multiples of 8 bits (always fit in
- * whole bytes). Keep in mind, however, that this technique also works
- * with sizes and alignments which are multiple of one bit.
- *
- * The root type to decode is:
- *
- *     struct            align = 8
- *       a: int	         align = 8     size = 16
- *       b: int	         align = 32    size = 32
- *       c: int	         align = 8     size = 8
- *       d: struct       align = 64
- *           e: float    align = 32    size = 32
- *           f: array    length = 5
- *             int       align = 8     size = 32
- *           g: int      align = 8     size = 64
- *       h: float        align = 32    size = 32
- *       j: array        length = 3
- *           enum        align = 8     size = 8
- *       k: int          align = 64    size = 64
- *
- * The bytes to decode are (`x` means one byte of padding):
- *
- *     +--------+-----------------+--------------+
- *     | Offset | Bytes	          | Struct field |
- *     +========+=================+==============+
- *     |      0 | i i             | root.a       |
- *     |      2 | x x             |              |
- *     |      4 | i i i i         | root.b       |
- *     |      8 | i               | root.c       |
- *     |      9 | x x x x x x x   |              |
- *     |     16 | f f f f         | root.d.e     |
- *     |     20 | i i i i         | root.d.f[0]  |
- *     |     24 | i i i i         | root.d.f[1]  |
- *     |     28 | i i i i         | root.d.f[2]  |
- *     |     32 | i i i i         | root.d.f[3]  |
- *     |     36 | i i i i         | root.d.f[4]  |
- *     |     40 | i i i i i i i i | root.d.g     |
- *     |     48 | f f f f         | root.h       |
- *     |     52 | e               | root.j[0]    |
- *     |     53 | e               | root.j[1]    |
- *     |     54 | e               | root.j[2]    |
- *     |     55 | x               |              |
- *     |     56 | i i i i i i i i | root.k       |
- *     +--------+-----------------+--------------+
- *
- * Total buffer size is 64 bytes.
- *
- * We'll now simulate a complete decoding process. Three calls to the
- * type reader API will be needed to finish the decoding, since two
- * calls will be interrupted by the medium returning the infamous
- * BT_CTF_BTR_MEDIUM_STATUS_AGAIN status code. Assume the maximum length
- * to request to the medium is 16 bytes.
- *
- * Let's do this, in 28 easy steps:
- *
- *   1.  User calls bt_ctf_btr_decode() with the type shown above.
- *   2.  Root type is a structure. Call struct_begin(). Push type on
- *       the currently (empty) stack, as the current parent type. Set
- *       current index to 0.
- *
- *       Current stack is:
- *
- *           Structure (root)    Index = 0    <-- top
- *
- *   3.  We need to read a 2-byte integer. Do we have at least 2 bytes
- *       left in the medium-provided buffer? No, 0 bytes are left.
- *       Request 16 bytes from the medium. Medium returns 16 bytes. Set
- *       current buffer position to 0. Read 2 bytes. Call
- *       unsigned_integer() with integer value. Set current index to 1.
- *       Set current buffer position to 2.
- *   4.  We need to read a 4-byte integer after having skipped 2 bytes
- *       of padding. Do we have at least 6 bytes left in the buffer?
- *       Yes, 14 bytes are left. Set current buffer position to 4. Read
- *       4 bytes. Call unsigned_integer() with integer value. Set
- *       current index to 2. Set current buffer position to 8.
- *   5.  We need to read a 1-byte integer. Do we have at least 1 byte
- *       left in the buffer? Yes, 8 bytes are left. Read 1 byte. Call
- *       unsigned_integer() with integer value. Set current index to 3.
- *       Set current buffer position to 9.
- *   6.  Type at index 3 is a structure. Call struct_begin(). Push type
- *       on the stack as the current parent type. Set current index to
- *       0. We need to skip 5 bytes of padding. Do we have at least 5
- *       bytes left in the buffer? Yes, 5 bytes are left. Set current
- *       buffer position to 16.
- *
- *       Current stack is:
- *
- *           Structure (d)       Index = 0    <-- top
- *           Structure (root)    Index = 3
- *
- *   7.  We need to read a 4-byte floating point number. Do we have at
- *       least 4 bytes left in the buffer? No, 0 bytes are left.
- *       Request 16 bytes from the medium. User returns the
- *       BT_CTF_BTR_MEDIUM_STATUS_AGAIN status code. bt_ctf_btr_decode()
- *       returns BT_CTF_BTR_STATUS_AGAIN to the user.
- *   8.  User makes sure some data becomes available from its medium.
- *       User calls bt_ctf_btr_continue() to continue.
- *   9.  We need to read a 4-byte floating point number. Do we have at
- *       least 4 bytes left in the buffer? No, 0 bytes are left.
- *       Request 16 bytes from the medium. Medium returns 10 bytes. Set
- *       current buffer position to 0. Read 4 bytes. Call
- *       floating_point() with floating point number value. Set current
- *       index to 1. Set current buffer position to 4.
- *   10. Type at index 1 is an array. Call array_begin(). Push type on
- *       the stack as the current parent type. Set current index to 0.
- *
- *       Current stack is:
- *
- *           Array     (d.f)     Index = 0    <-- top
- *           Structure (d)       Index = 1
- *           Structure (root)    Index = 3
- *
- *   11. We need to read a 4-byte integer. Do we have at least 4 bytes
- *       left in the buffer? Yes, 6 bytes are left. Read 4 bytes. Call
- *       unsigned_integer() with integer value. Set current index to 1.
- *       Set current buffer position to 8.
- *   12. We need to read a 4-byte integer. Do we have at least 4 bytes
- *       left in the buffer? No, 2 bytes are left. Read 2 bytes,
- *       and append them to the stitch buffer. Set current buffer
- *       position to 10. Request 16 bytes from the medium. Medium
- *       returns 14 bytes. Set current buffer position to 0. Read 2
- *       bytes, and append them to the stitch buffer. Decode the 4-byte
- *       integer in the stitch buffer. Call unsigned_integer() with
- *       integer value. Set current index to 2. Set current buffer
- *       position to 2.
- *   13. We need to read a 4-byte integer. Do we have at least 4 bytes
- *       left in the buffer? Yes, 12 bytes are left. Read 4 bytes. Call
- *       unsigned_integer() with integer value. Set current index to 3.
- *       Set current buffer position to 6.
- *   14. We need to read a 4-byte integer. Do we have at least 4 bytes
- *       left in the buffer? Yes, 8 bytes are left. Read 4 bytes. Call
- *       unsigned_integer() with integer value. Set current index to 4.
- *       Set current buffer position to 10.
- *   15. We need to read a 4-byte integer. Do we have at least 4 bytes
- *       left in the buffer? Yes, 4 bytes are left. Read 4 bytes. Call
- *       unsigned_integer() with integer value. Set current index to 5.
- *       Set current buffer position to 14.
- *   16. Current index equals parent type's length (5): pop stack's
- *       top entry. Call array_end(). Set current index to 2.
- *
- *       Current stack is:
- *
- *           Structure (d)       Index = 2    <-- top
- *           Structure (root)    Index = 3
- *
- *   17. We need to read an 8-byte integer. Do we have at least 8 bytes
- *       left in the buffer? No, 0 bytes are left. Request 16 bytes from
- *       the medium. Medium returns the BT_CTF_BTR_MEDIUM_STATUS_AGAIN
- *       status code. bt_ctf_btr_continue() returns
- *       BT_CTF_BTR_STATUS_AGAIN to the user.
- *   18. User makes sure some data becomes available from its medium.
- *       User calls bt_ctf_btr_continue() to continue.
- *   19. We need to read an 8-byte integer. Do we have at least 8 bytes
- *       left in the buffer? Nol, 0 bytes are left. Request 16 bytes from
- *       the user. User returns 16 bytes. Set current buffer position to
- *       0. Read 8 bytes, create integer field, set its value, and
- *       append it to the current parent field. Set current index to
- *       3. Set current buffer position to 8.
- *   20. Current index equals parent field's length (3): pop stack's
- *       top entry. Set current index to 4.
- *
- *       Current stack is:
- *
- *           Structure (root)    Index = 4    <-- top
- *
- *   21. We need to read a 4-byte floating point number. Do we have at
- *       least 4 bytes left in the buffer? Yes, 8 bytes are left.
- *       Read 4 bytes, create floating point number field, set its
- *       value, and append it to the current parent field. Set current
- *       index to 5. Set current buffer position to 12.
- *   22. Field at index 5 is an array. Create an array field. Append it
- *       to the current parent field. Push it on the stack as the
- *       current parent field. Set current index to 0.
- *
- *       Current stack is:
- *
- *           Array     (j)       Index = 0    <-- top
- *           Structure (root)    Index = 5
- *
- *   23. We need to read a 1-byte enumeration. Do we have at least 1
- *       byte left in the buffer? Yes, 4 bytes are left. Read 1 byte,
- *       create enumeration field, set its value, and append it to the
- *       current parent field. Set current index to 1. Set current
- *       buffer position to 13.
- *   24. We need to read a 1-byte enumeration. Do we have at least 1
- *       byte left in the buffer? Yes, 3 bytes are left. Read 1 byte,
- *       create enumeration field, set its value, and append it to the
- *       current parent field. Set current index to 2. Set current
- *       buffer position to 14.
- *   25. We need to read a 1-byte enumeration. Do we have at least 1
- *       byte left in the buffer? Yes, 2 bytes are left. Read 1 byte,
- *       create enumeration field, set its value, and append it to the
- *       current parent field. Set current index to 3. Set current
- *       buffer position to 14.
- *   26. Current index equals parent field's length (3): pop stack's
- *       top entry. Set current index to 6.
- *
- *       Current stack is:
- *
- *           Structure (root)    Index = 6    <-- top
- *
- *   27. We need to read an 8-byte integer after having skipped 1 byte
- *       of padding. Do we have at least 9 bytes left in the buffer?
- *       No, 1 byte is left. Skip this byte as padding. Request 16
- *       bytes from the user. User returns 8 bytes. Set current buffer
- *       position to 0. Read 8 bytes, create integer field, set its
- *       value, and append it to the current parent field. Set current
- *       index to 7. Set current buffer position to 8.
- *   28. Current index equals parent field's length (7): pop stack's
- *       top entry. Current stack is empty. Return popped field to
- *       user.
- *
- *
- * Strings
- * -------
- *
- * We didn't explore how string fields are decoded yet. Get hold of
- * yourself, here it is. A CTF string is a special type since it is
- * considered a basic type as per the CTF specifications, yet it really
- * is a sequence of individual bytes.
- *
- * Let's say we need to read a 28-byte string, that is, 27 printable
- * bytes followed by one null byte. We begin by creating an empty
- * string field, and then we set it as the current basic field. Assume
- * the maximum length to request to the user back-end is 16 bytes.
- *
- * 16 bytes are requested and returned. A null byte is searched for in
- * the returned buffer. None is found, so the whole 16-byte block is
- * appended to the current string field. Since no null byte was found,
- * the string field remains incomplete. 16 bytes are requested again,
- * and returned. A null byte is searched for in the returned buffer, and
- * is found at position 11. Bytes from position 0 to 10 are appended
- * to the current string field. Since a null byte was found, the
- * string field is considered complete, and it is popped off the
- * stack. Byte 11, the null byte, is skipped, so the current buffer
- * position is set to 12.
- *
- *
- * Variants
- * --------
- *
- * Our 28-step example did not look into variants either. They are
- * pretty easy, in fact. When one is hit, create the variant field, and
- * push it as the current parent field. Continue the loop. When the
- * current parent field is a variant, try reading its currently selected
- * field. When done, pop the variant.
- *
- *
- * Packet reading
- * ==============
- *
- * TODO: this whole subsection is to be rewritten.
- *
- * So this demonstrated how to transform bits into fields with decoding
- * interrupt support. The process of decoding a whole CTF packet uses
- * this, but we also introduce a decoding state.
- *
- * The first thing we want to know when starting the decoding of a
- * packet is to which stream it belongs. There are two possibilities
- * here:
- *
- *   * We'll find the stream ID in the `stream_id` field of the
- *     packet header, if it exists.
- *   * If the `stream_id` field is missing from the packet header, or
- *     if the packet header does not exist, there must be a single
- *     stream.
- *
- * The first step is thus decoding the packet header. Since we don't
- * know the packet size yet (this information, if it exists, is in the
- * packet context, which immediately follows the packet header), though,
- * we need to be careful in how many bits to request from the user.
- * Assume a packet header size of 24 bytes, which is typical, and a
- * maximum size to request of 4096 bytes. We must not request more than
- * the packet header size, because we don't know what follows yet (this
- * depends on the packet's stream, which we don't know yet). Two
- * situations:
- *
- *   * Packet header has a fixed size (no sequence field, no variant
- *     field): request this size to the user.
- *   * Packet header has a variable size (at least one sequence field or
- *     one variant field): request only what's needed for the next
- *     atomic field until the whole packet header is read.
- *
- * Requesting just enough when the packet size is unknown is important,
- * because requesting too much could result in having requested bits
- * that belong to the next packet, or bits that do not exist, and there
- * is no way to tell the user that we requested too much.
- *
- * Once we have the stream ID, we can find the stream, and thus the
- * packet context type. We proceed with decoding the packet context.
- * Again: request the whole packet context size if it's fixed, otherwise
- * one atomic field at a time, until we get either the `content_size` or
- * the `packet_size` field (which sets how many bits we need to read in
- * the whole packet), or the end of the packet context.
- *
- * Once there, we have everything we need to start decoding events.
- * If we know the packet size, we will request the maximum request size
- * to the stream reader until this size is reached. Otherwise, we
- * always request the maximum request size until the stream reader
- * returns BT_CTF_MEDIUM_STATUS_EOS (end of stream), in which
- * case we return BT_CTF_STREAM_READER_STATUS_EOP to the caller.
- *
- * When the packet reader context is created, we're at the initial
- * state: nothing is decoded yet. We always have to go through the
- * packet header and context decoding states before reading events, so
- * even if the first API call is bt_ctf_stream_reader_get_next_event(),
- * the packet reader will still decode the packet header and context
- * before eventually decoding the first event, and returning it. Then
- * subsequent calls to bt_ctf_stream_reader_get_header() and
- * bt_ctf_stream_reader_get_context() will simply return the previously
- * decoded fields.
- *
- *                        - T H E   E N D -
- */
-
 #include <stdint.h>
 #include <stddef.h>
 #include <assert.h>
 #include <string.h>
-#include <babeltrace/ctf-ir/packet-reader.h>
+#include <babeltrace/ctf-ir/ctf-bifir.h>
+#include <babeltrace/ctf-ir/ctf-btr.h>
 #include <babeltrace/bitfield.h>
 #include <babeltrace/ctf-ir/event-types.h>
 #include <babeltrace/ctf-ir/event-fields.h>
 #include <babeltrace/ctf-ir/stream-class.h>
-#include <babeltrace/align.h>
 #include <glib.h>
 
 #define BYTES_TO_BITS(x)		((x) * 8)
@@ -425,9 +40,7 @@
 #define BITS_TO_BYTES_CEIL(x)		(((x) + 7) >> 3)
 #define IN_BYTE_OFFSET(at)		((at) & 7)
 
-/*
- * A stack entry.
- */
+/* a visit stack entry */
 struct stack_entry {
 	/*
 	 * Current base field, one of:
@@ -441,19 +54,11 @@ struct stack_entry {
 	 */
 	struct bt_ctf_field *base;
 
-	/* current base field type (owned by this) */
-	struct bt_ctf_field_type *base_type;
-
-	/* length of base field */
-	int64_t base_len;
-
 	/* index of next field to read */
 	int64_t index;
 };
 
-/*
- * Visit stack.
- */
+/* visit stack */
 struct stack {
 	/* entries (struct stack_entry *) (top is last element) */
 	GPtrArray *entries;
@@ -476,9 +81,7 @@ enum global_decoding_state {
 	GDS_DONE,
 };
 
-/*
- * Decoding entities.
- */
+/* decoding entities */
 enum decoding_entity {
 	ENTITY_TRACE_PACKET_HEADER,
 	ENTITY_STREAM_PACKET_CONTEXT,
@@ -488,48 +91,8 @@ enum decoding_entity {
 	ENTITY_EVENT_PAYLOAD,
 };
 
-/*
- * Field decoding state, as such:
- *
- *   * FDS_INIT: checks the current situation and takes an action.
- *     If there's no more field to decode for the current base, pops
- *     the stack and continues. If there's no more entry in the stack,
- *     sets the context's last decoded entity and stops. Otherwise,
- *     creates the next field to decode and changes to FDS_SKIP_PADDING.
- *   * FDS_SKIP_PADDING: skips the padding before the next field to
- *     decode. If padding was skipped for a compound type, goes back
- *     to FDS_INIT. Otherwise, goes to FDS_DECODE_*_FIELD_BEGIN.
- *   * FDS_DECODE_*_FIELD_BEGIN: begins decoding a basic field,
- *     possibly decoding it entirely, in which case it goes back to
- *     FDS_INIT.
- *   * FDS_DECODE_*_FIELD_CONTINUE: continues decoding a basic field
- *     When done, sets the next field's value to the decoded value,
- *     and goes back to FDS_INIT.
- */
-enum field_decoding_state {
-	FDS_INIT,
-	FDS_SKIP_PADDING,
-	FDS_DECODE_BASIC_FIELD,
-	FDS_DECODE_INTEGER_FIELD_BEGIN,
-	FDS_DECODE_INTEGER_FIELD_CONTINUE,
-	FDS_DECODE_FLOAT_FIELD_BEGIN,
-	FDS_DECODE_FLOAT_FIELD_CONTINUE,
-	FDS_DECODE_ENUM_FIELD_BEGIN,
-	FDS_DECODE_ENUM_FIELD_CONTINUE,
-	FDS_DECODE_STRING_FIELD_BEGIN,
-	FDS_DECODE_STRING_FIELD_CONTINUE,
-};
-
-enum state_machine_action {
-	SMA_CONTINUE,
-	SMA_DONE,
-	SMA_ERROR,
-};
-
-/*
- * Packet reader context, where everything important lives.
- */
-struct bt_ctf_stream_reader_ctx {
+/* binary file reader */
+struct bt_ctf_bifir {
 	/* visit stack */
 	struct stack *stack;
 
@@ -542,19 +105,6 @@ struct bt_ctf_stream_reader_ctx {
 	 * exited.
 	 */
 	struct bt_ctf_field *last_decoded_entity;
-
-	/* current basic field being decoded stuff */
-	struct {
-		struct bt_ctf_field *field;
-		struct bt_ctf_field_type *field_type;
-	} cur_basic;
-
-	/* stitch buffer stuff */
-	struct {
-		uint8_t buf[16];
-		size_t offset;
-		size_t length;
-	} stitch;
 
 	/* trace and classes (owned by this) */
 	struct {
@@ -580,27 +130,29 @@ struct bt_ctf_stream_reader_ctx {
 
 		/* current entity being decoded */
 		enum decoding_entity entity;
-
-		/* current field decoding state */
-		enum field_decoding_state field;
-
-		/* true to skip the padding of the current base field */
-		bool skip_base_padding;
 	} state;
 
 	/* user buffer stuff */
 	struct {
+		/* last address provided by medium */
 		const uint8_t *addr;
-		size_t stream_offset;
+
+		/* buffer size provided by medium (bytes) */
+		size_t sz;
+
+		/* offset within whole packet of addr (bits) */
+		size_t packet_offset;
+
+		/* current position from addr (bits) */
 		size_t at;
-		size_t length;
+
 	} buf;
 
-	/* stream reader stuff */
+	/* medium stuff */
 	struct {
-		struct bt_ctf_medium_ops ops;
-		size_t max_request_len;
-		void *user_data;
+		struct bt_ctf_bifir_medium_ops medops;
+		size_t max_request_sz;
+		void *data;
 	} medium;
 
 	/* current packet size (bits) (-1 if unknown) */
@@ -654,8 +206,7 @@ void stack_destroy(struct stack *stack)
 }
 
 static
-int stack_push(struct stack *stack, struct bt_ctf_field *base,
-	struct bt_ctf_field_type *base_type, int64_t base_len)
+int stack_push(struct stack *stack, struct bt_ctf_field *base)
 {
 	int ret = 0;
 	struct stack_entry *entry;
@@ -671,10 +222,6 @@ int stack_push(struct stack *stack, struct bt_ctf_field *base,
 
 	entry->base = base;
 	bt_ctf_field_get(entry->base);
-	entry->base_type = base_type;
-	bt_ctf_field_type_get(entry->base_type);
-	entry->base_len = base_len;
-	g_ptr_array_add(stack->entries, entry);
 
 end:
 	return ret;
@@ -712,34 +259,10 @@ bool stack_empty(struct stack *stack)
 }
 
 static inline
-enum bt_ctf_stream_reader_status sr_status_from_m_status(
-	enum bt_ctf_medium_status m_status)
+enum bt_ctf_bifir_status bifir_status_from_m_status(
+	enum bt_ctf_bifir_medium_status m_status)
 {
-	enum bt_ctf_stream_reader_status sr_status;
-
-	switch (m_status) {
-	case BT_CTF_MEDIUM_STATUS_AGAIN:
-		sr_status = BT_CTF_STREAM_READER_STATUS_AGAIN;
-		break;
-
-	case BT_CTF_MEDIUM_STATUS_ERROR:
-		sr_status = BT_CTF_STREAM_READER_STATUS_ERROR;
-		break;
-
-	case BT_CTF_MEDIUM_STATUS_INVAL:
-		sr_status = BT_CTF_STREAM_READER_STATUS_INVAL;
-		break;
-
-	case BT_CTF_MEDIUM_STATUS_EOS:
-		sr_status = BT_CTF_STREAM_READER_STATUS_EOS;
-		break;
-
-	default:
-		sr_status = BT_CTF_STREAM_READER_STATUS_OK;
-		break;
-	}
-
-	return sr_status;
+	return m_status;
 }
 
 static inline
@@ -1276,7 +799,7 @@ enum state_machine_action handle_fds_skip_padding(
 	}
 
 	/* compute how many bits we need to skip */
-	aligned_stream_at = ALIGN(stream_at(ctx), field_alignment);
+	//aligned_stream_at = ALIGN(stream_at(ctx), field_alignment);
 	skip_bits = aligned_stream_at - stream_at(ctx);
 
 	/* nothing to skip? done */
