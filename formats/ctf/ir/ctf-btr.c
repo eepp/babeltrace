@@ -31,6 +31,7 @@
 #include <babeltrace/bitfield.h>
 #include <babeltrace/ctf-ir/ctf-btr.h>
 #include <babeltrace/ctf-ir/event-types.h>
+#include <babeltrace/ctf-ir/ref.h>
 #include <babeltrace/align.h>
 #include <glib.h>
 
@@ -67,6 +68,7 @@ struct stack {
 	GPtrArray *entries;
 };
 
+/* reading states */
 enum btr_state {
 	BTR_STATE_NEXT_FIELD,
 	BTR_STATE_ALIGN_BASIC,
@@ -150,7 +152,7 @@ void stack_entry_free_func(gpointer data)
 {
 	struct stack_entry *entry = data;
 
-	bt_ctf_field_type_put(entry->base_type);
+	BT_CTF_PUT(entry->base_type);
 	g_free(entry);
 }
 
@@ -323,9 +325,9 @@ void consume_bits(struct bt_ctf_btr *btr, size_t incr)
 }
 
 static inline
-bool has_enough_bits(struct bt_ctf_btr *btr, size_t len)
+bool has_enough_bits(struct bt_ctf_btr *btr, size_t sz)
 {
-	return available_bits(btr) >= len;
+	return available_bits(btr) >= sz;
 }
 
 static inline
@@ -401,7 +403,7 @@ int get_basic_field_type_size(struct bt_ctf_field_type *field_type)
 		}
 
 		size = get_basic_field_type_size(int_type);
-		bt_ctf_field_type_put(int_type);
+		BT_CTF_PUT(int_type);
 		break;
 	}
 
@@ -722,7 +724,7 @@ enum bt_ctf_btr_status read_basic_enum_and_call_cb(struct bt_ctf_btr *btr,
 		int_field_type, btr->cur_basic_field_type);
 
 end:
-	bt_ctf_field_type_put(int_field_type);
+	BT_CTF_PUT(int_field_type);
 
 	return status;
 }
@@ -1216,7 +1218,7 @@ enum bt_ctf_btr_status next_field_state(struct bt_ctf_btr *btr)
 		btr->state = BTR_STATE_ALIGN_COMPOUND;
 	} else {
 		/* replace current basic field type */
-		bt_ctf_field_type_put(btr->cur_basic_field_type);
+		BT_CTF_PUT(btr->cur_basic_field_type);
 		btr->cur_basic_field_type = next_field_type;
 		next_field_type = NULL;
 
@@ -1225,7 +1227,7 @@ enum bt_ctf_btr_status next_field_state(struct bt_ctf_btr *btr)
 	}
 
 end:
-	bt_ctf_field_type_put(next_field_type);
+	BT_CTF_PUT(next_field_type);
 
 	return status;
 }
@@ -1293,8 +1295,11 @@ end:
 
 void bt_ctf_btr_destroy(struct bt_ctf_btr *btr)
 {
-	stack_destroy(btr->stack);
-	bt_ctf_field_type_put(btr->cur_basic_field_type);
+	if (btr->stack) {
+		stack_destroy(btr->stack);
+	}
+
+	BT_CTF_PUT(btr->cur_basic_field_type);
 	g_free(btr);
 }
 
@@ -1302,8 +1307,7 @@ static
 void reset(struct bt_ctf_btr *btr)
 {
 	stack_clear(btr->stack);
-	bt_ctf_field_type_put(btr->cur_basic_field_type);
-	btr->cur_basic_field_type = NULL;
+	BT_CTF_PUT(btr->cur_basic_field_type);
 	stitch_reset(btr);
 	btr->buf.addr = NULL;
 	btr->last_bo = BT_CTF_BYTE_ORDER_UNKNOWN;
