@@ -31,21 +31,20 @@
 #include <babeltrace/ctf-ir/ctf-notit.h>
 #include <babeltrace/ctf-ir/ctf-btr.h>
 #include <babeltrace/ctf-ir/event-types.h>
+#include <babeltrace/ctf-ir/event-types-internal.h>
 #include <babeltrace/ctf-ir/event-fields.h>
 #include <babeltrace/ctf-ir/stream-class.h>
 #include <babeltrace/ctf-ir/ref.h>
 #include <glib.h>
 
 #define BYTES_TO_BITS(x)		((x) * 8)
-#define BITS_TO_BYTES_FLOOR(x)		((x) >> 3)
-#define BITS_TO_BYTES_CEIL(x)		(((x) + 7) >> 3)
-#define IN_BYTE_OFFSET(at)		((at) & 7)
 
 /* a visit stack entry */
 struct stack_entry {
 	/*
 	 * Current base field, one of:
 	 *
+	 *   * string
 	 *   * structure
 	 *   * array
 	 *   * sequence
@@ -55,8 +54,8 @@ struct stack_entry {
 	 */
 	struct bt_ctf_field *base;
 
-	/* index of next field to read */
-	int64_t index;
+	/* index of next field to set */
+	size_t index;
 };
 
 /* visit stack */
@@ -89,13 +88,19 @@ enum state {
 	STATE_SKIP_PACKET_PADDING,
 };
 
-/* binary file reader */
+/* CTF notification iterator */
 struct bt_ctf_notit {
 	/* visit stack */
 	struct stack *stack;
 
-	/* last read field */
-	struct bt_ctf_field *last_dscope_field;
+	/*
+	 * Current dynamic scope field pointer.
+	 *
+	 * This is set when a dynamic scope field is first created by
+	 * btr_compound_begin_cb(). It points to one of the fields in
+	 * dscopes below.
+	 */
+	struct bt_ctf_field **cur_dscope_field;
 
 	/* trace and classes (owned by this) */
 	struct {
@@ -376,6 +381,8 @@ enum bt_ctf_notit_status read_dscope_begin_state(
 		goto end;
 	}
 
+	bt_ctf_put(*dscope_field);
+	notit->cur_dscope_field = dscope_field;
 	consumed_bits = bt_ctf_btr_start(notit->btr, dscope_field_type,
 		notit->buf.addr, notit->buf.at, packet_at(notit),
 		notit->buf.sz, &btr_status);
@@ -383,9 +390,6 @@ enum bt_ctf_notit_status read_dscope_begin_state(
 	switch (btr_status) {
 	case BT_CTF_BTR_STATUS_OK:
 		/* type was read completely */
-		bt_ctf_put(*dscope_field);
-		*dscope_field = notit->last_dscope_field;
-		notit->last_dscope_field = NULL;
 		notit->state = done_state;
 		break;
 
@@ -407,8 +411,7 @@ end:
 
 static
 enum bt_ctf_notit_status read_dscope_continue_state(
-	struct bt_ctf_notit *notit, enum state done_state,
-	struct bt_ctf_field **dscope_field)
+	struct bt_ctf_notit *notit, enum state done_state)
 {
 	enum bt_ctf_notit_status status = BT_CTF_NOTIT_STATUS_OK;
 	enum bt_ctf_btr_status btr_status;
@@ -426,9 +429,6 @@ enum bt_ctf_notit_status read_dscope_continue_state(
 	switch (btr_status) {
 	case BT_CTF_BTR_STATUS_OK:
 		/* type was read completely */
-		bt_ctf_put(*dscope_field);
-		*dscope_field = notit->last_dscope_field;
-		notit->last_dscope_field = NULL;
 		notit->state = done_state;
 		break;
 
@@ -502,14 +502,19 @@ enum bt_ctf_notit_status read_packet_header_continue_state(
 	struct bt_ctf_notit *notit)
 {
 	return read_dscope_continue_state(notit,
-		STATE_AFTER_TRACE_PACKET_HEADER,
-		&notit->dscopes.trace_packet_header);
+		STATE_AFTER_TRACE_PACKET_HEADER);
 }
 
 static inline
 bool is_struct_type(struct bt_ctf_field_type *field_type)
 {
 	return bt_ctf_field_type_get_type_id(field_type) == CTF_TYPE_STRUCT;
+}
+
+static inline
+bool is_variant_type(struct bt_ctf_field_type *field_type)
+{
+	return bt_ctf_field_type_get_type_id(field_type) == CTF_TYPE_VARIANT;
 }
 
 static inline
@@ -619,8 +624,7 @@ enum bt_ctf_notit_status read_packet_context_continue_state(
 	struct bt_ctf_notit *notit)
 {
 	return read_dscope_continue_state(notit,
-		STATE_AFTER_STREAM_PACKET_CONTEXT,
-		&notit->dscopes.stream_packet_context);
+		STATE_AFTER_STREAM_PACKET_CONTEXT);
 }
 
 static inline
@@ -726,8 +730,7 @@ enum bt_ctf_notit_status read_event_header_continue_state(
 	struct bt_ctf_notit *notit)
 {
 	return read_dscope_continue_state(notit,
-		STATE_AFTER_STREAM_EVENT_HEADER,
-		&notit->dscopes.stream_event_header);
+		STATE_AFTER_STREAM_EVENT_HEADER);
 }
 
 static inline
@@ -839,8 +842,7 @@ enum bt_ctf_notit_status read_stream_event_context_continue_state(
 	struct bt_ctf_notit *notit)
 {
 	return read_dscope_continue_state(notit,
-		STATE_DSCOPE_EVENT_CONTEXT_BEGIN,
-		&notit->dscopes.stream_event_context);
+		STATE_DSCOPE_EVENT_CONTEXT_BEGIN);
 }
 
 static
@@ -878,7 +880,7 @@ enum bt_ctf_notit_status read_event_context_continue_state(
 	struct bt_ctf_notit *notit)
 {
 	return read_dscope_continue_state(notit,
-		STATE_DSCOPE_EVENT_PAYLOAD_BEGIN, &notit->dscopes.event_context);
+		STATE_DSCOPE_EVENT_PAYLOAD_BEGIN);
 }
 
 static
@@ -915,8 +917,7 @@ static
 enum bt_ctf_notit_status read_event_payload_continue_state(
 	struct bt_ctf_notit *notit)
 {
-	return read_dscope_continue_state(notit, STATE_EMIT_NOTIF_EVENT,
-		&notit->dscopes.event_payload);
+	return read_dscope_continue_state(notit, STATE_EMIT_NOTIF_EVENT);
 }
 
 static
@@ -1021,11 +1022,11 @@ enum bt_ctf_notit_status handle_state(struct bt_ctf_notit *notit)
 		break;
 
 	case STATE_DSCOPE_EVENT_PAYLOAD_BEGIN:
-		status = read_event_context_begin_state(notit);
+		status = read_event_payload_begin_state(notit);
 		break;
 
 	case STATE_DSCOPE_EVENT_PAYLOAD_CONTINUE:
-		status = read_event_context_continue_state(notit);
+		status = read_event_payload_continue_state(notit);
 		break;
 
 	case STATE_EMIT_NOTIF_EVENT:
@@ -1061,64 +1062,405 @@ void bt_ctf_notit_reset(struct bt_ctf_notit *notit)
 }
 
 static
+struct bt_ctf_field *get_next_field(struct bt_ctf_notit *notit)
+{
+	struct bt_ctf_field *next_field = NULL;
+	struct bt_ctf_field *base_field;
+	struct bt_ctf_field_type *base_type;
+	size_t index;
+
+	assert(!stack_empty(notit->stack));
+	index = stack_top(notit->stack)->index;
+	base_field = stack_top(notit->stack)->base;
+	base_type = bt_ctf_field_get_type(base_field);
+
+	if (!base_type) {
+		goto end;
+	}
+
+	switch (bt_ctf_field_type_get_type_id(base_type)) {
+	case CTF_TYPE_STRUCT:
+		next_field = bt_ctf_field_structure_get_field_by_index(
+			base_field, index);
+		break;
+
+	case CTF_TYPE_ARRAY:
+		next_field = bt_ctf_field_array_get_field(base_field, index);
+		break;
+
+	case CTF_TYPE_SEQUENCE:
+		next_field = bt_ctf_field_sequence_get_field(base_field, index);
+		break;
+
+	case CTF_TYPE_VARIANT:
+		next_field = bt_ctf_field_variant_get_current_field(base_field);
+		break;
+
+	default:
+		assert(false);
+		break;
+	}
+
+end:
+	BT_CTF_PUT(base_type);
+
+	return next_field;
+}
+
+static
 enum bt_ctf_btr_status btr_signed_int_cb(int64_t value,
 	struct bt_ctf_field_type *type, void *data)
 {
-	return BT_CTF_BTR_STATUS_OK;
+	enum bt_ctf_btr_status status = BT_CTF_BTR_STATUS_OK;
+	struct bt_ctf_field *field = NULL;
+	struct bt_ctf_notit *notit = data;
+	int ret;
+
+	/* create next field */
+	field = get_next_field(notit);
+
+	if (!field) {
+		status = BT_CTF_BTR_STATUS_ERROR;
+		goto end;
+	}
+
+	switch(bt_ctf_field_type_get_type_id(type)) {
+	case CTF_TYPE_INTEGER:
+		ret = bt_ctf_field_signed_integer_set_value(field, value);
+		assert(!ret);
+		break;
+
+	case CTF_TYPE_ENUM:
+	{
+		struct bt_ctf_field *int_field;
+
+		int_field = bt_ctf_field_enumeration_get_container(field);
+		assert(int_field);
+		ret = bt_ctf_field_signed_integer_set_value(int_field, value);
+		assert(!ret);
+		BT_CTF_PUT(int_field);
+		break;
+	}
+
+	default:
+		status = BT_CTF_BTR_STATUS_ERROR;
+		goto end;
+	}
+
+	stack_top(notit->stack)->index++;
+
+end:
+	BT_CTF_PUT(field);
+
+	return status;
 }
 
 static
 enum bt_ctf_btr_status btr_unsigned_int_cb(uint64_t value,
 	struct bt_ctf_field_type *type, void *data)
 {
-	return BT_CTF_BTR_STATUS_OK;
+	enum bt_ctf_btr_status status = BT_CTF_BTR_STATUS_OK;
+	struct bt_ctf_field *field = NULL;
+	struct bt_ctf_notit *notit = data;
+	int ret;
+
+	/* create next field */
+	field = get_next_field(notit);
+
+	if (!field) {
+		status = BT_CTF_BTR_STATUS_ERROR;
+		goto end;
+	}
+
+	switch(bt_ctf_field_type_get_type_id(type)) {
+	case CTF_TYPE_INTEGER:
+		ret = bt_ctf_field_unsigned_integer_set_value(field, value);
+		assert(!ret);
+		break;
+
+	case CTF_TYPE_ENUM:
+	{
+		struct bt_ctf_field *int_field;
+
+		int_field = bt_ctf_field_enumeration_get_container(field);
+		assert(int_field);
+		ret = bt_ctf_field_unsigned_integer_set_value(int_field, value);
+		assert(!ret);
+		BT_CTF_PUT(int_field);
+		break;
+	}
+
+	default:
+		status = BT_CTF_BTR_STATUS_ERROR;
+		goto end;
+	}
+
+	stack_top(notit->stack)->index++;
+
+end:
+	BT_CTF_PUT(field);
+
+	return status;
 }
 
 static
 enum bt_ctf_btr_status btr_floating_point_cb(double value,
 	struct bt_ctf_field_type *type, void *data)
 {
-	return BT_CTF_BTR_STATUS_OK;
+	enum bt_ctf_btr_status status = BT_CTF_BTR_STATUS_OK;
+	struct bt_ctf_field *field = NULL;
+	struct bt_ctf_notit *notit = data;
+	int ret;
+
+	/* create next field */
+	field = get_next_field(notit);
+
+	if (!field) {
+		status = BT_CTF_BTR_STATUS_ERROR;
+		goto end;
+	}
+
+	ret = bt_ctf_field_floating_point_set_value(field, value);
+	assert(!ret);
+	stack_top(notit->stack)->index++;
+
+end:
+	BT_CTF_PUT(field);
+
+	return status;
 }
 
 static
 enum bt_ctf_btr_status btr_string_begin_cb(
 	struct bt_ctf_field_type *type, void *data)
 {
-	return BT_CTF_BTR_STATUS_OK;
+	enum bt_ctf_btr_status status = BT_CTF_BTR_STATUS_OK;
+	struct bt_ctf_field *field = NULL;
+	struct bt_ctf_notit *notit = data;
+	int ret;
+
+	/* create next field */
+	field = get_next_field(notit);
+
+	/*
+	 * Push on stack. Not a compound type per se, but we know that only
+	 * btr_string_cb() may be called between this call and a subsequent
+	 * call to btr_string_end_cb().
+	 */
+	ret = stack_push(notit->stack, field);
+
+	if (ret) {
+		status = BT_CTF_BTR_STATUS_ERROR;
+		goto end;
+	}
+
+end:
+	BT_CTF_PUT(field);
+
+	return status;
 }
 
 static
 enum bt_ctf_btr_status btr_string_cb(const char *value,
 	size_t len, struct bt_ctf_field_type *type, void *data)
 {
-	return BT_CTF_BTR_STATUS_OK;
+	enum bt_ctf_btr_status status = BT_CTF_BTR_STATUS_OK;
+	struct bt_ctf_field *field = NULL;
+	struct bt_ctf_notit *notit = data;
+	int ret;
+
+	/* get string field */
+	field = stack_top(notit->stack)->base;
+	assert(field);
+
+	/* append current string */
+	ret = bt_ctf_field_string_append_len(field, value, len);
+
+	if (ret) {
+		status = BT_CTF_BTR_STATUS_ERROR;
+		goto end;
+	}
+
+end:
+	return status;
 }
 
 static
 enum bt_ctf_btr_status btr_string_end_cb(
 	struct bt_ctf_field_type *type, void *data)
 {
+	struct bt_ctf_notit *notit = data;
+
+	/* pop string field */
+	stack_pop(notit->stack);
+
+	/* go to next field */
+	stack_top(notit->stack)->index++;
+
 	return BT_CTF_BTR_STATUS_OK;
 }
 
 enum bt_ctf_btr_status btr_compound_begin_cb(
 	struct bt_ctf_field_type *type, void *data)
 {
-	return BT_CTF_BTR_STATUS_OK;
+	enum bt_ctf_btr_status status = BT_CTF_BTR_STATUS_OK;
+	struct bt_ctf_notit *notit = data;
+	struct bt_ctf_field *field;
+	int ret;
+
+	/* create field */
+	if (stack_empty(notit->stack)) {
+		/* root: create dynamic scope field */
+		*notit->cur_dscope_field = bt_ctf_field_create(type);
+	} else {
+		field = get_next_field(notit);
+	}
+
+	if (!field) {
+		status = BT_CTF_BTR_STATUS_ERROR;
+		goto end;
+	}
+
+	/* push field */
+	ret = stack_push(notit->stack, field);
+
+	if (ret) {
+		status = BT_CTF_BTR_STATUS_ERROR;
+		goto end;
+	}
+
+end:
+	BT_CTF_PUT(field);
+
+	return status;
 }
 
 enum bt_ctf_btr_status btr_compound_end_cb(
 	struct bt_ctf_field_type *type, void *data)
 {
+	struct bt_ctf_notit *notit = data;
+
+	assert(!stack_empty(notit->stack));
+
+	/* pop stack now */
+	stack_pop(notit->stack);
+
 	return BT_CTF_BTR_STATUS_OK;
+}
+
+static
+struct bt_ctf_field *resolve_field(struct bt_ctf_notit *notit,
+	struct bt_ctf_field_path *path)
+{
+	struct bt_ctf_field *field = NULL;
+	unsigned int i;
+
+	switch (path->root) {
+	case CTF_NODE_TRACE_PACKET_HEADER:
+		field = notit->dscopes.trace_packet_header;
+		break;
+
+	case CTF_NODE_STREAM_PACKET_CONTEXT:
+		field = notit->dscopes.stream_packet_context;
+		break;
+
+	case CTF_NODE_STREAM_EVENT_HEADER:
+		field = notit->dscopes.stream_event_header;
+		break;
+
+	case CTF_NODE_STREAM_EVENT_CONTEXT:
+		field = notit->dscopes.stream_event_context;
+		break;
+
+	case CTF_NODE_EVENT_CONTEXT:
+		field = notit->dscopes.event_context;
+		break;
+
+	case CTF_NODE_EVENT_FIELDS:
+		field = notit->dscopes.event_payload;
+		break;
+
+	default:
+		break;
+	}
+
+	if (!field) {
+		goto end;
+	}
+
+	bt_ctf_get(field);
+
+	for (i = 0; i < path->path_indexes->len; ++i) {
+		struct bt_ctf_field *next_field = NULL;
+		struct bt_ctf_field_type *field_type;
+		int index = g_array_index(path->path_indexes, int, i);
+
+		field_type = bt_ctf_field_get_type(field);
+
+		if (!field_type) {
+			BT_CTF_PUT(field);
+			goto end;
+		}
+
+		if (is_struct_type(field_type)) {
+			next_field = bt_ctf_field_structure_get_field_by_index(
+				field, index);
+		} else if (is_variant_type(field_type)) {
+			next_field =
+				bt_ctf_field_variant_get_current_field(field);
+		}
+
+		BT_CTF_PUT(field);
+		BT_CTF_PUT(field_type);
+
+		if (!next_field) {
+			goto end;
+		}
+
+		/* move next field -> field */
+		field = next_field;
+		next_field = NULL;
+	}
+
+end:
+	return field;
 }
 
 static
 int64_t btr_get_sequence_length_cb(struct bt_ctf_field_type *type,
 	void *data)
 {
-	return -1;
+	int64_t ret = -1;
+	int iret;
+	struct bt_ctf_field_path *path;
+	struct bt_ctf_notit *notit = data;
+	struct bt_ctf_field *field = NULL;
+	uint64_t length;
+
+	path = bt_ctf_field_type_sequence_get_length_field_path(type);
+
+	if (!path) {
+		goto end;
+	}
+
+	field = resolve_field(notit, path);
+
+	if (!field) {
+		goto end;
+	}
+
+	iret = bt_ctf_field_unsigned_integer_get_value(field, &length);
+
+	if (iret) {
+		goto end;
+	}
+
+	ret = (int64_t) length;
+
+end:
+	BT_CTF_PUT(field);
+
+	return ret;
 }
 
 static
