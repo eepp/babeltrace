@@ -535,6 +535,8 @@ enum bt_ctf_notit_status set_current_stream_class(struct bt_ctf_notit *notit)
 	}
 
 	assert(is_struct_type(packet_header_type));
+
+	// TODO: optimize
 	stream_id_field_type =
 		bt_ctf_field_type_structure_get_field_type_by_name(
 			packet_header_type, "stream_id");
@@ -545,6 +547,8 @@ enum bt_ctf_notit_status set_current_stream_class(struct bt_ctf_notit *notit)
 		int ret;
 
 		assert(notit->dscopes.trace_packet_header);
+
+		// TODO: optimize
 		stream_id_field = bt_ctf_field_structure_get_field(
 			notit->dscopes.trace_packet_header, "stream_id");
 		assert(stream_id_field);
@@ -637,6 +641,8 @@ enum bt_ctf_notit_status set_current_packet_content_sizes(
 	uint64_t content_size = -1, packet_size = -1;
 
 	assert(notit->dscopes.stream_packet_context);
+
+	// TODO: optimize
 	packet_size_field = bt_ctf_field_structure_get_field(
 		notit->dscopes.stream_packet_context, "packet_size");
 	content_size_field = bt_ctf_field_structure_get_field(
@@ -760,6 +766,8 @@ enum bt_ctf_notit_status set_current_event_class(struct bt_ctf_notit *notit)
 		int ret;
 
 		assert(notit->dscopes.stream_event_header);
+
+		// TODO: optimize
 		id_field = bt_ctf_field_structure_get_field(
 			notit->dscopes.stream_event_header, "id");
 		assert(id_field);
@@ -960,6 +968,7 @@ enum bt_ctf_notit_status handle_state(struct bt_ctf_notit *notit)
 {
 	enum bt_ctf_notit_status status = BT_CTF_NOTIT_STATUS_OK;
 
+	// TODO: optimize
 	switch (notit->state) {
 	case STATE_INIT:
 		notit->state = STATE_DSCOPE_TRACE_PACKET_HEADER_BEGIN;
@@ -1467,7 +1476,49 @@ static
 struct bt_ctf_field_type *btr_get_variant_type_cb(
 	struct bt_ctf_field_type *type, void *data)
 {
-	return NULL;
+	struct bt_ctf_field_path *path;
+	struct bt_ctf_notit *notit = data;
+	struct bt_ctf_field *tag_field = NULL;
+	struct bt_ctf_field *selected_field = NULL;
+	struct bt_ctf_field_type *selected_field_type = NULL;
+
+	path = bt_ctf_field_type_variant_get_tag_field_path(type);
+
+	if (!path) {
+		goto end;
+	}
+
+	tag_field = resolve_field(notit, path);
+
+	if (!tag_field) {
+		goto end;
+	}
+
+	/*
+	 * We found the enumeration tag field instance which should be able
+	 * to select a current field for this variant. This callback
+	 * function we're in is called _after_ compound_begin(), so the
+	 * current stack top's base field is the variant field in
+	 * question. We get the selected field here thanks to this
+	 * tag field (thus creating the selected field), which will also
+	 * provide us with its type. Then, this field will remain the
+	 * current selected one until the next callback function call
+	 * which is used to fill the current selected field.
+	 */
+	selected_field = bt_ctf_field_variant_get_field(
+		stack_top(notit->stack)->base, tag_field);
+
+	if (!selected_field) {
+		goto end;
+	}
+
+	selected_field_type = bt_ctf_field_get_type(selected_field);
+
+end:
+	BT_CTF_PUT(tag_field);
+	BT_CTF_PUT(selected_field);
+
+	return selected_field_type;
 }
 
 struct bt_ctf_notit *bt_ctf_notit_create(struct bt_ctf_trace *trace,
