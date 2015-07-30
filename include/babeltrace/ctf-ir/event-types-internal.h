@@ -71,6 +71,13 @@ struct bt_ctf_field_type {
 	 * a field has been instanciated from it.
 	 */
 	int frozen;
+
+	/*
+	 * This flag indicates if the field type is valid. A valid
+	 * field type is _always_ frozen. All the nested field types of
+	 * a valid field type are also valid (and thus frozen).
+	 */
+	int valid;
 };
 
 struct bt_ctf_field_type_integer {
@@ -168,6 +175,9 @@ BT_HIDDEN
 int bt_ctf_field_type_validate(struct bt_ctf_field_type *type);
 
 BT_HIDDEN
+int bt_ctf_field_type_validate_recursive(struct bt_ctf_field_type *type);
+
+BT_HIDDEN
 const char *bt_ctf_field_type_enumeration_get_mapping_name_unsigned(
 		struct bt_ctf_field_type_enumeration *enumeration_type,
 		uint64_t value);
@@ -237,5 +247,13 @@ BT_HIDDEN
 int bt_ctf_field_type_variant_set_field_index(
 		struct bt_ctf_field_type *variant,
 		struct bt_ctf_field_type *field, int index);
+
+BT_HIDDEN
+int bt_ctf_field_type_array_set_element_type(struct bt_ctf_field_type *array,
+		struct bt_ctf_field_type *element_type);
+
+BT_HIDDEN
+int bt_ctf_field_type_sequence_set_element_type(struct bt_ctf_field_type *array,
+		struct bt_ctf_field_type *element_type);
 
 #endif /* BABELTRACE_CTF_IR_EVENT_TYPES_INTERNAL_H */

@@ -31,6 +31,7 @@
 #include <babeltrace/ctf-ir/visitor-internal.h>
 #include <babeltrace/ctf-ir/event-types-internal.h>
 #include <babeltrace/ctf-ir/event-internal.h>
+#include <babeltrace/ref.h>
 #include <babeltrace/babeltrace-internal.h>
 
 /* TSDL dynamic scope prefixes defined in CTF Section 7.3.2 */
@@ -87,6 +88,8 @@ int get_type_field_count(struct bt_ctf_field_type *type)
 		field_count = bt_ctf_field_type_structure_get_field_count(type);
 	} else if (type_id == CTF_TYPE_VARIANT) {
 		field_count = bt_ctf_field_type_variant_get_field_count(type);
+	} else if (type_id == CTF_TYPE_ARRAY || type_id == CTF_TYPE_SEQUENCE) {
+		field_count = 1;
 	}
 	return field_count;
 }
@@ -103,6 +106,10 @@ struct bt_ctf_field_type *get_type_field(struct bt_ctf_field_type *type, int i)
 	} else if (type_id == CTF_TYPE_VARIANT) {
 		bt_ctf_field_type_variant_get_field(type,
 			NULL, &field, i);
+	} else if (type_id == CTF_TYPE_ARRAY) {
+		field = bt_ctf_field_type_array_get_element_type(type);
+	} else if (type_id == CTF_TYPE_SEQUENCE) {
+		field = bt_ctf_field_type_sequence_get_element_type(type);
 	}
 
 	return field;
@@ -121,6 +128,10 @@ int set_type_field(struct bt_ctf_field_type *type,
 	} else if (type_id == CTF_TYPE_VARIANT) {
 		ret = bt_ctf_field_type_variant_set_field_index(
 			type, field, i);
+	} else if (type_id == CTF_TYPE_ARRAY) {
+		ret = bt_ctf_field_type_array_set_element_type(type, field);
+	} else if (type_id == CTF_TYPE_SEQUENCE) {
+		ret = bt_ctf_field_type_sequence_set_element_type(type, field);
 	}
 
 	return ret;
@@ -167,6 +178,7 @@ int ctf_type_stack_push(ctf_type_stack *stack,
 		goto end;
 	}
 
+	bt_get(entry->type);
 	g_ptr_array_add(stack, entry);
 end:
 	return ret;
@@ -193,6 +205,7 @@ struct ctf_type_stack_frame *ctf_type_stack_pop(ctf_type_stack *stack)
 
 	entry = ctf_type_stack_peek(stack);
 	if (entry) {
+		bt_put(entry->type);
 		g_ptr_array_set_size(stack, stack->len - 1);
 	}
 	return entry;
@@ -205,6 +218,7 @@ int field_type_visit(struct bt_ctf_field_type *type,
 {
 	int ret;
 	enum ctf_type_id type_id;
+	struct bt_ctf_field_type *top_type = NULL;
 	struct ctf_type_stack_frame *frame = NULL;
 
 	ret = func(type, context);
@@ -212,22 +226,30 @@ int field_type_visit(struct bt_ctf_field_type *type,
 		goto end;
 	}
 
-	type_id = bt_ctf_field_type_get_type_id(type);
-	if (type_id == CTF_TYPE_SEQUENCE || type_id == CTF_TYPE_ARRAY) {
-		struct bt_ctf_field_type *element =
-			type_id == CTF_TYPE_SEQUENCE ?
-			bt_ctf_field_type_sequence_get_element_type(type) :
-			bt_ctf_field_type_array_get_element_type(type);
+	/*
+	 * Original type could have been copied and replaced by func(),
+	 * so get it again from the stack's top frame.
+	 */
+	frame = ctf_type_stack_peek(context->stack);
 
-		ret = field_type_recursive_visit(element, context, func);
-		bt_ctf_field_type_put(element);
-		if (ret) {
+	if (frame) {
+		top_type = get_type_field(frame->type, frame->index);
+
+		if (!top_type) {
+			ret = -1;
 			goto end;
 		}
+
+		type = top_type;
+		frame = NULL;
 	}
 
+	type_id = bt_ctf_field_type_get_type_id(type);
+
 	if (type_id != CTF_TYPE_STRUCT &&
-		type_id != CTF_TYPE_VARIANT) {
+		type_id != CTF_TYPE_VARIANT &&
+		type_id != CTF_TYPE_ARRAY &&
+		type_id != CTF_TYPE_SEQUENCE) {
 		/* No need to create a new stack frame */
 		goto end;
 	}
@@ -245,6 +267,8 @@ int field_type_visit(struct bt_ctf_field_type *type,
 		goto end;
 	}
 end:
+	BT_PUT(top_type);
+
 	return ret;
 }
 
@@ -254,16 +278,11 @@ int field_type_recursive_visit(struct bt_ctf_field_type *type,
 		ctf_type_visitor_func func)
 {
 	int ret = 0;
-	struct ctf_type_stack_frame *stack_marker = NULL;
+	struct bt_ctf_field_type *top_type = NULL;
 
 	ret = field_type_visit(type, context, func);
-	if (ret) {
-		goto end;
-	}
 
-	stack_marker = ctf_type_stack_peek(context->stack);
-	if (!stack_marker || stack_marker->type != type) {
-		/* No need for a recursive visit */
+	if (ret) {
 		goto end;
 	}
 
@@ -291,7 +310,7 @@ int field_type_recursive_visit(struct bt_ctf_field_type *type,
 				g_free(entry);
 			}
 
-			if (entry == stack_marker) {
+			if (context->stack->len == 0) {
 				/* Completed visit */
 				break;
 			} else {
@@ -300,7 +319,10 @@ int field_type_recursive_visit(struct bt_ctf_field_type *type,
 		}
 
 		field = get_type_field(entry->type, entry->index);
-		/* Will push a new stack frame if field is struct or variant */
+		/*
+		 * Will push a new stack frame if field is a struct,
+		 * variant, array, or sequence.
+		 */
 		ret = field_type_visit(field, context, func);
 		bt_ctf_field_type_put(field);
 		if (ret) {
@@ -310,6 +332,8 @@ int field_type_recursive_visit(struct bt_ctf_field_type *type,
 		entry->index++;
 	}
 end:
+	BT_PUT(top_type);
+
 	return ret;
 }
 
@@ -372,7 +396,7 @@ int bt_ctf_stream_class_visit(struct bt_ctf_stream_class *stream_class,
 		struct bt_ctf_trace *trace,
 		ctf_type_visitor_func func)
 {
-	int i, ret = 0, event_count;
+	int ret = 0;
 	struct bt_ctf_field_type *type;
 	struct ctf_type_visitor_context context = { 0 };
 
@@ -425,23 +449,6 @@ int bt_ctf_stream_class_visit(struct bt_ctf_stream_class *stream_class,
 		}
 	}
 
-	/* Visit event classes */
-	event_count = bt_ctf_stream_class_get_event_class_count(stream_class);
-	if (event_count < 0) {
-		ret = event_count;
-		goto end;
-	}
-	for (i = 0; i < event_count; i++) {
-		struct bt_ctf_event_class *event_class =
-			bt_ctf_stream_class_get_event_class(stream_class, i);
-
-		ret = bt_ctf_event_class_visit(event_class, trace,
-			stream_class, func);
-		bt_ctf_event_class_put(event_class);
-		if (ret) {
-			goto end;
-		}
-	}
 end:
 	if (context.stack) {
 		ctf_type_stack_destroy(context.stack);
@@ -470,8 +477,15 @@ int set_field_path_relative(struct ctf_type_visitor_context *context,
 	bt_ctf_field_type_get(field);
 	for (i = 0; i < token_count; i++) {
 		struct bt_ctf_field_type *next_field = NULL;
-		int field_index = get_type_field_index(field,
-			(*path_tokens)->data);
+		enum ctf_type_id type_id = bt_ctf_field_type_get_type_id(field);
+		int field_index;
+
+		/* Skip arrays and sequences */
+		if (type_id == CTF_TYPE_ARRAY || type_id == CTF_TYPE_SEQUENCE) {
+			continue;
+		}
+
+		field_index = get_type_field_index(field, (*path_tokens)->data);
 
 		if (field_index < 0) {
 			/* Field name not found, abort */
@@ -524,6 +538,13 @@ int set_field_path_relative(struct ctf_type_visitor_context *context,
 		int index;
 		struct ctf_type_stack_frame *frame =
 			g_ptr_array_index(context->stack, i);
+		enum ctf_type_id type_id =
+			bt_ctf_field_type_get_type_id(frame->type);
+
+		/* Skip arrays and sequences */
+		if (type_id == CTF_TYPE_ARRAY || type_id == CTF_TYPE_SEQUENCE) {
+			continue;
+		}
 
 		/* Decrement "index" since it points to the next field */
 		index = frame->index - 1;
@@ -565,25 +586,55 @@ int set_field_path_absolute(struct ctf_type_visitor_context *context,
 	/* Set the appropriate root field */
 	switch (field_path->root) {
 	case CTF_NODE_TRACE_PACKET_HEADER:
+		if (!context->trace) {
+			ret = -1;
+			goto end;
+		}
+
 		field = bt_ctf_trace_get_packet_header_type(context->trace);
 		break;
 	case CTF_NODE_STREAM_PACKET_CONTEXT:
+		if (!context->stream_class) {
+			ret = -1;
+			goto end;
+		}
+
 		field = bt_ctf_stream_class_get_packet_context_type(
 			context->stream_class);
 		break;
 	case CTF_NODE_STREAM_EVENT_HEADER:
+		if (!context->stream_class) {
+			ret = -1;
+			goto end;
+		}
+
 		field = bt_ctf_stream_class_get_event_header_type(
 			context->stream_class);
 		break;
 	case CTF_NODE_STREAM_EVENT_CONTEXT:
+		if (!context->stream_class) {
+			ret = -1;
+			goto end;
+		}
+
 		field = bt_ctf_stream_class_get_event_context_type(
 			context->stream_class);
 		break;
 	case CTF_NODE_EVENT_CONTEXT:
+		if (!context->event_class) {
+			ret = -1;
+			goto end;
+		}
+
 		field = bt_ctf_event_class_get_context_type(
 			context->event_class);
 		break;
 	case CTF_NODE_EVENT_FIELDS:
+		if (!context->event_class) {
+			ret = -1;
+			goto end;
+		}
+
 		field = bt_ctf_event_class_get_payload_type(
 			context->event_class);
 		break;
@@ -598,9 +649,17 @@ int set_field_path_absolute(struct ctf_type_visitor_context *context,
 	}
 
 	for (i = 0; i < token_count; i++) {
-		int field_index = get_type_field_index(field,
-			(*path_tokens)->data);
+		int field_index;
 		struct bt_ctf_field_type *next_field = NULL;
+		enum ctf_type_id type_id =
+			bt_ctf_field_type_get_type_id(field);
+
+		/* Skip arrays and sequences */
+		if (type_id == CTF_TYPE_ARRAY || type_id == CTF_TYPE_SEQUENCE) {
+			continue;
+		}
+
+		field_index = get_type_field_index(field, (*path_tokens)->data);
 
 		if (field_index < 0) {
 			/* Field name not found, abort */
@@ -859,7 +918,7 @@ BT_HIDDEN
 int bt_ctf_trace_visit(struct bt_ctf_trace *trace,
 		ctf_type_visitor_func func)
 {
-	int i, stream_count, ret = 0;
+	int ret = 0;
 	struct bt_ctf_field_type *type = NULL;
 	struct ctf_type_visitor_context visitor_ctx = { 0 };
 
@@ -888,19 +947,6 @@ int bt_ctf_trace_visit(struct bt_ctf_trace *trace,
 		}
 	}
 
-	stream_count = bt_ctf_trace_get_stream_class_count(trace);
-	for (i = 0; i < stream_count; i++) {
-		struct bt_ctf_stream_class *stream_class =
-			bt_ctf_trace_get_stream_class(trace, i);
-
-		/* Visit streams */
-		ret = bt_ctf_stream_class_visit(stream_class, trace,
-			func);
-		bt_ctf_stream_class_put(stream_class);
-		if (ret) {
-			goto end;
-		}
-	}
 end:
 	if (visitor_ctx.stack) {
 		ctf_type_stack_destroy(visitor_ctx.stack);
