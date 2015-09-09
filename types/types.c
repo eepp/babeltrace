@@ -279,6 +279,16 @@ int bt_register_field_definition(GQuark field_name, struct bt_definition *defini
 	return 0;
 }
 
+void bt_unregister_field_definition(GQuark field_name,
+		struct definition_scope *scope)
+{
+	if (!scope || !field_name)
+		return -EPERM;
+
+	g_hash_table_remove(scope->definitions,
+			    (gpointer) (unsigned long) field_name);
+}
+
 void bt_declaration_ref(struct bt_declaration *declaration)
 {
 	declaration->ref++;

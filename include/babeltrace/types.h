@@ -355,6 +355,8 @@ struct bt_definition *
 int bt_register_field_definition(GQuark field_name,
 			      struct bt_definition *definition,
 			      struct definition_scope *scope);
+void bt_unregister_field_definition(GQuark field_name,
+			      struct definition_scope *scope);
 struct definition_scope *
 	bt_new_definition_scope(struct definition_scope *parent_scope,
 			     GQuark field_name, const char *root_name);
