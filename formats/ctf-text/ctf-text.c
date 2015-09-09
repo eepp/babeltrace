@@ -27,6 +27,7 @@
  */
 
 #include <babeltrace/format.h>
+#include <babeltrace/types.h>
 #include <babeltrace/ctf-text/types.h>
 #include <babeltrace/ctf/metadata.h>
 #include <babeltrace/babeltrace-internal.h>
@@ -236,8 +237,160 @@ const char *print_loglevel(int value)
 }
 
 static
+struct definition_integer *int_def_from_struct_def(
+		struct definition_struct *sec_def, const char *name)
+{
+	unsigned int i;
+	struct definition_integer *int_def = NULL;
+
+	for (i = 0; i < sec_def->fields->len; ++i) {
+		struct bt_definition* field_def;
+		const char *field_name;
+		enum ctf_type_id type_id;
+
+		field_def = g_ptr_array_index(sec_def->fields, i);
+
+		if (!field_def->name) {
+			continue;
+		}
+
+		field_name = g_quark_to_string(field_def->name);
+
+		if (strcmp(field_name, name) == 0) {
+			type_id = field_def->declaration->id;
+
+			if (type_id != CTF_TYPE_INTEGER) {
+				goto end;
+			}
+
+			int_def = (struct definition_integer *) field_def;
+			goto end;
+		}
+	}
+
+end:
+	return int_def;
+}
+
+static
+int insert_debug_info_into_sec_def(struct definition_struct *sec_def,
+		struct definition_integer *ip_def,
+		struct definition_integer *vpid_def)
+{
+	int ret = 0;
+	struct bt_declaration *str_decl = NULL;
+	struct bt_definition *filename_def = NULL, *sourceloc_def = NULL;
+	struct definition_string *filename_str_def;
+	struct definition_string *sourceloc_str_def;
+	GQuark qfilename = g_quark_from_static_string("_filename");
+	GQuark qsourceloc = g_quark_from_static_string("_source_loc");
+
+	/* Create needed string declaration */
+	str_decl = (struct bt_declaration *)
+		bt_string_declaration_new(CTF_STRING_UTF8);
+
+	if (!str_decl) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	/* Create both string definitions (filename, source location) */
+	filename_def = str_decl->definition_new(
+		str_decl, sec_def->p.scope, qfilename,
+		sec_def->fields->len, NULL);
+
+	if (!filename_def) {
+		ret = -1;
+		goto end;
+	}
+
+	sourceloc_def = str_decl->definition_new(
+		str_decl, sec_def->p.scope, qsourceloc,
+		sec_def->fields->len + 1, NULL);
+
+	if (!sourceloc_def) {
+		ret = -1;
+		goto end;
+	}
+
+	/*
+	 * Immediately unregister those two fields from their
+	 * parent scope. This is done here because it's not done on
+	 * definition free. This registration is not needed for the
+	 * sake of CTF text. This structure is not considered safe
+	 * outside CTF text.
+	 */
+	bt_unregister_field_definition(qfilename, sec_def->p.scope);
+	bt_unregister_field_definition(qsourceloc, sec_def->p.scope);
+
+	filename_str_def = (struct definition_string *) filename_def;
+	sourceloc_str_def = (struct definition_string *) sourceloc_def;
+	filename_str_def->value = strdup("myfile.c");
+	sourceloc_str_def->value = strdup("function+offset");
+
+	if (!filename_str_def->value || !sourceloc_str_def->value) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	/*
+	 * Append both new definitions to stream event context
+	 * definition. The new definitions MUST be removed before
+	 * handling the next event, as this is not a safe state for
+	 * everything outside CTF text.
+	 */
+	g_ptr_array_add(sec_def->fields, filename_def);
+	g_ptr_array_add(sec_def->fields, sourceloc_def);
+
+	/*
+	 * Lose initial reference to string declaration. Its reference
+	 * count should now be 2, and it will be freed when both
+	 * definitions using it are freed.
+	 */
+	bt_declaration_unref(str_decl);
+
+end:
+	if (ret) {
+		if (filename_def) {
+			bt_definition_unref(filename_def);
+		}
+
+		if (sourceloc_def) {
+			bt_definition_unref(filename_def);
+		}
+
+		if (str_decl) {
+			bt_declaration_unref(str_decl);
+		}
+	}
+
+	return ret;
+}
+
+static
+void release_debug_info_from_sec_def(struct definition_struct *sec_def)
+{
+	struct bt_definition *filename_def = NULL, *sourceloc_def = NULL;
+
+	/* Get both definitions */
+	filename_def = g_ptr_array_index(sec_def->fields,
+		sec_def->fields->len - 2);
+	sourceloc_def = g_ptr_array_index(sec_def->fields,
+		sec_def->fields->len - 1);
+
+	/* Unreference both definitions */
+	bt_definition_unref(filename_def);
+	bt_definition_unref(sourceloc_def);
+
+	/*
+	 * Remove custom definitions from stream event context.
+	 */
+	g_ptr_array_set_size(sec_def->fields, sec_def->fields->len - 2);
+}
+
+static
 int ctf_text_write_event(struct bt_stream_pos *ppos, struct ctf_stream_definition *stream)
-			 
+
 {
 	struct ctf_text_stream_pos *pos =
 		container_of(ppos, struct ctf_text_stream_pos, parent);
@@ -479,6 +632,9 @@ int ctf_text_write_event(struct bt_stream_pos *ppos, struct ctf_stream_definitio
 
 	/* print stream-declared event context */
 	if (stream->stream_event_context) {
+		struct definition_integer *ip_def, *vpid_def;
+		int debug_info_insert_ret = -1;
+
 		if (pos->field_nr++ != 0)
 			fprintf(pos->fp, ",");
 		set_field_names_print(pos, ITEM_SCOPE);
@@ -486,8 +642,39 @@ int ctf_text_write_event(struct bt_stream_pos *ppos, struct ctf_stream_definitio
 			fprintf(pos->fp, " stream.event.context =");
 		field_nr_saved = pos->field_nr;
 		pos->field_nr = 0;
+
+		/* Find "ip" and "vpid" fields */
+		ip_def = int_def_from_struct_def(stream->stream_event_context,
+			"_ip");
+		vpid_def = int_def_from_struct_def(stream->stream_event_context,
+			"_vpid");
+
+		/*
+		 * If we have both "ip" and "vpid" fields, we may proceed
+		 * on to get the string (filename + source location) which
+		 * must be inserted as fields into the stream event context
+		 * structure.
+		 */
+		if (ip_def && vpid_def) {
+			debug_info_insert_ret =
+				insert_debug_info_into_sec_def(
+					stream->stream_event_context,
+					ip_def, vpid_def);
+		}
+
 		set_field_names_print(pos, ITEM_CONTEXT);
 		ret = generic_rw(ppos, &stream->stream_event_context->p);
+
+		/*
+		 * Release created debug info fields here, if any.
+		 * Note that if debug_info_insert_ret is not 0, the
+		 * fields were not added in the first place.
+		 */
+		if (!debug_info_insert_ret) {
+			release_debug_info_from_sec_def(
+				stream->stream_event_context);
+		}
+
 		if (ret)
 			goto error;
 		pos->field_nr = field_nr_saved;
