@@ -408,6 +408,10 @@ struct debug_info *get_debug_infos_from_process_debug_infos(
 		}
 
 		di = debug_info_new(so, ip);
+		if (di) {
+			g_hash_table_insert(pdi->ip_to_debug_info,
+					(gpointer) key, di);
+		}
 		break;
 	}
 
