@@ -117,6 +117,25 @@ BT_HIDDEN
 int so_info_set_debug_link(struct so_info *so, char *filename, uint32_t crc);
 
 /**
+ * Returns whether or not the given SO info \p so contains the address
+ * \p addr.
+ *
+ * @param so		so_info instance
+ * @param addr		Address to lookup
+ * @returns		1 if \p so contains \p addr, 0 if it does not,
+ *			-1 on failure
+ */
+static inline
+int so_info_has_address(struct so_info *so, uint64_t addr)
+{
+	if (!so) {
+		return -1;
+	}
+
+	return addr >= so->low_addr && addr <= so->high_addr;
+}
+
+/**
  * Get the name of the function containing a given address within an
  * executable.
  *
