@@ -519,17 +519,7 @@ void source_location_destroy(struct source_location *src_loc)
 		return;
 	}
 
-	/*
-	 * The filename field, whose value is obtained from
-	 * dwarf_linesrc() is managed by libdwarf and will be freed
-	 * upon dwarf_finish() rather than manually.
-	 */
-
-	/*
-	 * TODO: verify that this claim actually matches the current
-	 * libdwarf implementation
-	 */
-
+	free(src_loc->filename);
 	g_free(src_loc);
 }
 
@@ -818,7 +808,11 @@ int so_info_lookup_dwarf_function_name(struct so_info *so, uint64_t addr,
 	}
 
 	if (_found) {
-		*func_name = _func_name;
+		/*
+		 * strdup here because libdwarf keeps the ownership of
+		 * _func_name.
+		 */
+		*func_name = strdup(_func_name);
 	}
 	*found = _found;
 	durin_cu_destroy(cu);
@@ -903,6 +897,7 @@ int so_info_lookup_cu_source_location(struct durin_cu *cu, uint64_t addr,
 				struct source_location **src_loc, int *found)
 {
 	int ret = 0, _found = 0;
+	char *_filename = NULL;
 	struct durin_die *die = NULL;
 	struct source_location *_src_loc = NULL;
 	Dwarf_Line *line_buf = NULL;
@@ -952,11 +947,15 @@ int so_info_lookup_cu_source_location(struct durin_cu *cu, uint64_t addr,
 			if (!_src_loc) {
 				goto error;
 			}
-			ret = dwarf_linesrc(prev_line, &_src_loc->filename,
-					NULL);
+			ret = dwarf_linesrc(prev_line, &_filename, NULL);
 			if (ret != DW_DLV_OK) {
 				goto error;
 			}
+			/*
+			 * strdup here because libdwarf keeps the ownership of
+			 * _filename.
+			 */
+			_src_loc->filename = strdup(_filename);
 			ret = dwarf_lineno(prev_line, &_src_loc->line_no, NULL);
 			if (ret != DW_DLV_OK) {
 				goto error;
@@ -987,7 +986,7 @@ int so_info_lookup_source_location(struct so_info *so, uint64_t addr,
 				struct source_location **src_loc, int *found)
 {
 	int _found = 0;
-	struct durin_cu *cu;
+	struct durin_cu *cu = NULL;
 	struct source_location *_src_loc = NULL;
 
 	if (!so || !src_loc || !found) {
