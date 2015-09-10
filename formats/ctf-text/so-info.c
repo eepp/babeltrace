@@ -28,12 +28,14 @@
 
 #include <fcntl.h>
 #include <math.h>
+#include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <libdwarf/dwarf.h>
 #include <glib.h>
+#include <libdwarf/dwarf.h>
+#include <babeltrace/ctf-text/crc32.h>
 #include <babeltrace/ctf-text/durin.h>
 #include <babeltrace/ctf-text/so-info.h>
 
@@ -72,27 +74,37 @@ struct so_info *so_info_create(const char *path, uint64_t low_addr,
 		goto error;
 	}
 
-	so->path = path;
+	so->elf_path = strdup(path);
+	if (!so->elf_path) {
+		goto error;
+	}
+
 	/*
 	 * Only set dwarf_info the first time it is read, to avoid
 	 * reading it uselessly.
 	 */
 	so->dwarf_info = NULL;
+	so->dwarf_path = NULL;
+	so->build_id = NULL;
+	so->build_id_len = 0;
+	so->dbg_link_filename = NULL;
+	so->dbg_link_crc = 0;
 	so->is_elf_only = 0;
-	so->fd = open(path, O_RDONLY);
-	if (so->fd < 0) {
+
+	so->elf_fd = open(path, O_RDONLY);
+	if (so->elf_fd < 0) {
 		fprintf(stderr, "Failed to open %s\n", path);
 		goto error;
 	}
 
-	so->elf_file = elf_begin(so->fd, ELF_C_READ, NULL);
+	so->elf_file = elf_begin(so->elf_fd, ELF_C_READ, NULL);
 	if (!so->elf_file) {
 		fprintf(stderr, "elf_begin failed: %s\n", elf_errmsg(-1));
 		goto error;
 	}
 
 	if (elf_kind(so->elf_file) != ELF_K_ELF) {
-		fprintf(stderr, "Error: %s is not an ELF object\n", so->path);
+		fprintf(stderr, "Error: %s is not an ELF object\n", so->elf_path);
 		goto error;
 	}
 
@@ -102,7 +114,7 @@ struct so_info *so_info_create(const char *path, uint64_t low_addr,
 	}
 
 	if (!gelf_getehdr(so->elf_file, ehdr)) {
-		fprintf(stderr, "Error: couldn't get ehdr for %s\n", so->path);
+		fprintf(stderr, "Error: couldn't get ehdr for %s\n", so->elf_path);
 		goto error;
 	}
 
@@ -118,11 +130,7 @@ struct so_info *so_info_create(const char *path, uint64_t low_addr,
 
 error:
 	g_free(ehdr);
-	if (so) {
-		elf_end(so->elf_file);
-		close(so->fd);
-		g_free(so);
-	}
+	so_info_destroy(so);
 
 	return NULL;
 }
@@ -137,10 +145,14 @@ void so_info_destroy(struct so_info *so)
 		dwarf_finish(*so->dwarf_info, NULL);
 		g_free(so->dwarf_info);
 	}
-	g_free(so->build_id);
-	g_free(so->dbg_link_filename);
+
+	free(so->elf_path);
+	free(so->dwarf_path);
+	free(so->build_id);
+	free(so->dbg_link_filename);
 	elf_end(so->elf_file);
-	close(so->fd);
+	close(so->elf_fd);
+	close(so->dwarf_fd);
 	g_free(so);
 }
 
@@ -151,9 +163,18 @@ int so_info_set_build_id(struct so_info *so, uint8_t *build_id,
 		goto error;
 	}
 
-	/* memcpy? */
-	so->build_id = build_id;
+	so->build_id = malloc(build_id_len);
+	if (!so->build_id) {
+		goto error;
+	}
+	memcpy(so->build_id, build_id, build_id_len);
 	so->build_id_len = build_id_len;
+	/*
+	 * Reset the is_elf_only flag in case it had been set
+	 * previously, because we might find separate debug info using
+	 * the new build id information.
+	 */
+	so->is_elf_only = 0;
 
 	return 0;
 
@@ -168,13 +189,274 @@ int so_info_set_debug_link(struct so_info *so, char *filename, uint32_t crc)
 		goto error;
 	}
 
-	/* strdup? */
-	so->dbg_link_filename = filename;
+	so->dbg_link_filename = strdup(filename);
+	if (!so->dbg_link_filename) {
+		goto error;
+	}
 	so->dbg_link_crc = crc;
+	/*
+	 * Reset the is_elf_only flag in case it had been set
+	 * previously, because we might find separate debug info using
+	 * the new build id information.
+	 */
+	so->is_elf_only = 0;
 
 	return 0;
 
 error:
+
+	return -1;
+}
+
+static
+int so_info_set_dwarf_info_from_path(struct so_info *so, char *path)
+{
+	int fd = -1;
+	int ret = 0;
+	Dwarf_Debug *dwarf_info = NULL;
+
+	if (!so || !path) {
+		goto error;
+	}
+
+	dwarf_info = g_new0(Dwarf_Debug, 1);
+	if (!dwarf_info) {
+		goto error;
+	}
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		goto error;
+	}
+
+	ret = dwarf_init(fd, DW_DLC_READ, NULL, NULL, dwarf_info, NULL);
+	if (ret != DW_DLV_OK) {
+		goto error;
+	}
+
+	/*
+	 * Check if the dwarf info has any CU. If not, the SO's object
+	 * file contains no DWARF info.
+	 */
+	if (!durin_cu_create(dwarf_info)) {
+		goto error;
+	}
+
+	so->dwarf_fd = fd;
+	so->dwarf_path = strdup(path);
+	if (!so->dwarf_path) {
+		goto error;
+	}
+	so->dwarf_info = dwarf_info;
+
+	return 0;
+
+error:
+	close(fd);
+	if (dwarf_info) {
+		dwarf_finish(*dwarf_info, NULL);
+		g_free(dwarf_info);
+	}
+
+	return -1;
+}
+
+
+static
+int so_info_set_dwarf_info_build_id(struct so_info *so, char *debug_dir,
+				int *found)
+{
+	int i = 0, ret = 0;
+	char *path = NULL;
+	char *build_id_file = NULL;
+	size_t build_id_file_len;
+	size_t path_len;
+	int debug_dir_trailing_slash = 0;
+
+	if (!so || !found || !so->build_id) {
+		goto error;
+	}
+
+	if (!debug_dir) {
+		/*
+		 * Use current dir if no global debug directory has
+		 * been specified. This matches GDB's behaviour.
+		 */
+		debug_dir = ".";
+	}
+
+	debug_dir_trailing_slash = debug_dir[strlen(debug_dir) - 1] == '/';
+
+	/* +2, 1 for '/' and 1 for '\0' */
+	build_id_file_len = so->build_id_len + 2;
+	build_id_file = malloc(build_id_file_len);
+	if (!build_id_file) {
+		goto error;
+	}
+	snprintf(build_id_file, 4, "%02x%02x/", so->build_id[0], so->build_id[1]);
+	for (i = 2; i < so->build_id_len; ++i) {
+		snprintf(&build_id_file[i], 2, "%02x", so->build_id[i]);
+	}
+
+	path_len = strlen(debug_dir) + strlen(BUILD_ID_SUBDIR) +
+		strlen(build_id_file) + strlen(BUILD_ID_SUFFIX) + 1;
+	if (!debug_dir_trailing_slash) {
+		path_len += 1;
+	}
+
+	path = malloc(path_len);
+	if (!path) {
+		goto error;
+	}
+
+	strcpy(path, debug_dir);
+	if (!debug_dir_trailing_slash) {
+		strcat(path, "/");
+	}
+	strcat(path, BUILD_ID_SUBDIR);
+	strcat(path, build_id_file);
+	strcat(path, BUILD_ID_SUFFIX);
+
+	ret = so_info_set_dwarf_info_from_path(so, path);
+	if (ret) {
+		goto error;
+	}
+
+	*found = 1;
+	free(build_id_file);
+	free(path);
+
+	return 0;
+
+error:
+	free(build_id_file);
+	free(path);
+
+	return -1;
+}
+
+/**
+ * Tests whether the file located at path exists and has the expected
+ * checksum.
+ *
+ * This predicate is used when looking up separate debug info via the
+ * GNU debuglink method. The expected crc can be found .gnu_debuglink
+ * section in the original ELF file, along with the filename for the
+ * file containing the debug info.
+ *
+ * @param path	Full path at which to look for the debug file
+ * @param crc	Expected checksum for the debug file
+ * @returns	1 if the file exists and has the correct checksum,
+ *		0 otherwise
+ */
+static
+int is_valid_debug_file(char *path, uint32_t crc)
+{
+	int ret = 0, fd = -1;
+	uint32_t _crc = 0;
+
+	if (!path) {
+		goto end;
+	}
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		goto end;
+	}
+
+	ret = crc32(fd, &_crc);
+	if (ret) {
+		ret = 0;
+		goto end;
+	}
+
+	ret = crc == _crc;
+
+end:
+	close(fd);
+	return ret;
+}
+
+static
+int so_info_set_dwarf_info_debug_link(struct so_info *so, char *debug_dir,
+				int *found)
+{
+	int ret = 0, _found = 0;
+	char *so_dir = NULL;
+	char *path = NULL;
+	size_t max_path_len = 0;
+
+	if (!so || !found) {
+		goto error;
+	}
+
+	if (!so->dbg_link_filename) {
+		goto error;
+	}
+
+	if (!debug_dir) {
+		/*
+		 * Use current dir if no global debug directory has
+		 * been specified. This matches GDB's behaviour.
+		 */
+		debug_dir = ".";
+	}
+
+	so_dir = dirname(so->elf_path);
+	if (!so_dir) {
+		goto error;
+	}
+
+	max_path_len = strlen(debug_dir) + strlen(so_dir) +
+		strlen(DEBUG_SUBDIR) + strlen(so->dbg_link_filename) + 1;
+	path = malloc(max_path_len);
+	if (!path) {
+		goto error;
+	}
+
+	/* First look in the SO's dir */
+	strcpy(path, so_dir);
+	strcat(path, so->dbg_link_filename);
+
+	_found = is_valid_debug_file(path, so->dbg_link_crc);
+	if (_found) {
+		goto end;
+	}
+
+	/* If not found, look in .debug subdir */
+	strcpy(path, so_dir);
+	strcat(path, DEBUG_SUBDIR);
+	strcat(path, so->dbg_link_filename);
+
+	_found = is_valid_debug_file(path, so->dbg_link_crc);
+	if (_found) {
+		goto end;
+	}
+
+	/* Lastly, look under the global debug directory */
+	strcpy(path, debug_dir);
+	strcat(path, so_dir);
+	strcat(path, so->dbg_link_filename);
+
+	_found = is_valid_debug_file(path, so->dbg_link_crc);
+	if (_found) {
+		goto end;
+	}
+
+end:
+	if (_found) {
+		ret = so_info_set_dwarf_info_from_path(so, path);
+		if (ret) {
+			goto error;
+		}
+	}
+	*found = _found;
+	free(path);
+
+	return 0;
+
+error:
+	free(path);
 
 	return -1;
 }
@@ -188,49 +470,42 @@ error:
 static
 int so_info_set_dwarf_info(struct so_info *so)
 {
-	int ret = 0;
-	Dwarf_Debug *dwarf_info = NULL;
-	Dwarf_Error error;
+	int ret = 0, found = 0;
 
 	if (!so) {
 		goto error;
 	}
 
-	dwarf_info = g_new0(Dwarf_Debug, 1);
-	if (!dwarf_info) {
-		goto error;
-	}
-
-	ret = dwarf_init(so->fd, DW_DLC_READ, NULL, NULL, dwarf_info,
-			 &error);
-	if (ret != DW_DLV_OK) {
-		fprintf(stderr, "Failed to initialize DWARF info for %s\n",
-			so->path);
-		goto error;
+	/* First try to set the DWARF info from the ELF file */
+	ret = so_info_set_dwarf_info_from_path(so, so->elf_path);
+	if (!ret) {
+		goto end;
 	}
 
 	/*
-	 * Check if the dwarf info has any CU. If not, the SO's object
-	 * file contains no DWARF info.
+	 * If that fails, try to find separate debug info via build ID
+	 * and debug link.
 	 */
-	if (!durin_cu_create(dwarf_info)) {
-		/*
-		 * TODO: try to find separate debug info using
-		 * build-id and debuglink methods before failing.
-		 */
+	ret = so_info_set_dwarf_info_build_id(so, DEFAULT_DEBUG_DIR, &found);
+	if (ret) {
 		goto error;
 	}
+	if (found) {
+		goto end;
+	}
 
-	so->dwarf_info = dwarf_info;
+	ret = so_info_set_dwarf_info_debug_link(so, DEFAULT_DEBUG_DIR, &found);
+	if (ret) {
+		goto error;
+	}
+	if (found) {
+		goto end;
+	}
 
+end:
 	return 0;
 
 error:
-	if (dwarf_info) {
-		dwarf_finish(*dwarf_info, NULL);
-		g_free(dwarf_info);
-	}
-
 	return -1;
 }
 

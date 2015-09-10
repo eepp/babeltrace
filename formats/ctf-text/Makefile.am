@@ -6,6 +6,7 @@ lib_LTLIBRARIES = libbabeltrace-ctf-text.la
 
 libbabeltrace_ctf_text_la_SOURCES = \
 	ctf-text.c \
+	crc32.c \
 	durin.c \
 	so-info.c
 

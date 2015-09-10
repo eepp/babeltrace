@@ -51,6 +51,7 @@ noinst_HEADERS = \
 	babeltrace/ctf/events-internal.h \
 	babeltrace/ctf/metadata.h \
 	babeltrace/ctf-text/types.h \
+	babeltrace/ctf-text/crc32.h \
 	babeltrace/ctf-text/durin.h \
 	babeltrace/ctf-text/so-info.h \
 	babeltrace/ctf/types.h \
