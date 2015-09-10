@@ -61,6 +61,15 @@ struct source_location {
 };
 
 /**
+ * Initializes the so_info framekwork. Call this before calling
+ * anything else.
+ *
+ * @returns		0 on success, -1 on failure
+ */
+BT_HIDDEN
+int so_info_init(void);
+
+/**
  * Instantiate a structure representing an ELF executable, possibly
  * with DWARF info, located at the given path.
  *

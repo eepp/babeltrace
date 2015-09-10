@@ -44,6 +44,19 @@
  */
 #define ADDR_STR_LEN 20
 
+int so_info_init(void)
+{
+	int ret = 0;
+
+	if (elf_version(EV_CURRENT) == EV_NONE) {
+		fprintf(stderr, "ELF library initialization failed: %s\n",
+			elf_errmsg(-1));
+		ret = -1;
+	}
+
+	return ret;
+}
+
 struct so_info *so_info_create(const char *path, uint64_t low_addr,
 			uint64_t memsz)
 {
