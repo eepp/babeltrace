@@ -645,8 +645,16 @@ int insert_debug_info_into_sec_def(struct ctf_text_stream_pos *pos,
 	 * sake of CTF text. This structure is not considered safe
 	 * outside CTF text.
 	 */
-	bt_unregister_field_definition(qfilename, sec_def->p.scope);
-	bt_unregister_field_definition(qsourceloc, sec_def->p.scope);
+	ret = bt_unregister_field_definition(qfilename, sec_def->p.scope);
+	if (ret) {
+		ret = -1;
+		goto end;
+	}
+	ret = bt_unregister_field_definition(qsourceloc, sec_def->p.scope);
+	if (ret) {
+		ret = -1;
+		goto end;
+	}
 
 	/* Get concrete string definitions */
 	func_str_def = (struct definition_string *) func_def;
