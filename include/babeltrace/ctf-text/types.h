@@ -51,6 +51,12 @@ struct ctf_text_stream_pos {
 	uint64_t last_real_timestamp;	/* to print delta */
 	uint64_t last_cycles_timestamp;	/* to print delta */
 	GString *string;	/* Current string */
+
+	/*
+	 * Hash table of VPID to process debug info
+	 */
+	GHashTable *processes_debug_infos;
+
 };
 
 static inline

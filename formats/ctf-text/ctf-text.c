@@ -29,6 +29,7 @@
 #include <babeltrace/format.h>
 #include <babeltrace/types.h>
 #include <babeltrace/ctf-text/types.h>
+#include <babeltrace/ctf-text/so-info.h>
 #include <babeltrace/ctf/metadata.h>
 #include <babeltrace/babeltrace-internal.h>
 #include <babeltrace/ctf/events-internal.h>
@@ -85,6 +86,22 @@ enum bt_loglevel {
         BT_LOGLEVEL_DEBUG_FUNCTION         = 12,
         BT_LOGLEVEL_DEBUG_LINE             = 13,
         BT_LOGLEVEL_DEBUG                  = 14,
+};
+
+struct debug_info {
+	/* Owned by this */
+	char *func;
+
+	/* Owned by this */
+	struct source_location *src_loc;
+};
+
+struct process_debug_infos {
+	/* Hash table: base address to so info; owned by this */
+	GHashTable *baddr_to_so_info;
+
+	/* Hash table: IP to debug info; owned by this */
+	GHashTable *ip_to_debug_info;
 };
 
 static
@@ -237,53 +254,361 @@ const char *print_loglevel(int value)
 }
 
 static
-struct definition_integer *int_def_from_struct_def(
-		struct definition_struct *sec_def, const char *name)
+void debug_info_free(struct debug_info *di)
 {
-	unsigned int i;
-	struct definition_integer *int_def = NULL;
-
-	for (i = 0; i < sec_def->fields->len; ++i) {
-		struct bt_definition* field_def;
-		const char *field_name;
-		enum ctf_type_id type_id;
-
-		field_def = g_ptr_array_index(sec_def->fields, i);
-
-		if (!field_def->name) {
-			continue;
-		}
-
-		field_name = g_quark_to_string(field_def->name);
-
-		if (strcmp(field_name, name) == 0) {
-			type_id = field_def->declaration->id;
-
-			if (type_id != CTF_TYPE_INTEGER) {
-				goto end;
-			}
-
-			int_def = (struct definition_integer *) field_def;
-			goto end;
-		}
+	if (!di) {
+		return;
 	}
 
-end:
-	return int_def;
+	free(di->func);
+	source_location_destroy(di->src_loc);
+	g_free(di);
 }
 
 static
-int insert_debug_info_into_sec_def(struct definition_struct *sec_def,
-		struct definition_integer *ip_def,
-		struct definition_integer *vpid_def)
+struct debug_info *debug_info_new(struct so_info *so, uint64_t ip)
+{
+	int ret;
+	int found;
+	struct debug_info *di = NULL;
+
+	di = g_new0(struct debug_info, 1);
+
+	if (!di) {
+		goto end;
+	}
+
+	/* Lookup function name */
+	ret = so_info_lookup_function_name(so, ip, &di->func, &found);
+
+	if (ret) {
+		goto error;
+	}
+
+	/* Lookup source location */
+	ret = so_info_lookup_source_location(so, ip, &di->src_loc, &found);
+
+	if (ret) {
+		goto error;
+	}
+
+end:
+	return di;
+
+error:
+	debug_info_free(di);
+
+	return NULL;
+}
+
+static
+void process_debug_infos_free(struct process_debug_infos *pdi)
+{
+	if (!pdi) {
+		return;
+	}
+
+	if (pdi->baddr_to_so_info) {
+		g_hash_table_destroy(pdi->baddr_to_so_info);
+	}
+
+	if (pdi->ip_to_debug_info) {
+		g_hash_table_destroy(pdi->ip_to_debug_info);
+	}
+
+	g_free(pdi);
+}
+
+static
+struct process_debug_infos *process_debug_infos_new(void)
+{
+	struct process_debug_infos *pdi = NULL;
+
+	pdi = g_new0(struct process_debug_infos, 1);
+
+	if (!pdi) {
+		goto end;
+	}
+
+	pdi->baddr_to_so_info = g_hash_table_new_full(NULL, NULL, NULL,
+		(GDestroyNotify) so_info_destroy);
+
+	if (!pdi->baddr_to_so_info) {
+		goto error;
+	}
+
+	pdi->ip_to_debug_info = g_hash_table_new_full(NULL, NULL, NULL,
+		(GDestroyNotify) debug_info_free);
+
+	if (!pdi->ip_to_debug_info) {
+		goto error;
+	}
+
+end:
+	return pdi;
+
+error:
+	process_debug_infos_free(pdi);
+
+	return NULL;
+}
+
+static
+struct process_debug_infos *get_process_debug_infos_entry(
+		GHashTable *processes_debug_infos, int64_t vpid)
+{
+	gpointer key = (gpointer) vpid;
+	struct process_debug_infos *pdi = NULL;
+
+	/* Exists? Return it */
+	pdi = g_hash_table_lookup(processes_debug_infos, key);
+
+	if (pdi) {
+		goto end;
+	}
+
+	/* Create it */
+	pdi = process_debug_infos_new();
+
+	if (!pdi) {
+		goto end;
+	}
+
+	g_hash_table_insert(processes_debug_infos, key, pdi);
+
+end:
+	return pdi;
+}
+
+static
+struct debug_info *get_debug_infos_from_process_debug_infos(
+		struct process_debug_infos *pdi, uint64_t ip)
+{
+	struct debug_info *di = NULL;
+	gint64 key = (gint64) ip;
+	GHashTableIter iter;
+	gpointer baddr, value;
+
+	/* Look in IP to debug infos hash table first */
+	di = g_hash_table_lookup(pdi->ip_to_debug_info, (gpointer) key);
+
+	if (di) {
+		goto end;
+	}
+
+	/* Check in all so infos */
+	g_hash_table_iter_init(&iter, pdi->baddr_to_so_info);
+
+	while (g_hash_table_iter_next(&iter, &baddr, &value))
+	{
+		struct so_info *so = value;
+
+		if (!so_info_has_address(value, ip)) {
+			continue;
+		}
+
+		di = debug_info_new(so, ip);
+		break;
+	}
+
+end:
+	return di;
+}
+
+static
+struct debug_info *get_debug_infos(GHashTable *processes_debug_infos,
+	int64_t vpid, uint64_t ip)
+{
+	struct process_debug_infos *pdi;
+	struct debug_info *di = NULL;
+
+	pdi = get_process_debug_infos_entry(processes_debug_infos, vpid);
+
+	if (!pdi) {
+		goto end;
+	}
+
+	di = get_debug_infos_from_process_debug_infos(pdi, ip);
+
+	if (!di) {
+		goto end;
+	}
+
+end:
+	return di;
+}
+
+static
+void handle_statedump_build_id_event(struct ctf_text_stream_pos *pos,
+		struct ctf_event_declaration *event_class,
+		struct ctf_event_definition *event_def)
+{
+	// TODO
+}
+
+static
+void handle_statedump_debug_link_event(struct ctf_text_stream_pos *pos,
+		struct ctf_event_declaration *event_class,
+		struct ctf_event_definition *event_def)
+{
+	// TODO
+}
+
+static
+void handle_statedump_soinfo_event(struct ctf_text_stream_pos *pos,
+		struct ctf_event_declaration *event_class,
+		struct ctf_event_definition *event_def)
+{
+	struct bt_definition *baddr_def = NULL;
+	struct bt_definition *memsz_def = NULL;
+	struct bt_definition *sopath_def = NULL;
+	struct bt_definition *vpid_def = NULL;
+	struct bt_definition *event_fields_def = NULL;
+	struct bt_definition *sec_def = NULL;
+	struct process_debug_infos *pdi;
+	struct so_info *so;
+	uint64_t baddr, memsz;
+	int64_t vpid;
+	const char *sopath;
+
+	event_fields_def = (struct bt_definition *) event_def->event_fields;
+	sec_def = (struct bt_definition *)
+		event_def->stream->stream_event_context;
+
+	if (!event_fields_def || !sec_def) {
+		goto end;
+	}
+
+	baddr_def = bt_lookup_definition(event_fields_def, "_baddr");
+
+	if (!baddr_def) {
+		goto end;
+	}
+
+	memsz_def = bt_lookup_definition(event_fields_def, "_memsz");
+
+	if (!memsz_def) {
+		goto end;
+	}
+
+	sopath_def = bt_lookup_definition(event_fields_def, "_sopath");
+
+	if (!sopath_def) {
+		goto end;
+	}
+
+	vpid_def = bt_lookup_definition(sec_def, "_vpid");
+
+	if (!vpid_def) {
+		goto end;
+	}
+
+	if (baddr_def->declaration->id != CTF_TYPE_INTEGER) {
+		goto end;
+	}
+
+	if (memsz_def->declaration->id != CTF_TYPE_INTEGER) {
+		goto end;
+	}
+
+	if (sopath_def->declaration->id != CTF_TYPE_STRING) {
+		goto end;
+	}
+
+	if (vpid_def->declaration->id != CTF_TYPE_INTEGER) {
+		goto end;
+	}
+
+	baddr = bt_get_unsigned_int(baddr_def);
+	memsz = bt_get_unsigned_int(memsz_def);
+	sopath = bt_get_string(sopath_def);
+	vpid = bt_get_signed_int(vpid_def);
+
+	if (!sopath) {
+		goto end;
+	}
+
+	if (memsz == 0) {
+		/* Ignore VDSO */
+		goto end;
+	}
+
+	pdi = get_process_debug_infos_entry(pos->processes_debug_infos, vpid);
+
+	if (!pdi) {
+		goto end;
+	}
+
+	so = g_hash_table_lookup(pdi->baddr_to_so_info, (gpointer) baddr);
+
+	if (so) {
+		goto end;
+	}
+
+	so = so_info_create(sopath, baddr, memsz);
+
+	if (!so) {
+		goto end;
+	}
+
+	g_hash_table_insert(pdi->baddr_to_so_info, (gpointer) baddr, so);
+
+end:
+	return;
+}
+
+static
+void handle_statedump_event(struct ctf_text_stream_pos *pos,
+		struct ctf_event_declaration *event_class,
+		struct ctf_event_definition *event)
+{
+	const char *event_name = g_quark_to_string(event_class->name);
+
+	if (strcmp(event_name, "lttng_ust_statedump:soinfo") == 0 ||
+			strcmp(event_name, "lttng_ust_dl:dlopen") == 0) {
+		handle_statedump_soinfo_event(pos, event_class, event);
+	} else if (strcmp(event_name, "lttng_ust_statedump:debug_link)") == 0) {
+		handle_statedump_debug_link_event(pos, event_class, event);
+	} else if (strcmp(event_name, "lttng_ust_statedump:build_id)") == 0) {
+		handle_statedump_build_id_event(pos, event_class, event);
+	}
+}
+
+static
+int insert_debug_info_into_sec_def(struct ctf_text_stream_pos *pos,
+		struct definition_struct *sec_def)
 {
 	int ret = 0;
+	struct bt_definition *ip_def, *vpid_def;
 	struct bt_declaration *str_decl = NULL;
-	struct bt_definition *filename_def = NULL, *sourceloc_def = NULL;
-	struct definition_string *filename_str_def;
+	struct bt_definition *func_def = NULL, *sourceloc_def = NULL;
+	struct definition_string *func_str_def;
 	struct definition_string *sourceloc_str_def;
-	GQuark qfilename = g_quark_from_static_string("_filename");
+	struct debug_info *di;
+	GQuark qfilename = g_quark_from_static_string("_func");
 	GQuark qsourceloc = g_quark_from_static_string("_source_loc");
+	int64_t vpid, ip;
+
+	/* Get "ip" and "vpid" definitions */
+	vpid_def = bt_lookup_definition((struct bt_definition *) sec_def,
+		"_vpid");
+	ip_def = bt_lookup_definition((struct bt_definition *) sec_def, "_ip");
+
+	if (!vpid_def || !ip_def) {
+		ret = -1;
+		goto end;
+	}
+
+	vpid = bt_get_signed_int(vpid_def);
+	ip = bt_get_unsigned_int(ip_def);
+
+	/* Get debug info for this context */
+	di = get_debug_infos(pos->processes_debug_infos, vpid, ip);
+
+	if (!di) {
+		ret = -1;
+		goto end;
+	}
 
 	/* Create needed string declaration */
 	str_decl = (struct bt_declaration *)
@@ -295,11 +620,11 @@ int insert_debug_info_into_sec_def(struct definition_struct *sec_def,
 	}
 
 	/* Create both string definitions (filename, source location) */
-	filename_def = str_decl->definition_new(
+	func_def = str_decl->definition_new(
 		str_decl, sec_def->p.scope, qfilename,
 		sec_def->fields->len, NULL);
 
-	if (!filename_def) {
+	if (!func_def) {
 		ret = -1;
 		goto end;
 	}
@@ -323,12 +648,35 @@ int insert_debug_info_into_sec_def(struct definition_struct *sec_def,
 	bt_unregister_field_definition(qfilename, sec_def->p.scope);
 	bt_unregister_field_definition(qsourceloc, sec_def->p.scope);
 
-	filename_str_def = (struct definition_string *) filename_def;
+	/* Get concrete string definitions */
+	func_str_def = (struct definition_string *) func_def;
 	sourceloc_str_def = (struct definition_string *) sourceloc_def;
-	filename_str_def->value = strdup("myfile.c");
-	sourceloc_str_def->value = strdup("function+offset");
 
-	if (!filename_str_def->value || !sourceloc_str_def->value) {
+	/* Allocate and format strings to be printed */
+	if (di->func) {
+		func_str_def->value = strdup(di->func);
+	} else {
+		func_str_def->value = strdup("<?>");
+	}
+
+	if (!func_str_def->value) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	if (di->src_loc) {
+		sourceloc_str_def->value =
+			malloc(strlen(di->src_loc->filename) + 32);
+
+		if (sourceloc_str_def->value) {
+			sprintf(sourceloc_str_def->value, "%s:%llu",
+				di->src_loc->filename, di->src_loc->line_no);
+		}
+	} else {
+		sourceloc_str_def->value = strdup("<?>");
+	}
+
+	if (!sourceloc_str_def->value) {
 		ret = -ENOMEM;
 		goto end;
 	}
@@ -339,24 +687,25 @@ int insert_debug_info_into_sec_def(struct definition_struct *sec_def,
 	 * handling the next event, as this is not a safe state for
 	 * everything outside CTF text.
 	 */
-	g_ptr_array_add(sec_def->fields, filename_def);
+	g_ptr_array_add(sec_def->fields, func_def);
 	g_ptr_array_add(sec_def->fields, sourceloc_def);
 
 	/*
 	 * Lose initial reference to string declaration. Its reference
 	 * count should now be 2, and it will be freed when both
-	 * definitions using it are freed.
+	 * definitions using it are freed in
+	 * release_debug_info_from_sec_def().
 	 */
 	bt_declaration_unref(str_decl);
 
 end:
 	if (ret) {
-		if (filename_def) {
-			bt_definition_unref(filename_def);
+		if (func_def) {
+			bt_definition_unref(func_def);
 		}
 
 		if (sourceloc_def) {
-			bt_definition_unref(filename_def);
+			bt_definition_unref(sourceloc_def);
 		}
 
 		if (str_decl) {
@@ -418,6 +767,8 @@ int ctf_text_write_event(struct bt_stream_pos *ppos, struct ctf_stream_definitio
 		fprintf(stderr, "[error] Event class id %" PRIu64 " is unknown.\n", id);
 		return -EINVAL;
 	}
+
+	handle_statedump_event(pos, event_class, event);
 
 	if (stream->has_timestamp) {
 		set_field_names_print(pos, ITEM_HEADER);
@@ -632,7 +983,6 @@ int ctf_text_write_event(struct bt_stream_pos *ppos, struct ctf_stream_definitio
 
 	/* print stream-declared event context */
 	if (stream->stream_event_context) {
-		struct definition_integer *ip_def, *vpid_def;
 		int debug_info_insert_ret = -1;
 
 		if (pos->field_nr++ != 0)
@@ -643,24 +993,12 @@ int ctf_text_write_event(struct bt_stream_pos *ppos, struct ctf_stream_definitio
 		field_nr_saved = pos->field_nr;
 		pos->field_nr = 0;
 
-		/* Find "ip" and "vpid" fields */
-		ip_def = int_def_from_struct_def(stream->stream_event_context,
-			"_ip");
-		vpid_def = int_def_from_struct_def(stream->stream_event_context,
-			"_vpid");
-
 		/*
-		 * If we have both "ip" and "vpid" fields, we may proceed
-		 * on to get the string (filename + source location) which
-		 * must be inserted as fields into the stream event context
-		 * structure.
+		 * Try inserting debug info into the stream event
+		 * context structure.
 		 */
-		if (ip_def && vpid_def) {
-			debug_info_insert_ret =
-				insert_debug_info_into_sec_def(
-					stream->stream_event_context,
-					ip_def, vpid_def);
-		}
+		debug_info_insert_ret = insert_debug_info_into_sec_def(
+			pos, stream->stream_event_context);
 
 		set_field_names_print(pos, ITEM_CONTEXT);
 		ret = generic_rw(ppos, &stream->stream_event_context->p);
@@ -755,6 +1093,13 @@ struct bt_trace_descriptor *ctf_text_open_trace(const char *path, int flags,
 		goto error;
 	}
 
+	pos->processes_debug_infos = g_hash_table_new_full(NULL, NULL, NULL,
+		(GDestroyNotify) process_debug_infos_free);
+
+	if (!pos->processes_debug_infos) {
+		goto error;
+	}
+
 	return &pos->trace_descriptor;
 error:
 	g_free(pos);
@@ -776,6 +1121,9 @@ int ctf_text_close_trace(struct bt_trace_descriptor *td)
 			return -1;
 		}
 	}
+	if (pos->processes_debug_infos) {
+		g_hash_table_destroy(pos->processes_debug_infos);
+	}
 	g_free(pos);
 	return 0;
 }
@@ -787,6 +1135,8 @@ void __attribute__((constructor)) ctf_text_init(void)
 
 	ctf_text_format.name = g_quark_from_static_string("text");
 	ret = bt_register_format(&ctf_text_format);
+	assert(!ret);
+	ret = so_info_init();
 	assert(!ret);
 }
 
