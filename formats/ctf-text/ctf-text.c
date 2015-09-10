@@ -614,6 +614,11 @@ int insert_debug_info_into_sec_def(struct ctf_text_stream_pos *pos,
 		goto end;
 	}
 
+	if (!di->func && !di->src_loc) {
+		ret = -1;
+		goto end;
+	}
+
 	/* Create needed string declaration */
 	str_decl = (struct bt_declaration *)
 		bt_string_declaration_new(CTF_STRING_UTF8);
