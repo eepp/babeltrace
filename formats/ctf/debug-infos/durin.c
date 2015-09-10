@@ -309,13 +309,21 @@ int durin_die_contains_addr(struct durin_die *die, uint64_t addr, int *contains)
 	}
 
 	ret = dwarf_lowpc(*die->dwarf_die, &low_pc, &error);
-	if (ret != DW_DLV_OK) {
+	if (ret == DW_DLV_ERROR) {
 		goto error;
+	}
+	if (ret == DW_DLV_NO_ENTRY) {
+		*contains = 0;
+		goto end;
 	}
 
 	ret = dwarf_highpc_b(*die->dwarf_die, &high_pc, &form, &class, &error);
-	if (ret != DW_DLV_OK) {
+	if (ret == DW_DLV_ERROR) {
 		goto error;
+	}
+	if (ret == DW_DLV_NO_ENTRY) {
+		*contains = 0;
+		goto end;
 	}
 
 	if (class != DW_FORM_CLASS_ADDRESS) {
@@ -327,6 +335,7 @@ int durin_die_contains_addr(struct durin_die *die, uint64_t addr, int *contains)
 	}
 	*contains = low_pc <= addr && addr < high_pc;
 
+end:
 	return 0;
 
 error:
