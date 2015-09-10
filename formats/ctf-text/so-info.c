@@ -97,7 +97,7 @@ struct so_info *so_info_create(const char *path, uint64_t low_addr,
 	}
 
 	ehdr = g_new0(GElf_Ehdr, 1);
-	if (ehdr) {
+	if (!ehdr) {
 		goto error;
 	}
 
