@@ -213,6 +213,7 @@ int so_info_set_dwarf_info_from_path(struct so_info *so, char *path)
 {
 	int fd = -1;
 	int ret = 0;
+	struct durin_cu *cu = NULL;
 	Dwarf_Debug *dwarf_info = NULL;
 
 	if (!so || !path) {
@@ -238,7 +239,8 @@ int so_info_set_dwarf_info_from_path(struct so_info *so, char *path)
 	 * Check if the dwarf info has any CU. If not, the SO's object
 	 * file contains no DWARF info.
 	 */
-	if (!durin_cu_create(dwarf_info)) {
+	cu = durin_cu_create(dwarf_info);
+	if (!cu) {
 		goto error;
 	}
 
@@ -248,6 +250,7 @@ int so_info_set_dwarf_info_from_path(struct so_info *so, char *path)
 		goto error;
 	}
 	so->dwarf_info = dwarf_info;
+	free(cu);
 
 	return 0;
 
@@ -257,6 +260,7 @@ error:
 		dwarf_finish(*dwarf_info, NULL);
 		g_free(dwarf_info);
 	}
+	free(cu);
 
 	return -1;
 }
