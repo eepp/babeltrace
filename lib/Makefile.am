@@ -14,7 +14,8 @@ libbabeltrace_la_SOURCES = babeltrace.c \
 			   ref.c \
 			   debuginfo.c \
 			   so-info.c \
-			   durin.c
+			   durin.c \
+			   crc32.c
 
 libbabeltrace_la_LDFLAGS = -version-info $(BABELTRACE_LIBRARY_VERSION) -lelf -ldwarf
 

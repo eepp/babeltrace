@@ -32,6 +32,11 @@
 #include <libdwarf/libdwarf.h>
 #include <babeltrace/babeltrace-internal.h>
 
+#define DEFAULT_DEBUG_DIR "/usr/lib/debug"
+#define DEBUG_SUBDIR ".debug/"
+#define BUILD_ID_SUBDIR ".build-id/"
+#define BUILD_ID_SUFFIX ".debug"
+
 struct so_info {
 	/* Base virtual memory address. */
 	uint64_t low_addr;
@@ -39,16 +44,21 @@ struct so_info {
 	uint64_t high_addr;
 	/* Size of exec address space. */
 	uint64_t memsz;
-	const char *path;
+	/* Paths to ELF and DWARF files. */
+	char *elf_path;
+	char *dwarf_path;
+	/* libelf and libdwarf objects representing the files. */
 	Elf *elf_file;
 	Dwarf_Debug *dwarf_info;
-	/* Optional build ID info */
+	/* Optional build ID info. */
 	uint8_t *build_id;
 	size_t build_id_len;
-	/* Optional debug link info */
+	/* Optional debug link info. */
 	char *dbg_link_filename;
 	uint32_t dbg_link_crc;
-	int fd;
+	/* FDs to ELF and DWARF files. */
+	int elf_fd;
+	int dwarf_fd;
 	/* Denotes whether the executable is position independent code. */
 	uint8_t is_pic : 1;
 	/* Denotes whether the SO only has ELF symbols and no DWARF info. */
