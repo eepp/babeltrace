@@ -27,6 +27,7 @@
  */
 
 #include <babeltrace/ctf-text/types.h>
+#include <babeltrace/ctf-ir/metadata.h>
 #include <stdio.h>
 #include <inttypes.h>
 #include <stdint.h>
@@ -39,6 +40,7 @@ int ctf_text_integer_write(struct bt_stream_pos *ppos, struct bt_definition *def
 	const struct declaration_integer *integer_declaration =
 		integer_definition->declaration;
 	struct ctf_text_stream_pos *pos = ctf_text_pos(ppos);
+	struct ctf_debug_info *di;
 
 	if (!print_field(definition))
 		return 0;
@@ -127,6 +129,34 @@ int ctf_text_integer_write(struct bt_stream_pos *ppos, struct bt_definition *def
 	}
 	default:
 		return -EINVAL;
+	}
+
+	/* Print debug info if available */
+	di = integer_definition->debug_info;
+
+	if (di) {
+		if (di->func || di->src_loc) {
+			int add_comma = 0;
+
+			fprintf(pos->fp, ", debug_info = { ");
+
+			if (di->func) {
+				fprintf(pos->fp, "func = \"%s\"", di->func);
+				add_comma = 1;
+			}
+
+			if (di->src_loc) {
+				if (add_comma) {
+					fprintf(pos->fp, ", ");
+				}
+
+				fprintf(pos->fp, "source_loc = \"%s:%llu\"",
+					di->src_loc->filename,
+					di->src_loc->line_no);
+			}
+
+			fprintf(pos->fp, " }");
+		}
 	}
 
 	return 0;

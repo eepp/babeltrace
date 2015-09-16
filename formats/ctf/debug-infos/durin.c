@@ -27,7 +27,7 @@
  */
 
 #include <glib.h>
-#include <babeltrace/ctf-text/durin.h>
+#include <babeltrace/ctf-ir/durin.h>
 
 /*
  * XXX: libdwarf often hides pointers behind typedefs, which can lead

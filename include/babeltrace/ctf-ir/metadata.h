@@ -36,6 +36,7 @@
 #include <babeltrace/compat/uuid.h>
 #include <assert.h>
 #include <glib.h>
+#include <babeltrace/ctf-ir/so-info.h>
 
 struct ctf_trace;
 struct ctf_stream_declaration;
@@ -52,6 +53,14 @@ struct ctf_stream_packet_limits {
 struct ctf_stream_packet_timestamp {
 	struct ctf_stream_packet_limits cycles;
 	struct ctf_stream_packet_limits real;
+};
+
+struct ctf_debug_info {
+       /* Owned by this */
+       char *func;
+
+       /* Owned by this */
+       struct source_location *src_loc;
 };
 
 struct ctf_stream_definition {
@@ -222,7 +231,10 @@ struct ctf_trace {
 	/* Information about trace backing directory and files */
 	DIR *dir;
 	int dirfd;
-	int flags;		/* open flags */
+	int flags;		/* open flags */;
+
+	/* Hash table of VPIDs (int64_t) to (struct ctf_proc_debug_infos*) */
+	GHashTable *proc_debug_infos;
 };
 
 #define CTF_STREAM_SET_FIELD(ctf_stream, field)				\

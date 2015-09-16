@@ -148,6 +148,8 @@ struct declaration_integer {
 	struct ctf_clock *clock;
 };
 
+struct ctf_debug_info;
+
 struct definition_integer {
 	struct bt_definition p;
 	struct declaration_integer *declaration;
@@ -156,6 +158,15 @@ struct definition_integer {
 		uint64_t _unsigned;
 		int64_t _signed;
 	} value;
+
+	/*
+	 * Debug infos (NULL if not set).
+	 *
+	 * This is extended debug informations set by the CTF input plugin
+	 * itself when available. If it's set, then this integer definition
+	 * is the "_ip" field of the stream event context.
+	 */
+	struct ctf_debug_info *debug_info;
 };
 
 struct declaration_float {

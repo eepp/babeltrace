@@ -36,6 +36,7 @@
 #include <babeltrace/compat/uuid.h>
 #include <babeltrace/endian.h>
 #include <babeltrace/ctf/ctf-index.h>
+#include <babeltrace/ctf-ir/so-info.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -155,6 +156,227 @@ struct bt_format ctf_format = {
 	.timestamp_end = ctf_timestamp_end,
 	.convert_index_timestamp = ctf_convert_index_timestamp,
 };
+
+struct ctf_proc_debug_infos {
+       /* Hash table: base address to so info; owned by this */
+       GHashTable *baddr_to_so_info;
+
+       /* Hash table: IP to debug info; owned by this */
+       GHashTable *ip_to_debug_info;
+};
+
+static
+void debug_info_free(struct ctf_debug_info *di)
+{
+	if (!di) {
+		return;
+	}
+
+	free(di->func);
+	source_location_destroy(di->src_loc);
+	g_free(di);
+}
+
+static
+struct ctf_debug_info *debug_info_new(struct so_info *so, uint64_t ip)
+{
+	int ret;
+	int found;
+	struct ctf_debug_info *di = NULL;
+
+	di = g_new0(struct ctf_debug_info, 1);
+
+	if (!di) {
+		goto end;
+	}
+
+	/* Lookup function name */
+	ret = so_info_lookup_function_name(so, ip, &di->func, &found);
+
+	if (ret) {
+		goto error;
+	}
+
+	/* Lookup source location */
+	ret = so_info_lookup_source_location(so, ip, &di->src_loc, &found);
+
+	if (ret) {
+		goto error;
+	}
+
+end:
+	return di;
+
+error:
+	debug_info_free(di);
+
+	return NULL;
+}
+
+static
+void proc_debug_infos_free(struct ctf_proc_debug_infos *pdi)
+{
+	if (!pdi) {
+		return;
+	}
+
+	if (pdi->baddr_to_so_info) {
+		g_hash_table_destroy(pdi->baddr_to_so_info);
+	}
+
+	if (pdi->ip_to_debug_info) {
+		g_hash_table_destroy(pdi->ip_to_debug_info);
+	}
+
+	g_free(pdi);
+}
+
+static
+struct ctf_proc_debug_infos *proc_debug_infos_new(void)
+{
+	struct ctf_proc_debug_infos *pdi = NULL;
+
+	pdi = g_new0(struct ctf_proc_debug_infos, 1);
+
+	if (!pdi) {
+		goto end;
+	}
+
+	pdi->baddr_to_so_info = g_hash_table_new_full(NULL, NULL, NULL,
+		(GDestroyNotify) so_info_destroy);
+
+	if (!pdi->baddr_to_so_info) {
+		goto error;
+	}
+
+	pdi->ip_to_debug_info = g_hash_table_new_full(NULL, NULL, NULL,
+		(GDestroyNotify) debug_info_free);
+
+	if (!pdi->ip_to_debug_info) {
+		goto error;
+	}
+
+end:
+	return pdi;
+
+error:
+	proc_debug_infos_free(pdi);
+
+	return NULL;
+}
+
+static
+struct ctf_proc_debug_infos *get_proc_debug_infos_entry(
+		GHashTable *proc_debug_infos, int64_t vpid)
+{
+	gpointer key = (gpointer) vpid;
+	struct ctf_proc_debug_infos *pdi = NULL;
+
+	/* Exists? Return it */
+	pdi = g_hash_table_lookup(proc_debug_infos, key);
+
+	if (pdi) {
+		goto end;
+	}
+
+	/* Create it */
+	pdi = proc_debug_infos_new();
+
+	if (!pdi) {
+		goto end;
+	}
+
+	g_hash_table_insert(proc_debug_infos, key, pdi);
+
+end:
+	return pdi;
+}
+
+static
+struct ctf_debug_info *get_debug_infos_from_proc_debug_infos(
+		struct ctf_proc_debug_infos *pdi, uint64_t ip)
+{
+	struct ctf_debug_info *di = NULL;
+	gint64 key = (gint64) ip;
+	GHashTableIter iter;
+	gpointer baddr, value;
+
+	/* Look in IP to debug infos hash table first */
+	di = g_hash_table_lookup(pdi->ip_to_debug_info, (gpointer) key);
+
+	if (di) {
+		goto end;
+	}
+
+	/* Check in all so infos */
+	g_hash_table_iter_init(&iter, pdi->baddr_to_so_info);
+
+	while (g_hash_table_iter_next(&iter, &baddr, &value))
+	{
+		struct so_info *so = value;
+
+		if (!so_info_has_address(value, ip)) {
+			continue;
+		}
+
+		/* Found: add it to cache */
+		di = debug_info_new(so, ip);
+
+		if (di) {
+			g_hash_table_insert(pdi->ip_to_debug_info,
+					(gpointer) key, di);
+		}
+		break;
+	}
+
+end:
+	return di;
+}
+
+struct ctf_debug_info *get_debug_infos(struct ctf_trace *trace,
+		int64_t vpid, uint64_t ip)
+{
+	struct ctf_proc_debug_infos *pdi;
+	struct ctf_debug_info *di = NULL;
+
+	pdi = get_proc_debug_infos_entry(trace->proc_debug_infos, vpid);
+
+	if (!pdi) {
+		goto end;
+	}
+
+	di = get_debug_infos_from_proc_debug_infos(pdi, ip);
+
+	if (!di) {
+		goto end;
+	}
+
+end:
+	return di;
+}
+
+static
+int init_proc_debug_infos(struct ctf_trace *trace)
+{
+	int ret = 0;
+
+	trace->proc_debug_infos = g_hash_table_new_full(NULL, NULL, NULL,
+		(GDestroyNotify) proc_debug_infos_free);
+
+	if (!trace->proc_debug_infos) {
+		ret = -1;
+	}
+
+	return ret;
+}
+
+static
+void free_proc_debug_infos(struct ctf_trace *trace)
+{
+	if (trace->proc_debug_infos) {
+		g_hash_table_destroy(trace->proc_debug_infos);
+	}
+}
 
 static
 uint64_t ctf_timestamp_begin(struct bt_trace_descriptor *descriptor,
@@ -459,6 +681,187 @@ void ctf_print_discarded(FILE *fp, struct ctf_stream_definition *stream)
 }
 
 static
+void handle_statedump_build_id_event(struct ctf_trace *trace,
+		struct ctf_event_definition *event_def)
+{
+	// TODO
+}
+
+static
+void handle_statedump_debug_link_event(struct ctf_trace *trace,
+		struct ctf_event_definition *event_def)
+{
+	// TODO
+}
+
+static
+void handle_statedump_soinfo_event(struct ctf_trace *trace,
+		struct ctf_event_definition *event_def)
+{
+	struct bt_definition *baddr_def = NULL;
+	struct bt_definition *memsz_def = NULL;
+	struct bt_definition *sopath_def = NULL;
+	struct bt_definition *vpid_def = NULL;
+	struct bt_definition *event_fields_def = NULL;
+	struct bt_definition *sec_def = NULL;
+	struct ctf_proc_debug_infos *pdi;
+	struct so_info *so;
+	uint64_t baddr, memsz;
+	int64_t vpid;
+	const char *sopath;
+
+	event_fields_def = (struct bt_definition *) event_def->event_fields;
+	sec_def = (struct bt_definition *)
+		event_def->stream->stream_event_context;
+
+	if (!event_fields_def || !sec_def) {
+		goto end;
+	}
+
+	baddr_def = bt_lookup_definition(event_fields_def, "_baddr");
+
+	if (!baddr_def) {
+		goto end;
+	}
+
+	memsz_def = bt_lookup_definition(event_fields_def, "_memsz");
+
+	if (!memsz_def) {
+		goto end;
+	}
+
+	sopath_def = bt_lookup_definition(event_fields_def, "_sopath");
+
+	if (!sopath_def) {
+		goto end;
+	}
+
+	vpid_def = bt_lookup_definition(sec_def, "_vpid");
+
+	if (!vpid_def) {
+		goto end;
+	}
+
+	if (baddr_def->declaration->id != CTF_TYPE_INTEGER) {
+		goto end;
+	}
+
+	if (memsz_def->declaration->id != CTF_TYPE_INTEGER) {
+		goto end;
+	}
+
+	if (sopath_def->declaration->id != CTF_TYPE_STRING) {
+		goto end;
+	}
+
+	if (vpid_def->declaration->id != CTF_TYPE_INTEGER) {
+		goto end;
+	}
+
+	baddr = bt_get_unsigned_int(baddr_def);
+	memsz = bt_get_unsigned_int(memsz_def);
+	sopath = bt_get_string(sopath_def);
+	vpid = bt_get_signed_int(vpid_def);
+
+	if (!sopath) {
+		goto end;
+	}
+
+	if (memsz == 0) {
+		/* Ignore VDSO */
+		goto end;
+	}
+
+	pdi = get_proc_debug_infos_entry(trace->proc_debug_infos, vpid);
+
+	if (!pdi) {
+		goto end;
+	}
+
+	so = g_hash_table_lookup(pdi->baddr_to_so_info, (gpointer) baddr);
+
+	if (so) {
+		goto end;
+	}
+
+	so = so_info_create(sopath, baddr, memsz);
+
+	if (!so) {
+		goto end;
+	}
+
+	g_hash_table_insert(pdi->baddr_to_so_info, (gpointer) baddr, so);
+
+end:
+	return;
+}
+
+static
+void register_event_debug_infos(struct ctf_trace *trace,
+		struct ctf_event_definition *event)
+{
+	struct bt_definition *ip_def, *vpid_def;
+	int64_t vpid;
+	uint64_t ip;
+	struct bt_definition *sec_def;
+
+	/* Get stream event context definition */
+	sec_def = (struct bt_definition *) event->stream->stream_event_context;
+
+	if (!sec_def) {
+		goto end;
+	}
+
+	/* Get "ip" and "vpid" definitions */
+	vpid_def = bt_lookup_definition((struct bt_definition *) sec_def,
+		 "_vpid");
+	ip_def = bt_lookup_definition((struct bt_definition *) sec_def, "_ip");
+
+	if (!vpid_def || !ip_def) {
+		 goto end;
+	}
+
+	vpid = bt_get_signed_int(vpid_def);
+	ip = bt_get_unsigned_int(ip_def);
+
+	/* Get debug info for this context */
+	((struct definition_integer *) ip_def)->debug_info =
+		get_debug_infos(trace, vpid, ip);
+
+end:
+	return;
+}
+
+static
+void handle_event_debug_infos(struct ctf_trace *trace,
+		struct ctf_event_definition *event)
+{
+	const char *event_name;
+	const struct ctf_event_declaration *event_class;
+	const struct ctf_stream_declaration *stream_class;
+
+	stream_class = event->stream->stream_class;
+	event_class = g_ptr_array_index(stream_class->events_by_id,
+			event->stream->event_id);
+	event_name = g_quark_to_string(event_class->name);
+
+	if (strcmp(event_name, "lttng_ust_statedump:soinfo") == 0 ||
+			strcmp(event_name, "lttng_ust_dl:dlopen") == 0) {
+		/* State dump/dlopen() */
+		handle_statedump_soinfo_event(trace, event);
+	} else if (strcmp(event_name, "lttng_ust_statedump:debug_link)") == 0) {
+		/* Debug link info */
+		handle_statedump_debug_link_event(trace, event);
+	} else if (strcmp(event_name, "lttng_ust_statedump:build_id)") == 0) {
+		/* Build ID info */
+		handle_statedump_build_id_event(trace, event);
+	} else {
+		/* Other events: register debug infos */
+		register_event_debug_infos(trace, event);
+	}
+}
+
+static
 int ctf_read_event(struct bt_stream_pos *ppos, struct ctf_stream_definition *stream)
 {
 	struct ctf_stream_pos *pos =
@@ -580,6 +983,9 @@ int ctf_read_event(struct bt_stream_pos *ppos, struct ctf_stream_definition *str
 		fprintf(stderr, "[error] Invalid 0 byte event encountered.\n");
 		return -EINVAL;
 	}
+
+	/* Handle debug infos events */
+	handle_event_debug_infos(stream->stream_class->trace, event);
 
 	return 0;
 
@@ -1055,7 +1461,7 @@ int check_version(unsigned int major, unsigned int minor)
 		}
 	default:
 		goto warning;
-		
+
 	}
 
 	/* eventually return an error instead of warning */
@@ -2203,6 +2609,11 @@ struct bt_trace_descriptor *ctf_open_trace(const char *path, int flags,
 		packet_seek = ctf_packet_seek;
 
 	td = g_new0(struct ctf_trace, 1);
+	ret = init_proc_debug_infos(td);
+
+	if (ret) {
+		goto error;
+	}
 
 	switch (flags & O_ACCMODE) {
 	case O_RDONLY:
@@ -2224,6 +2635,7 @@ struct bt_trace_descriptor *ctf_open_trace(const char *path, int flags,
 
 	return &td->parent;
 error:
+	free_proc_debug_infos(td);
 	g_free(td);
 	return NULL;
 }
@@ -2387,6 +2799,12 @@ struct bt_trace_descriptor *ctf_open_mmap_trace(
 		goto error;
 	}
 	td = g_new0(struct ctf_trace, 1);
+	ret = init_proc_debug_infos(td);
+
+	if (ret) {
+		goto error;
+	}
+
 	td->dirfd = -1;
 	ret = ctf_open_mmap_trace_read(td, mmap_list, packet_seek, metadata_fp);
 	if (ret)
@@ -2543,6 +2961,7 @@ int ctf_close_trace(struct bt_trace_descriptor *tdp)
 		}
 	}
 	free(td->metadata_string);
+	free_proc_debug_infos(td);
 	g_free(td);
 	return 0;
 }
@@ -2574,6 +2993,8 @@ void __attribute__((constructor)) ctf_init(void)
 
 	ctf_format.name = g_quark_from_static_string("ctf");
 	ret = bt_register_format(&ctf_format);
+	assert(!ret);
+	ret = so_info_init();
 	assert(!ret);
 }
 

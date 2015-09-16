@@ -51,8 +51,6 @@ noinst_HEADERS = \
 	babeltrace/ctf/events-internal.h \
 	babeltrace/ctf/metadata.h \
 	babeltrace/ctf-text/types.h \
-	babeltrace/ctf-text/durin.h \
-	babeltrace/ctf-text/so-info.h \
 	babeltrace/ctf/types.h \
 	babeltrace/ctf/callbacks-internal.h \
 	babeltrace/ctf/ctf-index.h \
@@ -66,6 +64,8 @@ noinst_HEADERS = \
 	babeltrace/ctf-ir/stream-internal.h \
 	babeltrace/ctf-ir/trace-internal.h \
 	babeltrace/ctf-ir/visitor-internal.h \
+	babeltrace/ctf-ir/durin.h \
+	babeltrace/ctf-ir/so-info.h \
 	babeltrace/ctf-writer/functor-internal.h \
 	babeltrace/trace-handle-internal.h \
 	babeltrace/compat/uuid.h \

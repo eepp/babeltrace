@@ -9,11 +9,14 @@ libbabeltrace_ctf_la_SOURCES = \
 	events.c \
 	iterator.c \
 	callbacks.c \
-	events-private.h
+	events-private.h \
+	debug-infos/so-info.c \
+	debug-infos/durin.c
 
 # Request that the linker keeps all static libraries objects.
 libbabeltrace_ctf_la_LDFLAGS = \
-	-Wl,--no-as-needed -version-info $(BABELTRACE_LIBRARY_VERSION)
+	-Wl,--no-as-needed -version-info $(BABELTRACE_LIBRARY_VERSION) \
+	-lelf -ldwarf
 
 libbabeltrace_ctf_la_LIBADD = \
 	$(top_builddir)/lib/libbabeltrace.la \
