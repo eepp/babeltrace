@@ -31,6 +31,7 @@
 #include <babeltrace/ctf/metadata.h>
 #include <babeltrace/babeltrace-internal.h>
 #include <babeltrace/ctf/events-internal.h>
+#include <babeltrace/debuginfo.h>
 #include <inttypes.h>
 #include <sys/mman.h>
 #include <errno.h>
@@ -237,7 +238,7 @@ const char *print_loglevel(int value)
 
 static
 int ctf_text_write_event(struct bt_stream_pos *ppos, struct ctf_stream_definition *stream)
-			 
+
 {
 	struct ctf_text_stream_pos *pos =
 		container_of(ppos, struct ctf_text_stream_pos, parent);
@@ -265,6 +266,8 @@ int ctf_text_write_event(struct bt_stream_pos *ppos, struct ctf_stream_definitio
 		fprintf(stderr, "[error] Event class id %" PRIu64 " is unknown.\n", id);
 		return -EINVAL;
 	}
+
+	debug_info_handle_event(stream_class->trace->debug_info, event);
 
 	if (stream->has_timestamp) {
 		set_field_names_print(pos, ITEM_HEADER);

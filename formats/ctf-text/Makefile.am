@@ -5,14 +5,11 @@ SUBDIRS = types .
 lib_LTLIBRARIES = libbabeltrace-ctf-text.la
 
 libbabeltrace_ctf_text_la_SOURCES = \
-	ctf-text.c \
-	durin.c \
-	so-info.c
+	ctf-text.c
 
 libbabeltrace_ctf_text_la_LDFLAGS = \
 	-Wl,--no-as-needed -version-info $(BABELTRACE_LIBRARY_VERSION) \
-	types/libctf-text-types.la \
-	-lelf -ldwarf
+	types/libctf-text-types.la
 
 libbabeltrace_ctf_text_la_LIBADD = \
 	$(top_builddir)/lib/libbabeltrace.la \

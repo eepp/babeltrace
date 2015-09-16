@@ -34,8 +34,8 @@
 #include <unistd.h>
 #include <libdwarf/dwarf.h>
 #include <glib.h>
-#include <babeltrace/ctf-text/durin.h>
-#include <babeltrace/ctf-text/so-info.h>
+#include "durin.h"
+#include "so-info.h"
 
 /*
  * An adress printed in hex is at most 20 bytes (16 for 64-bits +

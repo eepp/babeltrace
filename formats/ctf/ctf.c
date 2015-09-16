@@ -35,6 +35,7 @@
 #include <babeltrace/context-internal.h>
 #include <babeltrace/compat/uuid.h>
 #include <babeltrace/endian.h>
+#include <babeltrace/debuginfo.h>
 #include <babeltrace/ctf/ctf-index.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -1055,7 +1056,7 @@ int check_version(unsigned int major, unsigned int minor)
 		}
 	default:
 		goto warning;
-		
+
 	}
 
 	/* eventually return an error instead of warning */
@@ -1813,7 +1814,7 @@ int create_trace_definitions(struct ctf_trace *td, struct ctf_stream_definition 
 			ret = -EINVAL;
 			goto error;
 		}
-		stream->trace_packet_header = 
+		stream->trace_packet_header =
 			container_of(definition, struct definition_struct, p);
 		stream->parent_def_scope = stream->trace_packet_header->p.scope;
 	}
@@ -2183,6 +2184,30 @@ error:
 	return ret;
 }
 
+static
+int trace_debug_info_create(struct ctf_trace *trace)
+{
+	int ret = 0;
+
+	if (strcmp(trace->env.domain, "ust") != 0) {
+		goto end;
+	}
+
+	if (strcmp(trace->env.tracer_name, "lttng-ust") != 0) {
+		goto end;
+	}
+
+	trace->debug_info = debug_info_create();
+
+	if (!trace->debug_info) {
+		ret = -1;
+		goto end;
+	}
+
+end:
+	return ret;
+}
+
 /*
  * ctf_open_trace: Open a CTF trace and index it.
  * Note that the user must seek the trace after the open (using the iterator)
@@ -2222,8 +2247,15 @@ struct bt_trace_descriptor *ctf_open_trace(const char *path, int flags,
 		goto error;
 	}
 
+	ret = trace_debug_info_create(td);
+
+	if (ret) {
+		goto error;
+	}
+
 	return &td->parent;
 error:
+	debug_info_destroy(td->debug_info);
 	g_free(td);
 	return NULL;
 }
@@ -2392,6 +2424,12 @@ struct bt_trace_descriptor *ctf_open_mmap_trace(
 	if (ret)
 		goto error_free;
 
+	ret = trace_debug_info_create(td);
+
+	if (ret) {
+		goto error;
+	}
+
 	return &td->parent;
 
 error_free:
@@ -2543,6 +2581,7 @@ int ctf_close_trace(struct bt_trace_descriptor *tdp)
 		}
 	}
 	free(td->metadata_string);
+	debug_info_destroy(td->debug_info);
 	g_free(td);
 	return 0;
 }
@@ -2574,6 +2613,8 @@ void __attribute__((constructor)) ctf_init(void)
 
 	ctf_format.name = g_quark_from_static_string("ctf");
 	ret = bt_register_format(&ctf_format);
+	assert(!ret);
+	ret = debug_info_init();
 	assert(!ret);
 }
 

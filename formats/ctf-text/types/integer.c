@@ -31,6 +31,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <babeltrace/bitfield.h>
+#include <babeltrace/debuginfo.h>
 
 int ctf_text_integer_write(struct bt_stream_pos *ppos, struct bt_definition *definition)
 {
@@ -39,6 +40,7 @@ int ctf_text_integer_write(struct bt_stream_pos *ppos, struct bt_definition *def
 	const struct declaration_integer *integer_declaration =
 		integer_definition->declaration;
 	struct ctf_text_stream_pos *pos = ctf_text_pos(ppos);
+	struct debug_info_source *debug_info_src;
 
 	if (!print_field(definition))
 		return 0;
@@ -127,6 +129,34 @@ int ctf_text_integer_write(struct bt_stream_pos *ppos, struct bt_definition *def
 	}
 	default:
 		return -EINVAL;
+	}
+
+	/* Print debug info if available */
+	debug_info_src = integer_definition->debug_info_src;
+
+	if (debug_info_src) {
+		if (debug_info_src->func || debug_info_src->filename) {
+			int add_comma = 0;
+
+			fprintf(pos->fp, ", debug_info = { ");
+
+			if (debug_info_src->func) {
+				fprintf(pos->fp, "func = \"%s\"", debug_info_src->func);
+				add_comma = 1;
+			}
+
+			if (debug_info_src->filename) {
+				if (add_comma) {
+					fprintf(pos->fp, ", ");
+				}
+
+				fprintf(pos->fp, "source_loc = \"%s:%llu\"",
+					debug_info_src->filename,
+					debug_info_src->line_no);
+			}
+
+			fprintf(pos->fp, " }");
+		}
 	}
 
 	return 0;

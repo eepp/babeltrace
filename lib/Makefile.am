@@ -11,9 +11,12 @@ libbabeltrace_la_SOURCES = babeltrace.c \
 			   trace-collection.c \
 			   registry.c \
 			   values.c \
-			   ref.c
+			   ref.c \
+			   debuginfo.c \
+			   so-info.c \
+			   durin.c
 
-libbabeltrace_la_LDFLAGS = -version-info $(BABELTRACE_LIBRARY_VERSION)
+libbabeltrace_la_LDFLAGS = -version-info $(BABELTRACE_LIBRARY_VERSION) -lelf -ldwarf
 
 libbabeltrace_la_LIBADD = \
 	prio_heap/libprio_heap.la \

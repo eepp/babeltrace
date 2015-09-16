@@ -30,6 +30,7 @@
 #include <babeltrace/types.h>
 #include <babeltrace/format.h>
 #include <babeltrace/format-internal.h>
+#include <babeltrace/debuginfo.h>
 #include <babeltrace/ctf/types.h>
 #include <sys/types.h>
 #include <dirent.h>
@@ -222,7 +223,10 @@ struct ctf_trace {
 	/* Information about trace backing directory and files */
 	DIR *dir;
 	int dirfd;
-	int flags;		/* open flags */
+	int flags;		/* open flags */;
+
+	/* Debug information for this trace */
+	struct debug_info *debug_info;
 };
 
 #define CTF_STREAM_SET_FIELD(ctf_stream, field)				\
