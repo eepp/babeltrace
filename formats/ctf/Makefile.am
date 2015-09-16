@@ -11,7 +11,8 @@ libbabeltrace_ctf_la_SOURCES = \
 	callbacks.c \
 	events-private.h \
 	debug-infos/so-info.c \
-	debug-infos/durin.c
+	debug-infos/durin.c \
+	debug-infos/crc32.c
 
 # Request that the linker keeps all static libraries objects.
 libbabeltrace_ctf_la_LDFLAGS = \

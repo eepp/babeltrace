@@ -66,6 +66,7 @@ noinst_HEADERS = \
 	babeltrace/ctf-ir/visitor-internal.h \
 	babeltrace/ctf-ir/durin.h \
 	babeltrace/ctf-ir/so-info.h \
+	babeltrace/ctf-ir/crc32.h \
 	babeltrace/ctf-writer/functor-internal.h \
 	babeltrace/trace-handle-internal.h \
 	babeltrace/compat/uuid.h \
