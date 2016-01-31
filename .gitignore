@@ -44,3 +44,5 @@ bindings/python/nativebt_wrap.c
 bindings/python/__pycache__
 babeltrace.pc
 babeltrace-ctf.pc
+gdb/commands
+gdb/python/**/__pycache__
