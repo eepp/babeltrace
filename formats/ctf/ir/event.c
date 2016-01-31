@@ -35,6 +35,7 @@
 #include <babeltrace/ctf-ir/stream-class.h>
 #include <babeltrace/ctf-ir/stream-class-internal.h>
 #include <babeltrace/ctf-ir/trace-internal.h>
+#include <babeltrace/ctf-ir/validation-internal.h>
 #include <babeltrace/ctf-ir/utils.h>
 #include <babeltrace/ref.h>
 #include <babeltrace/ctf-ir/attributes-internal.h>
@@ -536,58 +537,176 @@ end:
 
 struct bt_ctf_event *bt_ctf_event_create(struct bt_ctf_event_class *event_class)
 {
+	int ret;
+	enum bt_ctf_validation_flag validation_flags =
+		BT_CTF_VALIDATION_FLAG_STREAM |
+		BT_CTF_VALIDATION_FLAG_EVENT;
 	struct bt_ctf_event *event = NULL;
+	struct bt_ctf_field_type *packet_header_type = NULL;
+	struct bt_ctf_field_type *packet_context_type = NULL;
+	struct bt_ctf_field_type *event_header_type = NULL;
+	struct bt_ctf_field_type *stream_event_ctx_type = NULL;
+	struct bt_ctf_field_type *event_context_type = NULL;
+	struct bt_ctf_field_type *event_payload_type = NULL;
+	struct bt_ctf_field *event_header = NULL;
+	struct bt_ctf_field *event_context = NULL;
+	struct bt_ctf_field *event_payload = NULL;
+	struct bt_ctf_validation_output validation_output = {0};
+	int trace_valid = 0;
 
 	if (!event_class) {
-		goto end;
+		goto error;
 	}
 
 	/*
 	 * The event class does not keep ownership of the stream class to
-	 * which it as been added. Therefore, it can't assume it has been
+	 * which it has been added. Therefore, it can't assume it has been
 	 * set. However, we disallow the creation of an event if its
 	 * associated stream class has been reclaimed.
 	 */
 	if (!event_class->stream_class) {
-		goto end;
+		goto error;
 	}
+
+	/* A stream class should always have an existing event header type */
 	assert(event_class->stream_class->event_header_type);
+
+	/* The event class was frozen when added to its stream class */
+	assert(event_class->frozen);
+
+	/* Validate the trace (if any), the stream class, and the event class */
+	if (event_class->stream_class->trace) {
+		packet_header_type = bt_ctf_trace_get_packet_header_type(
+			event_class->stream_class->trace);
+		trace_valid = event_class->stream_class->trace->valid;
+		validation_flags |= BT_CTF_VALIDATION_FLAG_TRACE;
+	}
+
+	packet_context_type = bt_ctf_stream_class_get_packet_context_type(
+		event_class->stream_class);
+	event_header_type = bt_ctf_stream_class_get_event_header_type(
+		event_class->stream_class);
+	stream_event_ctx_type = bt_ctf_stream_class_get_event_context_type(
+		event_class->stream_class);
+	event_context_type = bt_ctf_event_class_get_context_type(event_class);
+	event_payload_type = bt_ctf_event_class_get_payload_type(event_class);
+	ret = bt_ctf_validate_class_types(packet_header_type,
+		packet_context_type, event_header_type, stream_event_ctx_type,
+		event_context_type, event_payload_type, trace_valid,
+		event_class->stream_class->valid, event_class->valid,
+		&validation_output, validation_flags);
+	BT_PUT(packet_header_type);
+	BT_PUT(packet_context_type);
+	BT_PUT(event_header_type);
+	BT_PUT(stream_event_ctx_type);
+	BT_PUT(event_context_type);
+	BT_PUT(event_payload_type);
+
+	if (ret) {
+		/*
+		 * This means something went wrong during the validation
+		 * process, not that the objects are invalid.
+		 */
+		goto error;
+	}
+
+	if ((validation_output.valid_flags & validation_flags) !=
+			validation_flags) {
+		/* Invalid trace/stream class/event class */
+		goto error;
+	}
+
+	/*
+	 * At this point we know the trace (if associated to the stream
+	 * class), the stream class, and the event class, with their
+	 * current types, are valid. We may proceed with creating
+	 * the event.
+	 */
 	event = g_new0(struct bt_ctf_event, 1);
+
 	if (!event) {
-		goto end;
+		goto error;
 	}
 
 	bt_object_init(event, bt_ctf_event_destroy);
 	bt_get(event_class);
-	bt_ctf_event_class_freeze(event_class);
 	event->event_class = event_class;
 
-	event->event_header = bt_ctf_field_create(
-		event_class->stream_class->event_header_type);
-	if (!event->event_header) {
+	event_header =
+		bt_ctf_field_create(validation_output.event_header_type);
+
+	if (!event_header) {
 		goto error;
 	}
-	if (event_class->context) {
-		event->context_payload = bt_ctf_field_create(
-			event_class->context);
-		if (!event->context_payload) {
+
+	if (validation_output.event_context_type) {
+		event_context = bt_ctf_field_create(
+			validation_output.event_context_type);
+
+		if (!event_context) {
 			goto error;
 		}
 	}
-	event->fields_payload = bt_ctf_field_create(event_class->fields);
-	if (!event->fields_payload) {
-		goto error;
+
+	if (validation_output.event_payload_type) {
+		event_payload = bt_ctf_field_create(
+			validation_output.event_payload_type);
+
+		if (!event_payload) {
+			goto error;
+		}
 	}
+
+	/*
+	 * At this point all the fields are created, potentially from
+	 * validated copies of field types, so that the field types and
+	 * fields can be replaced in the trace, stream class,
+	 * event class, and created event.
+	 */
+	bt_ctf_validation_replace_types(event_class->stream_class->trace,
+		event_class->stream_class, event_class, &validation_output,
+		validation_flags);
+	BT_MOVE(event->event_header, event_header);
+	BT_MOVE(event->context_payload, event_context);
+	BT_MOVE(event->fields_payload, event_payload);
+
+	/*
+	 * Put what was not moved in bt_ctf_validation_replace_types().
+	 */
+	bt_ctf_validation_output_put_types(&validation_output);
 
 	/*
 	 * Freeze the stream class since the event header must not be changed
 	 * anymore.
 	 */
 	bt_ctf_stream_class_freeze(event_class->stream_class);
-end:
+
+	/*
+	 * Mark trace, stream class, and event class as valid since
+	 * they're all frozen now.
+	 */
+	if (event_class->stream_class->trace) {
+		event_class->stream_class->trace->valid = 1;
+	}
+
+	event_class->stream_class->valid = 1;
+	event_class->valid = 1;
+
 	return event;
+
 error:
+	bt_ctf_validation_output_put_types(&validation_output);
 	BT_PUT(event);
+	BT_PUT(event_header);
+	BT_PUT(event_context);
+	BT_PUT(event_payload);
+	assert(!packet_header_type);
+	assert(!packet_context_type);
+	assert(!event_header_type);
+	assert(!stream_event_ctx_type);
+	assert(!event_context_type);
+	assert(!event_payload_type);
+
 	return event;
 }
 
