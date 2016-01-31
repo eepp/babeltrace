@@ -54,9 +54,12 @@ enum bt_ctf_node {
 
 struct bt_ctf_field_path {
 	enum bt_ctf_node root;
+
 	/*
 	 * Array of integers (int) indicating the index in either
-	 * structures or variants that make-up the path to a field.
+	 * structures, variants, arrays, or sequences that make up
+	 * the path to a field type. -1 means the "current element
+	 * of an array or sequence type".
 	 */
 	GArray *path_indexes;
 };
@@ -71,6 +74,13 @@ struct bt_ctf_field_type {
 	 * a field has been instanciated from it.
 	 */
 	int frozen;
+
+	/*
+	 * This flag indicates if the field type is valid. A valid
+	 * field type is _always_ frozen. All the nested field types of
+	 * a valid field type are also valid (and thus frozen).
+	 */
+	int valid;
 };
 
 struct bt_ctf_field_type_integer {
@@ -190,6 +200,9 @@ BT_HIDDEN
 int bt_ctf_field_type_validate(struct bt_ctf_field_type *type);
 
 BT_HIDDEN
+int bt_ctf_field_type_validate_recursive(struct bt_ctf_field_type *type);
+
+BT_HIDDEN
 const char *bt_ctf_field_type_enumeration_get_mapping_name_unsigned(
 		struct bt_ctf_field_type_enumeration *enumeration_type,
 		uint64_t value);
@@ -211,6 +224,9 @@ struct bt_ctf_field_type *bt_ctf_field_type_copy(
 
 BT_HIDDEN
 struct bt_ctf_field_path *bt_ctf_field_path_create(void);
+
+BT_HIDDEN
+void bt_ctf_field_path_clear(struct bt_ctf_field_path *field_path);
 
 BT_HIDDEN
 struct bt_ctf_field_path *bt_ctf_field_path_copy(
@@ -251,8 +267,8 @@ struct bt_ctf_field_path *bt_ctf_field_type_variant_get_tag_field_path(
 		struct bt_ctf_field_type *type);
 
 BT_HIDDEN
-int bt_ctf_field_type_variant_set_tag(struct bt_ctf_field_type *type,
-		struct bt_ctf_field_type *tag);
+int bt_ctf_field_type_variant_set_tag_field_type(struct bt_ctf_field_type *type,
+		struct bt_ctf_field_type *tag_type);
 
 /* Replace an existing field's type in a variant */
 BT_HIDDEN
