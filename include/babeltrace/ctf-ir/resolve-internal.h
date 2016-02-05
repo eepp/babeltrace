@@ -31,6 +31,7 @@
 
 #include <babeltrace/ctf-ir/event-types.h>
 #include <babeltrace/ctf-ir/event-types-internal.h>
+#include <babeltrace/values.h>
 #include <babeltrace/babeltrace-internal.h>
 #include <glib.h>
 
@@ -40,7 +41,7 @@ enum bt_ctf_resolve_flag {
 	BT_CTF_RESOLVE_FLAG_EVENT_HEADER	= 0x04,
 	BT_CTF_RESOLVE_FLAG_STREAM_EVENT_CTX	= 0x08,
 	BT_CTF_RESOLVE_FLAG_EVENT_CONTEXT	= 0x10,
-	BT_CTF_RESOLVE_FLAG_EVENT_PAYLOAD	= 0x12,
+	BT_CTF_RESOLVE_FLAG_EVENT_PAYLOAD	= 0x20,
 };
 
 /*
@@ -57,7 +58,7 @@ enum bt_ctf_resolve_flag {
  * this function does not copy field types.
  */
 BT_HIDDEN
-int bt_ctf_resolve_types(
+int bt_ctf_resolve_types(struct bt_value *environment,
 		struct bt_ctf_field_type *packet_header_type,
 		struct bt_ctf_field_type *packet_context_type,
 		struct bt_ctf_field_type *event_header_type,

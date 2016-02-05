@@ -479,10 +479,11 @@ int bt_ctf_trace_add_stream_class(struct bt_ctf_trace *trace,
 		bt_ctf_stream_class_get_event_header_type(stream_class);
 	stream_event_ctx_type =
 		bt_ctf_stream_class_get_event_context_type(stream_class);
-	ret = bt_ctf_validate_class_types(packet_header_type,
-		packet_context_type, event_header_type, stream_event_ctx_type,
-		NULL, NULL, trace->valid, stream_class->valid, 1,
-		&trace_sc_validation_output, trace_sc_validation_flags);
+	ret = bt_ctf_validate_class_types(trace->environment,
+		packet_header_type, packet_context_type, event_header_type,
+		stream_event_ctx_type, NULL, NULL, trace->valid,
+		stream_class->valid, 1, &trace_sc_validation_output,
+		trace_sc_validation_flags);
 	BT_PUT(packet_header_type);
 	BT_PUT(packet_context_type);
 	BT_PUT(event_header_type);
@@ -531,7 +532,7 @@ int bt_ctf_trace_add_stream_class(struct bt_ctf_trace *trace,
 		 * the previous trace and stream class validation here
 		 * because copies could have been made.
 		 */
-		ret = bt_ctf_validate_class_types(
+		ret = bt_ctf_validate_class_types(trace->environment,
 			trace_sc_validation_output.packet_header_type,
 			trace_sc_validation_output.packet_context_type,
 			trace_sc_validation_output.event_header_type,

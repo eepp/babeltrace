@@ -35,6 +35,7 @@
 #include <babeltrace/ctf-ir/event-internal.h>
 #include <babeltrace/ref.h>
 #include <babeltrace/babeltrace-internal.h>
+#include <babeltrace/values.h>
 #include <glib.h>
 
 typedef GPtrArray type_stack;
@@ -45,6 +46,7 @@ struct type_stack_frame {
 };
 
 struct resolve_context {
+	struct bt_value *environment;
 	struct bt_ctf_field_type *packet_header_type;
 	struct bt_ctf_field_type *packet_context_type;
 	struct bt_ctf_field_type *event_header_type;
@@ -123,7 +125,7 @@ int type_stack_push(type_stack *stack, struct bt_ctf_field_type *type)
 	int ret = 0;
 	struct type_stack_frame *frame = NULL;
 
-	if (!stack || !frame) {
+	if (!stack || !type) {
 		ret = -1;
 		goto end;
 	}
@@ -355,7 +357,7 @@ enum bt_ctf_node get_root_node_from_absolute_pathstr(const char *pathstr)
 		 * Refer to CTF 7.3.2 STATIC AND DYNAMIC SCOPES.
 		 */
 		if (strncmp(pathstr, absolute_path_prefixes[i],
-			strlen(absolute_path_prefixes[i]))) {
+				strlen(absolute_path_prefixes[i]))) {
 			/* Prefix does not match: try the next one */
 			continue;
 		}
@@ -434,8 +436,71 @@ error:
 }
 
 /*
- * `ptokens` is owned by the caller, but may be modified here.
- * `field_path` is an output parameter owned by the caller.
+ * `ptokens` is owned by the caller. `field_path` is an output parameter
+ * owned by the caller that must be filled here. `root` is owned by the
+ * caller.
+ */
+static
+int ptokens_to_field_path(GList *ptokens, struct bt_ctf_field_path *field_path,
+		struct bt_ctf_field_type *type)
+{
+	int ret = 0;
+	GList *cur_ptoken = ptokens;
+
+	/* Get our own reference */
+	bt_get(type);
+
+	/* Locate target */
+	while (cur_ptoken) {
+		struct bt_ctf_field_type *child_type;
+		int child_index;
+		enum ctf_type_id type_id = bt_ctf_field_type_get_type_id(type);
+		const char *field_name = ptoken_get_string(cur_ptoken);
+
+		/* Find to which index corresponds the current path token */
+		if (type_id == CTF_TYPE_ARRAY || type_id == CTF_TYPE_SEQUENCE) {
+			child_index = -1;
+		} else {
+			child_index = get_type_field_index(type, field_name);
+
+			if (child_index < 0) {
+				/*
+				 * Error: field name does not exist or
+				 * wrong current type.
+				 */
+				ret = -1;
+				goto end;
+			}
+
+			/* Next path token */
+			cur_ptoken = g_list_next(cur_ptoken);
+		}
+
+		/* Create new field path entry */
+		g_array_append_val(field_path->path_indexes, child_index);
+
+		/* Get child field type */
+		child_type = get_type_field_at_index(type, child_index);
+
+		if (!child_type) {
+			ret = -1;
+			goto end;
+		}
+
+		/* Move child type to current type */
+		BT_MOVE(type, child_type);
+	}
+
+end:
+	BT_PUT(type);
+
+	return ret;
+}
+
+/*
+ * `ptokens` is owned by the caller, but may be modified here (it is
+ * discarded afterwards). `field_path` is an output parameter owned by
+ * the caller that must be filled here.
  */
 static
 int absolute_ptokens_to_field_path(GList *ptokens,
@@ -452,7 +517,6 @@ int absolute_ptokens_to_field_path(GList *ptokens,
 
 	/* Start with root type */
 	type = get_type_from_ctx(ctx, field_path->root);
-	bt_get(type);
 
 	if (!type) {
 		/* Error: root type is not available */
@@ -461,53 +525,16 @@ int absolute_ptokens_to_field_path(GList *ptokens,
 	}
 
 	/* Locate target */
-	while (cur_ptoken) {
-		struct bt_ctf_field_type *child_type;
-		int child_index;
-		enum ctf_type_id type_id = bt_ctf_field_type_get_type_id(type);
-		const char *field_name = ptoken_get_string(cur_ptoken);
-
-		/* Find to which index corresponds the current path token */
-		if (type_id == CTF_TYPE_ARRAY || type_id == CTF_TYPE_SEQUENCE) {
-			child_index = -1;
-		} else {
-			child_index = get_type_field_index(type, field_name);
-
-			if (child_index < 0) {
-				/*
-				 * Error: field name does not exist or
-				 * wrong current type.
-				 */
-				ret = -1;
-				goto end;
-			}
-		}
-
-		/* Create new field path entry */
-		g_array_append_val(field_path->path_indexes, child_index);
-
-		/* Get child field type */
-		child_type = get_type_field_at_index(type, child_index);
-
-		if (!child_type) {
-			ret = -1;
-			goto end;
-		}
-
-		/* Move child type to current type */
-		BT_PUT(type);
-		BT_MOVE(type, child_type);
-	}
+	ret = ptokens_to_field_path(cur_ptoken, field_path, type);
 
 end:
-	BT_PUT(type);
-
 	return ret;
 }
 
 /*
- * `ptokens` is owned by the caller, but may be modified here.
- * `field_path` is an output parameter owned by the caller.
+ * `ptokens` is owned by the caller, but may be modified here (it is
+ * discarded afterwards). `field_path` is an output parameter owned by
+ * the caller that must be filled here.
  */
 static
 int relative_ptokens_to_field_path(GList *ptokens,
@@ -515,64 +542,96 @@ int relative_ptokens_to_field_path(GList *ptokens,
 		struct resolve_context *ctx)
 {
 	int ret = 0;
-	GList *cur_ptoken;
-	struct bt_ctf_field_type *type;
+	struct bt_ctf_field_path *tail_field_path = bt_ctf_field_path_create();
+	int parent_pos_in_stack;
 
-	/* Skip absolute path tokens */
-	cur_ptoken = g_list_nth(ptokens,
-		absolute_path_prefix_ptoken_counts[field_path->root]);
-
-	/* Start with root type */
-	type = get_type_from_ctx(ctx, field_path->root);
-	bt_get(type);
-
-	if (!type) {
-		/* Error: root type is not available */
+	if (!tail_field_path) {
+		printf_error("Cannot create field path\n");
 		ret = -1;
 		goto end;
 	}
 
-	/* Locate target */
-	while (cur_ptoken) {
-		struct bt_ctf_field_type *child_type;
-		int child_index;
-		enum ctf_type_id type_id = bt_ctf_field_type_get_type_id(type);
-		const char *field_name = ptoken_get_string(cur_ptoken);
+	parent_pos_in_stack = type_stack_size(ctx->type_stack) - 1;
 
-		/* Find to which index corresponds the current path token */
-		if (type_id == CTF_TYPE_ARRAY || type_id == CTF_TYPE_SEQUENCE) {
-			child_index = -1;
+	while (parent_pos_in_stack >= 0) {
+		struct bt_ctf_field_type *parent_type =
+			type_stack_at(ctx->type_stack,
+				parent_pos_in_stack)->type;
+
+		/* Locate target from current parent type */
+		ret = ptokens_to_field_path(ptokens, tail_field_path,
+			parent_type);
+
+		if (ret) {
+			/* Not found... yet */
+			bt_ctf_field_path_clear(tail_field_path);
 		} else {
-			child_index = get_type_field_index(type, field_name);
+			/* Found: stitch tail field path to head field path */
+			int i = 0;
+			int tail_field_path_len =
+				tail_field_path->path_indexes->len;
 
-			if (child_index < 0) {
-				/*
-				 * Error: field name does not exist or
-				 * wrong current type.
-				 */
-				ret = -1;
-				goto end;
+			while (true) {
+				struct bt_ctf_field_type *cur_type =
+					type_stack_at(ctx->type_stack, i)->type;
+				int index = type_stack_at(
+					ctx->type_stack, i)->index;
+
+				if (cur_type == parent_type) {
+					break;
+				}
+
+				g_array_append_val(field_path->path_indexes,
+					index);
+				++i;
 			}
+
+			for (i = 0; i < tail_field_path_len; ++i) {
+				int index = g_array_index(
+					tail_field_path->path_indexes,
+					int, i);
+
+				g_array_append_val(field_path->path_indexes,
+					index);
+			}
+			break;
 		}
 
-		/* Create new field path entry */
-		g_array_append_val(field_path->path_indexes, child_index);
+		parent_pos_in_stack--;
+	}
 
-		/* Get child field type */
-		child_type = get_type_field_at_index(type, child_index);
+	if (parent_pos_in_stack < 0) {
+		/* Not found: look in previous scopes */
+		field_path->root--;
 
-		if (!child_type) {
-			ret = -1;
-			goto end;
+		while (field_path->root >= CTF_NODE_TRACE_PACKET_HEADER) {
+			struct bt_ctf_field_type *root_type;
+			bt_ctf_field_path_clear(field_path);
+
+			root_type = get_type_from_ctx(ctx, field_path->root);
+
+			if (!root_type) {
+				field_path->root--;
+				continue;
+			}
+
+			/* Locate target in previous scope */
+			ret = ptokens_to_field_path(ptokens, field_path,
+				root_type);
+
+			if (ret) {
+				/* Not found yet */
+				field_path->root--;
+				continue;
+			}
+
+			/* Found */
+			break;
 		}
-
-		/* Move child type to current type */
-		BT_PUT(type);
-		BT_MOVE(type, child_type);
 	}
 
 end:
-	BT_PUT(type);
+	bt_ctf_field_path_destroy(tail_field_path);
 
 	return ret;
 }
@@ -593,7 +652,8 @@ struct bt_ctf_field_path *pathstr_to_field_path(const char *pathstr,
 	field_path = bt_ctf_field_path_create();
 
 	if (!field_path) {
-		goto error;
+		printf_error("Cannot create field path\n");
+		goto end;
 	}
 
 	/* Convert path string to path tokens */
@@ -601,7 +661,7 @@ struct bt_ctf_field_path *pathstr_to_field_path(const char *pathstr,
 
 	if (!ptokens) {
 		ret = -1;
-		goto error;
+		goto end;
 	}
 
 	/* Absolute or relative path? */
@@ -613,25 +673,30 @@ struct bt_ctf_field_path *pathstr_to_field_path(const char *pathstr,
 		ret = relative_ptokens_to_field_path(ptokens, field_path, ctx);
 
 		if (ret) {
-			goto error;
+			goto end;
 		}
+	} else if (root_node == CTF_NODE_ENV) {
+		// TODO
+		assert(false);
 	} else {
-		/* Absolute path */
+		/* Absolute path: use found root node */
 		field_path->root = root_node;
 		ret = absolute_ptokens_to_field_path(ptokens, field_path, ctx);
 
 		if (ret) {
-			goto error;
+			goto end;
 		}
 	}
 
-	return field_path;
+end:
+	if (ret) {
+		bt_ctf_field_path_destroy(field_path);
+		field_path = NULL;
+	}
 
-error:
-	bt_ctf_field_path_destroy(field_path);
 	ptokens_destroy(ptokens);
 
-	return NULL;
+	return field_path;
 }
 
 /*
@@ -670,7 +735,6 @@ struct bt_ctf_field_type *field_path_to_field_type(
 		}
 
 		/* Move child type to current type */
-		BT_PUT(type);
 		BT_MOVE(type, child_type);
 	}
 
@@ -695,6 +759,7 @@ struct bt_ctf_field_path *get_ctx_stack_field_path(struct resolve_context *ctx)
 	field_path = bt_ctf_field_path_create();
 
 	if (!field_path) {
+		printf_error("Cannot create field path\n");
 		goto error;
 	}
 
@@ -742,7 +807,7 @@ int resolve_sequence_or_variant_type(struct bt_ctf_field_type *type,
 		break;
 
 	default:
-		ret = -1;
+		assert(0);
 		goto end;
 	}
 
@@ -762,7 +827,7 @@ int resolve_sequence_or_variant_type(struct bt_ctf_field_type *type,
 		goto end;
 	}
 
-	// VALIDATION STEPS HERE
+	// TODO: validation steps here
 
 	/* Get target field type */
 	target_type = field_path_to_field_type(target_field_path, ctx);
@@ -778,6 +843,7 @@ int resolve_sequence_or_variant_type(struct bt_ctf_field_type *type,
 			type, target_field_path);
 
 		if (ret) {
+			printf_error("Cannot set sequence field type's length field path\n");
 			goto end;
 		}
 
@@ -787,6 +853,7 @@ int resolve_sequence_or_variant_type(struct bt_ctf_field_type *type,
 			type, target_field_path);
 
 		if (ret) {
+			printf_error("Cannot set variant field type's tag field path\n");
 			goto end;
 		}
 
@@ -796,6 +863,7 @@ int resolve_sequence_or_variant_type(struct bt_ctf_field_type *type,
 			type, target_type);
 
 		if (ret) {
+			printf_error("Cannot set variant field type's tag field type\n");
 			goto end;
 		}
 	}
@@ -839,7 +907,7 @@ int resolve_type(struct bt_ctf_field_type *type, struct resolve_context *ctx)
 		break;
 	}
 
-	/* Recurse */
+	/* Recurse into compound types */
 	switch (type_id) {
 	case CTF_TYPE_STRUCT:
 	case CTF_TYPE_VARIANT:
@@ -851,12 +919,14 @@ int resolve_type(struct bt_ctf_field_type *type, struct resolve_context *ctx)
 		ret = type_stack_push(ctx->type_stack, type);
 
 		if (ret) {
+			printf_error("Cannot push field type on type stack\n");
 			goto end;
 		}
 
 		field_count = get_type_field_count(type);
 
 		if (field_count < 0) {
+			printf_error("Cannot get field type field count\n");
 			ret = field_count;
 			goto end;
 		}
@@ -866,11 +936,19 @@ int resolve_type(struct bt_ctf_field_type *type, struct resolve_context *ctx)
 				get_type_field_at_index(type, f_index);
 
 			if (!child_type) {
+				printf_error("Cannot get field type field\n");
 				ret = -1;
 				goto end;
 			}
 
-			type_stack_peek(ctx->type_stack)->index = f_index;
+			if (type_id == CTF_TYPE_ARRAY ||
+					type_id == CTF_TYPE_SEQUENCE) {
+				type_stack_peek(ctx->type_stack)->index = -1;
+			} else {
+				type_stack_peek(ctx->type_stack)->index =
+					f_index;
+			}
+
 			ret = resolve_type(child_type, ctx);
 			BT_PUT(child_type);
 
@@ -909,6 +987,7 @@ int resolve_root_type(enum ctf_type_id root_node, struct resolve_context *ctx)
  */
 BT_HIDDEN
 int bt_ctf_resolve_types(
+		struct bt_value *environment,
 		struct bt_ctf_field_type *packet_header_type,
 		struct bt_ctf_field_type *packet_context_type,
 		struct bt_ctf_field_type *event_header_type,
@@ -918,21 +997,22 @@ int bt_ctf_resolve_types(
 		enum bt_ctf_resolve_flag flags)
 {
 	int ret = 0;
-	struct resolve_context ctx = {0};
+	struct resolve_context ctx = {
+		.environment = environment,
+		.packet_header_type = packet_header_type,
+		.packet_context_type = packet_context_type,
+		.event_header_type = event_header_type,
+		.stream_event_ctx_type = stream_event_ctx_type,
+		.event_context_type = event_context_type,
+		.event_payload_type = event_payload_type,
+		.root_node = CTF_NODE_UNKNOWN,
+	};
 
-	return 0;
-
-	/* Initialize resolving context */
-	ctx.packet_header_type = packet_header_type;
-	ctx.packet_context_type = packet_context_type;
-	ctx.event_header_type = event_header_type;
-	ctx.stream_event_ctx_type = stream_event_ctx_type;
-	ctx.event_context_type = event_context_type;
-	ctx.event_payload_type = event_payload_type;
-	ctx.root_node = CTF_NODE_UNKNOWN;
+	/* Initialize type stack */
 	ctx.type_stack = type_stack_create();
 
 	if (!ctx.type_stack) {
+		printf_error("Cannot create type stack\n");
 		ret = -1;
 		goto end;
 	}
@@ -982,7 +1062,7 @@ int bt_ctf_resolve_types(
 		}
 	}
 
-	/* Resolve packet header type */
+	/* Resolve event payload type */
 	if (flags & BT_CTF_RESOLVE_FLAG_EVENT_PAYLOAD) {
 		ret = resolve_root_type(CTF_NODE_EVENT_FIELDS, &ctx);
 

@@ -551,6 +551,7 @@ struct bt_ctf_event *bt_ctf_event_create(struct bt_ctf_event_class *event_class)
 	struct bt_ctf_field *event_header = NULL;
 	struct bt_ctf_field *event_context = NULL;
 	struct bt_ctf_field *event_payload = NULL;
+	struct bt_value *environment = NULL;
 	struct bt_ctf_validation_output validation_output = {0};
 	int trace_valid = 0;
 
@@ -580,6 +581,7 @@ struct bt_ctf_event *bt_ctf_event_create(struct bt_ctf_event_class *event_class)
 			event_class->stream_class->trace);
 		trace_valid = event_class->stream_class->trace->valid;
 		validation_flags |= BT_CTF_VALIDATION_FLAG_TRACE;
+		environment = event_class->stream_class->trace->environment;
 	}
 
 	packet_context_type = bt_ctf_stream_class_get_packet_context_type(
@@ -590,7 +592,7 @@ struct bt_ctf_event *bt_ctf_event_create(struct bt_ctf_event_class *event_class)
 		event_class->stream_class);
 	event_context_type = bt_ctf_event_class_get_context_type(event_class);
 	event_payload_type = bt_ctf_event_class_get_payload_type(event_class);
-	ret = bt_ctf_validate_class_types(packet_header_type,
+	ret = bt_ctf_validate_class_types(environment, packet_header_type,
 		packet_context_type, event_header_type, stream_event_ctx_type,
 		event_context_type, event_payload_type, trace_valid,
 		event_class->stream_class->valid, event_class->valid,

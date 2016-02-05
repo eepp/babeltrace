@@ -29,6 +29,7 @@
 #include <babeltrace/ctf-ir/event.h>
 #include <babeltrace/ctf-ir/stream-class.h>
 #include <babeltrace/ctf-ir/trace.h>
+#include <babeltrace/values.h>
 #include <babeltrace/babeltrace-internal.h>
 
 enum bt_ctf_validation_flag {
@@ -68,7 +69,8 @@ struct bt_ctf_validation_output {
  * references if needed).
  */
 BT_HIDDEN
-int bt_ctf_validate_class_types(struct bt_ctf_field_type *packet_header_type,
+int bt_ctf_validate_class_types(struct bt_value *environment,
+		struct bt_ctf_field_type *packet_header_type,
 		struct bt_ctf_field_type *packet_context_type,
 		struct bt_ctf_field_type *event_header_type,
 		struct bt_ctf_field_type *stream_event_ctx_type,

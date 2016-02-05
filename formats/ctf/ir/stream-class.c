@@ -376,7 +376,8 @@ int bt_ctf_stream_class_add_event_class(
 			bt_ctf_event_class_get_context_type(event_class);
 		event_payload_type =
 			bt_ctf_event_class_get_payload_type(event_class);
-		ret = bt_ctf_validate_class_types(packet_header_type,
+		ret = bt_ctf_validate_class_types(
+			stream_class->trace->environment, packet_header_type,
 			packet_context_type, event_header_type,
 			stream_event_ctx_type, event_context_type,
 			event_payload_type, stream_class->trace->valid,

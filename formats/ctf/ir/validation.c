@@ -29,11 +29,12 @@
 #include <babeltrace/ctf-ir/trace-internal.h>
 #include <babeltrace/ctf-ir/stream-class-internal.h>
 #include <babeltrace/ctf-ir/event-internal.h>
+#include <babeltrace/values.h>
 #include <babeltrace/babeltrace-internal.h>
 #include <babeltrace/ref.h>
 
 static
-int validate_event_class_types(
+int validate_event_class_types(struct bt_value *environment,
 		struct bt_ctf_field_type *packet_header_type,
 		struct bt_ctf_field_type *packet_context_type,
 		struct bt_ctf_field_type *event_header_type,
@@ -44,9 +45,9 @@ int validate_event_class_types(
 	int ret = 0;
 
 	/* Resolve sequence type lengths and variant type tags first */
-	ret = bt_ctf_resolve_types(packet_header_type, packet_context_type,
-		event_header_type, stream_event_ctx_type, event_context_type,
-		event_payload_type,
+	ret = bt_ctf_resolve_types(environment, packet_header_type,
+		packet_context_type, event_header_type, stream_event_ctx_type,
+		event_context_type, event_payload_type,
 		BT_CTF_RESOLVE_FLAG_EVENT_CONTEXT |
 		BT_CTF_RESOLVE_FLAG_EVENT_PAYLOAD);
 
@@ -76,7 +77,7 @@ end:
 }
 
 static
-int validate_stream_class_types(
+int validate_stream_class_types(struct bt_value *environment,
 		struct bt_ctf_field_type *packet_header_type,
 		struct bt_ctf_field_type *packet_context_type,
 		struct bt_ctf_field_type *event_header_type,
@@ -85,8 +86,9 @@ int validate_stream_class_types(
 	int ret = 0;
 
 	/* Resolve sequence type lengths and variant type tags first */
-	ret = bt_ctf_resolve_types(packet_header_type, packet_context_type,
-		event_header_type, stream_event_ctx_type, NULL, NULL,
+	ret = bt_ctf_resolve_types(environment, packet_header_type,
+		packet_context_type, event_header_type, stream_event_ctx_type,
+		NULL, NULL,
 		BT_CTF_RESOLVE_FLAG_PACKET_CONTEXT |
 		BT_CTF_RESOLVE_FLAG_EVENT_HEADER |
 		BT_CTF_RESOLVE_FLAG_STREAM_EVENT_CTX);
@@ -126,13 +128,15 @@ end:
 }
 
 static
-int validate_trace_types(struct bt_ctf_field_type *packet_header_type)
+int validate_trace_types(struct bt_value *environment,
+		struct bt_ctf_field_type *packet_header_type)
 {
 	int ret = 0;
 
 	/* Resolve sequence type lengths and variant type tags first */
-	ret = bt_ctf_resolve_types(packet_header_type, NULL, NULL, NULL,
-		NULL, NULL, BT_CTF_RESOLVE_FLAG_PACKET_HEADER);
+	ret = bt_ctf_resolve_types(environment, packet_header_type,
+		NULL, NULL, NULL, NULL, NULL,
+		BT_CTF_RESOLVE_FLAG_PACKET_HEADER);
 
 	if (ret) {
 		goto end;
@@ -152,7 +156,8 @@ end:
 }
 
 BT_HIDDEN
-int bt_ctf_validate_class_types(struct bt_ctf_field_type *packet_header_type,
+int bt_ctf_validate_class_types(struct bt_value *environment,
+		struct bt_ctf_field_type *packet_header_type,
 		struct bt_ctf_field_type *packet_context_type,
 		struct bt_ctf_field_type *event_header_type,
 		struct bt_ctf_field_type *stream_event_ctx_type,
@@ -199,6 +204,7 @@ int bt_ctf_validate_class_types(struct bt_ctf_field_type *packet_header_type,
 
 			if (!packet_header_type_copy) {
 				ret = -1;
+				printf_error("Cannot copy packet header type\n");
 				goto error;
 			}
 		}
@@ -207,7 +213,7 @@ int bt_ctf_validate_class_types(struct bt_ctf_field_type *packet_header_type,
 		BT_MOVE(packet_header_type, packet_header_type_copy);
 
 		/* Validate trace field types */
-		ret = validate_trace_types(packet_header_type);
+		ret = validate_trace_types(environment, packet_header_type);
 
 		if (!ret) {
 			/* Trace is valid */
@@ -227,6 +233,7 @@ int bt_ctf_validate_class_types(struct bt_ctf_field_type *packet_header_type,
 				bt_ctf_field_type_copy(packet_context_type);
 
 			if (!packet_context_type_copy) {
+				printf_error("Cannot copy packet context type\n");
 				goto sc_validation_error;
 			}
 		}
@@ -236,6 +243,7 @@ int bt_ctf_validate_class_types(struct bt_ctf_field_type *packet_header_type,
 				bt_ctf_field_type_copy(event_header_type);
 
 			if (!event_header_type_copy) {
+				printf_error("Cannot copy event header type\n");
 				goto sc_validation_error;
 			}
 		}
@@ -245,6 +253,7 @@ int bt_ctf_validate_class_types(struct bt_ctf_field_type *packet_header_type,
 				bt_ctf_field_type_copy(stream_event_ctx_type);
 
 			if (!stream_event_ctx_type_copy) {
+				printf_error("Cannot copy stream event context type\n");
 				goto sc_validation_error;
 			}
 		}
@@ -255,9 +264,9 @@ int bt_ctf_validate_class_types(struct bt_ctf_field_type *packet_header_type,
 		BT_MOVE(stream_event_ctx_type, stream_event_ctx_type_copy);
 
 		/* Validate stream class field types */
-		ret = validate_stream_class_types(packet_header_type,
-			packet_context_type, event_header_type,
-			stream_event_ctx_type);
+		ret = validate_stream_class_types(environment,
+			packet_header_type, packet_context_type,
+			event_header_type, stream_event_ctx_type);
 
 		if (!ret) {
 			/* Stream class is valid */
@@ -286,6 +295,7 @@ sc_validation_done:
 				bt_ctf_field_type_copy(event_context_type);
 
 			if (!event_context_type_copy) {
+				printf_error("Cannot copy event context type\n");
 				goto ec_validation_error;
 			}
 		}
@@ -295,6 +305,7 @@ sc_validation_done:
 				bt_ctf_field_type_copy(event_payload_type);
 
 			if (!event_payload_type_copy) {
+				printf_error("Cannot copy event payload type\n");
 				goto ec_validation_error;
 			}
 		}
@@ -304,10 +315,10 @@ sc_validation_done:
 		BT_MOVE(event_payload_type, event_payload_type_copy);
 
 		/* Validate event class field types */
-		ret = validate_event_class_types(packet_header_type,
-			packet_context_type, event_header_type,
-			stream_event_ctx_type, event_context_type,
-			event_payload_type);
+		ret = validate_event_class_types(environment,
+			packet_header_type, packet_context_type,
+			event_header_type, stream_event_ctx_type,
+			event_context_type, event_payload_type);
 
 		if (!ret) {
 			/* Event class is valid */
