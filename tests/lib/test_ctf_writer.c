@@ -2690,6 +2690,123 @@ void append_existing_event_class(struct bt_ctf_stream_class *stream_class)
 	bt_put(event_class);
 }
 
+struct bt_ctf_field_type *get_test10_type(void)
+{
+	#include "test10.c"
+
+	return root;
+}
+
+struct bt_ctf_field_type *get_test9_type(void)
+{
+	#include "test9.c"
+
+	return root;
+}
+
+struct bt_ctf_field_type *get_test8_type(void)
+{
+	#include "test8.c"
+
+	return root;
+}
+
+struct bt_ctf_field_type *get_test7_type(void)
+{
+	#include "test7.c"
+
+	return root;
+}
+
+struct bt_ctf_field_type *get_test6_type(void)
+{
+	#include "test6.c"
+
+	return root;
+}
+
+struct bt_ctf_field_type *get_test5_type(void)
+{
+	#include "test5.c"
+
+	return root;
+}
+
+struct bt_ctf_field_type *get_test4_type(void)
+{
+	#include "test4.c"
+
+	return root;
+}
+
+struct bt_ctf_field_type *get_test3_type(void)
+{
+	#include "test3.c"
+
+	return root;
+}
+
+struct bt_ctf_field_type *get_test2_type(void)
+{
+	#include "test2.c"
+
+	return root;
+}
+
+struct bt_ctf_field_type *get_test1_type(void)
+{
+	#include "test1.c"
+
+	return root;
+}
+
+void test(struct bt_ctf_field_type *context_type,
+		struct bt_ctf_field_type *payload_type)
+{
+	int ret;
+	struct bt_ctf_event_class *event_class = bt_ctf_event_class_create("yeah");
+
+	assert(event_class);
+	ret = bt_ctf_event_class_set_payload_type(event_class, payload_type);
+	assert(ret == 0);
+
+	if (context_type) {
+		ret = bt_ctf_event_class_set_context_type(event_class, context_type);
+		assert(ret == 0);
+	}
+
+	struct bt_ctf_stream_class *stream_class = bt_ctf_stream_class_create("hello");
+
+	assert(stream_class);
+	ret = bt_ctf_stream_class_add_event_class(stream_class, event_class);
+
+	struct bt_ctf_event *event = bt_ctf_event_create(event_class);
+
+check:
+	BT_PUT(payload_type);
+	BT_PUT(context_type);
+	BT_PUT(event_class);
+	BT_PUT(event);
+	BT_PUT(stream_class);
+}
+
+int main(void)
+{
+	//test(NULL, get_test1_type());
+	//test(NULL, get_test2_type());
+	//test(NULL, get_test3_type());
+	//test(NULL, get_test4_type());
+	//test(NULL, get_test5_type());
+	//test(NULL, get_test6_type());
+	//test(NULL, get_test7_type());
+	//test(NULL, get_test8_type());
+	//test(NULL, get_test9_type());
+	test(get_test9_type(), get_test10_type());
+
+	return 0;
+}
+
+#if 0
 int main(int argc, char **argv)
 {
 	char trace_path[] = "/tmp/ctfwriter_XXXXXX";
@@ -3367,3 +3484,4 @@ int main(int argc, char **argv)
 	closedir(trace_dir);
 	return 0;
 }
+#endif
