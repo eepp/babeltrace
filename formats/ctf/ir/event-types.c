@@ -4064,3 +4064,85 @@ int bt_ctf_field_type_compare(struct bt_ctf_field_type *type_a,
 end:
 	return ret;
 }
+
+BT_HIDDEN
+int bt_ctf_field_type_get_field_count(struct bt_ctf_field_type *field_type)
+{
+	int field_count = -1;
+	enum ctf_type_id type_id = bt_ctf_field_type_get_type_id(field_type);
+
+	switch (type_id) {
+	case CTF_TYPE_STRUCT:
+		field_count =
+			bt_ctf_field_type_structure_get_field_count(field_type);
+		break;
+	case CTF_TYPE_VARIANT:
+		field_count =
+			bt_ctf_field_type_variant_get_field_count(field_type);
+		break;
+	case CTF_TYPE_ARRAY:
+	case CTF_TYPE_SEQUENCE:
+		/*
+		 * Array and sequence types always contain a single member
+		 * (the element type).
+		 */
+		field_count = 1;
+		break;
+	default:
+		break;
+	}
+
+	return field_count;
+}
+
+BT_HIDDEN
+struct bt_ctf_field_type *bt_ctf_field_type_get_field_at_index(
+		struct bt_ctf_field_type *field_type, int index)
+{
+	struct bt_ctf_field_type *field = NULL;
+	enum ctf_type_id type_id = bt_ctf_field_type_get_type_id(field_type);
+
+	switch (type_id) {
+	case CTF_TYPE_STRUCT:
+		bt_ctf_field_type_structure_get_field(field_type, NULL, &field,
+			index);
+		break;
+	case CTF_TYPE_VARIANT:
+		bt_ctf_field_type_variant_get_field(field_type, NULL,
+			&field, index);
+		break;
+	case CTF_TYPE_ARRAY:
+		field = bt_ctf_field_type_array_get_element_type(field_type);
+		break;
+	case CTF_TYPE_SEQUENCE:
+		field = bt_ctf_field_type_sequence_get_element_type(field_type);
+		break;
+	default:
+		break;
+	}
+
+	return field;
+}
+
+BT_HIDDEN
+int bt_ctf_field_type_get_field_index(struct bt_ctf_field_type *field_type,
+		const char *name)
+{
+	int field_index = -1;
+	enum ctf_type_id type_id = bt_ctf_field_type_get_type_id(field_type);
+
+	switch (type_id) {
+	case CTF_TYPE_STRUCT:
+		field_index = bt_ctf_field_type_structure_get_field_name_index(
+			field_type, name);
+		break;
+	case CTF_TYPE_VARIANT:
+		field_index = bt_ctf_field_type_variant_get_field_name_index(
+			field_type, name);
+		break;
+	default:
+		break;
+	}
+
+	return field_index;
+}
