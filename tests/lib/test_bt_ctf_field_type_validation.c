@@ -20,7 +20,7 @@
  */
 
 #include <babeltrace/ctf-ir/event-types.h>
-#include <babeltrace/ctf-ir/event-types-internal.h>
+#include <babeltrace/ctf-ir/field-path.h>
 #include <babeltrace/ctf-ir/event.h>
 #include <babeltrace/ctf-ir/stream-class.h>
 #include <babeltrace/ctf-ir/trace.h>
@@ -1645,33 +1645,23 @@ int validate_field_path(struct bt_ctf_field_type *field_type,
 	int expected_index;
 	int actual_index;
 	int i = 0;
-	const struct bt_ctf_field_path *field_path;
+	struct bt_ctf_field_path *field_path;
 	va_list ap;
 
 	va_start(ap, root);
-
-	if (bt_ctf_field_type_is_sequence(field_type)) {
-		field_path = ((struct bt_ctf_field_type_sequence *)
-			field_type)->length_field_path;
-	} else if (bt_ctf_field_type_is_variant(field_type)) {
-		field_path = ((struct bt_ctf_field_type_variant *)
-			field_type)->tag_path;
-	} else {
-		ret = -1;
-		goto end;
-	}
+	field_path = bt_ctf_field_type_get_field_path(field_type);
 
 	if (!field_path) {
 		ret = -1;
 		goto end;
 	}
 
-	if (field_path->root != root) {
+	if (bt_ctf_field_path_get_root(field_path) != root) {
 		ret = -1;
 		goto end;
 	}
 
-	len = field_path->path_indexes->len;
+	len = bt_ctf_field_path_get_index_count(field_path);
 
 	while (true) {
 		expected_index = va_arg(ap, int);
@@ -1684,9 +1674,9 @@ int validate_field_path(struct bt_ctf_field_type *field_type,
 			break;
 		}
 
-		actual_index = g_array_index(field_path->path_indexes, int, i);
+		actual_index = bt_ctf_field_path_get_index(field_path, i);
 
-		if (actual_index != expected_index) {
+		if (actual_index == INT_MIN) {
 			ret = -1;
 			goto end;
 		}
@@ -1699,6 +1689,7 @@ int validate_field_path(struct bt_ctf_field_type *field_type,
 	}
 
 end:
+	BT_PUT(field_path);
 	va_end(ap);
 
 	return ret;
