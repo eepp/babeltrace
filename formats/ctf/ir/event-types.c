@@ -409,6 +409,11 @@ int bt_ctf_field_type_validate(struct bt_ctf_field_type *type)
 		goto end;
 	}
 
+	if (type->valid) {
+		/* Already marked as valid */
+		goto end;
+	}
+
 	switch (type->declaration->id) {
 	case CTF_TYPE_ENUM:
 	{
@@ -435,16 +440,213 @@ int bt_ctf_field_type_validate(struct bt_ctf_field_type *type)
 		struct bt_ctf_field_type_variant *variant =
 			container_of(type, struct bt_ctf_field_type_variant,
 				parent);
+		int i = 0;
+		int tag_mappings_count;
 
 		if (variant->tag_name->len == 0 || !variant->tag) {
 			ret = -1;
+			goto end;
+		}
+
+		tag_mappings_count =
+			bt_ctf_field_type_enumeration_get_mapping_count(
+				(struct bt_ctf_field_type *) variant->tag);
+
+		if (tag_mappings_count != variant->fields->len) {
+			ret = -1;
+			goto end;
+		}
+
+		for (i = 0; i < tag_mappings_count; ++i) {
+			const char *label;
+			int64_t range_start, range_end;
+			struct bt_ctf_field_type *ft;
+
+			ret = bt_ctf_field_type_enumeration_get_mapping(
+				(struct bt_ctf_field_type *) variant->tag,
+				i, &label, &range_start, &range_end);
+
+			if (!ret || !label) {
+				goto end;
+			}
+
+			ft = bt_ctf_field_type_variant_get_field_type_by_name(
+				type, label);
+
+			if (!ft) {
+				ret = -1;
+				goto end;
+			}
+
+			BT_PUT(ft);
 		}
 		break;
 	}
 	default:
 		break;
 	}
+
+	if (ret) {
+		/* Invalid */
+		goto end;
+	}
+
+	/* Field type is valid */
+	if (type->frozen) {
+		type->valid = 1;
+	}
+
 end:
+	return ret;
+}
+
+/*
+ * This function validates a given field type without considering
+ * where this field type is located. It only validates the properties
+ * of the given field type and the properties of its children if
+ * applicable.
+ */
+BT_HIDDEN
+int bt_ctf_field_type_validate_recursive(struct bt_ctf_field_type *type)
+{
+	int ret = 0;
+	struct bt_ctf_field_type *inner_type = NULL;
+
+	if (!type) {
+		ret = -1;
+		goto end;
+	}
+
+	if (type->valid) {
+		/* Already marked as valid */
+		goto end;
+	}
+
+	/* Invalid ID? */
+	if (type->declaration->id == CTF_TYPE_UNKNOWN) {
+		ret = -1;
+		goto end;
+	}
+
+	/* Recurse */
+	switch (type->declaration->id) {
+	case CTF_TYPE_ENUM:
+	{
+		inner_type =
+			bt_ctf_field_type_enumeration_get_container_type(type);
+
+		if (!inner_type) {
+			ret = -1;
+			goto end;
+		}
+
+		ret = bt_ctf_field_type_validate(inner_type);
+
+		if (ret) {
+			goto end;
+		}
+		break;
+	}
+	case CTF_TYPE_STRUCT:
+	{
+		int len = bt_ctf_field_type_structure_get_field_count(type);
+		int i;
+
+		if (len < 0) {
+			ret = -1;
+			goto end;
+		}
+
+		for (i = 0; i < len; ++i) {
+			ret = bt_ctf_field_type_structure_get_field(type,
+				NULL, &inner_type, i);
+
+			if (ret) {
+				goto end;
+			}
+
+			ret = bt_ctf_field_type_validate_recursive(inner_type);
+
+			if (ret) {
+				goto end;
+			}
+
+			BT_PUT(inner_type);
+		}
+		break;
+	}
+	case CTF_TYPE_ARRAY:
+	{
+		inner_type = bt_ctf_field_type_array_get_element_type(type);
+
+		if (!inner_type) {
+			ret = -1;
+			goto end;
+		}
+
+		ret = bt_ctf_field_type_validate_recursive(inner_type);
+
+		if (ret) {
+			goto end;
+		}
+		break;
+	}
+	case CTF_TYPE_SEQUENCE:
+	{
+		inner_type = bt_ctf_field_type_sequence_get_element_type(type);
+
+		if (!inner_type) {
+			ret = -1;
+			goto end;
+		}
+
+		ret = bt_ctf_field_type_validate_recursive(inner_type);
+
+		if (ret) {
+			goto end;
+		}
+		break;
+	}
+	case CTF_TYPE_VARIANT:
+	{
+		int len = bt_ctf_field_type_variant_get_field_count(type);
+		int i;
+
+		if (len < 0) {
+			ret = -1;
+			goto end;
+		}
+
+		for (i = 0; i < len; ++i) {
+			ret = bt_ctf_field_type_variant_get_field(type,
+				NULL, &inner_type, i);
+
+			if (ret) {
+				goto end;
+			}
+
+			ret = bt_ctf_field_type_validate_recursive(inner_type);
+
+			if (ret) {
+				goto end;
+			}
+
+			BT_PUT(inner_type);
+		}
+		break;
+	}
+
+	default:
+		/* Non-compound type */
+		break;
+	}
+
+	/* Validate the field type itself */
+	ret = bt_ctf_field_type_validate(type);
+
+end:
+	BT_PUT(inner_type);
+
 	return ret;
 }
 
@@ -1189,8 +1391,7 @@ int bt_ctf_field_type_structure_add_field(struct bt_ctf_field_type *type,
 
 	if (!type || !field_type || type->frozen ||
 		bt_ctf_validate_identifier(field_name) ||
-		(type->declaration->id != CTF_TYPE_STRUCT) ||
-		bt_ctf_field_type_validate(field_type)) {
+		(type->declaration->id != CTF_TYPE_STRUCT)) {
 		ret = -1;
 		goto end;
 	}
@@ -1394,8 +1595,7 @@ int bt_ctf_field_type_variant_add_field(struct bt_ctf_field_type *type,
 
 	if (!type || !field_type || type->frozen ||
 		bt_ctf_validate_identifier(field_name) ||
-		(type->declaration->id != CTF_TYPE_VARIANT) ||
-		bt_ctf_field_type_validate(field_type)) {
+		(type->declaration->id != CTF_TYPE_VARIANT)) {
 		ret = -1;
 		goto end;
 	}
@@ -1544,8 +1744,7 @@ struct bt_ctf_field_type *bt_ctf_field_type_array_create(
 {
 	struct bt_ctf_field_type_array *array = NULL;
 
-	if (!element_type || length == 0 ||
-		bt_ctf_field_type_validate(element_type)) {
+	if (!element_type || length == 0) {
 		goto error;
 	}
 
@@ -1631,8 +1830,7 @@ struct bt_ctf_field_type *bt_ctf_field_type_sequence_create(
 {
 	struct bt_ctf_field_type_sequence *sequence = NULL;
 
-	if (!element_type || bt_ctf_validate_identifier(length_field_name) ||
-		bt_ctf_field_type_validate(element_type)) {
+	if (!element_type || bt_ctf_validate_identifier(length_field_name)) {
 		goto error;
 	}
 
@@ -2120,6 +2318,13 @@ int bt_ctf_field_type_serialize(struct bt_ctf_field_type *type,
 
 	if (!type || !context) {
 		ret = -1;
+		goto end;
+	}
+
+	/* Make sure field type is valid before serializing it */
+	ret = bt_ctf_field_type_validate_recursive(type);
+
+	if (ret) {
 		goto end;
 	}
 
@@ -2706,11 +2911,6 @@ int bt_ctf_field_type_enumeration_serialize(struct bt_ctf_field_type *type,
 		struct bt_ctf_field_type_enumeration, parent);
 	struct bt_ctf_field_type *container_type;
 	int container_signed;
-
-	ret = bt_ctf_field_type_validate(type);
-	if (ret) {
-		goto end;
-	}
 
 	container_type = bt_ctf_field_type_enumeration_get_container_type(type);
 	if (!container_type) {
