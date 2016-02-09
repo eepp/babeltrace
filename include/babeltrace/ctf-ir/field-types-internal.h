@@ -1,8 +1,8 @@
-#ifndef BABELTRACE_CTF_IR_EVENT_TYPES_INTERNAL_H
-#define BABELTRACE_CTF_IR_EVENT_TYPES_INTERNAL_H
+#ifndef BABELTRACE_CTF_IR_FIELD_TYPES_INTERNAL_H
+#define BABELTRACE_CTF_IR_FIELD_TYPES_INTERNAL_H
 
 /*
- * BabelTrace - CTF IR: Event types internal
+ * BabelTrace - CTF IR: Event field types internal
  *
  * Copyright 2013, 2014 Jérémie Galarneau <jeremie.galarneau@efficios.com>
  *
@@ -240,4 +240,4 @@ BT_HIDDEN
 int bt_ctf_field_type_sequence_set_element_type(struct bt_ctf_field_type *array,
 		struct bt_ctf_field_type *element_type);
 
-#endif /* BABELTRACE_CTF_IR_EVENT_TYPES_INTERNAL_H */
+#endif /* BABELTRACE_CTF_IR_FIELD_TYPES_INTERNAL_H */
