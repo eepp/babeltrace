@@ -63,6 +63,10 @@ reference moves.
 @sa refs
 */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*!
 @addtogroup refs
 @{
@@ -146,5 +150,9 @@ void bt_put(void *object);
 /*!
 @}
 */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #endif /* BABELTRACE_REF_H */
