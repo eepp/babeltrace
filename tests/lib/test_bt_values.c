@@ -21,6 +21,7 @@
  */
 
 #include <babeltrace/values.h>
+#include <babeltrace/values-internal.h>
 #include <assert.h>
 #include <string.h>
 #include "tap/tap.h"

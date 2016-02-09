@@ -48,6 +48,7 @@ noinst_HEADERS = \
 	babeltrace/prio_heap.h \
 	babeltrace/ref-internal.h \
 	babeltrace/types.h \
+	babeltrace/values-internal.h \
 	babeltrace/object-internal.h \
 	babeltrace/ctf-ir/metadata.h \
 	babeltrace/ctf/events-internal.h \

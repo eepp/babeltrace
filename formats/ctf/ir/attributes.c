@@ -26,6 +26,7 @@
  */
 
 #include <babeltrace/babeltrace-internal.h>
+#include <babeltrace/values-internal.h>
 #include <babeltrace/values.h>
 
 #define BT_CTF_ATTR_NAME_INDEX		0

@@ -33,6 +33,7 @@
 #include <babeltrace/object-internal.h>
 #include <babeltrace/ref.h>
 #include <babeltrace/values.h>
+#include <babeltrace/values-internal.h>
 #include <babeltrace/compat/glib.h>
 
 #define BT_VALUE_FROM_CONCRETE(_concrete) ((struct bt_value *) (_concrete))

@@ -40,6 +40,7 @@
 #include <babeltrace/ctf-ir/utils.h>
 #include <babeltrace/compiler.h>
 #include <babeltrace/values.h>
+#include <babeltrace/values-internal.h>
 #include <babeltrace/ref.h>
 #include <babeltrace/endian.h>
 
