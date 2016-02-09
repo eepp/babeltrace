@@ -26,9 +26,8 @@
  * SOFTWARE.
  */
 
-#include <babeltrace/ctf-writer/event-fields.h>
-#include <babeltrace/ctf-ir/event-fields-internal.h>
-#include <babeltrace/ctf-ir/event-types-internal.h>
+#include <babeltrace/ctf-ir/fields-internal.h>
+#include <babeltrace/ctf-ir/field-types-internal.h>
 #include <babeltrace/object-internal.h>
 #include <babeltrace/ref.h>
 #include <babeltrace/compiler.h>
