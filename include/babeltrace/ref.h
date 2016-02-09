@@ -54,6 +54,10 @@
  * @bug		No known bugs
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Calls bt_put() on variable \p _var, then sets \p _var to \c NULL.
  *
@@ -125,5 +129,9 @@ void *bt_get(void *obj);
  *			reference (can be \c NULL)
  */
 void bt_put(void *obj);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* BABELTRACE_REF_H */
