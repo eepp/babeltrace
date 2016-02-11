@@ -387,6 +387,10 @@ int bt_ctf_trace_add_clock(struct bt_ctf_trace *trace,
 
 	bt_get(clock);
 	g_ptr_array_add(trace->clocks, clock);
+
+	if (trace->frozen) {
+		bt_ctf_clock_freeze(clock);
+	}
 end:
 	return ret;
 }
@@ -1048,8 +1052,18 @@ end:
 static
 void bt_ctf_trace_freeze(struct bt_ctf_trace *trace)
 {
+	int i;
+
 	bt_ctf_field_type_freeze(trace->packet_header_type);
 	bt_ctf_attributes_freeze(trace->environment);
+
+	for (i = 0; i < trace->clocks->len; ++i) {
+		struct bt_ctf_clock *clock =
+			g_ptr_array_index(trace->clocks, i);
+
+		bt_ctf_clock_freeze(clock);
+	}
+
 	trace->frozen = 1;
 }
 
