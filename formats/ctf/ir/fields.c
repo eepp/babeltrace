@@ -26,6 +26,7 @@
  * SOFTWARE.
  */
 
+#include <babeltrace/ctf-ir/clock.h>
 #include <babeltrace/ctf-ir/fields-internal.h>
 #include <babeltrace/ctf-ir/field-types-internal.h>
 #include <babeltrace/object-internal.h>
@@ -946,6 +947,10 @@ int bt_ctf_field_unsigned_integer_set_value(struct bt_ctf_field *field,
 
 	integer->definition.value._unsigned = value;
 	integer->parent.payload_set = 1;
+
+	if (integer_type->mapped_clock) {
+		bt_ctf_clock_set_time(integer_type->mapped_clock, value);
+	}
 end:
 	return ret;
 }
