@@ -629,6 +629,13 @@ int bt_ctf_event_populate_event_header(struct bt_ctf_event *event)
 		}
 	}
 
+	/*
+	 * This is a special case for CTF writer where the "timestamp"
+	 * field is actually updated from its mapped clock's current
+	 * value, whereas normally, the mapped clock's current value
+	 * gets updated when the integer field mapped to it has its
+	 * value changed.
+	 */
 	timestamp_field = bt_ctf_field_structure_get_field(event->event_header,
 		"timestamp");
 	if (timestamp_field) {
