@@ -46,3 +46,4 @@ babeltrace.pc
 babeltrace-ctf.pc
 gdb/commands
 gdb/python/**/__pycache__
+doc/doxygen-*/build

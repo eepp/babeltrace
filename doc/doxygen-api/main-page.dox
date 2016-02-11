@@ -1,0 +1,91 @@
+/*!
+@mainpage Welcome!
+
+Welcome the
+<strong><em><a href="http://diamon.org/babeltrace">Babeltrace</a>
+2.0 C API</em></strong> documentation!
+
+Babeltrace is an open source converter of
+<a href="https://en.wikipedia.org/wiki/Tracing_(software)">trace</a>
+formats. Its C API can be used to
+write custom source, sink, and filter
+\link components component classes\endlink which can be added to user
+\link plugins plugins\endlink.
+
+There's also a <a href="#">Python package</a> wrapping this C API in the
+most possible Pythonic way.
+
+@tableofcontents
+
+
+@section basics Basics of the Babeltrace C API
+
+The goal of using this API is to create user
+\link plugins plugins\endlink.
+
+A Babeltrace plugin contains one or more
+\link components component classes\endlink. A component class is either:
+
+  - A \b source, or producer of trace events.
+  - A \b sink, or consumer of trace events.
+  - A \b filter, that is, both a producer and a consumer of trace
+    events.
+
+A component class can be instantiated as many times as desired into
+concrete components. Each component instance is given custom parameters.
+
+Plugins, as of this version, are built as dynamic shared objects
+(<code>.so</code> files) and loaded by the \c babeltrace converter
+program. The converter program is responsible for passing notifications
+and events from source components to filter components, if any, and
+from filter components to sink components.
+
+The internal representations of a trace, a stream, and an event follow
+the <a href="http://diamon.org/ctf">Common Trace Format</a> model.
+Within the Babeltrace C API, this representation is called the
+<em>Common Trace Format Intermediate Representation</em>, or
+\link ctf-ir CTF IR\endlink.
+
+The CTF IR model contains the following objects, amongst others:
+
+  - A \link field-types field type\endlink is a template for creating
+    a concrete \link fields field\endlink. For example, an
+    integer field type contains the size of the integer in bits, its
+    byte order, whether or not it's signed, and so on. An integer
+    field created out of an integer field type, however, only contains
+    an integer value. Many fields can be created out of a single
+    field type template.
+  - An \link event-class event class\endlink is a template for
+    creating a concrete \link event event\endlink. An event class
+    contains the field types of its various scopes, while an event
+    contains the actual fields holding their values.
+  - A \link stream-class stream class\endlink is a template for
+    creating a concrete \link stream\endlink. A stream class contains
+    the field types of its various scopes, while a stream contains the
+    actual fields holding their values. A stream class is the parent of
+    one or more event classes.
+  - A \link trace trace\endlink contains the global properties of a
+    trace. A trace is the parent of one or more stream classes.
+
+Some parts of the API require typical scalar value objects (boolean,
+integer, floating point number, string) and compound value objects
+(array, map). For example, the environment of a
+\link trace CTF IR trace\endlink maps strings to strings or integers,
+and the parameters passed to component instances take the form of a map.
+For this purpose, \link values value objects\endlink are used.
+
+All the Babeltrace objects have a reference count. When a Babeltrace
+object is created by the user, its reference count is initialized to 1:
+the user is its sole owner. When this object gets added to another one,
+the latter takes its own reference using bt_get(), incrementing the
+owned object's reference count. When an owner is done with an object,
+bt_put() is used to drop a reference, decrementing its reference count.
+When an object's reference count reaches 0, the object is considered
+destroyed and cannot be used anymore. See \ref refs for more details.
+
+
+@section quick-start Quick start
+
+Have a look at the various \link tutorials tutorials\endlink to
+gain experience in using the Babeltrace C API.
+*/
