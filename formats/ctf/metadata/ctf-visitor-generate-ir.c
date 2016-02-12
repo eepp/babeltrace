@@ -1234,8 +1234,7 @@ int visit_type_declarator(struct ctx *ctx, struct ctf_node *type_specifier_list,
 			BT_MOVE(nested_decl, nested_decl_copy);
 
 			/* Force integer's base to 16 since it's a pointer */
-			if (bt_ctf_field_type_get_type_id(nested_decl) ==
-					BT_CTF_TYPE_ID_INTEGER) {
+			if (bt_ctf_field_type_is_integer(nested_decl)) {
 				bt_ctf_field_type_integer_set_base(nested_decl,
 					BT_CTF_INTEGER_BASE_HEXADECIMAL);
 			}
@@ -1516,7 +1515,7 @@ int visit_typedef(struct ctx *ctx, struct ctf_node *type_specifier_list,
 		}
 
 		/* Do not allow typedef and typealias of untagged variants */
-		if (bt_ctf_field_type_get_type_id(type_decl) == BT_CTF_TYPE_ID_VARIANT) {
+		if (bt_ctf_field_type_is_variant(type_decl)) {
 			if (bt_ctf_field_type_variant_get_tag_name(type_decl)) {
 				_PERROR("%s", "typedef of untagged variant is not allowed");
 				ret = -EPERM;
@@ -1568,7 +1567,7 @@ int visit_typealias(struct ctx *ctx, struct ctf_node *target,
 	}
 
 	/* Do not allow typedef and typealias of untagged variants */
-	if (bt_ctf_field_type_get_type_id(type_decl) == BT_CTF_TYPE_ID_VARIANT) {
+	if (bt_ctf_field_type_is_variant(type_decl)) {
 		if (bt_ctf_field_type_variant_get_tag_name(type_decl)) {
 			_PERROR("%s",
 				"typealias of untagged variant is not allowed");
@@ -2085,8 +2084,7 @@ int visit_enum_decl(struct ctx *ctx, const char *name,
 
 		assert(integer_decl);
 
-		if (bt_ctf_field_type_get_type_id(integer_decl) !=
-				BT_CTF_TYPE_ID_INTEGER) {
+		if (!bt_ctf_field_type_is_integer(integer_decl)) {
 			_PERROR("%s", "container type for enumeration is not an integer");
 			ret = -EINVAL;
 			goto error;
@@ -2185,7 +2183,7 @@ int visit_integer_decl(struct ctx *ctx,
 	struct ctf_node *expression;
 	uint64_t alignment = 0, size = 0;
 	struct bt_ctf_clock *mapped_clock = NULL;
-	enum ctf_string_encoding encoding = CTF_STRING_NONE;
+	enum bt_ctf_string_encoding encoding = BT_CTF_STRING_ENCODING_NONE;
 	enum bt_ctf_integer_base base = BT_CTF_INTEGER_BASE_DECIMAL;
 	enum bt_ctf_byte_order byte_order =
 		bt_ctf_trace_get_byte_order(ctx->trace);
@@ -2400,12 +2398,12 @@ int visit_integer_decl(struct ctx *ctx,
 					!strcmp(s_right, "utf8") ||
 					!strcmp(s_right, "utf-8") ||
 					!strcmp(s_right, "UTF-8")) {
-				encoding = CTF_STRING_UTF8;
+				encoding = BT_CTF_STRING_ENCODING_UTF8;
 			} else if (!strcmp(s_right, "ASCII") ||
 					!strcmp(s_right, "ascii")) {
-				encoding = CTF_STRING_ASCII;
+				encoding = BT_CTF_STRING_ENCODING_ASCII;
 			} else if (!strcmp(s_right, "none")) {
-				encoding = CTF_STRING_NONE;
+				encoding = BT_CTF_STRING_ENCODING_NONE;
 			} else {
 				_PERROR("invalid \"encoding\" attribute in integer declaration: unknown encoding \"%s\"",
 					s_right);
@@ -2696,7 +2694,7 @@ int visit_string_decl(struct ctx *ctx,
 	int set = 0;
 	int ret = 0;
 	struct ctf_node *expression;
-	enum ctf_string_encoding encoding = CTF_STRING_UTF8;
+	enum bt_ctf_string_encoding encoding = BT_CTF_STRING_ENCODING_UTF8;
 
 	*string_decl = NULL;
 
@@ -2742,12 +2740,12 @@ int visit_string_decl(struct ctx *ctx,
 					!strcmp(s_right, "utf8") ||
 					!strcmp(s_right, "utf-8") ||
 					!strcmp(s_right, "UTF-8")) {
-				encoding = CTF_STRING_UTF8;
+				encoding = BT_CTF_STRING_ENCODING_UTF8;
 			} else if (!strcmp(s_right, "ASCII") ||
 					!strcmp(s_right, "ascii")) {
-				encoding = CTF_STRING_ASCII;
+				encoding = BT_CTF_STRING_ENCODING_ASCII;
 			} else if (!strcmp(s_right, "none")) {
-				encoding = CTF_STRING_NONE;
+				encoding = BT_CTF_STRING_ENCODING_NONE;
 			} else {
 				_PERROR("invalid \"encoding\" attribute in string declaration: unknown encoding \"%s\"",
 					s_right);
@@ -3701,8 +3699,7 @@ int visit_stream_decl(struct ctx *ctx, struct ctf_node *node)
 			goto error;
 		}
 
-		if (bt_ctf_field_type_get_type_id(stream_id_decl) !=
-				BT_CTF_TYPE_ID_INTEGER) {
+		if (!bt_ctf_field_type_is_integer(stream_id_decl)) {
 			BT_PUT(stream_id_decl);
 			_PERROR("%s", "\"stream_id\" field in packet header declaration is not an integer");
 			goto error;
