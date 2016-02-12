@@ -310,13 +310,6 @@ struct bt_ctf_stream *bt_ctf_stream_create(
 	if (!stream->events) {
 		goto error;
 	}
-	if (stream_class->event_context_type) {
-		stream->event_contexts = g_ptr_array_new_with_free_func(
-			(GDestroyNotify) bt_put);
-		if (!stream->event_contexts) {
-			goto error;
-		}
-	}
 
 	/* A trace is not allowed to have a NULL packet header */
 	assert(trace->packet_header_type);
@@ -511,15 +504,32 @@ int bt_ctf_stream_append_event(struct bt_ctf_stream *stream,
 		goto end;
 	}
 
-	/* Make sure the event's payload is set */
-	ret = bt_ctf_event_validate(event);
-	if (ret) {
-		goto end;
-	}
-
-	/* Sample the current stream event context by copying it */
-	if (stream->event_context) {
-		/* Make sure the event context's payload is set */
+	/*
+	 * This is a backward-compatibility remaining which we have to
+	 * deal with.
+	 *
+	 * It is possible using the CTF writer API to set the stream's
+	 * stream event context using bt_ctf_stream_set_event_context().
+	 * This event context is sampled here and copied to the event
+	 * so that each event has its own version before the data is
+	 * written.
+	 *
+	 * It is also possible that the stream event context was set
+	 * on the event itself using
+	 * bt_ctf_event_set_stream_event_context(). In this case, we
+	 * ignore the current stream's stream event context and leave
+	 * the one in the event as is.
+	 *
+	 * We use bt_ctf_field_validate() here because
+	 * event->stream_event_context is never NULL: it's created,
+	 * although with no fields set, at event creation time.
+	 */
+	if (stream->event_context &&
+			bt_ctf_field_validate(event->stream_event_context)) {
+		/*
+		 * Make sure the stream's stream event context's payload
+		 * is set.
+		 */
 		ret = bt_ctf_field_validate(stream->event_context);
 		if (ret) {
 			goto end;
@@ -530,13 +540,19 @@ int bt_ctf_stream_append_event(struct bt_ctf_stream *stream,
 			ret = -1;
 			goto end;
 		}
+
+		BT_MOVE(event->stream_event_context, event_context_copy);
 	}
 
-	/* Save the new event along with its associated stream event context */
-	g_ptr_array_add(stream->events, event);
-	if (event_context_copy) {
-		g_ptr_array_add(stream->event_contexts, event_context_copy);
+	/* Make sure the various scopes of the event are set */
+	ret = bt_ctf_event_validate(event);
+	if (ret) {
+		goto end;
 	}
+
+	/* Save the new event */
+	g_ptr_array_add(stream->events, event);
+
 	/*
 	 * Event had to hold a reference to its event class as long as it wasn't
 	 * part of the same trace hierarchy. From now on, the event and its
@@ -843,10 +859,9 @@ int bt_ctf_stream_flush(struct bt_ctf_stream *stream)
 		}
 
 		/* Write stream event context */
-		if (stream->event_contexts) {
+		if (event->stream_event_context) {
 			ret = bt_ctf_field_serialize(
-				g_ptr_array_index(stream->event_contexts, i),
-				&stream->pos);
+				event->stream_event_context, &stream->pos);
 			if (ret) {
 				goto end;
 			}
@@ -885,9 +900,6 @@ int bt_ctf_stream_flush(struct bt_ctf_stream *stream)
 	}
 
 	g_ptr_array_set_size(stream->events, 0);
-	if (stream->event_contexts) {
-		g_ptr_array_set_size(stream->event_contexts, 0);
-	}
 	stream->flushed_packet_count++;
 end:
 	bt_put(integer);
@@ -917,9 +929,6 @@ void bt_ctf_stream_destroy(struct bt_object *obj)
 
 	if (stream->events) {
 		g_ptr_array_free(stream->events, TRUE);
-	}
-	if (stream->event_contexts) {
-		g_ptr_array_free(stream->event_contexts, TRUE);
 	}
 	bt_put(stream->packet_header);
 	bt_put(stream->packet_context);

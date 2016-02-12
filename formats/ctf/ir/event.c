@@ -61,6 +61,7 @@ struct bt_ctf_event *bt_ctf_event_create(struct bt_ctf_event_class *event_class)
 	struct bt_ctf_field_type *event_context_type = NULL;
 	struct bt_ctf_field_type *event_payload_type = NULL;
 	struct bt_ctf_field *event_header = NULL;
+	struct bt_ctf_field *stream_event_context = NULL;
 	struct bt_ctf_field *event_context = NULL;
 	struct bt_ctf_field *event_payload = NULL;
 	struct bt_value *environment = NULL;
@@ -158,6 +159,14 @@ struct bt_ctf_event *bt_ctf_event_create(struct bt_ctf_event_class *event_class)
 		goto error;
 	}
 
+	if (validation_output.stream_event_ctx_type) {
+		stream_event_context = bt_ctf_field_create(
+			validation_output.stream_event_ctx_type);
+		if (!stream_event_context) {
+			goto error;
+		}
+	}
+
 	if (validation_output.event_context_type) {
 		event_context = bt_ctf_field_create(
 			validation_output.event_context_type);
@@ -183,6 +192,7 @@ struct bt_ctf_event *bt_ctf_event_create(struct bt_ctf_event_class *event_class)
 	bt_ctf_validation_replace_types(trace, stream_class,
 		event_class, &validation_output, validation_flags);
 	BT_MOVE(event->event_header, event_header);
+	BT_MOVE(event->stream_event_context, stream_event_context);
 	BT_MOVE(event->context_payload, event_context);
 	BT_MOVE(event->fields_payload, event_payload);
 
@@ -216,6 +226,7 @@ error:
 	BT_PUT(stream_class);
 	BT_PUT(trace);
 	BT_PUT(event_header);
+	BT_PUT(stream_event_context);
 	BT_PUT(event_context);
 	BT_PUT(event_payload);
 	assert(!packet_header_type);
@@ -510,6 +521,7 @@ void bt_ctf_event_destroy(struct bt_object *obj)
 		bt_put(event->event_class);
 	}
 	bt_put(event->event_header);
+	bt_put(event->stream_event_context);
 	bt_put(event->context_payload);
 	bt_put(event->fields_payload);
 	g_free(event);
@@ -564,11 +576,22 @@ int bt_ctf_event_validate(struct bt_ctf_event *event)
 {
 	/* Make sure each field's payload has been set */
 	int ret;
+	struct bt_ctf_stream_class *stream_class = NULL;
 
 	assert(event);
 	ret = bt_ctf_field_validate(event->event_header);
 	if (ret) {
 		goto end;
+	}
+
+	stream_class = bt_ctf_event_class_get_stream_class(event->event_class);
+	assert(stream_class);
+
+	if (stream_class->event_context_type) {
+		ret = bt_ctf_field_validate(event->stream_event_context);
+		if (ret) {
+			goto end;
+		}
 	}
 
 	ret = bt_ctf_field_validate(event->fields_payload);
@@ -580,6 +603,8 @@ int bt_ctf_event_validate(struct bt_ctf_event *event)
 		ret = bt_ctf_field_validate(event->context_payload);
 	}
 end:
+	BT_PUT(stream_class);
+
 	return ret;
 }
 
@@ -689,6 +714,15 @@ struct bt_ctf_event *bt_ctf_event_copy(struct bt_ctf_event *event)
 		copy->event_header = bt_ctf_field_copy(event->event_header);
 
 		if (!copy->event_header) {
+			goto error;
+		}
+	}
+
+	if (event->stream_event_context) {
+		copy->stream_event_context =
+			bt_ctf_field_copy(event->stream_event_context);
+
+		if (!copy->stream_event_context) {
 			goto error;
 		}
 	}
