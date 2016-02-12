@@ -496,6 +496,52 @@ end:
 	return ret;
 }
 
+struct bt_ctf_field *bt_ctf_event_get_stream_event_context(
+		struct bt_ctf_event *event)
+{
+	struct bt_ctf_field *stream_event_context = NULL;
+
+	if (!event || !event->stream_event_context) {
+		goto end;
+	}
+
+	stream_event_context = event->stream_event_context;
+	bt_get(stream_event_context);
+end:
+	return stream_event_context;
+}
+
+int bt_ctf_event_set_stream_event_context(struct bt_ctf_event *event,
+		struct bt_ctf_field *stream_event_context)
+{
+	int ret = 0;
+	struct bt_ctf_field_type *field_type = NULL;
+	struct bt_ctf_stream_class *stream_class = NULL;
+
+	if (!event || !stream_event_context) {
+		ret = -1;
+		goto end;
+	}
+
+	stream_class = bt_ctf_event_class_get_stream_class(event->event_class);
+	assert(stream_class);
+
+	field_type = bt_ctf_field_get_type(stream_event_context);
+	if (bt_ctf_field_type_compare(field_type,
+			stream_class->event_context_type)) {
+		ret = -1;
+		goto end;
+	}
+
+	bt_get(stream_event_context);
+	bt_put(event->stream_event_context);
+	event->stream_event_context = stream_event_context;
+end:
+	BT_PUT(stream_class);
+	bt_put(field_type);
+	return ret;
+}
+
 void bt_ctf_event_get(struct bt_ctf_event *event)
 {
 	bt_get(event);
