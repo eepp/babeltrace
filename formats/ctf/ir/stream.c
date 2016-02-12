@@ -35,6 +35,7 @@
 #include <babeltrace/ctf-ir/stream.h>
 #include <babeltrace/ctf-ir/stream-internal.h>
 #include <babeltrace/ctf-ir/stream-class-internal.h>
+#include <babeltrace/ctf-ir/packet-internal.h>
 #include <babeltrace/ref.h>
 #include <babeltrace/ctf-writer/functor-internal.h>
 #include <babeltrace/compiler.h>
@@ -929,4 +930,42 @@ end:
 	bt_put(integer);
 	bt_put(field_type);
 	return ret;
+}
+
+static
+void bt_ctf_packet_destroy(struct bt_object *obj)
+{
+	struct bt_ctf_packet *packet;
+
+	packet = container_of(obj, struct bt_ctf_packet, base);
+	bt_put(packet->header);
+	bt_put(packet->context);
+	g_free(packet);
+}
+
+extern struct bt_ctf_packet *bt_ctf_stream_create_packet(
+		struct bt_ctf_stream *stream)
+{
+	struct bt_ctf_packet *packet = NULL;
+
+	if (!stream) {
+		goto error;
+	}
+
+	packet = g_new0(struct bt_ctf_packet, 1);
+	if (!packet) {
+		goto error;
+	}
+
+	bt_object_init(packet, bt_ctf_packet_destroy);
+	bt_object_set_parent(packet, stream);
+	packet->header = bt_get(stream->packet_header);
+	packet->context = bt_get(stream->packet_context);
+
+	return packet;
+
+error:
+	BT_PUT(packet);
+
+	return NULL;
 }

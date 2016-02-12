@@ -30,6 +30,7 @@
  * http://www.efficios.com/ctf
  */
 
+#include <babeltrace/ctf-ir/packet.h>
 #include <babeltrace/ctf-ir/stream-class.h>
 #include <stdint.h>
 
@@ -189,6 +190,9 @@ extern int bt_ctf_stream_set_event_header(
  * Returns 0 on success, a negative value on error.
  */
 extern int bt_ctf_stream_flush(struct bt_ctf_stream *stream);
+
+extern struct bt_ctf_packet *bt_ctf_stream_create_packet(
+		struct bt_ctf_stream *stream);
 
 /*
  * bt_ctf_stream_get and bt_ctf_stream_put: increment and decrement the
