@@ -57,7 +57,7 @@
 #define DEFAULT_CLOCK_IS_ABSOLUTE 0
 #define DEFAULT_CLOCK_TIME 0
 
-#define NR_TESTS 585
+#define NR_TESTS 579
 
 static uint64_t current_time = 42;
 
@@ -694,7 +694,9 @@ void append_simple_event(struct bt_ctf_stream_class *stream_class,
 	ok(bt_ctf_clock_set_time(clock, current_time) == 0, "Set clock time");
 
 	/* Populate stream event context */
-	stream_event_context = bt_ctf_stream_get_event_context(stream);
+	stream_event_context =
+		bt_ctf_event_get_stream_event_context(simple_event);
+	assert(stream_event_context);
 	stream_event_context_field = bt_ctf_field_structure_get_field(
 		stream_event_context, "common_event_context");
 	bt_ctf_field_unsigned_integer_set_value(stream_event_context_field, 42);
@@ -824,7 +826,8 @@ void append_complex_event(struct bt_ctf_stream_class *stream_class,
 	struct bt_ctf_field *uint_35_field, *int_16_field, *a_string_field,
 		*inner_structure_field, *complex_structure_field,
 		*a_sequence_field, *enum_variant_field, *enum_container_field,
-		*variant_field, *an_array_field, *ret_field;
+		*variant_field, *an_array_field, *stream_event_ctx_field,
+		*stream_event_ctx_int_field, *ret_field;
 	uint64_t ret_unsigned_int;
 	int64_t ret_signed_int;
 	const char *ret_string;
@@ -1305,6 +1308,14 @@ void append_complex_event(struct bt_ctf_stream_class *stream_class,
 		bt_ctf_field_signed_integer_set_value(int_16_field, i);
 		bt_put(int_16_field);
 	}
+
+	stream_event_ctx_field = bt_ctf_event_get_stream_event_context(event);
+	assert(stream_event_ctx_field);
+	stream_event_ctx_int_field = bt_ctf_field_structure_get_field(
+		stream_event_ctx_field, "common_event_context");
+	BT_PUT(stream_event_ctx_field);
+	bt_ctf_field_unsigned_integer_set_value(stream_event_ctx_int_field, 17);
+	BT_PUT(stream_event_ctx_int_field);
 
 	bt_ctf_clock_set_time(clock, ++current_time);
 	ok(bt_ctf_stream_append_event(stream, event) == 0,
@@ -2180,7 +2191,7 @@ void packet_resize_test(struct bt_ctf_stream_class *stream_class,
 	uint64_t ret_uint64;
 	int events_appended = 0;
 	struct bt_ctf_field *packet_context = NULL,
-		*packet_context_field = NULL, *event_context = NULL;
+		*packet_context_field = NULL, *stream_event_context = NULL;
 	struct bt_ctf_field_type *ep_field_1_type = NULL;
 	struct bt_ctf_field_type *ep_a_string_type = NULL;
 	struct bt_ctf_field_type *ep_type = NULL;
@@ -2223,22 +2234,6 @@ void packet_resize_test(struct bt_ctf_stream_class *stream_class,
 		"bt_ctf_event_get_payload_by_index handles an invalid index correctly");
 	bt_put(event);
 
-	ok(bt_ctf_stream_get_event_context(NULL) == NULL,
-		"bt_ctf_stream_get_event_context handles NULL correctly");
-	event_context = bt_ctf_stream_get_event_context(stream);
-	ok(event_context,
-		"bt_ctf_stream_get_event_context returns a stream event context");
-	ok(bt_ctf_stream_set_event_context(NULL, event_context) < 0,
-		"bt_ctf_stream_set_event_context handles a NULL stream correctly");
-	ok(bt_ctf_stream_set_event_context(stream, NULL) < 0,
-		"bt_ctf_stream_set_event_context handles a NULL stream event context correctly");
-	ok(!bt_ctf_stream_set_event_context(stream, event_context),
-		"bt_ctf_stream_set_event_context correctly set a stream event context");
-	ret_field = bt_ctf_field_create(ep_field_1_type);
-	ok(bt_ctf_stream_set_event_context(stream, ret_field) < 0,
-		"bt_ctf_stream_set_event_context rejects an event context of incorrect type");
-	bt_put(ret_field);
-
 	for (i = 0; i < PACKET_RESIZE_TEST_LENGTH; i++) {
 		event = bt_ctf_event_create(event_class);
 		struct bt_ctf_field *integer =
@@ -2257,8 +2252,11 @@ void packet_resize_test(struct bt_ctf_stream_class *stream_class,
 		bt_put(string);
 
 		/* Populate stream event context */
-		integer = bt_ctf_field_structure_get_field(event_context,
+		stream_event_context =
+			bt_ctf_event_get_stream_event_context(event);
+		integer = bt_ctf_field_structure_get_field(stream_event_context,
 			"common_event_context");
+		BT_PUT(stream_event_context);
 		ret |= bt_ctf_field_unsigned_integer_set_value(integer,
 			i % 42);
 		bt_put(integer);
@@ -2305,7 +2303,7 @@ end:
 	bt_put(string_type);
 	bt_put(packet_context);
 	bt_put(packet_context_field);
-	bt_put(event_context);
+	bt_put(stream_event_context);
 	bt_put(event_class);
 	bt_put(ep_field_1_type);
 	bt_put(ep_a_string_type);
