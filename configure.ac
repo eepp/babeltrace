@@ -295,20 +295,13 @@ AC_SUBST(babeltracectfirincludedir)
 
 AC_CONFIG_FILES([
 	Makefile
-	types/Makefile
 	compat/Makefile
+	ctf-reader-dev/Makefile
+	ctf-reader-dev/metadata/Makefile
 	formats/Makefile
 	formats/ctf/Makefile
-	formats/ctf/types/Makefile
-	formats/ctf-text/Makefile
-	formats/ctf-text/types/Makefile
-	formats/ctf-metadata/Makefile
-	formats/bt-dummy/Makefile
-	formats/lttng-live/Makefile
-	formats/ctf/metadata/Makefile
 	formats/ctf/writer/Makefile
 	formats/ctf/ir/Makefile
-	converter/Makefile
 	doc/Makefile
 	doc/bindings/Makefile
 	doc/bindings/python/Makefile
@@ -316,13 +309,6 @@ AC_CONFIG_FILES([
 	lib/Makefile
 	lib/prio_heap/Makefile
 	include/Makefile
-	bindings/Makefile
-	bindings/python/Makefile
-	tests/Makefile
-	tests/bin/Makefile
-	tests/lib/Makefile
-	tests/utils/Makefile
-	tests/utils/tap/Makefile
 	extras/Makefile
 	extras/valgrind/Makefile
 	babeltrace.pc
