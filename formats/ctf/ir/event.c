@@ -568,6 +568,7 @@ void bt_ctf_event_destroy(struct bt_object *obj)
 	bt_put(event->stream_event_context);
 	bt_put(event->context_payload);
 	bt_put(event->fields_payload);
+	bt_put(event->packet);
 	g_free(event);
 }
 
@@ -788,4 +789,21 @@ struct bt_ctf_event *bt_ctf_event_copy(struct bt_ctf_event *event)
 error:
 	BT_PUT(copy);
 	return copy;
+}
+
+int bt_ctf_event_set_packet(struct bt_ctf_event *event,
+		struct bt_ctf_packet *packet)
+{
+	int ret = 0;
+
+	if (!event || !packet) {
+		ret = -1;
+		goto end;
+	}
+
+	bt_put(event->packet);
+	event->packet = bt_get(packet);
+
+end:
+	return ret;
 }
