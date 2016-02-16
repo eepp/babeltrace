@@ -56,8 +56,9 @@
 #define DEFAULT_CLOCK_OFFSET_S 0
 #define DEFAULT_CLOCK_IS_ABSOLUTE 0
 #define DEFAULT_CLOCK_TIME 0
+#define DEFAULT_CLOCK_VALUE 0
 
-#define NR_TESTS 585
+#define NR_TESTS 588
 
 static uint64_t current_time = 42;
 
@@ -2977,9 +2978,22 @@ int main(int argc, char **argv)
 
 	ok(bt_ctf_clock_get_time(clock) == DEFAULT_CLOCK_TIME,
 		"bt_ctf_clock_get_time returns the correct default time");
+	ok(bt_ctf_clock_get_value(clock) == DEFAULT_CLOCK_VALUE,
+		"bt_ctf_clock_get_value returns the correct default value");
+	ok(bt_ctf_clock_set_value(clock, current_time) == 0,
+		"Set clock value");
+	ok(bt_ctf_clock_get_value(clock) == current_time,
+		"bt_ctf_clock_get_value returns the correct value once it is set");
 	ok(bt_ctf_clock_set_time(clock, current_time) == 0,
 		"Set clock time");
-	ok(bt_ctf_clock_get_time(clock) == current_time,
+
+	/*
+	 * Approximate check because it is known that
+	 * bt_ctf_clock_set_time() and bt_ctf_clock_get_time() are not
+	 * accurate when the clock's frequency is not 1 GHz.
+	 */
+	ok(bt_ctf_clock_get_time(clock) >= current_time - 1 &&
+		bt_ctf_clock_get_time(clock) <= current_time + 1,
 		"bt_ctf_clock_get_time returns the correct time once it is set");
 
 	ok(bt_ctf_writer_add_clock(writer, clock) == 0,

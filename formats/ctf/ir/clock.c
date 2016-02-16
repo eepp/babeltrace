@@ -324,7 +324,15 @@ uint64_t bt_ctf_clock_get_time(struct bt_ctf_clock *clock)
 		goto end;
 	}
 
-	ret = clock->time;
+	/* Common case where cycles are actually nanoseconds */
+	if (clock->frequency == 1000000000) {
+		ret = clock->value;
+		goto end;
+	}
+
+	ret = (uint64_t) ((1e9 * (double) clock->value) /
+		(double) clock->frequency);
+
 end:
 	return ret;
 }
@@ -334,12 +342,48 @@ int bt_ctf_clock_set_time(struct bt_ctf_clock *clock, uint64_t time)
 	int ret = 0;
 
 	/* Timestamps are strictly monotonic */
-	if (!clock || time < clock->time) {
+	if (!clock) {
 		ret = -1;
 		goto end;
 	}
 
-	clock->time = time;
+	/* Common case where cycles are actually nanoseconds */
+	if (clock->frequency == 1000000000) {
+		clock->value = time;
+		goto end;
+	}
+
+	ret = bt_ctf_clock_set_value(clock,
+		(uint64_t) (((double) time * (double) clock->frequency) / 1e9));
+
+end:
+	return ret;
+}
+
+uint64_t bt_ctf_clock_get_value(struct bt_ctf_clock *clock)
+{
+	uint64_t ret = -1ULL;
+
+	if (!clock) {
+		goto end;
+	}
+
+	ret = clock->value;
+end:
+	return ret;
+}
+
+int bt_ctf_clock_set_value(struct bt_ctf_clock *clock, uint64_t value)
+{
+	int ret = 0;
+
+	/* Timestamps are strictly monotonic */
+	if (!clock || value < clock->value) {
+		ret = -1;
+		goto end;
+	}
+
+	clock->value = value;
 end:
 	return ret;
 }

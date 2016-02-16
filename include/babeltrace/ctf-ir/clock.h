@@ -254,24 +254,10 @@ extern uint64_t bt_ctf_clock_get_time(struct bt_ctf_clock *clock);
 extern int bt_ctf_clock_set_time(struct bt_ctf_clock *clock,
 		uint64_t time);
 
-/*
- * bt_ctf_clock_get and bt_ctf_clock_put: increment and decrement the
- * refcount of the clock
- *
- * You may also use bt_ctf_get() and bt_ctf_put() with clock objects.
- *
- * These functions ensure that the clock won't be destroyed when it
- * is in use. The same number of get and put (plus one extra put to
- * release the initial reference done at creation) has to be done to
- * destroy a clock.
- *
- * When the clock refcount is decremented to 0 by a bt_ctf_clock_put,
- * the clock is freed.
- *
- * @param clock Clock instance.
- */
-extern void bt_ctf_clock_get(struct bt_ctf_clock *clock);
-extern void bt_ctf_clock_put(struct bt_ctf_clock *clock);
+extern uint64_t bt_ctf_clock_get_value(struct bt_ctf_clock *clock);
+
+extern int bt_ctf_clock_set_value(struct bt_ctf_clock *clock,
+		uint64_t value);
 
 #ifdef __cplusplus
 }
