@@ -917,7 +917,6 @@ void bt_ctf_stream_destroy(struct bt_object *obj)
 	free(stream->name);
 	bt_put(stream->packet_header);
 	bt_put(stream->packet_context);
-	bt_put(stream->event_context);
 	g_free(stream);
 }
 
