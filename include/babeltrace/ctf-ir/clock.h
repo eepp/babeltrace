@@ -233,32 +233,6 @@ extern const unsigned char *bt_ctf_clock_get_uuid(struct bt_ctf_clock *clock);
 extern int bt_ctf_clock_set_uuid(struct bt_ctf_clock *clock,
 		const unsigned char *uuid);
 
-/*
- * bt_ctf_clock_get_time: get a clock's current time value.
- *
- * Get the current time in nanoseconds since the clock's origin (offset and
- * offset_s attributes).
- *
- * Returns the clock's current time value, -1ULL on error.
- */
-extern uint64_t bt_ctf_clock_get_time(struct bt_ctf_clock *clock);
-
-/*
- * bt_ctf_clock_set_time: set a clock's current time value.
- *
- * Set the current time in nanoseconds since the clock's origin (offset and
- * offset_s attributes). Defaults to 0.
- *
- * Returns 0 on success, a negative value on error.
- */
-extern int bt_ctf_clock_set_time(struct bt_ctf_clock *clock,
-		uint64_t time);
-
-extern uint64_t bt_ctf_clock_get_value(struct bt_ctf_clock *clock);
-
-extern int bt_ctf_clock_set_value(struct bt_ctf_clock *clock,
-		uint64_t value);
-
 #ifdef __cplusplus
 }
 #endif
