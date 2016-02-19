@@ -323,6 +323,20 @@ end:
 	return ret;
 }
 
+static
+uint64_t ns_from_value(uint64_t frequency, uint64_t value)
+{
+	uint64_t ns;
+
+	if (frequency == 1000000000) {
+		ns = value;
+	} else {
+		ns = (uint64_t) ((1e9 * (double) value) / (double) frequency);
+	}
+
+	return ns;
+}
+
 uint64_t bt_ctf_clock_get_time(struct bt_ctf_clock *clock)
 {
 	uint64_t ret = -1ULL;
@@ -340,14 +354,7 @@ uint64_t bt_ctf_clock_get_time(struct bt_ctf_clock *clock)
 		goto end;
 	}
 
-	/* Common case where cycles are actually nanoseconds */
-	if (clock->frequency == 1000000000) {
-		ret = clock->value;
-		goto end;
-	}
-
-	ret = (uint64_t) ((1e9 * (double) clock->value) /
-		(double) clock->frequency);
+	ret = ns_from_value(clock->frequency, clock->value);
 
 end:
 	return ret;
@@ -509,4 +516,25 @@ void bt_ctf_clock_destroy(struct bt_object *obj)
 	}
 
 	g_free(clock);
+}
+
+uint64_t bt_ctf_clock_ns_from_value(struct bt_ctf_clock *clock, uint64_t value)
+{
+	uint64_t ns = -1ULL;
+
+	if (!clock) {
+		goto end;
+	}
+
+	/* Initialize nanosecond timestamp to clock's offset in seconds */
+	ns = clock->offset_s * 1000000000;
+
+	/* Add offset in cycles, converted to nanoseconds */
+	ns += ns_from_value(clock->frequency, clock->offset);
+
+	/* Add given value, converter to nanoseconds */
+	ns += ns_from_value(clock->frequency, value);
+
+end:
+	return ns;
 }
