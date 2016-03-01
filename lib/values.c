@@ -260,7 +260,7 @@ struct bt_value *(* const copy_funcs[])(const struct bt_value *) = {
 };
 
 static
-bool bt_value_null_compare(const struct bt_value *object_a,
+int bt_value_null_compare(const struct bt_value *object_a,
 		const struct bt_value *object_b)
 {
 	/*
@@ -268,52 +268,52 @@ bool bt_value_null_compare(const struct bt_value *object_a,
 	 * object_a and object_b have the same type, and in the case of
 	 * null value objects, they're always the same if it is so.
 	 */
-	return true;
+	return 0;
 }
 
 static
-bool bt_value_bool_compare(const struct bt_value *object_a,
+int bt_value_bool_compare(const struct bt_value *object_a,
 		const struct bt_value *object_b)
 {
 	return BT_VALUE_TO_BOOL(object_a)->value ==
-		BT_VALUE_TO_BOOL(object_b)->value;
+		BT_VALUE_TO_BOOL(object_b)->value ? 0 : 1;
 }
 
 static
-bool bt_value_integer_compare(const struct bt_value *object_a,
+int bt_value_integer_compare(const struct bt_value *object_a,
 		const struct bt_value *object_b)
 {
 	return BT_VALUE_TO_INTEGER(object_a)->value ==
-		BT_VALUE_TO_INTEGER(object_b)->value;
+		BT_VALUE_TO_INTEGER(object_b)->value ? 0 : 1;
 }
 
 static
-bool bt_value_float_compare(const struct bt_value *object_a,
+int bt_value_float_compare(const struct bt_value *object_a,
 		const struct bt_value *object_b)
 {
 	return BT_VALUE_TO_FLOAT(object_a)->value ==
-		BT_VALUE_TO_FLOAT(object_b)->value;
+		BT_VALUE_TO_FLOAT(object_b)->value ? 0 : 1;
 }
 
 static
-bool bt_value_string_compare(const struct bt_value *object_a,
+int bt_value_string_compare(const struct bt_value *object_a,
 		const struct bt_value *object_b)
 {
 	return !strcmp(BT_VALUE_TO_STRING(object_a)->gstr->str,
-		BT_VALUE_TO_STRING(object_b)->gstr->str);
+		BT_VALUE_TO_STRING(object_b)->gstr->str) ? 0 : 1;
 }
 
 static
-bool bt_value_array_compare(const struct bt_value *object_a,
+int bt_value_array_compare(const struct bt_value *object_a,
 		const struct bt_value *object_b)
 {
 	int i;
-	bool ret = true;
+	int ret = 0;
 	const struct bt_value_array *array_obj_a =
 		BT_VALUE_TO_ARRAY(object_a);
 
 	if (bt_value_array_size(object_a) != bt_value_array_size(object_b)) {
-		ret = false;
+		ret = 1;
 		goto end;
 	}
 
@@ -323,11 +323,11 @@ bool bt_value_array_compare(const struct bt_value *object_a,
 
 		element_obj_a = bt_value_array_get(object_a, i);
 		element_obj_b = bt_value_array_get(object_b, i);
+		ret = bt_value_compare(element_obj_a, element_obj_b);
 
-		if (!bt_value_compare(element_obj_a, element_obj_b)) {
+		if (ret) {
 			BT_PUT(element_obj_a);
 			BT_PUT(element_obj_b);
-			ret = false;
 			goto end;
 		}
 
@@ -340,16 +340,16 @@ end:
 }
 
 static
-bool bt_value_map_compare(const struct bt_value *object_a,
+int bt_value_map_compare(const struct bt_value *object_a,
 		const struct bt_value *object_b)
 {
-	bool ret = true;
+	int ret = 0;
 	GHashTableIter iter;
 	gpointer key, element_obj_a;
 	const struct bt_value_map *map_obj_a = BT_VALUE_TO_MAP(object_a);
 
 	if (bt_value_map_size(object_a) != bt_value_map_size(object_b)) {
-		ret = false;
+		ret = 1;
 		goto end;
 	}
 
@@ -360,10 +360,10 @@ bool bt_value_map_compare(const struct bt_value *object_a,
 		const char *key_str = g_quark_to_string((unsigned long) key);
 
 		element_obj_b = bt_value_map_get(object_b, key_str);
+		ret = bt_value_compare(element_obj_a, element_obj_b);
 
-		if (!bt_value_compare(element_obj_a, element_obj_b)) {
+		if (ret) {
 			BT_PUT(element_obj_b);
-			ret = false;
 			goto end;
 		}
 
@@ -375,14 +375,14 @@ end:
 }
 
 static
-bool (* const compare_funcs[])(const struct bt_value *,
+int (* const compare_funcs[])(const struct bt_value *,
 		const struct bt_value *) = {
 	[BT_VALUE_TYPE_NULL] =		bt_value_null_compare,
 	[BT_VALUE_TYPE_BOOL] =		bt_value_bool_compare,
 	[BT_VALUE_TYPE_INTEGER] =	bt_value_integer_compare,
-	[BT_VALUE_TYPE_FLOAT] =	bt_value_float_compare,
+	[BT_VALUE_TYPE_FLOAT] =		bt_value_float_compare,
 	[BT_VALUE_TYPE_STRING] =	bt_value_string_compare,
-	[BT_VALUE_TYPE_ARRAY] =	bt_value_array_compare,
+	[BT_VALUE_TYPE_ARRAY] =		bt_value_array_compare,
 	[BT_VALUE_TYPE_MAP] =		bt_value_map_compare,
 };
 
@@ -1182,16 +1182,18 @@ end:
 	return copy_obj;
 }
 
-bool bt_value_compare(const struct bt_value *object_a,
+int bt_value_compare(const struct bt_value *object_a,
 	const struct bt_value *object_b)
 {
-	bool ret = false;
+	int ret;
 
 	if (!object_a || !object_b) {
+		ret = -1;
 		goto end;
 	}
 
 	if (object_a->type != object_b->type) {
+		ret = 1;
 		goto end;
 	}
 

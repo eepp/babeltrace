@@ -958,15 +958,15 @@ extern struct bt_value *bt_value_copy(const struct bt_value *object);
 
 /**
  * Compares the value objects \p object_a and \p object_b and returns
- * \c true if they have the same \em content (raw values).
+ * 0 if they have the same \em content (raw values).
  *
  * @param object_a	Value object A
  * @param object_b	Value object B
- * @returns		\c true if \p object_a and \p object_b have the
- *			same content, or \c false if they differ or on
- *			error
+ * @returns		0 if \p object_a and \p object_b have the
+ *			same content, a positive value if they differ,
+ *			or a negative value on error
  */
-extern bool bt_value_compare(const struct bt_value *object_a,
+extern int bt_value_compare(const struct bt_value *object_a,
 		const struct bt_value *object_b);
 
 #ifdef __cplusplus

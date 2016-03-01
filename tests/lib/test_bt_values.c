@@ -848,11 +848,11 @@ void test_types(void)
 static
 void test_compare_null(void)
 {
-	ok(!bt_value_compare(bt_value_null, NULL),
+	ok(bt_value_compare(bt_value_null, NULL) < 0,
 		"cannot compare null value object and NULL");
-	ok(!bt_value_compare(NULL, bt_value_null),
+	ok(bt_value_compare(NULL, bt_value_null) < 0,
 		"cannot compare NULL and null value object");
-	ok(bt_value_compare(bt_value_null, bt_value_null),
+	ok(bt_value_compare(bt_value_null, bt_value_null) == 0,
 		"null value objects are equivalent");
 }
 
@@ -864,11 +864,11 @@ void test_compare_bool(void)
 	struct bt_value *bool3 = bt_value_bool_create_init(false);
 
 	assert(bool1 && bool2 && bool3);
-	ok(!bt_value_compare(bt_value_null, bool1),
+	ok(bt_value_compare(bt_value_null, bool1) > 0,
 		"cannot compare null value object and bool value object");
-	ok(!bt_value_compare(bool1, bool2),
+	ok(bt_value_compare(bool1, bool2) > 0,
 		"integer value objects are not equivalent (false and true)");
-	ok(bt_value_compare(bool1, bool3),
+	ok(bt_value_compare(bool1, bool3) == 0,
 		"integer value objects are equivalent (false and false)");
 
 	BT_PUT(bool1);
@@ -884,11 +884,11 @@ void test_compare_integer(void)
 	struct bt_value *int3 = bt_value_integer_create_init(10);
 
 	assert(int1 && int2 && int3);
-	ok(!bt_value_compare(bt_value_null, int1),
+	ok(bt_value_compare(bt_value_null, int1) > 0,
 		"cannot compare null value object and integer value object");
-	ok(!bt_value_compare(int1, int2),
+	ok(bt_value_compare(int1, int2) > 0,
 		"integer value objects are not equivalent (10 and -23)");
-	ok(bt_value_compare(int1, int3),
+	ok(bt_value_compare(int1, int3) == 0,
 		"integer value objects are equivalent (10 and 10)");
 
 	BT_PUT(int1);
@@ -905,11 +905,11 @@ void test_compare_float(void)
 
 	assert(float1 && float2 && float3);
 
-	ok(!bt_value_compare(bt_value_null, float1),
+	ok(bt_value_compare(bt_value_null, float1) > 0,
 		"cannot compare null value object and floating point number value object");
-	ok(!bt_value_compare(float1, float2),
+	ok(bt_value_compare(float1, float2) > 0,
 		"floating point number value objects are not equivalent (17.38 and -14.23)");
-	ok(bt_value_compare(float1, float3),
+	ok(bt_value_compare(float1, float3) == 0,
 		"floating point number value objects are equivalent (17.38 and 17.38)");
 
 	BT_PUT(float1);
@@ -926,11 +926,11 @@ void test_compare_string(void)
 
 	assert(string1 && string2 && string3);
 
-	ok(!bt_value_compare(bt_value_null, string1),
+	ok(bt_value_compare(bt_value_null, string1) > 0,
 		"cannot compare null value object and string value object");
-	ok(!bt_value_compare(string1, string2),
+	ok(bt_value_compare(string1, string2) > 0,
 		"string value objects are not equivalent (\"hello\" and \"bt_value\")");
-	ok(bt_value_compare(string1, string3),
+	ok(bt_value_compare(string1, string3) == 0,
 		"string value objects are equivalent (\"hello\" and \"hello\")");
 
 	BT_PUT(string1);
@@ -947,7 +947,7 @@ void test_compare_array(void)
 
 	assert(array1 && array2 && array3);
 
-	ok(bt_value_compare(array1, array2),
+	ok(bt_value_compare(array1, array2) == 0,
 		"empty array value objects are equivalent");
 
 	assert(!bt_value_array_append_integer(array1, 23));
@@ -963,11 +963,11 @@ void test_compare_array(void)
 	assert(bt_value_array_size(array2) == 3);
 	assert(bt_value_array_size(array3) == 3);
 
-	ok(!bt_value_compare(bt_value_null, array1),
+	ok(bt_value_compare(bt_value_null, array1) > 0,
 		"cannot compare null value object and array value object");
-	ok(!bt_value_compare(array1, array2),
+	ok(bt_value_compare(array1, array2) > 0,
 		"array value objects are not equivalent ([23, 14.2, false] and [14.2, 23, false])");
-	ok(bt_value_compare(array1, array3),
+	ok(bt_value_compare(array1, array3) == 0,
 		"array value objects are equivalent ([23, 14.2, false] and [23, 14.2, false])");
 
 	BT_PUT(array1);
@@ -984,7 +984,7 @@ void test_compare_map(void)
 
 	assert(map1 && map2 && map3);
 
-	ok(bt_value_compare(map1, map2),
+	ok(bt_value_compare(map1, map2) == 0,
 		"empty map value objects are equivalent");
 
 	assert(!bt_value_map_insert_integer(map1, "one", 23));
@@ -1000,11 +1000,11 @@ void test_compare_map(void)
 	assert(bt_value_map_size(map2) == 3);
 	assert(bt_value_map_size(map3) == 3);
 
-	ok(!bt_value_compare(bt_value_null, map1),
+	ok(bt_value_compare(bt_value_null, map1) > 0,
 		"cannot compare null value object and map value object");
-	ok(!bt_value_compare(map1, map2),
+	ok(bt_value_compare(map1, map2) > 0,
 		"map value objects are not equivalent");
-	ok(bt_value_compare(map1, map3),
+	ok(bt_value_compare(map1, map3) == 0,
 		"map value objects are equivalent");
 
 	BT_PUT(map1);
@@ -1015,7 +1015,7 @@ void test_compare_map(void)
 static
 void test_compare(void)
 {
-	ok(!bt_value_compare(NULL, NULL), "cannot compare NULL and NULL");
+	ok(bt_value_compare(NULL, NULL) < 0, "cannot compare NULL and NULL");
 	test_compare_null();
 	test_compare_bool();
 	test_compare_integer();
@@ -1090,7 +1090,7 @@ void test_copy(void)
 	ok(null_copy_obj == bt_value_null,
 		"bt_value_copy() returns the same pointer (null)");
 
-	ok(bt_value_compare(map_obj, map_copy_obj),
+	ok(bt_value_compare(map_obj, map_copy_obj) == 0,
 		"source and destination value objects have the same content");
 
 	BT_PUT(bool_copy_obj);
