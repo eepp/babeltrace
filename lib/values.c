@@ -166,7 +166,7 @@ static
 struct bt_value *bt_value_array_copy(const struct bt_value *array_obj)
 {
 	int i;
-	int ret;
+	int err;
 	struct bt_value *copy_obj;
 	struct bt_value_array *typed_array_obj;
 
@@ -196,10 +196,10 @@ struct bt_value *bt_value_array_copy(const struct bt_value *array_obj)
 			goto end;
 		}
 
-		ret = bt_value_array_append(copy_obj, element_obj_copy);
+		err = bt_value_array_append(copy_obj, element_obj_copy);
 		BT_PUT(element_obj_copy);
 
-		if (ret) {
+		if (err) {
 			BT_ERR("Cannot append array value object's element copy #%d to array value object copy\n", i);
 			BT_PUT(copy_obj);
 			goto end;
@@ -213,7 +213,7 @@ end:
 static
 struct bt_value *bt_value_map_copy(const struct bt_value *map_obj)
 {
-	int ret;
+	int err;
 	GHashTableIter iter;
 	gpointer key, element_obj;
 	struct bt_value *copy_obj;
@@ -240,10 +240,10 @@ struct bt_value *bt_value_map_copy(const struct bt_value *map_obj)
 			goto end;
 		}
 
-		ret = bt_value_map_insert(copy_obj, key_str, element_obj_copy);
+		err = bt_value_map_insert(copy_obj, key_str, element_obj_copy);
 		BT_PUT(element_obj_copy);
 
-		if (ret) {
+		if (err) {
 			BT_ERR("Cannot insert map value object's element copy \"%s\" into map value object copy\n", key_str);
 			BT_PUT(copy_obj);
 			goto end;
@@ -478,18 +478,18 @@ void bt_value_destroy(struct bt_object *obj)
 
 enum bt_value_status bt_value_freeze(struct bt_value *object)
 {
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 
 	if (!object) {
 		BT_ERR_STR("Cannot freeze value object: invalid argument");
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
 	freeze_funcs[object->type](object);
 
 end:
-	return ret;
+	return err;
 }
 
 bool bt_value_is_frozen(const struct bt_value *object)
@@ -537,13 +537,13 @@ end:
 
 struct bt_value *bt_value_bool_create(void)
 {
-	struct bt_value *ret = bt_value_bool_create_init(false);
+	struct bt_value *err = bt_value_bool_create_init(false);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot create a default boolean value object\n");
 	}
 
-	return ret;
+	return err;
 }
 
 struct bt_value *bt_value_integer_create_init(int64_t val)
@@ -565,13 +565,13 @@ end:
 
 struct bt_value *bt_value_integer_create(void)
 {
-	struct bt_value *ret = bt_value_integer_create_init(0);
+	struct bt_value *err = bt_value_integer_create_init(0);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot create a default integer value object\n");
 	}
 
-	return ret;
+	return err;
 }
 
 struct bt_value *bt_value_float_create_init(double val)
@@ -593,13 +593,13 @@ end:
 
 struct bt_value *bt_value_float_create(void)
 {
-	struct bt_value *ret = bt_value_float_create_init(0.);
+	struct bt_value *err = bt_value_float_create_init(0.);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot create a default floating point number value object\n");
 	}
 
-	return ret;
+	return err;
 }
 
 struct bt_value *bt_value_string_create_init(const char *val)
@@ -632,13 +632,13 @@ end:
 
 struct bt_value *bt_value_string_create(void)
 {
-	struct bt_value *ret = bt_value_string_create_init("");
+	struct bt_value *err = bt_value_string_create_init("");
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot create a default string value object\n");
 	}
 
-	return ret;
+	return err;
 }
 
 struct bt_value *bt_value_array_create(void)
@@ -692,174 +692,174 @@ end:
 enum bt_value_status bt_value_bool_get(const struct bt_value *bool_obj,
 		bool *val)
 {
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 	struct bt_value_bool *typed_bool_obj = BT_VALUE_TO_BOOL(bool_obj);
 
 	if (!bool_obj || !bt_value_is_bool(bool_obj) || !val) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
 	*val = typed_bool_obj->value;
 
 end:
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_bool_set(struct bt_value *bool_obj, bool val)
 {
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 	struct bt_value_bool *typed_bool_obj = BT_VALUE_TO_BOOL(bool_obj);
 
 	if (!bool_obj || !bt_value_is_bool(bool_obj)) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
 	if (bool_obj->is_frozen) {
 		BT_ERR_STR_FUNC(bt_log_str_frozen);
-		ret = BT_VALUE_STATUS_FROZEN;
+		err = BT_VALUE_STATUS_FROZEN;
 		goto end;
 	}
 
 	typed_bool_obj->value = val;
 
 end:
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_integer_get(const struct bt_value *integer_obj,
 		int64_t *val)
 {
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 	struct bt_value_integer *typed_integer_obj =
 		BT_VALUE_TO_INTEGER(integer_obj);
 
 	if (!integer_obj || !bt_value_is_integer(integer_obj) || !val) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
 	*val = typed_integer_obj->value;
 
 end:
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_integer_set(struct bt_value *integer_obj,
 		int64_t val)
 {
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 	struct bt_value_integer *typed_integer_obj =
 		BT_VALUE_TO_INTEGER(integer_obj);
 
 	if (!integer_obj || !bt_value_is_integer(integer_obj)) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
 	if (integer_obj->is_frozen) {
 		BT_ERR_STR_FUNC(bt_log_str_frozen);
-		ret = BT_VALUE_STATUS_FROZEN;
+		err = BT_VALUE_STATUS_FROZEN;
 		goto end;
 	}
 
 	typed_integer_obj->value = val;
 
 end:
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_float_get(const struct bt_value *float_obj,
 		double *val)
 {
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 	struct bt_value_float *typed_float_obj =
 		BT_VALUE_TO_FLOAT(float_obj);
 
 	if (!float_obj || !bt_value_is_float(float_obj) || !val) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
 	*val = typed_float_obj->value;
 
 end:
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_float_set(struct bt_value *float_obj,
 		double val)
 {
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 	struct bt_value_float *typed_float_obj =
 		BT_VALUE_TO_FLOAT(float_obj);
 
 	if (!float_obj || !bt_value_is_float(float_obj)) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
 	if (float_obj->is_frozen) {
 		BT_ERR_STR_FUNC(bt_log_str_frozen);
-		ret = BT_VALUE_STATUS_FROZEN;
+		err = BT_VALUE_STATUS_FROZEN;
 		goto end;
 	}
 
 	typed_float_obj->value = val;
 
 end:
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_string_get(const struct bt_value *string_obj,
 		const char **val)
 {
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 	struct bt_value_string *typed_string_obj =
 		BT_VALUE_TO_STRING(string_obj);
 
 	if (!string_obj || !bt_value_is_string(string_obj) || !val) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
 	*val = typed_string_obj->gstr->str;
 
 end:
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_string_set(struct bt_value *string_obj,
 		const char *val)
 {
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 	struct bt_value_string *typed_string_obj =
 		BT_VALUE_TO_STRING(string_obj);
 
 	if (!string_obj || !bt_value_is_string(string_obj) || !val) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
 	if (string_obj->is_frozen) {
 		BT_ERR_STR_FUNC(bt_log_str_frozen);
-		ret = BT_VALUE_STATUS_FROZEN;
+		err = BT_VALUE_STATUS_FROZEN;
 		goto end;
 	}
 
 	g_string_assign(typed_string_obj->gstr, val);
 
 end:
-	return ret;
+	return err;
 }
 
 int bt_value_array_size(const struct bt_value *array_obj)
@@ -909,19 +909,19 @@ end:
 enum bt_value_status bt_value_array_append(struct bt_value *array_obj,
 		struct bt_value *element_obj)
 {
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 	struct bt_value_array *typed_array_obj =
 		BT_VALUE_TO_ARRAY(array_obj);
 
 	if (!array_obj || !bt_value_is_array(array_obj) || !element_obj) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
 	if (array_obj->is_frozen) {
 		BT_ERR_STR_FUNC(bt_log_str_frozen);
-		ret = BT_VALUE_STATUS_FROZEN;
+		err = BT_VALUE_STATUS_FROZEN;
 		goto end;
 	}
 
@@ -929,127 +929,127 @@ enum bt_value_status bt_value_array_append(struct bt_value *array_obj,
 	bt_get(element_obj);
 
 end:
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_array_append_bool(struct bt_value *array_obj,
 		bool val)
 {
-	enum bt_value_status ret;
+	enum bt_value_status err;
 	struct bt_value *bool_obj = NULL;
 
 	bool_obj = bt_value_bool_create_init(val);
-	ret = bt_value_array_append(array_obj, bool_obj);
+	err = bt_value_array_append(array_obj, bool_obj);
 	bt_put(bool_obj);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot append a boolean value object\n");
 	}
 
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_array_append_integer(
 		struct bt_value *array_obj, int64_t val)
 {
-	enum bt_value_status ret;
+	enum bt_value_status err;
 	struct bt_value *integer_obj = NULL;
 
 	integer_obj = bt_value_integer_create_init(val);
-	ret = bt_value_array_append(array_obj, integer_obj);
+	err = bt_value_array_append(array_obj, integer_obj);
 	bt_put(integer_obj);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot append an integer value object\n");
 	}
 
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_array_append_float(struct bt_value *array_obj,
 		double val)
 {
-	enum bt_value_status ret;
+	enum bt_value_status err;
 	struct bt_value *float_obj = NULL;
 
 	float_obj = bt_value_float_create_init(val);
-	ret = bt_value_array_append(array_obj, float_obj);
+	err = bt_value_array_append(array_obj, float_obj);
 	bt_put(float_obj);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot append a floating point number value object\n");
 	}
 
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_array_append_string(struct bt_value *array_obj,
 		const char *val)
 {
-	enum bt_value_status ret;
+	enum bt_value_status err;
 	struct bt_value *string_obj = NULL;
 
 	string_obj = bt_value_string_create_init(val);
-	ret = bt_value_array_append(array_obj, string_obj);
+	err = bt_value_array_append(array_obj, string_obj);
 	bt_put(string_obj);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot append a string value object\n");
 	}
 
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_array_append_empty_array(
 		struct bt_value *array_obj)
 {
-	enum bt_value_status ret;
+	enum bt_value_status err;
 	struct bt_value *empty_array_obj = NULL;
 
 	empty_array_obj = bt_value_array_create();
-	ret = bt_value_array_append(array_obj, empty_array_obj);
+	err = bt_value_array_append(array_obj, empty_array_obj);
 	bt_put(empty_array_obj);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot append an empty array value object\n");
 	}
 
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_array_append_empty_map(struct bt_value *array_obj)
 {
-	enum bt_value_status ret;
+	enum bt_value_status err;
 	struct bt_value *map_obj = NULL;
 
 	map_obj = bt_value_map_create();
-	ret = bt_value_array_append(array_obj, map_obj);
+	err = bt_value_array_append(array_obj, map_obj);
 	bt_put(map_obj);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot append an empty map value object\n");
 	}
 
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_array_set(struct bt_value *array_obj,
 		size_t index, struct bt_value *element_obj)
 {
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 	struct bt_value_array *typed_array_obj =
 		BT_VALUE_TO_ARRAY(array_obj);
 
 	if (!array_obj || !bt_value_is_array(array_obj) || !element_obj ||
 			index >= typed_array_obj->garray->len) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
 	if (array_obj->is_frozen) {
 		BT_ERR_STR_FUNC(bt_log_str_frozen);
-		ret = BT_VALUE_STATUS_FROZEN;
+		err = BT_VALUE_STATUS_FROZEN;
 		goto end;
 	}
 
@@ -1058,7 +1058,7 @@ enum bt_value_status bt_value_array_set(struct bt_value *array_obj,
 	bt_get(element_obj);
 
 end:
-	return ret;
+	return err;
 }
 
 int bt_value_map_size(const struct bt_value *map_obj)
@@ -1110,40 +1110,40 @@ end:
 
 bool bt_value_map_has_key(const struct bt_value *map_obj, const char *key)
 {
-	bool ret;
+	bool has_key;
 	GQuark quark;
 	struct bt_value_map *typed_map_obj = BT_VALUE_TO_MAP(map_obj);
 
 	if (!map_obj || !bt_value_is_map(map_obj) || !key) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = false;
+		has_key = false;
 		goto end;
 	}
 
 	quark = g_quark_from_string(key);
-	ret = babeltrace_g_hash_table_contains(typed_map_obj->ght,
+	has_key = babeltrace_g_hash_table_contains(typed_map_obj->ght,
 		GUINT_TO_POINTER(quark));
 
 end:
-	return ret;
+	return has_key;
 }
 
 enum bt_value_status bt_value_map_insert(struct bt_value *map_obj,
 		const char *key, struct bt_value *element_obj)
 {
 	GQuark quark;
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 	struct bt_value_map *typed_map_obj = BT_VALUE_TO_MAP(map_obj);
 
 	if (!map_obj || !bt_value_is_map(map_obj) || !key || !element_obj) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
 	if (map_obj->is_frozen) {
 		BT_ERR_STR_FUNC(bt_log_str_frozen);
-		ret = BT_VALUE_STATUS_FROZEN;
+		err = BT_VALUE_STATUS_FROZEN;
 		goto end;
 	}
 
@@ -1153,122 +1153,122 @@ enum bt_value_status bt_value_map_insert(struct bt_value *map_obj,
 	bt_get(element_obj);
 
 end:
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_map_insert_bool(struct bt_value *map_obj,
 		const char *key, bool val)
 {
-	enum bt_value_status ret;
+	enum bt_value_status err;
 	struct bt_value *bool_obj = NULL;
 
 	bool_obj = bt_value_bool_create_init(val);
-	ret = bt_value_map_insert(map_obj, key, bool_obj);
+	err = bt_value_map_insert(map_obj, key, bool_obj);
 	bt_put(bool_obj);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot insert a boolean value object mapped to key \"%s\"\n", key);
 	}
 
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_map_insert_integer(struct bt_value *map_obj,
 		const char *key, int64_t val)
 {
-	enum bt_value_status ret;
+	enum bt_value_status err;
 	struct bt_value *integer_obj = NULL;
 
 	integer_obj = bt_value_integer_create_init(val);
-	ret = bt_value_map_insert(map_obj, key, integer_obj);
+	err = bt_value_map_insert(map_obj, key, integer_obj);
 	bt_put(integer_obj);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot insert an integer value object mapped to key \"%s\"\n", key);
 	}
 
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_map_insert_float(struct bt_value *map_obj,
 		const char *key, double val)
 {
-	enum bt_value_status ret;
+	enum bt_value_status err;
 	struct bt_value *float_obj = NULL;
 
 	float_obj = bt_value_float_create_init(val);
-	ret = bt_value_map_insert(map_obj, key, float_obj);
+	err = bt_value_map_insert(map_obj, key, float_obj);
 	bt_put(float_obj);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot insert a floating point number value object mapped to key \"%s\"\n", key);
 	}
 
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_map_insert_string(struct bt_value *map_obj,
 		const char *key, const char *val)
 {
-	enum bt_value_status ret;
+	enum bt_value_status err;
 	struct bt_value *string_obj = NULL;
 
 	string_obj = bt_value_string_create_init(val);
-	ret = bt_value_map_insert(map_obj, key, string_obj);
+	err = bt_value_map_insert(map_obj, key, string_obj);
 	bt_put(string_obj);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot insert a string value object mapped to key \"%s\"\n", key);
 	}
 
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_map_insert_empty_array(struct bt_value *map_obj,
 		const char *key)
 {
-	enum bt_value_status ret;
+	enum bt_value_status err;
 	struct bt_value *array_obj = NULL;
 
 	array_obj = bt_value_array_create();
-	ret = bt_value_map_insert(map_obj, key, array_obj);
+	err = bt_value_map_insert(map_obj, key, array_obj);
 	bt_put(array_obj);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot insert an empty array value object mapped to key \"%s\"\n", key);
 	}
 
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_map_insert_empty_map(struct bt_value *map_obj,
 		const char *key)
 {
-	enum bt_value_status ret;
+	enum bt_value_status err;
 	struct bt_value *empty_map_obj = NULL;
 
 	empty_map_obj = bt_value_map_create();
-	ret = bt_value_map_insert(map_obj, key, empty_map_obj);
+	err = bt_value_map_insert(map_obj, key, empty_map_obj);
 	bt_put(empty_map_obj);
 
-	if (ret) {
+	if (err) {
 		BT_ERR_FUNC("Cannot insert an empty map value object mapped to key \"%s\"\n", key);
 	}
 
-	return ret;
+	return err;
 }
 
 enum bt_value_status bt_value_map_foreach(const struct bt_value *map_obj,
 		bt_value_map_foreach_cb cb, void *data)
 {
-	enum bt_value_status ret = BT_VALUE_STATUS_OK;
+	enum bt_value_status err = BT_VALUE_STATUS_OK;
 	gpointer key, element_obj;
 	GHashTableIter iter;
 	struct bt_value_map *typed_map_obj = BT_VALUE_TO_MAP(map_obj);
 
 	if (!map_obj || !bt_value_is_map(map_obj) || !cb) {
 		BT_ERR_STR_FUNC(bt_log_str_inval);
-		ret = BT_VALUE_STATUS_INVAL;
+		err = BT_VALUE_STATUS_INVAL;
 		goto end;
 	}
 
@@ -1279,13 +1279,13 @@ enum bt_value_status bt_value_map_foreach(const struct bt_value *map_obj,
 
 		if (!cb(key_str, element_obj, data)) {
 			BT_DBG_FUNC("Loop cancelled by user at key \"%s\"\n", key_str);
-			ret = BT_VALUE_STATUS_CANCELLED;
+			err = BT_VALUE_STATUS_CANCELLED;
 			break;
 		}
 	}
 
 end:
-	return ret;
+	return err;
 }
 
 struct bt_value *bt_value_copy(const struct bt_value *object)
