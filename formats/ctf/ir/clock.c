@@ -32,6 +32,7 @@
 #include <babeltrace/ctf-writer/writer-internal.h>
 #include <babeltrace/object-internal.h>
 #include <babeltrace/compiler.h>
+#include <babeltrace/logging-internal.h>
 #include <inttypes.h>
 
 static
@@ -44,6 +45,7 @@ struct bt_ctf_clock *_bt_ctf_clock_create(void)
 		struct bt_ctf_clock, 1);
 
 	if (!clock) {
+		BT_ERR_STR(bt_log_str_oom);
 		goto end;
 	}
 
@@ -61,6 +63,8 @@ int bt_ctf_clock_set_name(struct bt_ctf_clock *clock,
 	int ret = 0;
 
 	if (bt_ctf_validate_identifier(name)) {
+		BT_ERR_FUNC("Wrong clock object name (not a valid TSDL identifier): \"%s\"\n",
+			name);
 		ret = -1;
 		goto end;
 	}
@@ -70,6 +74,7 @@ int bt_ctf_clock_set_name(struct bt_ctf_clock *clock,
 	} else {
 		clock->name = g_string_new(name);
 		if (!clock->name) {
+			BT_ERR_STR_FUNC(bt_log_str_oom);
 			ret = -1;
 			goto end;
 		}
@@ -86,16 +91,20 @@ struct bt_ctf_clock *bt_ctf_clock_create(const char *name)
 
 	clock = _bt_ctf_clock_create();
 	if (!clock) {
+		BT_ERR_STR_FUNC("Cannot create clock object");
 		goto error;
 	}
 
 	ret = bt_ctf_clock_set_name(clock, name);
 	if (ret) {
+		BT_ERR_FUNC("Cannot set clock object's initial name to \"%s\"\n",
+			name);
 		goto error;
 	}
 
 	ret = bt_uuid_generate(clock->uuid);
 	if (ret) {
+		BT_ERR_FUNC("Cannot generate UUID\n");
 		goto error;
 	}
 
@@ -118,6 +127,7 @@ const char *bt_ctf_clock_get_name(struct bt_ctf_clock *clock)
 	const char *ret = NULL;
 
 	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		goto end;
 	}
 
@@ -134,6 +144,7 @@ const char *bt_ctf_clock_get_description(struct bt_ctf_clock *clock)
 	const char *ret = NULL;
 
 	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		goto end;
 	}
 
@@ -148,7 +159,14 @@ int bt_ctf_clock_set_description(struct bt_ctf_clock *clock, const char *desc)
 {
 	int ret = 0;
 
-	if (!clock || !desc || clock->frozen) {
+	if (!clock || !desc) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
+		ret = -1;
+		goto end;
+	}
+
+	if (clock->frozen) {
+		BT_ERR_STR_FUNC(bt_log_str_frozen);
 		ret = -1;
 		goto end;
 	}
@@ -164,6 +182,7 @@ uint64_t bt_ctf_clock_get_frequency(struct bt_ctf_clock *clock)
 	uint64_t ret = -1ULL;
 
 	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		goto end;
 	}
 
@@ -176,7 +195,14 @@ int bt_ctf_clock_set_frequency(struct bt_ctf_clock *clock, uint64_t freq)
 {
 	int ret = 0;
 
-	if (!clock || clock->frozen) {
+	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
+		ret = -1;
+		goto end;
+	}
+
+	if (clock->frozen) {
+		BT_ERR_STR_FUNC(bt_log_str_frozen);
 		ret = -1;
 		goto end;
 	}
@@ -191,6 +217,7 @@ uint64_t bt_ctf_clock_get_precision(struct bt_ctf_clock *clock)
 	uint64_t ret = -1ULL;
 
 	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		goto end;
 	}
 
@@ -203,7 +230,14 @@ int bt_ctf_clock_set_precision(struct bt_ctf_clock *clock, uint64_t precision)
 {
 	int ret = 0;
 
-	if (!clock || clock->frozen) {
+	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
+		ret = -1;
+		goto end;
+	}
+
+	if (clock->frozen) {
+		BT_ERR_STR_FUNC(bt_log_str_frozen);
 		ret = -1;
 		goto end;
 	}
@@ -218,6 +252,7 @@ int bt_ctf_clock_get_offset_s(struct bt_ctf_clock *clock, int64_t *offset_s)
 	int ret = 0;
 
 	if (!clock || !offset_s) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		ret = -1;
 		goto end;
 	}
@@ -231,7 +266,14 @@ int bt_ctf_clock_set_offset_s(struct bt_ctf_clock *clock, int64_t offset_s)
 {
 	int ret = 0;
 
-	if (!clock || clock->frozen) {
+	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
+		ret = -1;
+		goto end;
+	}
+
+	if (clock->frozen) {
+		BT_ERR_STR_FUNC(bt_log_str_frozen);
 		ret = -1;
 		goto end;
 	}
@@ -246,6 +288,7 @@ int bt_ctf_clock_get_offset(struct bt_ctf_clock *clock, int64_t *offset)
 	int ret = 0;
 
 	if (!clock || !offset) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		ret = -1;
 		goto end;
 	}
@@ -259,7 +302,14 @@ int bt_ctf_clock_set_offset(struct bt_ctf_clock *clock, int64_t offset)
 {
 	int ret = 0;
 
-	if (!clock || clock->frozen) {
+	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
+		ret = -1;
+		goto end;
+	}
+
+	if (clock->frozen) {
+		BT_ERR_STR_FUNC(bt_log_str_frozen);
 		ret = -1;
 		goto end;
 	}
@@ -274,6 +324,7 @@ int bt_ctf_clock_get_is_absolute(struct bt_ctf_clock *clock)
 	int ret = -1;
 
 	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		goto end;
 	}
 
@@ -286,7 +337,14 @@ int bt_ctf_clock_set_is_absolute(struct bt_ctf_clock *clock, int is_absolute)
 {
 	int ret = 0;
 
-	if (!clock || clock->frozen) {
+	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
+		ret = -1;
+		goto end;
+	}
+
+	if (clock->frozen) {
+		BT_ERR_STR_FUNC(bt_log_str_frozen);
 		ret = -1;
 		goto end;
 	}
@@ -301,6 +359,7 @@ const unsigned char *bt_ctf_clock_get_uuid(struct bt_ctf_clock *clock)
 	const unsigned char *ret;
 
 	if (!clock || !clock->uuid_set) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		ret = NULL;
 		goto end;
 	}
@@ -314,7 +373,14 @@ int bt_ctf_clock_set_uuid(struct bt_ctf_clock *clock, const unsigned char *uuid)
 {
 	int ret = 0;
 
-	if (!clock || !uuid || clock->frozen) {
+	if (!clock || !uuid) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
+		ret = -1;
+		goto end;
+	}
+
+	if (clock->frozen) {
+		BT_ERR_STR_FUNC(bt_log_str_frozen);
 		ret = -1;
 		goto end;
 	}
@@ -343,6 +409,7 @@ int bt_ctf_clock_get_time(struct bt_ctf_clock *clock, int64_t *time)
 	int ret = 0;
 
 	if (!clock || !time) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		ret = -1;
 		goto end;
 	}
@@ -353,6 +420,7 @@ int bt_ctf_clock_get_time(struct bt_ctf_clock *clock, int64_t *time)
 		 * Clock belongs to a non-writer mode trace and thus
 		 * this function is disabled.
 		 */
+		BT_ERR_STR_FUNC("Cannot get the time of a clock object which was added to a trace object not created by a writer object");
 		goto end;
 	}
 
@@ -369,6 +437,7 @@ int bt_ctf_clock_set_time(struct bt_ctf_clock *clock, int64_t time)
 
 	/* Timestamps are strictly monotonic */
 	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		ret = -1;
 		goto end;
 	}
@@ -379,6 +448,7 @@ int bt_ctf_clock_set_time(struct bt_ctf_clock *clock, int64_t time)
 		 * Clock belongs to a non-writer mode trace and thus
 		 * this function is disabled.
 		 */
+		BT_ERR_STR_FUNC("Cannot set the time of a clock object which was added to a trace object not created by a writer object");
 		ret = -1;
 		goto end;
 	}
@@ -392,6 +462,10 @@ int bt_ctf_clock_set_time(struct bt_ctf_clock *clock, int64_t time)
 	}
 
 	ret = bt_ctf_clock_set_value(clock, value);
+	if (ret) {
+		BT_ERR_FUNC("Cannot set clock object's value to %" PRId64 "\n",
+			value);
+	}
 end:
 	return ret;
 }
@@ -401,6 +475,7 @@ uint64_t bt_ctf_clock_get_value(struct bt_ctf_clock *clock)
 	uint64_t ret = -1ULL;
 
 	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		goto end;
 	}
 
@@ -409,6 +484,7 @@ uint64_t bt_ctf_clock_get_value(struct bt_ctf_clock *clock)
 		 * Clock belongs to a non-writer mode trace and thus
 		 * this function is disabled.
 		 */
+		BT_ERR_STR_FUNC("Cannot get the value of a clock object which was added to a trace object not created by a writer object");
 		goto end;
 	}
 
@@ -422,6 +498,7 @@ int bt_ctf_clock_set_value(struct bt_ctf_clock *clock, uint64_t value)
 	int ret = 0;
 
 	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		ret = -1;
 		goto end;
 	}
@@ -431,12 +508,15 @@ int bt_ctf_clock_set_value(struct bt_ctf_clock *clock, uint64_t value)
 		 * Clock belongs to a non-writer mode trace and thus
 		 * this function is disabled.
 		 */
+		BT_ERR_STR_FUNC("Cannot set the value of a clock object which was added to a trace object not created by a writer object");
 		ret = -1;
 		goto end;
 	}
 
 	/* Timestamps are strictly monotonic */
 	if (value < clock->value) {
+		BT_ERR_FUNC("New value (%" PRId64 ") is lesser than clock object's current value (%" PRId64 ")\n",
+			value, clock->value);
 		ret = -1;
 		goto end;
 	}
@@ -526,6 +606,7 @@ int64_t bt_ctf_clock_ns_from_value(struct bt_ctf_clock *clock, uint64_t value)
 	int64_t ns = -1ULL;
 
 	if (!clock) {
+		BT_ERR_STR_FUNC(bt_log_str_inval);
 		goto end;
 	}
 
