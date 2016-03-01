@@ -3,6 +3,7 @@ babeltraceinclude_HEADERS = \
 	babeltrace/format.h \
 	babeltrace/context.h \
 	babeltrace/iterator.h \
+	babeltrace/logging.h \
 	babeltrace/trace-handle.h \
 	babeltrace/list.h \
 	babeltrace/clock-types.h \
@@ -45,6 +46,7 @@ noinst_HEADERS = \
 	babeltrace/context-internal.h \
 	babeltrace/format-internal.h \
 	babeltrace/iterator-internal.h \
+	babeltrace/logging-internal.h \
 	babeltrace/trace-collection.h \
 	babeltrace/prio_heap.h \
 	babeltrace/ref-internal.h \

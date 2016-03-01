@@ -7,6 +7,7 @@ lib_LTLIBRARIES = libbabeltrace.la
 libbabeltrace_la_SOURCES = babeltrace.c \
 			   iterator.c \
 			   context.c \
+			   logging.c \
 			   trace-handle.c \
 			   trace-collection.c \
 			   registry.c \
