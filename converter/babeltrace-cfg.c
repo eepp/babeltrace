@@ -47,7 +47,7 @@
 			fprintf(stderr, "Error: ");	\
 			is_first_error = false;		\
 		}					\
-		fprintf(stderr, fmt, ## args);		\
+		fprintf(stderr, fmt, ##args);		\
 	} while (0)
 
 static bool is_first_error = true;
@@ -91,18 +91,28 @@ struct ini_parsing_state {
 	GString *ini_error;
 };
 
-/* Legacy "ctf"/"lttng-live" plugin options */
-struct ctf_legacy_opts {
-	int64_t offset_s;
-	int64_t offset_ns;
-	bool offset_s_is_set;
-	bool offset_ns_is_set;
+/* Offset option with "is set" boolean */
+struct offset_opt {
+	int64_t value;
+	bool is_set;
 };
 
-/* Legacy "text" plugin options */
+/* Legacy "ctf"/"lttng-live" format options */
+struct ctf_legacy_opts {
+	struct offset_opt offset_s;
+	struct offset_opt offset_ns;
+	bool stream_intersection;
+};
+
+/* Legacy "text" format options */
 struct text_legacy_opts {
-	/* output, names, and fields are owned by this */
+	/*
+	 * output, dbg_info_dir, dbg_info_target_prefix, names,
+	 * and fields are owned by this.
+	 */
 	GString *output;
+	GString *dbg_info_dir;
+	GString *dbg_info_target_prefix;
 	struct bt_value *names;
 	struct bt_value *fields;
 
@@ -112,19 +122,17 @@ struct text_legacy_opts {
 	bool clock_seconds;
 	bool clock_date;
 	bool clock_gmt;
-
-	/* True if any of the options above is explicitly set */
-	bool any_is_set;
+	bool dbg_info_full_path;
 };
 
-/* Legacy input plugin format */
+/* Legacy input format format */
 enum legacy_input_format {
 	LEGACY_INPUT_FORMAT_NONE = 0,
 	LEGACY_INPUT_FORMAT_CTF,
 	LEGACY_INPUT_FORMAT_LTTNG_LIVE,
 };
 
-/* Legacy output plugin format */
+/* Legacy output format format */
 enum legacy_output_format {
 	LEGACY_OUTPUT_FORMAT_NONE = 0,
 	LEGACY_OUTPUT_FORMAT_TEXT,
@@ -142,21 +150,48 @@ void print_err_oom(void)
 }
 
 /*
- * Prints duplicate legacy output plugin error.
+ * Prints duplicate legacy output format error.
  */
 static
 void print_err_dup_legacy_output(void)
 {
-	printf_err("More than one legacy output plugin specified\n");
+	printf_err("More than one legacy output format specified\n");
 }
 
 /*
- * Prints duplicate legacy input plugin error.
+ * Prints duplicate legacy input format error.
  */
 static
 void print_err_dup_legacy_input(void)
 {
-	printf_err("More than one legacy input plugin specified\n");
+	printf_err("More than one legacy input format specified\n");
+}
+
+/*
+ * Checks if any of the "text" legacy options is set.
+ */
+static
+bool text_legacy_opts_is_any_set(struct text_legacy_opts *opts)
+{
+	return (opts->output && opts->output->len > 0) ||
+		(opts->dbg_info_dir && opts->dbg_info_dir->len > 0) ||
+		(opts->dbg_info_target_prefix &&
+			opts->dbg_info_target_prefix->len > 0) ||
+		bt_value_array_size(opts->names) > 0 ||
+		bt_value_array_size(opts->fields) > 0 ||
+		opts->no_delta || opts->clock_cycles || opts->clock_seconds ||
+		opts->clock_date || opts->clock_gmt ||
+		opts->dbg_info_full_path;
+}
+
+/*
+ * Checks if any of the "ctf" legacy options is set.
+ */
+static
+bool ctf_legacy_opts_is_any_set(struct ctf_legacy_opts *opts)
+{
+	return opts->offset_s.is_set || opts->offset_ns.is_set ||
+		opts->stream_intersection;
 }
 
 /*
@@ -164,8 +199,8 @@ void print_err_dup_legacy_input(void)
  * error buffer.
  */
 static
-void ini_append_error_expecting(struct ini_parsing_state *state, GScanner *scanner,
-		const char *expecting)
+void ini_append_error_expecting(struct ini_parsing_state *state,
+		GScanner *scanner, const char *expecting)
 {
 	size_t i;
 	size_t pos;
@@ -549,7 +584,6 @@ end:
 	}
 
 	free(state.last_map_key);
-
 	return state.params;
 }
 
@@ -595,7 +629,6 @@ end:
 	if (ini_error) {
 		g_string_free(ini_error, TRUE);
 	}
-
 	return params;
 }
 
@@ -666,7 +699,7 @@ end:
 static
 void print_version(void)
 {
-	puts("Babeltrace v" VERSION);
+	puts("Babeltrace " VERSION);
 }
 
 /*
@@ -695,13 +728,14 @@ void print_legacy_usage(FILE *fp)
 	fprintf(fp, "  Available input formats:  ctf, lttng-live, ctf-metadata\n");
 	fprintf(fp, "  Available output formats: text, dummy\n");
 	fprintf(fp, "\n");
-	fprintf(fp, "Input plugins specific options:\n");
+	fprintf(fp, "Input formats specific options:\n");
 	fprintf(fp, "\n");
 	fprintf(fp, "  INPUT...                     Input trace file(s), directory(ies), or URLs\n");
 	fprintf(fp, "      --clock-offset=SEC       Set clock offset to SEC seconds\n");
 	fprintf(fp, "      --clock-offset-ns=NS     Set clock offset to NS nanoseconds\n");
+	fprintf(fp, "      --stream-intersection    Only process events when all streams are active\n");
 	fprintf(fp, "\n");
-	fprintf(fp, "ctf-text output plugin specific options:\n");
+	fprintf(fp, "text output format specific options:\n");
 	fprintf(fp, "  \n");
 	fprintf(fp, "      --clock-cycles           Print timestamps in clock cycles\n");
 	fprintf(fp, "      --clock-date             Print timestamp dates\n");
@@ -709,6 +743,12 @@ void print_legacy_usage(FILE *fp)
 	fprintf(fp, "                               (default: local time zone)\n");
 	fprintf(fp, "      --clock-seconds          Print the timestamps as [SEC.NS]\n");
 	fprintf(fp, "                               (default format: [HH:MM:SS.NS])\n");
+	fprintf(fp, "      --debug-info-dir=DIR     Search for debug info in directory DIR\n");
+	fprintf(fp, "                               (default: \"/usr/lib/debug\")\n");
+	fprintf(fp, "      --debug-info-full-path   Show full debug info source and binary paths\n");
+	fprintf(fp, "      --debug-info-target-prefix=DIR  Use directory DIR as a prefix when looking\n");
+	fprintf(fp, "                                      up executables during debug info analysis\n");
+	fprintf(fp, "                               (default: \"/usr/lib/debug\")\n");
 	fprintf(fp, "  -f, --fields=NAME[,NAME]...  Print additional fields:\n");
 	fprintf(fp, "                                 all, trace, trace:hostname, trace:domain,\n");
 	fprintf(fp, "                                 trace:procname, trace:vpid, loglevel, emf,\n");
@@ -782,24 +822,28 @@ void print_usage(FILE *fp)
  * Destroys a component configuration.
  */
 static
-void bt_cfg_component_destroy(void *data)
+void bt_config_component_destroy(struct bt_object *obj)
 {
-	struct bt_cfg_component *bt_cfg_component = data;
+	struct bt_config_component *bt_config_component =
+		container_of(obj, struct bt_config_component, base);
 
-	if (!bt_cfg_component) {
-		return;
+	if (!obj) {
+		goto end;
 	}
 
-	if (bt_cfg_component->plugin_name) {
-		g_string_free(bt_cfg_component->plugin_name, TRUE);
+	if (bt_config_component->plugin_name) {
+		g_string_free(bt_config_component->plugin_name, TRUE);
 	}
 
-	if (bt_cfg_component->component_name) {
-		g_string_free(bt_cfg_component->component_name, TRUE);
+	if (bt_config_component->component_name) {
+		g_string_free(bt_config_component->component_name, TRUE);
 	}
 
-	BT_PUT(bt_cfg_component->params);
-	g_free(bt_cfg_component);
+	BT_PUT(bt_config_component->params);
+	g_free(bt_config_component);
+
+end:
+	return;
 }
 
 /*
@@ -811,38 +855,38 @@ void bt_cfg_component_destroy(void *data)
  * Return value is owned by the caller.
  */
 static
-struct bt_cfg_component *bt_cfg_component_create(const char *plugin_name,
+struct bt_config_component *bt_config_component_create(const char *plugin_name,
 		const char *component_name, struct bt_value *params)
 {
-	struct bt_cfg_component *bt_cfg_component = NULL;
+	struct bt_config_component *cfg_component = NULL;
 
-	bt_cfg_component = g_new0(struct bt_cfg_component, 1);
-	if (!bt_cfg_component) {
+	cfg_component = g_new0(struct bt_config_component, 1);
+	if (!cfg_component) {
 		print_err_oom();
 		goto error;
 	}
 
-	bt_cfg_component->plugin_name = g_string_new(plugin_name);
-	if (!bt_cfg_component->plugin_name) {
+	bt_object_init(cfg_component, bt_config_component_destroy);
+	cfg_component->plugin_name = g_string_new(plugin_name);
+	if (!cfg_component->plugin_name) {
 		print_err_oom();
 		goto error;
 	}
 
-	bt_cfg_component->component_name = g_string_new(component_name);
-	if (!bt_cfg_component->component_name) {
+	cfg_component->component_name = g_string_new(component_name);
+	if (!cfg_component->component_name) {
 		print_err_oom();
 		goto error;
 	}
 
-	bt_cfg_component->params = bt_get(params);
+	cfg_component->params = bt_get(params);
 	goto end;
 
 error:
-	bt_cfg_component_destroy(bt_cfg_component);
-	bt_cfg_component = NULL;
+	BT_PUT(cfg_component);
 
 end:
-	return bt_cfg_component;
+	return cfg_component;
 }
 
 /*
@@ -852,9 +896,9 @@ end:
  * parameters.
  */
 static
-struct bt_cfg_component *bt_cfg_component_from_arg(const char *arg)
+struct bt_config_component *bt_config_component_from_arg(const char *arg)
 {
-	struct bt_cfg_component *bt_cfg_component = NULL;
+	struct bt_config_component *bt_config_component = NULL;
 	char *plugin_name;
 	char *component_name;
 	struct bt_value *params = NULL;
@@ -871,45 +915,50 @@ struct bt_cfg_component *bt_cfg_component_from_arg(const char *arg)
 		goto error;
 	}
 
-	bt_cfg_component = bt_cfg_component_create(plugin_name, component_name,
-		params);
-	if (!bt_cfg_component) {
+	bt_config_component = bt_config_component_create(plugin_name,
+		component_name, params);
+	if (!bt_config_component) {
 		goto error;
 	}
 
 	goto end;
 
 error:
-	bt_cfg_component_destroy(bt_cfg_component);
-	bt_cfg_component = NULL;
+	BT_PUT(bt_config_component);
 
 end:
 	free(plugin_name);
 	free(component_name);
 	BT_PUT(params);
-
-	return bt_cfg_component;
+	return bt_config_component;
 }
 
 /*
  * Destroys a configuration.
  */
-void bt_cfg_destroy(struct bt_cfg *bt_cfg)
+static
+void bt_config_destroy(struct bt_object *obj)
 {
-	if (!bt_cfg) {
-		return;
+	struct bt_config *bt_config =
+		container_of(obj, struct bt_config, base);
+
+	if (!obj) {
+		goto end;
 	}
 
-	if (bt_cfg->sources) {
-		g_ptr_array_free(bt_cfg->sources, TRUE);
+	if (bt_config->sources) {
+		g_ptr_array_free(bt_config->sources, TRUE);
 	}
 
-	if (bt_cfg->sinks) {
-		g_ptr_array_free(bt_cfg->sinks, TRUE);
+	if (bt_config->sinks) {
+		g_ptr_array_free(bt_config->sinks, TRUE);
 	}
 
-	BT_PUT(bt_cfg->plugin_paths);
-	g_free(bt_cfg);
+	BT_PUT(bt_config->plugin_paths);
+	g_free(bt_config);
+
+end:
+	return;
 }
 
 /*
@@ -940,7 +989,10 @@ struct bt_value *plugin_paths_from_arg(const char *arg)
 
 		next_colon = strchr(at, ':');
 		if (next_colon == at) {
-			/* Empty path: try next character */
+			/*
+			 * Empty path: try next character (supported
+			 * to conform to the typical parsing of $PATH).
+			 */
 			at++;
 			continue;
 		} else if (!next_colon) {
@@ -980,7 +1032,7 @@ end:
  * Return value is owned by the caller.
  */
 static
-GScanner *create_simple_scanner(void)
+GScanner *create_csv_identifiers_scanner(void)
 {
 	GScannerConfig scanner_config = {
 		.cset_skip_characters = " \t\n",
@@ -1023,7 +1075,7 @@ GScanner *create_simple_scanner(void)
 static
 struct bt_value *names_from_arg(const char *arg)
 {
-	GScanner *scanner;
+	GScanner *scanner = NULL;
 	struct bt_value *names = NULL;
 
 	names = bt_value_array_create();
@@ -1032,7 +1084,7 @@ struct bt_value *names_from_arg(const char *arg)
 		goto error;
 	}
 
-	scanner = create_simple_scanner();
+	scanner = create_csv_identifiers_scanner();
 	if (!scanner) {
 		print_err_oom();
 		goto error;
@@ -1061,14 +1113,30 @@ struct bt_value *names_from_arg(const char *arg)
 						"context")) {
 					goto error;
 				}
-			} else if (!strcmp(identifier, "none") ||
-					!strcmp(identifier, "all") ||
-					!strcmp(identifier, "scope") ||
+			} else if (!strcmp(identifier, "scope") ||
 					!strcmp(identifier, "header")) {
 				if (bt_value_array_append_string(names,
 						identifier)) {
 					goto error;
 				}
+			} else if (!strcmp(identifier, "all") ||
+					!strcmp(identifier, "none")) {
+				/*
+				 * "all" and "none" override all the
+				 * specific names.
+				 */
+				BT_PUT(names);
+				names = bt_value_array_create();
+				if (!names) {
+					print_err_oom();
+					goto error;
+				}
+
+				if (bt_value_array_append_string(names,
+						identifier)) {
+					goto error;
+				}
+				goto end;
 			} else {
 				printf_err("Unknown field name: \"%s\"\n",
 					identifier);
@@ -1091,10 +1159,12 @@ error:
 	BT_PUT(names);
 
 end:
-	g_scanner_destroy(scanner);
-
+	if (scanner) {
+		g_scanner_destroy(scanner);
+	}
 	return names;
 }
+
 
 /*
  * Converts a comma-delimited list of known fields (--fields option) to
@@ -1106,8 +1176,8 @@ end:
 static
 struct bt_value *fields_from_arg(const char *arg)
 {
-	GScanner *scanner;
-	struct bt_value *fields = NULL;
+	GScanner *scanner = NULL;
+	struct bt_value *fields;
 
 	fields = bt_value_array_create();
 	if (!fields) {
@@ -1115,7 +1185,7 @@ struct bt_value *fields_from_arg(const char *arg)
 		goto error;
 	}
 
-	scanner = create_simple_scanner();
+	scanner = create_csv_identifiers_scanner();
 	if (!scanner) {
 		print_err_oom();
 		goto error;
@@ -1131,8 +1201,7 @@ struct bt_value *fields_from_arg(const char *arg)
 		{
 			const char *identifier = scanner->value.v_identifier;
 
-			if (!strcmp(identifier, "all") ||
-					!strcmp(identifier, "trace") ||
+			if (!strcmp(identifier, "trace") ||
 					!strcmp(identifier, "trace:hostname") ||
 					!strcmp(identifier, "trace:domain") ||
 					!strcmp(identifier, "trace:procname") ||
@@ -1144,6 +1213,20 @@ struct bt_value *fields_from_arg(const char *arg)
 						identifier)) {
 					goto error;
 				}
+			} else if (!strcmp(identifier, "all")) {
+				/* "all" override all the specific fields */
+				BT_PUT(fields);
+				fields = bt_value_array_create();
+				if (!fields) {
+					print_err_oom();
+					goto error;
+				}
+
+				if (bt_value_array_append_string(fields,
+						identifier)) {
+					goto error;
+				}
+				goto end;
 			} else {
 				printf_err("Unknown field name: \"%s\"\n",
 					identifier);
@@ -1166,8 +1249,9 @@ error:
 	BT_PUT(fields);
 
 end:
-	g_scanner_destroy(scanner);
-
+	if (scanner) {
+		g_scanner_destroy(scanner);
+	}
 	return fields;
 }
 
@@ -1183,6 +1267,10 @@ int insert_flat_names_fields_from_array(struct bt_value *map_obj,
 	int i;
 	GString *tmpstr = NULL;
 
+	/*
+	 * array_obj may be NULL if no CLI options were specified to
+	 * trigger its creation.
+	 */
 	if (!array_obj) {
 		goto end;
 	}
@@ -1230,8 +1318,26 @@ end:
 }
 
 /*
+ * Inserts a string (if exists and not empty) or null to a map value
+ * object.
+ */
+static
+enum bt_value_status map_insert_string_or_null(struct bt_value *map,
+		const char *key, GString *string)
+{
+	enum bt_value_status ret;
+
+	if (string && string->len > 0) {
+		ret = bt_value_map_insert_string(map, key, string->str);
+	} else {
+		ret = bt_value_map_insert(map, key, bt_value_null);
+	}
+	return ret;
+}
+
+/*
  * Returns the parameters (map value object) corresponding to the
- * legacy text plugin options.
+ * legacy text format options.
  *
  * Return value is owned by the caller.
  */
@@ -1247,12 +1353,28 @@ struct bt_value *params_from_text_legacy_opts(
 		goto error;
 	}
 
-	if (text_legacy_opts->output->len > 0) {
-		if (bt_value_map_insert_string(params, "output-path",
-				text_legacy_opts->output->str)) {
-			print_err_oom();
-			goto error;
-		}
+	if (map_insert_string_or_null(params, "output-path",
+			text_legacy_opts->output)) {
+		print_err_oom();
+		goto error;
+	}
+
+	if (map_insert_string_or_null(params, "debug-info-dir",
+			text_legacy_opts->dbg_info_dir)) {
+		print_err_oom();
+		goto error;
+	}
+
+	if (map_insert_string_or_null(params, "debug-info-target-prefix",
+			text_legacy_opts->dbg_info_target_prefix)) {
+		print_err_oom();
+		goto error;
+	}
+
+	if (bt_value_map_insert_bool(params, "debug-info-full-path",
+			text_legacy_opts->dbg_info_full_path)) {
+		print_err_oom();
+		goto error;
 	}
 
 	if (bt_value_map_insert_bool(params, "no-delta",
@@ -1313,7 +1435,7 @@ int append_sinks_from_legacy_opts(GPtrArray *sinks,
 	struct bt_value *params = NULL;
 	const char *plugin_name;
 	const char *component_name;
-	struct bt_cfg_component *bt_cfg_component = NULL;
+	struct bt_config_component *bt_config_component = NULL;
 
 	switch (legacy_output_format) {
 	case LEGACY_OUTPUT_FORMAT_TEXT:
@@ -1334,14 +1456,14 @@ int append_sinks_from_legacy_opts(GPtrArray *sinks,
 	}
 
 	if (legacy_output_format == LEGACY_OUTPUT_FORMAT_TEXT) {
-		/* Legacy "text" output plugin has parameters */
+		/* Legacy "text" output format has parameters */
 		params = params_from_text_legacy_opts(text_legacy_opts);
 		if (!params) {
 			goto error;
 		}
 	} else {
 		/*
-		 * Legacy "dummy" and "ctf-metadata" output plugins do
+		 * Legacy "dummy" and "ctf-metadata" output formats do
 		 * not have parameters.
 		 */
 		params = bt_value_map_create();
@@ -1352,14 +1474,14 @@ int append_sinks_from_legacy_opts(GPtrArray *sinks,
 	}
 
 	/* Create a component configuration */
-	bt_cfg_component = bt_cfg_component_create(plugin_name, component_name,
-		params);
-	if (!bt_cfg_component) {
+	bt_config_component = bt_config_component_create(plugin_name,
+		component_name, params);
+	if (!bt_config_component) {
 		goto error;
 	}
 
 	/* Move created component configuration to the array */
-	g_ptr_array_add(sinks, bt_cfg_component);
+	g_ptr_array_add(sinks, bt_config_component);
 
 	goto end;
 
@@ -1374,7 +1496,7 @@ end:
 
 /*
  * Returns the parameters (map value object) corresponding to the
- * given legacy CTF plugin options.
+ * given legacy CTF format options.
  *
  * Return value is owned by the caller.
  */
@@ -1391,13 +1513,19 @@ struct bt_value *params_from_ctf_legacy_opts(
 	}
 
 	if (bt_value_map_insert_integer(params, "offset-s",
-			ctf_legacy_opts->offset_s)) {
+			ctf_legacy_opts->offset_s.value)) {
 		print_err_oom();
 		goto error;
 	}
 
 	if (bt_value_map_insert_integer(params, "offset-ns",
-			ctf_legacy_opts->offset_s)) {
+			ctf_legacy_opts->offset_ns.value)) {
+		print_err_oom();
+		goto error;
+	}
+
+	if (bt_value_map_insert_bool(params, "stream-intersection",
+			ctf_legacy_opts->stream_intersection)) {
 		print_err_oom();
 		goto error;
 	}
@@ -1446,7 +1574,7 @@ int append_sources_from_legacy_opts(GPtrArray *sources,
 	}
 
 	for (i = 0; i < bt_value_array_size(legacy_input_paths); i++) {
-		struct bt_cfg_component *bt_cfg_component = NULL;
+		struct bt_config_component *bt_config_component = NULL;
 
 		/* Copy base parameters as current parameters */
 		params = bt_value_copy(base_params);
@@ -1473,14 +1601,14 @@ int append_sources_from_legacy_opts(GPtrArray *sources,
 		}
 
 		/* Create a component configuration */
-		bt_cfg_component = bt_cfg_component_create("ctf",
+		bt_config_component = bt_config_component_create("ctf",
 			component_name, params);
-		if (!bt_cfg_component) {
+		if (!bt_config_component) {
 			goto error;
 		}
 
 		/* Move created component configuration to the array */
-		g_ptr_array_add(sources, bt_cfg_component);
+		g_ptr_array_add(sources, bt_config_component);
 
 		/* Put current stuff */
 		BT_PUT(input_path);
@@ -1498,7 +1626,6 @@ end:
 	BT_PUT(params);
 	BT_PUT(input_path);
 	BT_PUT(input_path_copy);
-
 	return ret;
 }
 
@@ -1580,7 +1707,7 @@ int append_prefixed_flag_params(GString *str, struct bt_value *flags,
 			goto end;
 		}
 
-		g_string_append_printf(str, "%s-%s=true,", prefix, flag);
+		g_string_append_printf(str, ",%s-%s=true", prefix, flag);
 		BT_PUT(value);
 	}
 
@@ -1589,8 +1716,49 @@ end:
 }
 
 /*
+ * Appends a boolean parameter string.
+ */
+static
+void g_string_append_bool_param(GString *str, const char *name, bool value)
+{
+	g_string_append_printf(str, ",%s=%s", name, value ? "true" : "false");
+}
+
+/*
+ * Appends a path parameter string, or null if it's empty.
+ */
+static
+int g_string_append_string_path_param(GString *str, const char *name,
+		GString *path)
+{
+	int ret = 0;
+
+	if (path->len > 0) {
+		char *escaped_path = str_shell_escape(path->str);
+
+		if (!escaped_path) {
+			print_err_oom();
+			goto error;
+		}
+
+		g_string_append_printf(str, "%s=\"%s\"", name, escaped_path);
+		free(escaped_path);
+	} else {
+		g_string_append_printf(str, "%s=null", name);
+	}
+
+	goto end;
+
+error:
+	ret = -1;
+
+end:
+	return ret;
+}
+
+/*
  * Prints the non-legacy sink options equivalent to the specified
- * legacy output plugin options.
+ * legacy output format options.
  */
 static
 void print_output_legacy_to_sinks(
@@ -1620,9 +1788,9 @@ void print_output_legacy_to_sinks(
 		assert(false);
 	}
 
-	printf_err("Both \"%s\" legacy output plugin and non-legacy sink(s) specified.\n\n",
+	printf_err("Both \"%s\" legacy output format and non-legacy sink(s) specified.\n\n",
 		input_format);
-	printf_err("Specify the following non-legacy sink instead of the legacy \"%s\"\noutput plugin options:\n\n",
+	printf_err("Specify the following non-legacy sink instead of the legacy \"%s\"\noutput format options:\n\n",
 		input_format);
 	g_string_append(str, "-o ");
 
@@ -1641,45 +1809,41 @@ void print_output_legacy_to_sinks(
 	}
 
 	if (legacy_output_format == LEGACY_OUTPUT_FORMAT_TEXT &&
-			text_legacy_opts->any_is_set) {
+			text_legacy_opts_is_any_set(text_legacy_opts)) {
 		int ret;
 
 		g_string_append(str, ":'");
 
-		if (text_legacy_opts->output->len > 0) {
-			char *escaped_output = str_shell_escape(
-				text_legacy_opts->output->str);
-
-			if (!escaped_output) {
-				print_err_oom();
-				goto end;
-			}
-
-			g_string_append_printf(str, "output-path=\"%s\",",
-				escaped_output);
-			free(escaped_output);
+		if (g_string_append_string_path_param(str, "output-path",
+				text_legacy_opts->output)) {
+			goto end;
 		}
 
-		if (text_legacy_opts->no_delta) {
-			g_string_append(str, "no-delta=true,");
+		g_string_append(str, ",");
+
+		if (g_string_append_string_path_param(str, "debug-info-dir",
+				text_legacy_opts->dbg_info_dir)) {
+			goto end;
 		}
 
-		if (text_legacy_opts->clock_cycles) {
-			g_string_append(str, "clock-cycles=true,");
+		g_string_append(str, ",");
+
+		if (g_string_append_string_path_param(str,
+				"debug-info-target-prefix",
+				text_legacy_opts->dbg_info_target_prefix)) {
+			goto end;
 		}
 
-		if (text_legacy_opts->clock_seconds) {
-			g_string_append(str, "clock-seconds=true,");
-		}
-
-		if (text_legacy_opts->clock_date) {
-			g_string_append(str, "clock-date=true,");
-		}
-
-		if (text_legacy_opts->clock_gmt) {
-			g_string_append(str, "clock-gmt=true,");
-		}
-
+		g_string_append_bool_param(str, "no-delta",
+			text_legacy_opts->no_delta);
+		g_string_append_bool_param(str, "clock-cycles",
+			text_legacy_opts->clock_cycles);
+		g_string_append_bool_param(str, "clock-seconds",
+			text_legacy_opts->clock_seconds);
+		g_string_append_bool_param(str, "clock-date",
+			text_legacy_opts->clock_date);
+		g_string_append_bool_param(str, "clock-gmt",
+			text_legacy_opts->clock_gmt);
 		ret = append_prefixed_flag_params(str, text_legacy_opts->names,
 			"name");
 		if (ret) {
@@ -1693,7 +1857,6 @@ void print_output_legacy_to_sinks(
 		}
 
 		/* Remove last comma and close single quote */
-		g_string_truncate(str, str->len - 1);
 		g_string_append(str, "'");
 	}
 
@@ -1703,13 +1866,12 @@ end:
 	if (str) {
 		g_string_free(str, TRUE);
 	}
-
 	return;
 }
 
 /*
  * Prints the non-legacy source options equivalent to the specified
- * legacy input plugin options.
+ * legacy input format options.
  */
 static
 void print_input_legacy_to_sources(enum legacy_input_format legacy_input_format,
@@ -1737,9 +1899,9 @@ void print_input_legacy_to_sources(enum legacy_input_format legacy_input_format,
 		assert(false);
 	}
 
-	printf_err("Both \"%s\" legacy input plugin and non-legacy source(s) specified.\n\n",
+	printf_err("Both \"%s\" legacy input format and non-legacy source(s) specified.\n\n",
 		input_format);
-	printf_err("Specify the following non-legacy source(s) instead of the legacy \"%s\"\ninput plugin options and positional arguments:\n\n",
+	printf_err("Specify the following non-legacy source(s) instead of the legacy \"%s\"\ninput format options and positional arguments:\n\n",
 		input_format);
 
 	for (i = 0; i < bt_value_array_size(legacy_input_paths); i++) {
@@ -1774,17 +1936,12 @@ void print_input_legacy_to_sources(enum legacy_input_format legacy_input_format,
 
 		g_string_append(str, escaped_input);
 		g_string_append(str, "\"");
-
-		if (ctf_legacy_opts->offset_s_is_set) {
-			g_string_append_printf(str, ",offset-s=%" PRId64,
-				ctf_legacy_opts->offset_s);
-		}
-
-		if (ctf_legacy_opts->offset_ns_is_set) {
-			g_string_append_printf(str, ",offset-ns=%" PRId64,
-				ctf_legacy_opts->offset_ns);
-		}
-
+		g_string_append_printf(str, ",offset-s=%" PRId64,
+			ctf_legacy_opts->offset_s.value);
+		g_string_append_printf(str, ",offset-ns=%" PRId64,
+			ctf_legacy_opts->offset_ns.value);
+		g_string_append_bool_param(str, "stream-intersection",
+			ctf_legacy_opts->stream_intersection);
 		g_string_append(str, "' ");
 		g_free(escaped_input);
 	}
@@ -1795,19 +1952,18 @@ end:
 	if (str) {
 		g_string_free(str, TRUE);
 	}
-
 	return;
 }
 
 /*
  * Validates a given configuration, with optional legacy input and
- * output plugins options. Prints useful error messages if anything
+ * output formats options. Prints useful error messages if anything
  * is wrong.
  *
  * Returns true when the configuration is valid.
  */
 static
-bool validate_cfg(struct bt_cfg *cfg,
+bool validate_cfg(struct bt_config *cfg,
 		enum legacy_input_format *legacy_input_format,
 		enum legacy_output_format *legacy_output_format,
 		struct bt_value *legacy_input_paths,
@@ -1818,21 +1974,22 @@ bool validate_cfg(struct bt_cfg *cfg,
 	bool legacy_output = false;
 
 	/* Determine if the input and output should be legacy-style */
-	if (*legacy_input_format || cfg->sources->len == 0 ||
+	if (*legacy_input_format != LEGACY_INPUT_FORMAT_NONE ||
+			cfg->sources->len == 0 ||
 			!bt_value_array_is_empty(legacy_input_paths) ||
-			ctf_legacy_opts->offset_s_is_set ||
-			ctf_legacy_opts->offset_ns_is_set) {
+			ctf_legacy_opts_is_any_set(ctf_legacy_opts)) {
 		legacy_input = true;
 	}
 
-	if (*legacy_output_format || cfg->sinks->len == 0 ||
-			text_legacy_opts->any_is_set) {
+	if (*legacy_output_format != LEGACY_OUTPUT_FORMAT_NONE ||
+			cfg->sinks->len == 0 ||
+			text_legacy_opts_is_any_set(text_legacy_opts)) {
 		legacy_output = true;
 	}
 
 	if (legacy_input) {
-		/* If no legacy input plugin was specified, default to CTF */
-		if (!*legacy_input_format) {
+		/* If no legacy input format was specified, default to CTF */
+		if (*legacy_input_format == LEGACY_INPUT_FORMAT_NONE) {
 			*legacy_input_format = LEGACY_INPUT_FORMAT_CTF;
 		}
 
@@ -1840,10 +1997,10 @@ bool validate_cfg(struct bt_cfg *cfg,
 		if (bt_value_array_is_empty(legacy_input_paths)) {
 			switch (*legacy_input_format) {
 			case LEGACY_INPUT_FORMAT_CTF:
-				printf_err("No input path specified for legacy \"ctf\" input plugin\n");
+				printf_err("No input path specified for legacy \"ctf\" input format\n");
 				break;
 			case LEGACY_INPUT_FORMAT_LTTNG_LIVE:
-				printf_err("No URL specified for legacy \"lttng-live\" input plugin\n");
+				printf_err("No URL specified for legacy \"lttng-live\" input format\n");
 				break;
 			default:
 				assert(false);
@@ -1861,10 +2018,10 @@ bool validate_cfg(struct bt_cfg *cfg,
 
 	if (legacy_output) {
 		/*
-		 * If no legacy output plugin was specified, default to
+		 * If no legacy output format was specified, default to
 		 * "text".
 		 */
-		if (!*legacy_output_format) {
+		if (*legacy_output_format == LEGACY_OUTPUT_FORMAT_NONE) {
 			*legacy_output_format = LEGACY_OUTPUT_FORMAT_TEXT;
 		}
 
@@ -1872,10 +2029,10 @@ bool validate_cfg(struct bt_cfg *cfg,
 		 * If any "text" option was specified, the output must be
 		 * legacy "text".
 		 */
-		if (text_legacy_opts->any_is_set &&
+		if (text_legacy_opts_is_any_set(text_legacy_opts) &&
 				*legacy_output_format !=
 				LEGACY_OUTPUT_FORMAT_TEXT) {
-			printf_err("Options for legacy \"text\" output plugin specified with a different legacy output plugin\n");
+			printf_err("Options for legacy \"text\" output format specified with a different legacy output format\n");
 			goto error;
 		}
 
@@ -1888,12 +2045,12 @@ bool validate_cfg(struct bt_cfg *cfg,
 	}
 
 	/*
-	 * If the output is the legacy "ctf-metadata" plugin, then the
-	 * input should be the legacy "ctf" input plugin.
+	 * If the output is the legacy "ctf-metadata" format, then the
+	 * input should be the legacy "ctf" input format.
 	 */
 	if (*legacy_output_format == LEGACY_OUTPUT_FORMAT_CTF_METADATA &&
 			*legacy_input_format != LEGACY_INPUT_FORMAT_CTF) {
-		printf_err("Legacy \"ctf-metadata\" output plugin requires using legacy \"ctf\" input plugin\n");
+		printf_err("Legacy \"ctf-metadata\" output format requires using legacy \"ctf\" input format\n");
 		goto error;
 	}
 
@@ -1925,57 +2082,74 @@ int parse_int64(const char *arg, int64_t *val)
 /* popt options */
 enum {
 	OPT_NONE = 0,
-	OPT_OUTPUT_PATH,
-	OPT_INPUT_FORMAT,
-	OPT_OUTPUT_FORMAT,
-	OPT_HELP,
-	OPT_HELP_LEGACY,
-	OPT_VERSION,
-	OPT_LIST,
-	OPT_VERBOSE,
-	OPT_DEBUG,
-	OPT_NAMES,
-	OPT_FIELDS,
-	OPT_NO_DELTA,
+	OPT_CLOCK_CYCLES,
+	OPT_CLOCK_DATE,
+	OPT_CLOCK_FORCE_CORRELATE,
+	OPT_CLOCK_GMT,
 	OPT_CLOCK_OFFSET,
 	OPT_CLOCK_OFFSET_NS,
-	OPT_CLOCK_CYCLES,
 	OPT_CLOCK_SECONDS,
-	OPT_CLOCK_DATE,
-	OPT_CLOCK_GMT,
-	OPT_CLOCK_FORCE_CORRELATE,
+	OPT_DEBUG,
+	OPT_DEBUG_INFO_DIR,
+	OPT_DEBUG_INFO_FULL_PATH,
+	OPT_DEBUG_INFO_TARGET_PREFIX,
+	OPT_FIELDS,
+	OPT_HELP,
+	OPT_HELP_LEGACY,
+	OPT_INPUT_FORMAT,
+	OPT_LIST,
+	OPT_NAMES,
+	OPT_NO_DELTA,
+	OPT_OUTPUT_FORMAT,
+	OPT_OUTPUT_PATH,
 	OPT_PLUGIN_PATH,
-	OPT_SOURCE,
 	OPT_SINK,
+	OPT_SOURCE,
+	OPT_STREAM_INTERSECTION,
+	OPT_VERBOSE,
+	OPT_VERSION,
 };
 
 /* popt long option descriptions */
 static struct poptOption long_options[] = {
 	/* longName, shortName, argInfo, argPtr, value, descrip, argDesc */
-	{ "plugin-path", 'p', POPT_ARG_STRING, NULL, OPT_PLUGIN_PATH, NULL, NULL },
-	{ "output", 'w', POPT_ARG_STRING, NULL, OPT_OUTPUT_PATH, NULL, NULL },
-	{ "input-format", 'i', POPT_ARG_STRING, NULL, OPT_INPUT_FORMAT, NULL, NULL },
-	{ "output-format", 'o', POPT_ARG_STRING, NULL, OPT_OUTPUT_FORMAT, NULL, NULL },
-	{ "help", 'h', POPT_ARG_NONE, NULL, OPT_HELP, NULL, NULL },
-	{ "help-legacy", '\0', POPT_ARG_NONE, NULL, OPT_HELP_LEGACY, NULL, NULL },
-	{ "version", 'V', POPT_ARG_NONE, NULL, OPT_VERSION, NULL, NULL },
-	{ "list", 'l', POPT_ARG_NONE, NULL, OPT_LIST, NULL, NULL },
-	{ "verbose", 'v', POPT_ARG_NONE, NULL, OPT_VERBOSE, NULL, NULL },
-	{ "debug", 'd', POPT_ARG_NONE, NULL, OPT_DEBUG, NULL, NULL },
-	{ "names", 'n', POPT_ARG_STRING, NULL, OPT_NAMES, NULL, NULL },
-	{ "fields", 'f', POPT_ARG_STRING, NULL, OPT_FIELDS, NULL, NULL },
-	{ "no-delta", '\0', POPT_ARG_NONE, NULL, OPT_NO_DELTA, NULL, NULL },
+	{ "clock-cycles", '\0', POPT_ARG_NONE, NULL, OPT_CLOCK_CYCLES, NULL, NULL },
+	{ "clock-date", '\0', POPT_ARG_NONE, NULL, OPT_CLOCK_DATE, NULL, NULL },
+	{ "clock-force-correlate", '\0', POPT_ARG_NONE, NULL, OPT_CLOCK_FORCE_CORRELATE, NULL, NULL },
+	{ "clock-gmt", '\0', POPT_ARG_NONE, NULL, OPT_CLOCK_GMT, NULL, NULL },
 	{ "clock-offset", '\0', POPT_ARG_STRING, NULL, OPT_CLOCK_OFFSET, NULL, NULL },
 	{ "clock-offset-ns", '\0', POPT_ARG_STRING, NULL, OPT_CLOCK_OFFSET_NS, NULL, NULL },
-	{ "clock-cycles", '\0', POPT_ARG_NONE, NULL, OPT_CLOCK_CYCLES, NULL, NULL },
 	{ "clock-seconds", '\0', POPT_ARG_NONE, NULL, OPT_CLOCK_SECONDS, NULL, NULL },
-	{ "clock-date", '\0', POPT_ARG_NONE, NULL, OPT_CLOCK_DATE, NULL, NULL },
-	{ "clock-gmt", '\0', POPT_ARG_NONE, NULL, OPT_CLOCK_GMT, NULL, NULL },
-	{ "clock-force-correlate", '\0', POPT_ARG_NONE, NULL, OPT_CLOCK_FORCE_CORRELATE, NULL, NULL },
-	{ "source", '\0', POPT_ARG_STRING, NULL, OPT_SOURCE, NULL, NULL },
+	{ "debug", 'd', POPT_ARG_NONE, NULL, OPT_DEBUG, NULL, NULL },
+	{ "debug-info-dir", 0, POPT_ARG_STRING, NULL, OPT_DEBUG_INFO_DIR, NULL, NULL },
+	{ "debug-info-full-path", 0, POPT_ARG_NONE, NULL, OPT_DEBUG_INFO_FULL_PATH, NULL, NULL },
+	{ "debug-info-target-prefix", 0, POPT_ARG_STRING, NULL, OPT_DEBUG_INFO_TARGET_PREFIX, NULL, NULL },
+	{ "fields", 'f', POPT_ARG_STRING, NULL, OPT_FIELDS, NULL, NULL },
+	{ "help", 'h', POPT_ARG_NONE, NULL, OPT_HELP, NULL, NULL },
+	{ "help-legacy", '\0', POPT_ARG_NONE, NULL, OPT_HELP_LEGACY, NULL, NULL },
+	{ "input-format", 'i', POPT_ARG_STRING, NULL, OPT_INPUT_FORMAT, NULL, NULL },
+	{ "list", 'l', POPT_ARG_NONE, NULL, OPT_LIST, NULL, NULL },
+	{ "names", 'n', POPT_ARG_STRING, NULL, OPT_NAMES, NULL, NULL },
+	{ "no-delta", '\0', POPT_ARG_NONE, NULL, OPT_NO_DELTA, NULL, NULL },
+	{ "output", 'w', POPT_ARG_STRING, NULL, OPT_OUTPUT_PATH, NULL, NULL },
+	{ "output-format", 'o', POPT_ARG_STRING, NULL, OPT_OUTPUT_FORMAT, NULL, NULL },
+	{ "plugin-path", 'p', POPT_ARG_STRING, NULL, OPT_PLUGIN_PATH, NULL, NULL },
 	{ "sink", '\0', POPT_ARG_STRING, NULL, OPT_SINK, NULL, NULL },
+	{ "source", '\0', POPT_ARG_STRING, NULL, OPT_SOURCE, NULL, NULL },
+	{ "stream-intersection", '\0', POPT_ARG_NONE, NULL, OPT_STREAM_INTERSECTION, NULL, NULL },
+	{ "verbose", 'v', POPT_ARG_NONE, NULL, OPT_VERBOSE, NULL, NULL },
+	{ "version", 'V', POPT_ARG_NONE, NULL, OPT_VERSION, NULL, NULL },
 	{ NULL, 0, 0, NULL, 0, NULL, NULL },
 };
+
+/*
+ * Sets the value of a given legacy offset option and marks it as set.
+ */
+static void set_offset_value(struct offset_opt *offset_opt, int64_t value)
+{
+	offset_opt->value = value;
+	offset_opt->is_set = true;
+}
 
 /*
  * Returns a Babeltrace configuration, out of command-line arguments,
@@ -1987,9 +2161,9 @@ static struct poptOption long_options[] = {
  *
  * Return value is NULL on error, otherwise it's owned by the caller.
  */
-struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
+struct bt_config *bt_config_from_args(int argc, char *argv[], int *exit_code)
 {
-	struct bt_cfg *cfg = NULL;
+	struct bt_config *cfg = NULL;
 	poptContext pc = NULL;
 	char *arg = NULL;
 	struct ctf_legacy_opts ctf_legacy_opts = { 0 };
@@ -2013,20 +2187,33 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 		goto error;
 	}
 
+	text_legacy_opts.dbg_info_dir = g_string_new(NULL);
+	if (!text_legacy_opts.dbg_info_dir) {
+		print_err_oom();
+		goto error;
+	}
+
+	text_legacy_opts.dbg_info_target_prefix = g_string_new(NULL);
+	if (!text_legacy_opts.dbg_info_target_prefix) {
+		print_err_oom();
+		goto error;
+	}
+
 	/* Create config */
-	cfg = g_new0(struct bt_cfg, 1);
+	cfg = g_new0(struct bt_config, 1);
 	if (!cfg) {
 		print_err_oom();
 		goto error;
 	}
 
-	cfg->sources = g_ptr_array_new_with_free_func(bt_cfg_component_destroy);
+	bt_object_init(cfg, bt_config_destroy);
+	cfg->sources = g_ptr_array_new_with_free_func((GDestroyNotify) bt_put);
 	if (!cfg->sources) {
 		print_err_oom();
 		goto error;
 	}
 
-	cfg->sinks = g_ptr_array_new_with_free_func(bt_cfg_component_destroy);
+	cfg->sinks = g_ptr_array_new_with_free_func((GDestroyNotify) bt_put);
 	if (!cfg->sinks) {
 		print_err_oom();
 		goto error;
@@ -2070,16 +2257,31 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 			}
 
 			g_string_assign(text_legacy_opts.output, arg);
-			text_legacy_opts.any_is_set = true;
+			break;
+		case OPT_DEBUG_INFO_DIR:
+			if (text_legacy_opts.dbg_info_dir->len > 0) {
+				printf_err("Duplicate --debug-info-dir option\n");
+				goto error;
+			}
+
+			g_string_assign(text_legacy_opts.dbg_info_dir, arg);
+			break;
+		case OPT_DEBUG_INFO_TARGET_PREFIX:
+			if (text_legacy_opts.dbg_info_target_prefix->len > 0) {
+				printf_err("Duplicate --debug-info-target-prefix option\n");
+				goto error;
+			}
+
+			g_string_assign(text_legacy_opts.dbg_info_target_prefix, arg);
 			break;
 		case OPT_INPUT_FORMAT:
 		case OPT_SOURCE:
 		{
-			struct bt_cfg_component *bt_cfg_component;
+			struct bt_config_component *bt_config_component;
 
 			if (opt == OPT_INPUT_FORMAT) {
 				if (!strcmp(arg, "ctf")) {
-					/* Legacy CTF input plugin */
+					/* Legacy CTF input format */
 					if (legacy_input_format) {
 						print_err_dup_legacy_input();
 						goto error;
@@ -2089,7 +2291,7 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 						LEGACY_INPUT_FORMAT_CTF;
 					break;
 				} else if (!strcmp(arg, "lttng-live")) {
-					/* Legacy LTTng-live input plugin */
+					/* Legacy LTTng-live input format */
 					if (legacy_input_format) {
 						print_err_dup_legacy_input();
 						goto error;
@@ -2102,24 +2304,24 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 			}
 
 			/* Non-legacy: try to create a component config */
-			bt_cfg_component = bt_cfg_component_from_arg(arg);
-			if (!bt_cfg_component) {
+			bt_config_component = bt_config_component_from_arg(arg);
+			if (!bt_config_component) {
 				printf_err("Invalid source component format:\n    %s\n",
 					arg);
 				goto error;
 			}
 
-			g_ptr_array_add(cfg->sources, bt_cfg_component);
+			g_ptr_array_add(cfg->sources, bt_config_component);
 			break;
 		}
 		case OPT_OUTPUT_FORMAT:
 		case OPT_SINK:
 		{
-			struct bt_cfg_component *bt_cfg_component;
+			struct bt_config_component *bt_config_component;
 
 			if (opt == OPT_OUTPUT_FORMAT) {
 				if (!strcmp(arg, "text")) {
-					/* Legacy CTF-text output plugin */
+					/* Legacy CTF-text output format */
 					if (legacy_output_format) {
 						print_err_dup_legacy_output();
 						goto error;
@@ -2129,7 +2331,7 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 						LEGACY_OUTPUT_FORMAT_TEXT;
 					break;
 				} else if (!strcmp(arg, "dummy")) {
-					/* Legacy dummy output plugin */
+					/* Legacy dummy output format */
 					if (legacy_output_format) {
 						print_err_dup_legacy_output();
 						goto error;
@@ -2139,7 +2341,7 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 						LEGACY_OUTPUT_FORMAT_DUMMY;
 					break;
 				} else if (!strcmp(arg, "ctf-metadata")) {
-					/* Legacy CTF-metadata output plugin */
+					/* Legacy CTF-metadata output format */
 					if (legacy_output_format) {
 						print_err_dup_legacy_output();
 						goto error;
@@ -2152,14 +2354,14 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 			}
 
 			/* Non-legacy: try to create a component config */
-			bt_cfg_component = bt_cfg_component_from_arg(arg);
-			if (!bt_cfg_component) {
+			bt_config_component = bt_config_component_from_arg(arg);
+			if (!bt_config_component) {
 				printf_err("Invalid sink component format:\n    %s\n",
 					arg);
 				goto error;
 			}
 
-			g_ptr_array_add(cfg->sinks, bt_cfg_component);
+			g_ptr_array_add(cfg->sinks, bt_config_component);
 			break;
 		}
 		case OPT_NAMES:
@@ -2173,8 +2375,6 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 				printf_err("Invalid --names option's argument\n");
 				goto error;
 			}
-
-			text_legacy_opts.any_is_set = true;
 			break;
 		case OPT_FIELDS:
 			if (text_legacy_opts.fields) {
@@ -2187,34 +2387,30 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 				printf_err("Invalid --fields option's argument\n");
 				goto error;
 			}
-
-			text_legacy_opts.any_is_set = true;
 			break;
 		case OPT_NO_DELTA:
 			text_legacy_opts.no_delta = true;
-			text_legacy_opts.any_is_set = true;
 			break;
 		case OPT_CLOCK_CYCLES:
 			text_legacy_opts.clock_cycles = true;
-			text_legacy_opts.any_is_set = true;
 			break;
 		case OPT_CLOCK_SECONDS:
 			text_legacy_opts.clock_seconds = true;
-			text_legacy_opts.any_is_set = true;
 			break;
 		case OPT_CLOCK_DATE:
 			text_legacy_opts.clock_date = true;
-			text_legacy_opts.any_is_set = true;
 			break;
 		case OPT_CLOCK_GMT:
 			text_legacy_opts.clock_gmt = true;
-			text_legacy_opts.any_is_set = true;
+			break;
+		case OPT_DEBUG_INFO_FULL_PATH:
+			text_legacy_opts.dbg_info_full_path = true;
 			break;
 		case OPT_CLOCK_OFFSET:
 		{
 			int64_t val;
 
-			if (ctf_legacy_opts.offset_s_is_set) {
+			if (ctf_legacy_opts.offset_s.is_set) {
 				printf_err("Duplicate --clock-offset option\n");
 				goto error;
 			}
@@ -2224,15 +2420,14 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 				goto error;
 			}
 
-			ctf_legacy_opts.offset_s = val;
-			ctf_legacy_opts.offset_s_is_set = true;
+			set_offset_value(&ctf_legacy_opts.offset_s, val);
 			break;
 		}
 		case OPT_CLOCK_OFFSET_NS:
 		{
 			int64_t val;
 
-			if (ctf_legacy_opts.offset_ns_is_set) {
+			if (ctf_legacy_opts.offset_ns.is_set) {
 				printf_err("Duplicate --clock-offset-ns option\n");
 				goto error;
 			}
@@ -2242,26 +2437,25 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 				goto error;
 			}
 
-			ctf_legacy_opts.offset_ns = val;
-			ctf_legacy_opts.offset_ns_is_set = true;
+			set_offset_value(&ctf_legacy_opts.offset_ns, val);
 			break;
 		}
+		case OPT_STREAM_INTERSECTION:
+			ctf_legacy_opts.stream_intersection = true;
+			break;
 		case OPT_CLOCK_FORCE_CORRELATE:
 			cfg->force_correlate = true;
 			break;
 		case OPT_HELP:
-			bt_cfg_destroy(cfg);
-			cfg = NULL;
+			BT_PUT(cfg);
 			print_usage(stdout);
 			goto end;
 		case OPT_HELP_LEGACY:
-			bt_cfg_destroy(cfg);
-			cfg = NULL;
+			BT_PUT(cfg);
 			print_legacy_usage(stdout);
 			goto end;
 		case OPT_VERSION:
-			bt_cfg_destroy(cfg);
-			cfg = NULL;
+			BT_PUT(cfg);
 			print_version();
 			goto end;
 		case OPT_LIST:
@@ -2314,26 +2508,26 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 	}
 
 	/*
-	 * If there's a legacy input plugin, convert it to source
+	 * If there's a legacy input format, convert it to source
 	 * component configurations.
 	 */
 	if (legacy_input_format) {
 		if (append_sources_from_legacy_opts(cfg->sources,
 				legacy_input_format, &ctf_legacy_opts,
 				legacy_input_paths)) {
-			printf_err("Cannot convert legacy input plugin options to source(s)\n");
+			printf_err("Cannot convert legacy input format options to source(s)\n");
 			goto error;
 		}
 	}
 
 	/*
-	 * If there's a legacy output plugin, convert it to sink
+	 * If there's a legacy output format, convert it to sink
 	 * component configurations.
 	 */
 	if (legacy_output_format) {
 		if (append_sinks_from_legacy_opts(cfg->sinks,
 				legacy_output_format, &text_legacy_opts)) {
-			printf_err("Cannot convert legacy output plugin options to sink(s)\n");
+			printf_err("Cannot convert legacy output format options to sink(s)\n");
 			goto error;
 		}
 	}
@@ -2341,7 +2535,7 @@ struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code)
 	goto end;
 
 error:
-	bt_cfg_destroy(cfg);
+	BT_PUT(cfg);
 	cfg = NULL;
 	*exit_code = 1;
 
@@ -2354,10 +2548,17 @@ end:
 		g_string_free(text_legacy_opts.output, TRUE);
 	}
 
+	if (text_legacy_opts.dbg_info_dir) {
+		g_string_free(text_legacy_opts.dbg_info_dir, TRUE);
+	}
+
+	if (text_legacy_opts.dbg_info_target_prefix) {
+		g_string_free(text_legacy_opts.dbg_info_target_prefix, TRUE);
+	}
+
 	free(arg);
 	BT_PUT(text_legacy_opts.names);
 	BT_PUT(text_legacy_opts.fields);
 	BT_PUT(legacy_input_paths);
-
 	return cfg;
 }

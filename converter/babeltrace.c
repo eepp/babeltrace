@@ -211,26 +211,29 @@ void print_value(struct bt_value *value, size_t indent, bool do_indent)
 }
 
 static
-void print_bt_cfg_component(struct bt_cfg_component *bt_cfg_component)
+void print_bt_config_component(struct bt_config_component *bt_config_component)
 {
-	printf("  %s/%s\n", bt_cfg_component->plugin_name->str,
-		bt_cfg_component->component_name->str);
+	printf("  %s/%s\n", bt_config_component->plugin_name->str,
+		bt_config_component->component_name->str);
 	printf("    params:\n");
-	print_value(bt_cfg_component->params, 6, true);
+	print_value(bt_config_component->params, 6, true);
 }
 
 static
-void print_bt_cfg_components(GPtrArray *array)
+void print_bt_config_components(GPtrArray *array)
 {
 	size_t i;
 
 	for (i = 0; i < array->len; i++) {
-		print_bt_cfg_component(bt_cfg_get_cfg_component(array, i));
+		struct bt_config_component *cfg_component =
+			bt_config_get_component(array, i);
+		print_bt_config_component(cfg_component);
+		BT_PUT(cfg_component);
 	}
 }
 
 static
-void print_cfg(struct bt_cfg *cfg)
+void print_cfg(struct bt_config *cfg)
 {
 	printf("debug:           %d\n", cfg->debug);
 	printf("verbose:         %d\n", cfg->verbose);
@@ -239,9 +242,9 @@ void print_cfg(struct bt_cfg *cfg)
 	printf("plugin paths:\n");
 	print_value(cfg->plugin_paths, 2, true);
 	printf("sources:\n");
-	print_bt_cfg_components(cfg->sources);
+	print_bt_config_components(cfg->sources);
 	printf("sinks:\n");
-	print_bt_cfg_components(cfg->sinks);
+	print_bt_config_components(cfg->sinks);
 }
 
 int main(int argc, char **argv)
@@ -253,9 +256,9 @@ int main(int argc, char **argv)
 	struct bt_component_class *sink_class = NULL;
 	struct bt_component *source = NULL, *sink = NULL;
 	struct bt_value *source_params = NULL, *sink_params = NULL;
-	struct bt_cfg *cfg;
+	struct bt_config *cfg;
 
-	cfg = bt_cfg_from_args(argc, argv, &exit_code);
+	cfg = bt_config_from_args(argc, argv, &exit_code);
 
 	if (cfg) {
 		print_cfg(cfg);
@@ -319,6 +322,6 @@ end:
 	BT_PUT(sink);
 	BT_PUT(source_params);
 	BT_PUT(sink_params);
-	bt_cfg_destroy(cfg);
+	BT_PUT(cfg);
 	return ret ? 1 : 0;
 }

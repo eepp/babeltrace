@@ -27,32 +27,41 @@
 
 #include <stdlib.h>
 #include <babeltrace/values.h>
+#include <babeltrace/ref.h>
+#include <babeltrace/object-internal.h>
+#include <babeltrace/compiler.h>
 #include <glib.h>
 
-struct bt_cfg_component {
+struct bt_config_component {
+	struct bt_object base;
 	GString *plugin_name;
 	GString *component_name;
 	struct bt_value *params;
 };
 
-struct bt_cfg {
+struct bt_config {
+	struct bt_object base;
+	struct bt_value *plugin_paths;
+
+	/* Array of pointers to struct bt_config_component */
+	GPtrArray *sources;
+
+	/* Array of pointers to struct bt_config_component */
+	GPtrArray *sinks;
+
 	bool debug;
 	bool verbose;
 	bool do_list;
 	bool force_correlate;
-	struct bt_value *plugin_paths;
-	GPtrArray *sources;
-	GPtrArray *sinks;
 };
 
 static inline
-struct bt_cfg_component *bt_cfg_get_cfg_component(GPtrArray *array,
+struct bt_config_component *bt_config_get_component(GPtrArray *array,
 		size_t index)
 {
-	return g_ptr_array_index(array, index);
+	return bt_get(g_ptr_array_index(array, index));
 }
 
-void bt_cfg_destroy(struct bt_cfg *bt_cfg);
-struct bt_cfg *bt_cfg_from_args(int argc, char *argv[], int *exit_code);
+struct bt_config *bt_config_from_args(int argc, char *argv[], int *exit_code);
 
 #endif /* BABELTRACE_CONVERTER_CFG_H */
