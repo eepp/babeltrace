@@ -148,13 +148,14 @@ int visitor(struct bt_ctf_ir_element *element, void *data)
 	struct visitor_state *state = data;
 	struct expected_result *expected = &expected_results[state->i++];
 
-	switch (element->type) {
+	switch (bt_ctf_ir_element_get_type(element)) {
 	case BT_CTF_IR_TYPE_TRACE:
 		element_name = NULL;
 		names_match = expected->element_name == NULL;
 		break;
 	case BT_CTF_IR_TYPE_STREAM_CLASS:
-		element_name = bt_ctf_stream_class_get_name(element->element);
+		element_name = bt_ctf_stream_class_get_name(
+				bt_ctf_ir_element_get_element(element));
 		if (!element_name) {
 			ret = -1;
 			goto end;
@@ -163,7 +164,8 @@ int visitor(struct bt_ctf_ir_element *element, void *data)
 		names_match = !strcmp(element_name, expected->element_name);
 		break;
 	case BT_CTF_IR_TYPE_EVENT_CLASS:
-		element_name = bt_ctf_event_class_get_name(element->element);
+		element_name = bt_ctf_event_class_get_name(
+				bt_ctf_ir_element_get_element(element));
 		if (!element_name) {
 			ret = -1;
 			goto end;
@@ -177,10 +179,10 @@ int visitor(struct bt_ctf_ir_element *element, void *data)
 		goto end;
 	}
 
-	ok(expected->element_type == element->type,
+	ok(expected->element_type == bt_ctf_ir_element_get_type(element),
 			"Encoutered element type %s, expected %s",
 			element_type_str(expected->element_type),
-			element_type_str(element->type));
+			element_type_str(bt_ctf_ir_element_get_type(element)));
 	ok(names_match, "Element name is %s, expected %s",
 			element_name ? : "NULL",
 			expected->element_name ? : "NULL");
