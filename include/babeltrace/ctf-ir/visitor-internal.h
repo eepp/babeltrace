@@ -35,6 +35,11 @@ typedef int (*bt_child_count_accessor)(void *element);
 typedef int (*bt_child_visitor)(void *element, bt_ctf_ir_visitor visitor,
 		void *data);
 
+struct bt_ctf_ir_element {
+	enum bt_ctf_ir_type type;
+	void *element;
+};
+
 BT_HIDDEN
 int visitor_helper(struct bt_ctf_ir_element *root,
 		bt_child_count_accessor child_counter,

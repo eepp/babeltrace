@@ -67,3 +67,30 @@ int visitor_helper(struct bt_ctf_ir_element *root,
 end:
 	return ret;
 }
+
+enum bt_ctf_ir_type bt_ctf_ir_element_get_type(
+		struct bt_ctf_ir_element *element)
+{
+	enum bt_ctf_ir_type ret = BT_CTF_IR_TYPE_UNKNOWN;
+	
+	if (!element) {
+		goto end;
+	}
+
+	ret = element->type;
+end:
+	return ret;
+}
+
+void *bt_ctf_ir_element_get_element(struct bt_ctf_ir_element *element)
+{
+	void *ret = NULL;
+
+	if (!element) {
+		goto end;
+	}
+
+	ret = element->element;
+end:
+	return ret;
+}

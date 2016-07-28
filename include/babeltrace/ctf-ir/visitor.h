@@ -34,6 +34,8 @@
 extern "C" {
 #endif
 
+struct bt_ctf_ir_element;
+
 enum bt_ctf_ir_type {
 	BT_CTF_IR_TYPE_UNKNOWN = -1,
 	BT_CTF_IR_TYPE_TRACE = 0,
@@ -44,13 +46,32 @@ enum bt_ctf_ir_type {
 	BT_CTF_IR_TYPE_NR,
 };
 
-struct bt_ctf_ir_element {
-	enum bt_ctf_ir_type type;
-	void *element;
-};
-
 typedef int (*bt_ctf_ir_visitor)(struct bt_ctf_ir_element *element,
 		void *data);
+
+/*
+ * bt_ctf_ir_element_get_type: get an IR element's type.
+ *
+ * Get an IR element's type.
+ *
+ * @param element Element instance.
+ *
+ * Returns one of #bt_ctf_ir_type.
+ */
+enum bt_ctf_ir_type bt_ctf_ir_element_get_type(
+		struct bt_ctf_ir_element *element);
+
+/*
+ * bt_ctf_ir_element_get_element: get an IR element's value.
+ *
+ * Get an IR element's value.
+ *
+ * @param element Element instance.
+ *
+ * Returns a CTF-IR type. Use #bt_ctf_ir_type to determine the
+ * concrete type of the value returned.
+ */
+void *bt_ctf_ir_element_get_element(struct bt_ctf_ir_element *element);
 
 #ifdef __cplusplus
 }
