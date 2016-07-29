@@ -10,30 +10,25 @@ libtestcommon_a_SOURCES = common.c common.h
 # it knows better and considers libraries with constructors having
 # side-effects as dead code.
 test_seek_LDFLAGS = $(LD_NO_AS_NEEDED)
-test_seek_LDADD = $(LIBTAP) libtestcommon.a \
+
+COMMON_TEST_LDADD = $(LIBTAP) libtestcommon.a \
 	$(top_builddir)/lib/libbabeltrace.la \
 	$(top_builddir)/formats/ctf/libbabeltrace-ctf.la
+
+test_seek_LDADD = $(COMMON_TEST_LDADD)
 
 test_bitfield_LDADD = $(LIBTAP) libtestcommon.a
 
-test_ctf_writer_LDADD = $(LIBTAP) \
-	$(top_builddir)/lib/libbabeltrace.la \
-	$(top_builddir)/formats/ctf/libbabeltrace-ctf.la
+test_ctf_writer_LDADD = $(COMMON_TEST_LDADD)
 
 test_bt_values_LDADD = $(LIBTAP) \
 	$(top_builddir)/lib/libbabeltrace.la
 
-test_ctf_ir_ref_LDADD = $(LIBTAP) \
-	$(top_builddir)/lib/libbabeltrace.la \
-	$(top_builddir)/formats/ctf/libbabeltrace-ctf.la
+test_ctf_ir_ref_LDADD = $(COMMON_TEST_LDADD)
 
-test_bt_ctf_field_type_validation_LDADD = $(LIBTAP) \
-	$(top_builddir)/lib/libbabeltrace.la \
-	$(top_builddir)/formats/ctf/libbabeltrace-ctf.la
+test_bt_ctf_field_type_validation_LDADD = $(COMMON_TEST_LDADD)
 
-test_ir_visit_LDADD = $(LIBTAP) \
-	$(top_builddir)/lib/libbabeltrace.la \
-	$(top_builddir)/formats/ctf/libbabeltrace-ctf.la
+test_ir_visit_LDADD = $(COMMON_TEST_LDADD)
 
 noinst_PROGRAMS = test_seek test_bitfield test_ctf_writer test_bt_values \
 	test_ctf_ir_ref test_bt_ctf_field_type_validation test_ir_visit
