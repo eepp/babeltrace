@@ -1085,6 +1085,15 @@ end:
 	return ret;
 }
 
+static
+int invoke_listener(struct bt_ctf_ir_element *element, void *data)
+{
+	struct listener_wrapper *listener_wrapper = data;
+
+	listener_wrapper->listener(element, listener_wrapper->data);
+	return 0;
+}
+
 int bt_ctf_trace_add_listener(struct bt_ctf_trace *trace,
 		bt_ctf_listener_cb listener, void *listener_data)
 {
@@ -1101,8 +1110,7 @@ int bt_ctf_trace_add_listener(struct bt_ctf_trace *trace,
 	listener_wrapper->data = listener_data;
 
 	/* Visit the current schema. */
-	ret = bt_ctf_trace_visit(trace, (bt_ctf_ir_visitor) listener,
-			listener_data);
+	ret = bt_ctf_trace_visit(trace, invoke_listener, listener_wrapper);
 	if (ret) {
 		goto error;
 	}
