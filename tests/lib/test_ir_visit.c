@@ -195,7 +195,7 @@ int main(int argc, char **argv)
 	int ret;
 	struct bt_ctf_trace *trace;
 	struct visitor_state state = { 0 };
-	
+
 	plan_tests(NR_TESTS);
 
 	/*
