@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <glib.h>
+#include <babeltrace/align.h>
 
 #define PRINT_ERR_STREAM	ctf_fs->error_fp
 #define PRINT_PREFIX		"ctf-fs"
@@ -67,7 +68,7 @@ static struct ctf_fs *ctf_fs_create(const char *trace_path)
 	}
 
 	ctf_fs->error_fp = stderr;
-	ctf_fs->page_size = getpagesize();
+	ctf_fs->page_size = PAGE_SIZE;
 
 	if (ctf_fs_metadata_init(&ctf_fs->metadata)) {
 		PERR("Cannot initialize metadata structure\n");

@@ -60,12 +60,12 @@
 /*
  * Length of first attempt at mapping a packet header, in bits.
  */
-#define DEFAULT_HEADER_LEN	(getpagesize() * CHAR_BIT)
+#define DEFAULT_HEADER_LEN	(PAGE_SIZE * CHAR_BIT)
 
 /*
  * Lenght of packet to write, in bits.
  */
-#define WRITE_PACKET_LEN	(getpagesize() * 8 * CHAR_BIT)
+#define WRITE_PACKET_LEN	(PAGE_SIZE * 8 * CHAR_BIT)
 
 #ifndef min
 #define min(a, b)	(((a) < (b)) ? (a) : (b))

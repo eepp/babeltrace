@@ -30,8 +30,20 @@
 #include <babeltrace/compat/limits.h>
 
 #ifndef PAGE_SIZE		/* Cygwin limits.h defines its own PAGE_SIZE */
+#ifdef __MINGW32__
+#include <windows.h>
+static inline
+DWORD bt_getpagesize()
+{
+	SYSTEM_INFO si;
+	GetNativeSystemInfo(&si);
+	return si.dwPageSize;
+}
+#define PAGE_SIZE		bt_getpagesize()
+#else /* _WIN32 */
 #define PAGE_SIZE		sysconf(_SC_PAGE_SIZE)
-#endif
+#endif /* _WIN32 */
+#endif /* PAGE_SIZE */
 
 #define ALIGN(x, a)		__ALIGN_MASK(x, (typeof(x))(a) - 1)
 #define __ALIGN_MASK(x, mask)	(((x) + (mask)) & ~(mask))
