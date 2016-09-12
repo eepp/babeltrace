@@ -1439,7 +1439,7 @@ int add_one_trace(struct lttng_live_ctx *ctx,
 
 	handle = (struct bt_trace_handle *) g_hash_table_lookup(
 			bt_ctx->trace_handles,
-			(gpointer) (unsigned long) ret);
+			GUINT_TO_POINTER(ret));
 	td = handle->td;
 	trace->handle = handle;
 	if (bt_ctx->current_iterator) {
