@@ -165,7 +165,11 @@ extern int babeltrace_verbose, babeltrace_debug;
 /*
  * BT_HIDDEN: set the hidden attribute for internal functions
  */
+#ifdef _WIN32
+#define BT_HIDDEN
+#else
 #define BT_HIDDEN __attribute__((visibility("hidden")))
+#endif
 
 #define BT_CTF_MAJOR	1
 #define BT_CTF_MINOR	8
