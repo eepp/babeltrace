@@ -44,6 +44,7 @@
 #include <babeltrace/values.h>
 #include <babeltrace/ref.h>
 #include <babeltrace/endian.h>
+#include <babeltrace/compat/uuid.h>
 
 #define DEFAULT_IDENTIFIER_SIZE 128
 #define DEFAULT_METADATA_STRING_SIZE 4096
@@ -100,7 +101,7 @@ struct bt_ctf_trace *bt_ctf_trace_create(void)
 	}
 
 	/* Generate a trace UUID */
-	uuid_generate(trace->uuid);
+	bt_uuid_generate(trace->uuid);
 	if (init_trace_packet_header(trace)) {
 		goto error;
 	}
