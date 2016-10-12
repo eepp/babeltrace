@@ -197,6 +197,9 @@ struct ctx {
 	/* 1 if trace declaration is visited */
 	int is_trace_visited;
 
+	/* 1 if trace is an LTTng trace */
+	int is_lttng_trace;
+
 	/* Trace attributes */
 	uint64_t trace_major;
 	uint64_t trace_minor;
@@ -3987,12 +3990,20 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 
 		if (is_unary_string(right_head)) {
 			char *right = concatenate_unary_strings(right_head);
+			static const char *tracer_name_key = "tracer_name";
+			static const char *lttng_prefix = "lttng";
 
 			if (!right) {
 				_PERROR("unexpected unary expression for environment entry's value (\"%s\")",
 					left);
 				ret = -EINVAL;
 				goto error;
+			}
+
+			if (strncmp(left, tracer_name_key, strlen(tracer_name_key)) == 0) {
+				if (strncmp(right, lttng_prefix, strlen(lttng_prefix)) == 0) {
+					ctx->is_lttng_trace = 1;
+				}
 			}
 
 			printf_verbose("env.%s = \"%s\"\n", left, right);
@@ -4461,6 +4472,37 @@ end:
 }
 
 static
+int set_trace_clocks_absolute(struct bt_ctf_trace *trace)
+{
+	int ret = 0;
+	int clock_count = bt_ctf_trace_get_clock_count(trace);
+	int i;
+
+	if (clock_count < 0) {
+		ret = -1;
+		goto end;
+	}
+
+	for (i = 0; i < clock_count; i++) {
+		struct bt_ctf_clock *clock = bt_ctf_trace_get_clock(trace, i);
+
+		if (!clock) {
+			ret = -1;
+			goto end;
+		}
+
+		ret = bt_ctf_clock_set_is_absolute(clock, 1);
+		BT_PUT(clock);
+		if (ret) {
+			goto end;
+		}
+	}
+
+end:
+	return ret;
+}
+
+static
 int add_stream_classes_to_trace(struct ctx *ctx)
 {
 	int ret;
@@ -4640,6 +4682,14 @@ int ctf_visitor_generate_ir(FILE *efd, struct ctf_node *node,
 		_PERROR("unknown node type: %d", (int) node->type);
 		ret = -EINVAL;
 		goto error;
+	}
+
+	/* Update clocks */
+	if (ctx->is_lttng_trace) {
+		ret = set_trace_clocks_absolute(ctx->trace);
+		if (ret) {
+			_PERROR("%s", "cannot update clocks");
+		}
 	}
 
 	/* Add stream classes to trace now */
