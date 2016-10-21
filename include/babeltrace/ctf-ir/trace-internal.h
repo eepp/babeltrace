@@ -35,7 +35,7 @@
 #include <babeltrace/values.h>
 #include <glib.h>
 #include <sys/types.h>
-#include <uuid/uuid.h>
+#include <babeltrace/compat/uuid.h>
 
 enum field_type_alias {
 	FIELD_TYPE_ALIAS_UINT5_T = 0,
@@ -50,7 +50,7 @@ enum field_type_alias {
 struct bt_ctf_trace {
 	struct bt_object base;
 	int frozen;
-	uuid_t uuid;
+	unsigned char uuid[BABELTRACE_UUID_LEN];
 	int byte_order; /* A value defined in Babeltrace's "endian.h" */
 	struct bt_value *environment;
 	GPtrArray *clocks; /* Array of pointers to bt_ctf_clock */

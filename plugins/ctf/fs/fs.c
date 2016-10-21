@@ -28,6 +28,7 @@
 
 #include <babeltrace/plugin/plugin-system.h>
 #include <babeltrace/plugin/notification/iterator.h>
+#include <babeltrace/align.h>
 #include <glib.h>
 #include <assert.h>
 #include <unistd.h>
@@ -288,7 +289,7 @@ struct ctf_fs_component *ctf_fs_create(struct bt_value *params)
 
 	ctf_fs->streams = g_ptr_array_new_with_free_func(stream_destroy);
 	ctf_fs->error_fp = stderr;
-	ctf_fs->page_size = (size_t) getpagesize();
+	ctf_fs->page_size = PAGE_SIZE;
 
 	// FIXME: check error.
 	ctf_fs_metadata_set_trace(ctf_fs);

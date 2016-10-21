@@ -38,6 +38,8 @@
 #include <errno.h>
 #include <string.h>
 #include <inttypes.h>
+#include <glib.h>
+#include <glib/gstdio.h>
 
 #include <babeltrace/babeltrace-internal.h>
 #include <babeltrace/ctf/types.h>
@@ -230,7 +232,7 @@ void write_event_header(struct ctf_stream_pos *pos, char *line,
 			ti.tm_min = min;
 			ti.tm_sec = sec;
 
-			ep_sec = babeltrace_timegm(&ti);
+			ep_sec = bt_timegm(&ti);
 			if (ep_sec != (time_t) -1) {
 				*ts = (uint64_t) ep_sec * NSEC_PER_SEC
 					+ (uint64_t) msec * NSEC_PER_MSEC;
@@ -401,9 +403,9 @@ int main(int argc, char **argv)
 		exit(EXIT_SUCCESS);
 	}
 
-	ret = mkdir(s_outputname, S_IRWXU|S_IRWXG);
+	ret = g_mkdir(s_outputname, S_IRWXU|S_IRWXG);
 	if (ret) {
-		perror("mkdir");
+		perror("g_mkdir");
 		goto error;
 	}
 

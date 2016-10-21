@@ -228,7 +228,7 @@ int packetized_file_to_buf(struct ctf_fs_component *ctf_fs, struct ctf_fs_file *
 	int tret;
 	size_t packet_index = 0;
 
-	out_fp = babeltrace_open_memstream((char **) buf, &size);
+	out_fp = bt_open_memstream((char **) buf, &size);
 	if (out_fp == NULL) {
 		PERR("Cannot open memory stream: %s\n", strerror(errno));
 		goto error;
@@ -256,7 +256,7 @@ int packetized_file_to_buf(struct ctf_fs_component *ctf_fs, struct ctf_fs_file *
 	}
 
 	/* Close stream, which also flushes the buffer */
-	ret = babeltrace_close_memstream((char **) buf, &size, out_fp);
+	ret = bt_close_memstream((char **) buf, &size, out_fp);
 	if (ret < 0) {
 		PERR("Cannot close memory stream: %s\n", strerror(errno));
 		goto error;
@@ -268,7 +268,7 @@ error:
 	ret = -1;
 
 	if (out_fp) {
-		babeltrace_close_memstream((char **) buf, &size, out_fp);
+		bt_close_memstream((char **) buf, &size, out_fp);
 	}
 
 	if (*buf) {
@@ -316,7 +316,7 @@ void ctf_fs_metadata_set_trace(struct ctf_fs_component *ctf_fs)
 			goto error;
 		}
 
-		file->fp = babeltrace_fmemopen(cbuf, strlen(cbuf), "rb");
+		file->fp = bt_fmemopen(cbuf, strlen(cbuf), "rb");
 		if (!file->fp) {
 			PERR("Cannot memory-open metadata buffer: %s\n",
 				strerror(errno));

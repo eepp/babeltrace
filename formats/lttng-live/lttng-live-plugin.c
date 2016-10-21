@@ -193,10 +193,10 @@ guint g_uint64p_hash(gconstpointer key)
 	uint64_t v = *(uint64_t *) key;
 
 	if (sizeof(gconstpointer) == sizeof(uint64_t)) {
-		return g_direct_hash((gconstpointer) (unsigned long) v);
+		return g_direct_hash((gconstpointer) GUINT_TO_POINTER(v));
 	} else {
-		return g_direct_hash((gconstpointer) (unsigned long) (v >> 32))
-			^ g_direct_hash((gconstpointer) (unsigned long) v);
+		return g_direct_hash((gconstpointer) GUINT_TO_POINTER((v >> 32)))
+			^ g_direct_hash((gconstpointer) GUINT_TO_POINTER(v));
 	}
 }
 

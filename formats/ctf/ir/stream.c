@@ -126,7 +126,7 @@ int set_packet_header_uuid(struct bt_ctf_stream *stream)
 		goto end;
 	}
 
-	if (bt_ctf_field_type_array_get_length(uuid_field_type) != 16) {
+	if (bt_ctf_field_type_array_get_length(uuid_field_type) != BABELTRACE_UUID_LEN) {
 		/*
 		 * UUID field is not of the expected size.
 		 * Not an error, skip.
@@ -144,7 +144,7 @@ int set_packet_header_uuid(struct bt_ctf_stream *stream)
 	}
 
 	trace = (struct bt_ctf_trace *) bt_object_get_parent(stream);
-	for (i = 0; i < 16; i++) {
+	for (i = 0; i < BABELTRACE_UUID_LEN; i++) {
 		struct bt_ctf_field *uuid_element =
 			bt_ctf_field_array_get_field(uuid_field, i);
 

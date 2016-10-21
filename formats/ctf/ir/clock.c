@@ -32,6 +32,7 @@
 #include <babeltrace/ctf-writer/writer-internal.h>
 #include <babeltrace/object-internal.h>
 #include <babeltrace/compiler.h>
+#include <babeltrace/compat/string.h>
 #include <inttypes.h>
 
 static
@@ -317,7 +318,7 @@ int bt_ctf_clock_set_uuid(struct bt_ctf_clock *clock, const unsigned char *uuid)
 		goto end;
 	}
 
-	memcpy(clock->uuid, uuid, sizeof(uuid_t));
+	memcpy(clock->uuid, uuid, BABELTRACE_UUID_LEN);
 	clock->uuid_set = 1;
 end:
 	return ret;
