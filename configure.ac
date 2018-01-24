@@ -196,6 +196,8 @@ AC_PROG_LN_S
 AS_IF([test -f "$srcdir/bootstrap"], [in_git_repo=yes], [in_git_repo=no])
 AM_CONDITIONAL([IN_GIT_REPO], [test "x$in_git_repo" = "xyes"])
 
+Change 2.
+
 # check for bison
 AC_PROG_YACC
 AX_PROG_BISON_VERSION([2.4], [have_bison=yes])
