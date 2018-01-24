@@ -43,8 +43,6 @@ AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_MACRO_DIR([m4])
 AC_REQUIRE_AUX_FILE([tap-driver.sh])
 
-Change 1.
-
 AC_DEFINE([BT_VERSION_MAJOR], bt_version_major, [Babeltrace library major version])
 AC_DEFINE([BT_VERSION_MINOR], bt_version_minor, [Babeltrace library minor version])
 AC_DEFINE([BT_VERSION_PATCH], bt_version_patch, [Babeltrace library patch version])
@@ -346,6 +344,8 @@ AC_CHECK_LIB([c], [fmemopen],
 AC_CHECK_LIB([c], [open_memstream],
   [AC_DEFINE_UNQUOTED([BABELTRACE_HAVE_OPEN_MEMSTREAM], 1, [Has open_memstream support.])]
 )
+
+Change 3.
 
 # Check for posix_fallocate
 AC_CHECK_LIB([c], [posix_fallocate],
