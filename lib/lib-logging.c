@@ -1082,16 +1082,31 @@ static inline void handle_conversion_specifier_bt(void *priv_data,
 {
 	const char *fmt_ch = *out_fmt_ch;
 	bool extended = false;
-	const char *prefix = "";
+	char prefix[64];
+	char *prefix_ch = prefix;
 	void *obj;
 
 	/* skip "%!" */
 	fmt_ch += 2;
 
-	if (*fmt_ch == ':') {
-		prefix = va_arg(*args, char *);
+	if (*fmt_ch == '[') {
+		/* local prefix */
 		fmt_ch++;
+
+		while (true) {
+			if (*fmt_ch == ']') {
+				*prefix_ch = '\0';
+				fmt_ch++;
+				break;
+			}
+
+			*prefix_ch = *fmt_ch;
+			prefix_ch++;
+			fmt_ch++;
+		}
 	}
+
+	*prefix_ch = '\0';
 
 	if (*fmt_ch == '+') {
 		extended = true;

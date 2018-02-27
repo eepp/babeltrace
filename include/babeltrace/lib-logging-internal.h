@@ -53,9 +53,8 @@ int bt_lib_log_level;
  *
  * 1. Introductory `%!` sequence.
  *
- * 2. Optional: `:` to use a custom prefix for the printed fields. The
- *    prefix is specified as a `const char *` parameter before the main
- *    parameter.
+ * 2. Optional: `[` followed by a custom prefix for the printed fields
+ *    of this specifier, followed by `]`.
  *
  * 3. Optional: `+` to print extended fields. This depends on the
  *    provided format specifier.
@@ -141,10 +140,10 @@ int bt_lib_log_level;
  *
  * Example with a custom prefix:
  *
- *     BT_LIB_LOGI("Some message: %!:e, %!:+e", "ec-a-", event_class_a,
- *                 "ec-b-", event_class_b);
+ *     BT_LIB_LOGI("Some message: %![ec-a-]e, %![ec-b-]+e", ec_a, ec_b);
  *
- * It is safe to pass NULL as any Babeltrace object parameter.
+ * It is safe to pass NULL as any Babeltrace object parameter: the
+ * macros only print its null address.
  */
 #define BT_LIB_LOGF(_fmt, ...) bt_lib_log(BT_LOG_FATAL, _BT_LOG_TAG, (_fmt), ##__VA_ARGS__)
 #define BT_LIB_LOGE(_fmt, ...) bt_lib_log(BT_LOG_ERROR, _BT_LOG_TAG, (_fmt), ##__VA_ARGS__)
