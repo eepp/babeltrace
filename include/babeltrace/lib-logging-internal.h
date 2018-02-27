@@ -146,12 +146,12 @@ int bt_lib_log_level;
  *
  * It is safe to pass NULL as any Babeltrace object parameter.
  */
-#define BT_LIB_LOGF(_fmt, ...) bt_lib_log(BT_LOG_FATAL, _BT_LOG_TAG, (_fmt), __VA_ARGS__)
-#define BT_LIB_LOGE(_fmt, ...) bt_lib_log(BT_LOG_ERROR, _BT_LOG_TAG, (_fmt), __VA_ARGS__)
-#define BT_LIB_LOGW(_fmt, ...) bt_lib_log(BT_LOG_WARN, _BT_LOG_TAG, (_fmt), __VA_ARGS__)
-#define BT_LIB_LOGI(_fmt, ...) bt_lib_log(BT_LOG_INFO, _BT_LOG_TAG, (_fmt), __VA_ARGS__)
-#define BT_LIB_LOGD(_fmt, ...) bt_lib_log(BT_LOG_DEBUG, _BT_LOG_TAG, (_fmt), __VA_ARGS__)
-#define BT_LIB_LOGV(_fmt, ...) bt_lib_log(BT_LOG_VERBOSE, _BT_LOG_TAG, (_fmt), __VA_ARGS__)
+#define BT_LIB_LOGF(_fmt, ...) bt_lib_log(BT_LOG_FATAL, _BT_LOG_TAG, (_fmt), ##__VA_ARGS__)
+#define BT_LIB_LOGE(_fmt, ...) bt_lib_log(BT_LOG_ERROR, _BT_LOG_TAG, (_fmt), ##__VA_ARGS__)
+#define BT_LIB_LOGW(_fmt, ...) bt_lib_log(BT_LOG_WARN, _BT_LOG_TAG, (_fmt), ##__VA_ARGS__)
+#define BT_LIB_LOGI(_fmt, ...) bt_lib_log(BT_LOG_INFO, _BT_LOG_TAG, (_fmt), ##__VA_ARGS__)
+#define BT_LIB_LOGD(_fmt, ...) bt_lib_log(BT_LOG_DEBUG, _BT_LOG_TAG, (_fmt), ##__VA_ARGS__)
+#define BT_LIB_LOGV(_fmt, ...) bt_lib_log(BT_LOG_VERBOSE, _BT_LOG_TAG, (_fmt), ##__VA_ARGS__)
 
 /*
  * Log statement, specialized for the Babeltrace library.
