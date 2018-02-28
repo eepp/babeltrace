@@ -928,7 +928,7 @@ int bt_event_validate(struct bt_event *event)
 
 	assert(event);
 	if (event->event_header) {
-		ret = bt_field_validate(event->event_header);
+		ret = bt_field_validate_recursive(event->event_header);
 		if (ret) {
 			BT_LOGD("Invalid event's header field: "
 					"event-addr=%p, event-class-name=\"%s\", "
@@ -946,7 +946,7 @@ int bt_event_validate(struct bt_event *event)
 	 */
 	assert(stream_class);
 	if (stream_class->event_context_type) {
-		ret = bt_field_validate(event->stream_event_context);
+		ret = bt_field_validate_recursive(event->stream_event_context);
 		if (ret) {
 			BT_LOGD("Invalid event's stream event context field: "
 				"event-addr=%p, event-class-name=\"%s\", "
@@ -958,7 +958,7 @@ int bt_event_validate(struct bt_event *event)
 		}
 	}
 
-	ret = bt_field_validate(event->fields_payload);
+	ret = bt_field_validate_recursive(event->fields_payload);
 	if (ret) {
 		BT_LOGD("Invalid event's payload field: "
 			"event-addr=%p, event-class-name=\"%s\", "
@@ -976,7 +976,7 @@ int bt_event_validate(struct bt_event *event)
 			event,
 			bt_event_class_get_name(event->event_class),
 			bt_event_class_get_id(event->event_class));
-		ret = bt_field_validate(event->context_payload);
+		ret = bt_field_validate_recursive(event->context_payload);
 	}
 end:
 	bt_put(stream_class);
@@ -995,7 +995,7 @@ int bt_event_serialize(struct bt_event *event,
 
 	BT_LOGV_STR("Serializing event's context field.");
 	if (event->context_payload) {
-		ret = bt_field_serialize(event->context_payload, pos,
+		ret = bt_field_serialize_recursive(event->context_payload, pos,
 			native_byte_order);
 		if (ret) {
 			BT_LOGW("Cannot serialize event's context field: "
@@ -1010,7 +1010,7 @@ int bt_event_serialize(struct bt_event *event,
 
 	BT_LOGV_STR("Serializing event's payload field.");
 	if (event->fields_payload) {
-		ret = bt_field_serialize(event->fields_payload, pos,
+		ret = bt_field_serialize_recursive(event->fields_payload, pos,
 			native_byte_order);
 		if (ret) {
 			BT_LOGW("Cannot serialize event's payload field: "
@@ -1143,12 +1143,12 @@ void bt_event_freeze(struct bt_event *event)
 		bt_event_class_get_id(event->event_class));
 	bt_packet_freeze(event->packet);
 	BT_LOGD_STR("Freezing event's header field.");
-	bt_field_freeze(event->event_header);
+	bt_field_freeze_recursive(event->event_header);
 	BT_LOGD_STR("Freezing event's stream event context field.");
-	bt_field_freeze(event->stream_event_context);
+	bt_field_freeze_recursive(event->stream_event_context);
 	BT_LOGD_STR("Freezing event's context field.");
-	bt_field_freeze(event->context_payload);
+	bt_field_freeze_recursive(event->context_payload);
 	BT_LOGD_STR("Freezing event's payload field.");
-	bt_field_freeze(event->fields_payload);
+	bt_field_freeze_recursive(event->fields_payload);
 	event->frozen = 1;
 }

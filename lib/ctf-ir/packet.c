@@ -196,9 +196,9 @@ void bt_packet_freeze(struct bt_packet *packet)
 
 	BT_LOGD("Freezing packet: addr=%p", packet);
 	BT_LOGD_STR("Freezing packet's header field.");
-	bt_field_freeze(packet->header);
+	bt_field_freeze_recursive(packet->header);
 	BT_LOGD_STR("Freezing packet's context field.");
-	bt_field_freeze(packet->context);
+	bt_field_freeze_recursive(packet->context);
 	packet->frozen = 1;
 }
 

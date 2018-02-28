@@ -3261,7 +3261,7 @@ void bt_ctf_field_type_put(struct bt_field_type *type)
 }
 
 BT_HIDDEN
-void bt_field_type_freeze(struct bt_field_type *type)
+void _bt_field_type_freeze(struct bt_field_type *type)
 {
 	if (!type || type->frozen) {
 		return;
