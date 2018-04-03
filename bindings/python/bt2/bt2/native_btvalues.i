@@ -42,8 +42,6 @@ enum bt_value_type {
 enum bt_value_type bt_value_get_type(const struct bt_value *object);
 
 enum bt_value_status {
-	BT_VALUE_STATUS_FROZEN =	-4,
-	BT_VALUE_STATUS_CANCELLED =	-3,
 	BT_VALUE_STATUS_INVAL =		-22,
 	BT_VALUE_STATUS_ERROR =		-1,
 	BT_VALUE_STATUS_OK =		0,
@@ -53,8 +51,6 @@ enum bt_value_status {
 struct bt_value * const bt_value_null;
 
 /* Common functions */
-enum bt_value_status bt_value_freeze(struct bt_value *object);
-int bt_value_is_frozen(const struct bt_value *object);
 struct bt_value *bt_value_copy(const struct bt_value *object);
 int bt_value_compare(const struct bt_value *object_a,
 		const struct bt_value *object_b);

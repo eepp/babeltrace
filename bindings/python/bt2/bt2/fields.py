@@ -62,13 +62,6 @@ class _Field(object._Object, metaclass=abc.ABCMeta):
         return cpy
 
     def __eq__(self, other):
-        # special case: two unset fields with the same field type are equal
-        if isinstance(other, _Field):
-            if not self.is_set or not other.is_set:
-                if not self.is_set and not other.is_set and self.field_type == other.field_type:
-                    return True
-                return False
-
         other = _get_leaf_field(other)
         return self._spec_eq(other)
 
@@ -76,20 +69,11 @@ class _Field(object._Object, metaclass=abc.ABCMeta):
     def field_type(self):
         return self._field_type
 
-    @property
-    def is_set(self):
-        is_set = native_bt.field_is_set(self._ptr)
-        return is_set > 0
-
-    def reset(self):
-        ret = native_bt.field_reset(self._ptr)
-        utils._handle_ret(ret, "cannot reset field object's value")
-
     def _repr(self):
         raise NotImplementedError
 
     def __repr__(self):
-        return self._repr() if self.is_set else 'Unset'
+        return self._repr()
 
 
 @functools.total_ordering
@@ -311,9 +295,6 @@ class _IntegerField(_IntegralField):
             ret, value = native_bt.field_unsigned_integer_get_value(self._ptr)
 
         if ret < 0:
-            if not self.is_set:
-                return
-
             utils._handle_ret(ret, "cannot get integer field's value")
 
         return value
@@ -345,9 +326,6 @@ class _FloatingPointNumberField(_RealField):
         ret, value = native_bt.field_floating_point_get_value(self._ptr)
 
         if ret < 0:
-            if not self.is_set:
-                return
-
             utils._handle_ret(ret, "cannot get floating point number field's value")
 
         return value
@@ -436,7 +414,7 @@ class _StringField(_Field, collections.abc.Sequence):
         return repr(self._value)
 
     def __str__(self):
-        return self._value if self.is_set else repr(self)
+        return self._value
 
     def __getitem__(self, index):
         return self._value[index]
@@ -576,7 +554,7 @@ class _VariantField(_Field):
         return bool(self.selected_field)
 
     def __str__(self):
-        return str(self.selected_field) if self.is_set else repr(self)
+        return str(self.selected_field)
 
     def _repr(self):
         return repr(self.selected_field)

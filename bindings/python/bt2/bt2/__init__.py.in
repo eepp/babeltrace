@@ -89,10 +89,6 @@ class CreationError(Error):
     pass
 
 
-class Frozen(Error):
-    pass
-
-
 class InvalidQueryObject(Error):
     pass
 

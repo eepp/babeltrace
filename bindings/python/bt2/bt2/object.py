@@ -58,24 +58,3 @@ class _PrivateObject:
         native_bt.put(pub_ptr)
         self._pub_ptr = None
         super().__del__()
-
-
-class _Freezable(metaclass=abc.ABCMeta):
-    @property
-    def is_frozen(self):
-        return self._is_frozen()
-
-    @property
-    def frozen(self):
-        return self.is_frozen
-
-    def freeze(self):
-        self._freeze()
-
-    @abc.abstractmethod
-    def _is_frozen(self):
-        pass
-
-    @abc.abstractmethod
-    def _freeze(self):
-        pass

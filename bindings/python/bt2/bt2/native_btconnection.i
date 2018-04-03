@@ -65,24 +65,21 @@ struct bt_py3_create_notif_iter_ret {
 };
 
 static struct bt_py3_create_notif_iter_ret bt_py3_create_priv_conn_notif_iter(
-		unsigned long long priv_conn_addr, PyObject *py_notif_types)
+		unsigned long long priv_conn_addr)
 {
 	struct bt_private_connection *priv_conn;
-	enum bt_notification_type *notification_types = NULL;
 	struct bt_py3_create_notif_iter_ret ret;
 
 	priv_conn = (void *) priv_conn_addr;
 	BT_ASSERT(!PyErr_Occurred());
 	BT_ASSERT(priv_conn);
 
-	notification_types = bt_py3_notif_types_from_py_list(py_notif_types);
 	ret.status = bt_private_connection_create_notification_iterator(
-		priv_conn, notification_types, &ret.notif_iter);
-	g_free(notification_types);
+		priv_conn, &ret.notif_iter);
 
 	return ret;
 }
 %}
 
 struct bt_py3_create_notif_iter_ret bt_py3_create_priv_conn_notif_iter(
-		unsigned long long priv_conn_addr, PyObject *notif_types);
+		unsigned long long priv_conn_addr);

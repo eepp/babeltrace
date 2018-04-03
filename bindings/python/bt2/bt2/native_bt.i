@@ -193,42 +193,6 @@ typedef int bt_bool;
 	$result = $1;
 }
 
-%{
-static enum bt_notification_type *bt_py3_notif_types_from_py_list(
-		PyObject *py_notif_types)
-{
-	enum bt_notification_type *notification_types = NULL;
-	size_t i;
-
-	BT_ASSERT(!PyErr_Occurred());
-
-	if (py_notif_types == Py_None) {
-		goto end;
-	}
-
-	BT_ASSERT(PyList_Check(py_notif_types));
-	notification_types = g_new0(enum bt_notification_type,
-		PyList_Size(py_notif_types) + 1);
-	BT_ASSERT(notification_types);
-	notification_types[PyList_Size(py_notif_types)] =
-		BT_NOTIFICATION_TYPE_SENTINEL;
-
-	for (i = 0; i < PyList_Size(py_notif_types); i++) {
-		PyObject *item = PyList_GetItem(py_notif_types, i);
-		long value;
-		int overflow;
-
-		BT_ASSERT(item);
-		BT_ASSERT(PyLong_Check(item));
-		value = PyLong_AsLongAndOverflow(item, &overflow);
-		BT_ASSERT(overflow == 0);
-		notification_types[i] = value;
-	}
-
-end:
-	return notification_types;
-}
-%}
 
 /* Per-module interface files */
 %include "native_btccpriomap.i"

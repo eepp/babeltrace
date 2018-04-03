@@ -83,13 +83,11 @@ class _CompClsType:
 
 class TraceCollectionNotificationIterator(bt2.notification_iterator._NotificationIterator):
     def __init__(self, source_component_specs, filter_component_specs=None,
-                 notification_types=None, stream_intersection_mode=False,
-                 begin=None, end=None):
+                 stream_intersection_mode=False, begin=None, end=None):
         utils._check_bool(stream_intersection_mode)
         self._stream_intersection_mode = stream_intersection_mode
         self._begin_ns = _get_ns(begin)
         self._end_ns = _get_ns(end)
-        self._notification_types = notification_types
 
         if type(source_component_specs) is ComponentSpec:
             source_component_specs = [source_component_specs]
@@ -318,4 +316,4 @@ class TraceCollectionNotificationIterator(bt2.notification_iterator._Notificatio
                 self._connect_src_comp_port(out_port)
 
         # create this trace collection iterator's notification iterator
-        self._notif_iter = notif_iter_port.create_notification_iterator(self._notification_types)
+        self._notif_iter = notif_iter_port.create_notification_iterator()
