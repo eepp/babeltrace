@@ -256,10 +256,20 @@ class GraphTestCase(unittest.TestCase):
                 return ev
 
             def __next__(self):
-                if self._at == 5:
+                if self._at == 9:
                     raise bt2.Stop
 
-                notif = bt2.EventNotification(self._create_event(self._at * 3))
+                if self._at == 0:
+                    notif = bt2.StreamBeginningNotification(self._stream)
+                elif self._at == 1:
+                    notif = bt2.PacketBeginningNotification(self._packet)
+                elif self._at == 7:
+                    notif = bt2.PacketEndNotification(self._packet)
+                elif self._at == 8:
+                    notif = bt2.StreamEndNotification(self._stream)
+                else:
+                    notif = bt2.EventNotification(self._create_event(self._at * 3))
+
                 self._at += 1
                 return notif
 
@@ -284,7 +294,7 @@ class GraphTestCase(unittest.TestCase):
                     self.assertIsInstance(notif, bt2.EventNotification)
                     self.assertEqual(notif.event.event_class.name, 'salut')
                     field = notif.event.payload_field['my_int']
-                    self.assertEqual(field, (comp_self._at - 2) * 3)
+                    self.assertEqual(field, (comp_self._at) * 3)
                 elif comp_self._at == 7:
                     self.assertIsInstance(notif, bt2.PacketEndNotification)
                 elif comp_self._at == 8:
@@ -328,10 +338,16 @@ class GraphTestCase(unittest.TestCase):
                 return ev
 
             def __next__(self):
-                if self._at == 1:
+                if self._at == 3:
                     raise bt2.TryAgain
 
-                notif = bt2.EventNotification(self._create_event(self._at * 3))
+                if self._at == 0:
+                    notif = bt2.StreamBeginningNotification(self._stream)
+                elif self._at == 1:
+                    notif = bt2.PacketBeginningNotification(self._packet)
+                elif self._at == 2:
+                    notif = bt2.EventNotification(self._create_event(self._at * 3))
+
                 self._at += 1
                 return notif
 
@@ -346,20 +362,21 @@ class GraphTestCase(unittest.TestCase):
                 self._at = 0
 
             def _consume(comp_self):
+                notif = next(comp_self._notif_iter)
                 if comp_self._at == 0:
-                    notif = next(comp_self._notif_iter)
-                    self.assertIsInstance(notif, bt2.EventNotification)
+                    self.assertIsInstance(notif, bt2.StreamBeginningNotification)
                 elif comp_self._at == 1:
-                    with self.assertRaises(bt2.TryAgain):
-                        notif = next(comp_self._notif_iter)
-
+                    self.assertIsInstance(notif, bt2.PacketBeginningNotification)
+                elif comp_self._at == 2:
+                    self.assertIsInstance(notif, bt2.EventNotification)
                     raise bt2.TryAgain
+                else:
+                    pass
 
                 comp_self._at += 1
 
             def _port_connected(self, port, other_port):
-                types = [bt2.EventNotification]
-                self._notif_iter = port.connection.create_notification_iterator(types)
+                self._notif_iter = port.connection.create_notification_iterator()
 
         src = self._graph.add_component(MySource, 'src')
         sink = self._graph.add_component(MySink, 'sink')
@@ -367,29 +384,6 @@ class GraphTestCase(unittest.TestCase):
                                          sink.input_ports['in'])
 
         with self.assertRaises(bt2.TryAgain):
-            self._graph.run()
-
-    def test_run_no_sink(self):
-        class MyIter(bt2._UserNotificationIterator):
-            pass
-
-        class MySource(bt2._UserSourceComponent,
-                       notification_iterator_class=MyIter):
-            def __init__(self, params):
-                self._add_output_port('out')
-
-        class MyFilter(bt2._UserFilterComponent,
-                       notification_iterator_class=MyIter):
-            def __init__(self, params):
-                self._add_output_port('out')
-                self._add_input_port('in')
-
-        src = self._graph.add_component(MySource, 'src')
-        flt = self._graph.add_component(MyFilter, 'flt')
-        conn = self._graph.connect_ports(src.output_ports['out'],
-                                         flt.input_ports['in'])
-
-        with self.assertRaises(bt2.NoSinkComponent):
             self._graph.run()
 
     def test_run_error(self):
@@ -419,10 +413,15 @@ class GraphTestCase(unittest.TestCase):
                 return ev
 
             def __next__(self):
-                if self._at == 1:
+                if self._at == 4:
                     raise bt2.TryAgain
 
-                notif = bt2.EventNotification(self._create_event(self._at * 3))
+                if self._at == 0:
+                    notif = bt2.StreamBeginningNotification(self._stream)
+                elif self._at == 1:
+                    notif = bt2.PacketBeginningNotification(self._packet)
+                elif self._at == 2:
+                    notif = bt2.EventNotification(self._create_event(self._at * 3))
                 self._at += 1
                 return notif
 
@@ -437,17 +436,20 @@ class GraphTestCase(unittest.TestCase):
                 self._at = 0
 
             def _consume(comp_self):
+                notif = next(comp_self._notif_iter)
                 if comp_self._at == 0:
-                    notif = next(comp_self._notif_iter)
-                    self.assertIsInstance(notif, bt2.EventNotification)
+                    self.assertIsInstance(notif, bt2.StreamBeginningNotification)
                 elif comp_self._at == 1:
+                    self.assertIsInstance(notif, bt2.PacketBeginningNotification)
+                elif comp_self._at == 2:
+                    self.assertIsInstance(notif, bt2.EventNotification)
+                elif comp_self._at == 3:
                     raise RuntimeError('error!')
 
                 comp_self._at += 1
 
             def _port_connected(self, port, other_port):
-                types = [bt2.EventNotification]
-                self._notif_iter = port.connection.create_notification_iterator(types)
+                self._notif_iter = port.connection.create_notification_iterator()
 
         src = self._graph.add_component(MySource, 'src')
         sink = self._graph.add_component(MySink, 'sink')
@@ -475,9 +477,7 @@ class GraphTestCase(unittest.TestCase):
                 nonlocal exc
 
                 try:
-                    print('going in')
                     comp_self.graph.run()
-                    print('going out')
                 except Exception as e:
                     exc = e
 

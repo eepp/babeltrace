@@ -36,6 +36,7 @@ struct bt_component_class_sink_colander_data {
 	struct bt_notification **notification;
 };
 
+BT_HIDDEN
 extern struct bt_component_class *bt_component_class_sink_colander_get(void);
 
 #ifdef __cplusplus

@@ -31,8 +31,6 @@ struct bt_field *bt_field_create(
 struct bt_field_type *bt_field_get_type(
 		struct bt_field *field);
 struct bt_field *bt_field_copy(struct bt_field *field);
-bt_bool bt_field_is_set(struct bt_field *field);
-int bt_field_reset(struct bt_field *field);
 
 /* Integer field functions */
 int bt_field_signed_integer_get_value(struct bt_field *integer,

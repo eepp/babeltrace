@@ -4671,6 +4671,8 @@ int bt_field_type_variant_compare(struct bt_field_type *type_a,
 	int i;
 	struct bt_field_type_variant *variant_a;
 	struct bt_field_type_variant *variant_b;
+	struct bt_field_type_enumeration *tag_a;
+	struct bt_field_type_enumeration *tag_b;
 
 	variant_a = container_of(type_a,
 		struct bt_field_type_variant, parent);
@@ -4686,13 +4688,24 @@ int bt_field_type_variant_compare(struct bt_field_type *type_a,
 	}
 
 	/* Tag type */
-	ret = bt_field_type_compare(
-		(struct bt_field_type *) variant_a->tag,
-		(struct bt_field_type *) variant_b->tag);
-	if (ret) {
+	tag_a = variant_a->tag;
+	tag_b = variant_b->tag;
+	if (tag_a && tag_b) {
+		ret = bt_field_type_compare(
+			(struct bt_field_type *) tag_a,
+			(struct bt_field_type *) tag_b);
+		if (ret) {
+			BT_LOGV("Variant field types differ: different tag field types: "
+				"ft-a-tag-ft-addr=%p, ft-b-tag-ft-addr=%p",
+				tag_b, tag_b);
+			goto end;
+		}
+	} else if ((uintptr_t)tag_a ^ (uintptr_t)tag_b) {
+		/* One of the tag is a null pointer and the other is not. */
 		BT_LOGV("Variant field types differ: different tag field types: "
 			"ft-a-tag-ft-addr=%p, ft-b-tag-ft-addr=%p",
-			variant_a->tag, variant_b->tag);
+			tag_a, tag_b);
+		ret = 1;
 		goto end;
 	}
 

@@ -76,7 +76,7 @@ class _EventClockValues(collections.abc.Mapping):
 
     def add(self, clock_value):
         utils._check_type(clock_value, bt2.clock_value._ClockValue)
-        ret = native_bt.event_set_clock_value(self._ptr,
+        ret = native_bt.event_set_clock_value(self._event._ptr,
                                               clock_value._ptr)
         utils._handle_ret(ret, "cannot set event object's clock value")
 

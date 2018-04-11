@@ -88,7 +88,7 @@ def create_value(value):
     raise TypeError("cannot create value object from '{}' object".format(value.__class__.__name__))
 
 
-class _Value(object._Object, object._Freezable, metaclass=abc.ABCMeta):
+class _Value(object._Object, metaclass=abc.ABCMeta):
     def __eq__(self, other):
         if other is None:
             # self is never the null value object
@@ -120,13 +120,6 @@ class _Value(object._Object, object._Freezable, metaclass=abc.ABCMeta):
     def _check_create_status(self, ptr):
         if ptr is None:
             raise bt2.CreationError('cannot create {} value object'.format(self._NAME.lower()))
-
-    def _is_frozen(self):
-        return native_bt.value_is_frozen(self._ptr)
-
-    def _freeze(self):
-        status = native_bt.value_freeze(self._ptr)
-        self._handle_status(status)
 
 
 class _BasicCopy:

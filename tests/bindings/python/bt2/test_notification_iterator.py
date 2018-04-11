@@ -149,10 +149,20 @@ class OutputPortNotificationIteratorTestCase(unittest.TestCase):
                 return ev
 
             def __next__(self):
-                if self._at == 5:
+                if self._at == 7:
                     raise bt2.Stop
 
-                notif = bt2.EventNotification(self._create_event(self._at * 3))
+                if self._at == 0:
+                    notif = bt2.StreamBeginningNotification(self._stream)
+                elif self._at == 1:
+                    notif = bt2.PacketBeginningNotification(self._packet)
+                elif self._at == 5:
+                    notif = bt2.PacketEndNotification(self._packet)
+                elif self._at == 6:
+                    notif = bt2.StreamEndNotification(self._stream)
+                else:
+                    notif = bt2.EventNotification(self._create_event(self._at * 3))
+
                 self._at += 1
                 return notif
 
@@ -163,11 +173,19 @@ class OutputPortNotificationIteratorTestCase(unittest.TestCase):
 
         graph = bt2.Graph()
         src = graph.add_component(MySource, 'src')
-        types = [bt2.EventNotification]
-        notif_iter = src.output_ports['out'].create_notification_iterator(types)
+        notif_iter = src.output_ports['out'].create_notification_iterator()
 
         for at, notif in enumerate(notif_iter):
-            self.assertIsInstance(notif, bt2.EventNotification)
-            self.assertEqual(notif.event.event_class.name, 'salut')
-            field = notif.event.payload_field['my_int']
-            self.assertEqual(field, at * 3)
+            if at == 0:
+                self.assertIsInstance(notif, bt2.StreamBeginningNotification)
+            elif at == 1:
+                self.assertIsInstance(notif, bt2.PacketBeginningNotification)
+            elif at == 5:
+                self.assertIsInstance(notif, bt2.PacketEndNotification)
+            elif at == 6:
+                self.assertIsInstance(notif, bt2.StreamEndNotification)
+            else:
+                self.assertIsInstance(notif, bt2.EventNotification)
+                self.assertEqual(notif.event.event_class.name, 'salut')
+                field = notif.event.payload_field['my_int']
+                self.assertEqual(field, at * 3)

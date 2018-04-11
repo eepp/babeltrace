@@ -133,10 +133,12 @@ void bt_graph_destroy(struct bt_object *obj)
 		BT_LOGD_STR("Destroying connections.");
 		g_ptr_array_free(graph->connections, TRUE);
 	}
+
 	if (graph->components) {
 		BT_LOGD_STR("Destroying components.");
 		g_ptr_array_free(graph->components, TRUE);
 	}
+
 	if (graph->sinks_to_consume) {
 		g_queue_free(graph->sinks_to_consume);
 	}
@@ -557,7 +559,7 @@ enum bt_graph_status bt_graph_consume(struct bt_graph *graph)
 	graph->can_consume = BT_FALSE;
 	status = bt_graph_consume_no_check(graph);
 	graph->can_consume = BT_TRUE;
-	return BT_GRAPH_STATUS_OK;
+	return status;
 }
 
 enum bt_graph_status bt_graph_run(struct bt_graph *graph)

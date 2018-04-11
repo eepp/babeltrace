@@ -39,7 +39,6 @@ struct bt_component_class *colander_comp_cls;
 
 struct colander_data {
 	struct bt_notification **user_notif;
-	enum bt_notification_type *notif_types;
 	struct bt_notification_iterator *notif_iter;
 };
 
@@ -94,7 +93,6 @@ void colander_finalize(struct bt_private_component *priv_comp)
 		bt_put(colander_data->notif_iter);
 	}
 
-	g_free(colander_data->notif_types);
 	g_free(colander_data);
 }
 
@@ -171,6 +169,7 @@ end:
 	return status;
 }
 
+BT_HIDDEN
 struct bt_component_class *bt_component_class_sink_colander_get(void)
 {
 	if (colander_comp_cls) {

@@ -81,7 +81,7 @@ struct bt_notification *bt_notification_inactivity_create(
 		bt_notification_inactivity_destroy);
 	ret_notif = &notification->parent;
 	notification->clock_values = g_hash_table_new_full(g_direct_hash,
-		g_direct_equal, bt_put, bt_put);
+		g_direct_equal, NULL, bt_put);
 	if (!notification->clock_values) {
 		BT_LOGE_STR("Failed to allocate a GHashTable.");
 		goto error;

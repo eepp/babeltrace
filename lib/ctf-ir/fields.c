@@ -287,10 +287,6 @@ static inline bool field_type_has_known_id(struct bt_field_type *ft)
 		"%![field-]+f", bt_field_type_id_string(_type_id),	\
 		(_field))
 
-#define BT_ASSERT_PRE_FIELD_IS_SET(_field, _name)			\
-	BT_ASSERT_PRE(bt_field_is_set_recursive(_field),		\
-		_name " is not set: %!+f", (_field))
-
 #define BT_ASSERT_PRE_FIELD_HOT(_field, _name)				\
 	BT_ASSERT_PRE_HOT((_field), (_name), ": +%!+f", (_field))
 
@@ -438,7 +434,6 @@ int bt_field_sequence_set_length(struct bt_field *field,
 		"Length field");
 	BT_ASSERT_PRE(!bt_field_type_integer_is_signed(length_field->type),
 		"Length field's type is signed: %!+f", length_field);
-	BT_ASSERT_PRE_FIELD_IS_SET(length_field, "Length field");
 
 	length = container_of(length_field, struct bt_field_integer,
 		parent);
@@ -795,8 +790,6 @@ bt_field_enumeration_get_mappings(struct bt_field *field)
 	BT_ASSERT(container->type);
 	integer_type = container_of(container->type,
 		struct bt_field_type_integer, parent);
-	BT_ASSERT_PRE_FIELD_IS_SET(container,
-		"Enumeration field's payload field");
 
 	if (!integer_type->is_signed) {
 		uint64_t value;
@@ -821,14 +814,10 @@ bt_field_enumeration_get_mappings(struct bt_field *field)
 int bt_field_signed_integer_get_value(struct bt_field *field, int64_t *value)
 {
 	struct bt_field_integer *integer;
-	struct bt_field_type_integer *integer_type;
 
 	BT_ASSERT_PRE_NON_NULL(field, "Integer field");
 	BT_ASSERT_PRE_NON_NULL(value, "Value");
-	BT_ASSERT_PRE_FIELD_IS_SET(field, "Integer field");
 	BT_ASSERT_PRE_FIELD_HAS_TYPE_ID(field, BT_FIELD_TYPE_ID_INTEGER, "Field");
-	integer_type = container_of(field->type,
-		struct bt_field_type_integer, parent);
 	BT_ASSERT_PRE(bt_field_type_integer_is_signed(field->type),
 		"Field's type is unsigned: %!+f", field);
 	integer = container_of(field,
@@ -880,14 +869,10 @@ int bt_field_signed_integer_set_value(struct bt_field *field, int64_t value)
 int bt_field_unsigned_integer_get_value(struct bt_field *field, uint64_t *value)
 {
 	struct bt_field_integer *integer;
-	struct bt_field_type_integer *integer_type;
 
 	BT_ASSERT_PRE_NON_NULL(field, "Integer field");
 	BT_ASSERT_PRE_NON_NULL(value, "Value");
-	BT_ASSERT_PRE_FIELD_IS_SET(field, "Integer field");
 	BT_ASSERT_PRE_FIELD_HAS_TYPE_ID(field, BT_FIELD_TYPE_ID_INTEGER, "Field");
-	integer_type = container_of(field->type,
-		struct bt_field_type_integer, parent);
 	BT_ASSERT_PRE(!bt_field_type_integer_is_signed(field->type),
 		"Field's type is signed: %!+f", field);
 	integer = container_of(field, struct bt_field_integer, parent);
@@ -939,7 +924,6 @@ int bt_field_floating_point_get_value(struct bt_field *field, double *value)
 
 	BT_ASSERT_PRE_NON_NULL(field, "Floating point number field");
 	BT_ASSERT_PRE_NON_NULL(value, "Value");
-	BT_ASSERT_PRE_FIELD_IS_SET(field, "Floating point number field");
 	BT_ASSERT_PRE_FIELD_HAS_TYPE_ID(field, BT_FIELD_TYPE_ID_FLOAT, "Field");
 	floating_point = container_of(field,
 		struct bt_field_floating_point, parent);
@@ -966,10 +950,9 @@ const char *bt_field_string_get_value(struct bt_field *field)
 	struct bt_field_string *string;
 
 	BT_ASSERT_PRE_NON_NULL(field, "String field");
-	BT_ASSERT_PRE_FIELD_IS_SET(field, "String field");
 	BT_ASSERT_PRE_FIELD_HAS_TYPE_ID(field, BT_FIELD_TYPE_ID_STRING, "Field");
 	string = container_of(field, struct bt_field_string, parent);
-	return string->payload->str;
+	return string->payload ? string->payload->str : NULL;
 }
 
 int bt_field_string_set_value(struct bt_field *field, const char *value)
@@ -1005,6 +988,7 @@ int bt_field_string_append(struct bt_field *field, const char *value)
 	} else {
 		string_field->payload = g_string_new(value);
 	}
+
 
 	bt_field_set(field, true);
 	return 0;
@@ -1114,7 +1098,6 @@ struct bt_field *bt_field_copy(struct bt_field *field)
 		goto end;
 	}
 
-	bt_field_set(copy, field->payload_set);
 	type_id = bt_field_type_get_type_id(field->type);
 	ret = field_copy_funcs[type_id](field, copy);
 	if (ret) {
@@ -1128,8 +1111,7 @@ end:
 static
 struct bt_field *bt_field_integer_create(struct bt_field_type *type)
 {
-	struct bt_field_integer *integer = g_new0(
-		struct bt_field_integer, 1);
+	struct bt_field_integer *integer = g_new0(struct bt_field_integer, 1);
 
 	BT_LOGD("Creating integer field object: ft-addr=%p", type);
 
@@ -1144,8 +1126,7 @@ struct bt_field *bt_field_integer_create(struct bt_field_type *type)
 }
 
 static
-struct bt_field *bt_field_enumeration_create(
-	struct bt_field_type *type)
+struct bt_field *bt_field_enumeration_create(struct bt_field_type *type)
 {
 	struct bt_field_enumeration *enumeration = g_new0(
 		struct bt_field_enumeration, 1);
@@ -1163,8 +1144,7 @@ struct bt_field *bt_field_enumeration_create(
 }
 
 static
-struct bt_field *bt_field_floating_point_create(
-	struct bt_field_type *type)
+struct bt_field *bt_field_floating_point_create(struct bt_field_type *type)
 {
 	struct bt_field_floating_point *floating_point;
 
@@ -1182,8 +1162,7 @@ struct bt_field *bt_field_floating_point_create(
 }
 
 static
-struct bt_field *bt_field_structure_create(
-	struct bt_field_type *type)
+struct bt_field *bt_field_structure_create(struct bt_field_type *type)
 {
 	struct bt_field_type_structure *structure_type = container_of(type,
 		struct bt_field_type_structure, parent);
@@ -1231,8 +1210,7 @@ end:
 static
 struct bt_field *bt_field_variant_create(struct bt_field_type *type)
 {
-	struct bt_field_variant *variant = g_new0(
-		struct bt_field_variant, 1);
+	struct bt_field_variant *variant = g_new0(struct bt_field_variant, 1);
 
 	BT_LOGD("Creating variant field object: ft-addr=%p", type);
 
@@ -1280,11 +1258,9 @@ error:
 }
 
 static
-struct bt_field *bt_field_sequence_create(
-	struct bt_field_type *type)
+struct bt_field *bt_field_sequence_create(struct bt_field_type *type)
 {
-	struct bt_field_sequence *sequence = g_new0(
-		struct bt_field_sequence, 1);
+	struct bt_field_sequence *sequence = g_new0(struct bt_field_sequence, 1);
 
 	BT_LOGD("Creating sequence field object: ft-addr=%p", type);
 
@@ -1301,8 +1277,7 @@ struct bt_field *bt_field_sequence_create(
 static
 struct bt_field *bt_field_string_create(struct bt_field_type *type)
 {
-	struct bt_field_string *string = g_new0(
-		struct bt_field_string, 1);
+	struct bt_field_string *string = g_new0(struct bt_field_string, 1);
 
 	BT_LOGD("Creating string field object: ft-addr=%p", type);
 
@@ -1686,7 +1661,6 @@ int bt_field_integer_serialize(struct bt_field *field,
 	struct bt_field_integer *integer = container_of(field,
 		struct bt_field_integer, parent);
 
-	BT_ASSERT_PRE_FIELD_IS_SET(field, "Integer field");
 	BT_LOGV("Serializing integer field: addr=%p, pos-offset=%" PRId64 ", "
 		"native-bo=%s", field, pos->offset,
 		bt_byte_order_string(native_byte_order));
@@ -1735,7 +1709,6 @@ int bt_field_floating_point_serialize(struct bt_field *field,
 	struct bt_field_floating_point *floating_point = container_of(field,
 		struct bt_field_floating_point, parent);
 
-	BT_ASSERT_PRE_FIELD_IS_SET(field, "Floating point number field");
 	BT_LOGV("Serializing floating point number field: addr=%p, pos-offset=%" PRId64 ", "
 		"native-bo=%s", field, pos->offset,
 		bt_byte_order_string(native_byte_order));
@@ -1927,7 +1900,6 @@ int bt_field_string_serialize(struct bt_field *field, struct bt_stream_pos *pos,
 		get_field_type(FIELD_TYPE_ALIAS_UINT8_T);
 	struct bt_field *character;
 
-	BT_ASSERT_PRE_FIELD_IS_SET(field, "String field");
 	BT_LOGV("Serializing string field: addr=%p, pos-offset=%" PRId64 ", "
 		"native-bo=%s", field, pos->offset,
 		bt_byte_order_string(native_byte_order));

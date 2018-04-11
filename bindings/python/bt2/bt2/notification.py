@@ -273,6 +273,7 @@ class _InactivityNotificationClockValuesIterator(collections.abc.Iterator):
     def __next__(self):
         if self._at == len(self._clock_classes):
             raise StopIteration
+        at = self._at
 
         self._at += 1
         return self._clock_classes[at]
@@ -378,7 +379,7 @@ class InactivityNotification(_CopyableNotification):
 
         # copy clock values
         for orig_clock_class in self.clock_class_priority_map:
-            orig_clock_value = self.clock_value(orig_clock_class)
+            orig_clock_value = self.clock_values[orig_clock_class]
 
             if orig_clock_value is None:
                 continue

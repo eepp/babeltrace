@@ -7,33 +7,6 @@ import copy
 import bt2
 
 
-class _TestFrozen:
-    def test_is_frozen(self):
-        self._def.freeze()
-        self.assertTrue(self._def.is_frozen)
-
-    def test_frozen(self):
-        self._def.freeze()
-        self.assertTrue(self._def.frozen)
-
-    def test_frozen_exc(self):
-        self._def.freeze()
-
-        with self.assertRaisesRegex(bt2.Frozen, r'.* value object is frozen$') as cm:
-            self._modify_def()
-
-        self.assertEqual(self._def, self._def_value)
-
-    def test_get_value_when_frozen(self):
-        self._def.freeze()
-        self.assertEqual(self._def, self._def_value)
-
-
-class _TestFrozenSimple(_TestFrozen):
-    def _modify_def(self):
-        self._def.value = self._def_new_value
-
-
 class _TestCopySimple:
     def test_copy(self):
         cpy = copy.copy(self._def)
@@ -54,7 +27,7 @@ _COMP_BINOPS = (
 )
 
 
-class _TestNumericValue(_TestFrozenSimple, _TestCopySimple):
+class _TestNumericValue(_TestCopySimple):
     def _binop(self, op, rhs):
         rexc = None
         rvexc = None
@@ -822,7 +795,7 @@ class CreateValueFuncTestCase(unittest.TestCase):
             v = bt2.create_value(a)
 
 
-class BoolValueTestCase(_TestFrozenSimple, _TestCopySimple, unittest.TestCase):
+class BoolValueTestCase(_TestCopySimple, unittest.TestCase):
     def setUp(self):
         self._f = bt2.BoolValue(False)
         self._t = bt2.BoolValue(True)
@@ -1149,7 +1122,7 @@ class FloatValueTestCase(_TestNumericValue, unittest.TestCase):
 _inject_numeric_testing_methods(FloatValueTestCase)
 
 
-class StringValueTestCase(_TestCopySimple, _TestFrozenSimple, unittest.TestCase):
+class StringValueTestCase(_TestCopySimple, unittest.TestCase):
     def setUp(self):
         self._def_value = 'Hello, World!'
         self._def = bt2.StringValue(self._def_value)
@@ -1267,7 +1240,7 @@ class StringValueTestCase(_TestCopySimple, _TestFrozenSimple, unittest.TestCase)
         self.assertEqual(self._def, self._def_value)
 
 
-class ArrayValueTestCase(_TestFrozen, unittest.TestCase):
+class ArrayValueTestCase(unittest.TestCase):
     def setUp(self):
         self._def_value = [None, False, True, -23, 0, 42, -42.4, 23.17, 'yes']
         self._def = bt2.ArrayValue(copy.deepcopy(self._def_value))
@@ -1422,7 +1395,7 @@ class ArrayValueTestCase(_TestFrozen, unittest.TestCase):
             self.assertEqual(velem, elem)
 
 
-class MapValueTestCase(_TestFrozen, unittest.TestCase):
+class MapValueTestCase(unittest.TestCase):
     def setUp(self):
         self._def_value = {
             'none': None,
