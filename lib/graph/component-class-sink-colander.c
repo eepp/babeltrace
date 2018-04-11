@@ -173,6 +173,7 @@ end:
 	return status;
 }
 
+BT_HIDDEN
 struct bt_component_class *bt_component_class_sink_colander_get(void)
 {
 	if (colander_comp_cls) {

@@ -38,6 +38,7 @@ struct bt_component_class_sink_colander_data {
 	uint64_t *count_addr;
 };
 
+BT_HIDDEN
 extern struct bt_component_class *bt_component_class_sink_colander_get(void);
 
 #ifdef __cplusplus
