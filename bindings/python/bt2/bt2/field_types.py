@@ -417,7 +417,6 @@ class EnumerationFieldType(IntegerFieldType, collections.abc.Sequence):
     def mappings_by_name(self, name):
         utils._check_str(name)
         iter_ptr = native_bt.field_type_enumeration_find_mappings_by_name(self._ptr, name)
-        print('iter_ptr', iter_ptr)
         return self._get_mapping_iter(iter_ptr)
 
     def mappings_by_value(self, value):
