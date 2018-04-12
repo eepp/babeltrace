@@ -42,7 +42,6 @@ enum bt_value_type {
 enum bt_value_type bt_value_get_type(const struct bt_value *object);
 
 enum bt_value_status {
-	BT_VALUE_STATUS_INVAL =		-22,
 	BT_VALUE_STATUS_ERROR =		-1,
 	BT_VALUE_STATUS_OK =		0,
 };

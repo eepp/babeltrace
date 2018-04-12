@@ -173,10 +173,6 @@ enum bt_value_status {
 	/// Operation canceled.
 	BT_VALUE_STATUS_CANCELED =	-3,
 
-	/* -22 for compatibility with -EINVAL */
-	/// Invalid argument.
-	BT_VALUE_STATUS_INVAL =		-22,
-
 	/// General error.
 	BT_VALUE_STATUS_ERROR =		-1,
 

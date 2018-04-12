@@ -43,8 +43,6 @@ const char *bt_value_status_string(enum bt_value_status status)
 	switch (status) {
 	case BT_VALUE_STATUS_CANCELED:
 		return "BT_VALUE_STATUS_CANCELED";
-	case BT_VALUE_STATUS_INVAL:
-		return "BT_VALUE_STATUS_INVAL";
 	case BT_VALUE_STATUS_ERROR:
 		return "BT_VALUE_STATUS_ERROR";
 	case BT_VALUE_STATUS_OK:
