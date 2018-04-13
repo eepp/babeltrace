@@ -104,9 +104,6 @@ struct bt_ctf_stream {
 };
 
 BT_HIDDEN
-int bt_ctf_stream_set_fd(struct bt_ctf_stream *stream, int fd);
-
-BT_HIDDEN
 struct bt_ctf_stream *bt_ctf_stream_create_with_id(
 		struct bt_ctf_stream_class *stream_class,
 		const char *name, uint64_t id);
