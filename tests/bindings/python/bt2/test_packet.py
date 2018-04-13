@@ -12,7 +12,8 @@ class PacketTestCase(unittest.TestCase):
     def tearDown(self):
         del self._packet
 
-    def _create_packet(self, with_ph=True, with_pc=True):
+    def _create_packet(self, first=True, with_ph=True, with_pc=True):
+        clock_class = bt2.ClockClass('my_cc', 1000)
         # event header
         eh = bt2.StructureFieldType()
         eh += OrderedDict((
@@ -33,6 +34,10 @@ class PacketTestCase(unittest.TestCase):
             pc += OrderedDict((
                 ('something', bt2.IntegerFieldType(8)),
                 ('something_else', bt2.FloatingPointNumberFieldType()),
+                ('events_discarded', bt2.IntegerFieldType(64, is_signed=False)),
+                ('packet_seq_num', bt2.IntegerFieldType(64, is_signed=False)),
+                ('timestamp_begin', bt2.IntegerFieldType(64, is_signed=False, mapped_clock_class=clock_class)),
+                ('timestamp_end', bt2.IntegerFieldType(64, is_signed=False, mapped_clock_class=clock_class)),
             ))
         else:
             pc = None
@@ -74,16 +79,39 @@ class PacketTestCase(unittest.TestCase):
         else:
             ph = None
 
-        # trace c;ass
+        # trace class
         tc = bt2.Trace()
         tc.packet_header_field_type = ph
         tc.add_stream_class(sc)
+        tc.add_clock_class(clock_class)
 
         # stream
         stream = sc()
 
+
         # packet
-        return stream.create_packet()
+        # We create 3 packets because we need 2 frozen packets. A packet is
+        # frozen when the next packet is created.
+        packet1 = stream.create_packet(bt2.PreviousPacketAvailability.NONE, None)
+        if with_pc:
+            packet1.context_field['events_discarded'] = 5
+            packet1.context_field['packet_seq_num'] = 0
+            packet1.context_field['timestamp_begin'] = 1
+            packet1.context_field['timestamp_end'] = 500
+
+        packet2 = stream.create_packet(bt2.PreviousPacketAvailability.AVAILABLE, packet1)
+        if with_pc:
+            packet2.context_field['events_discarded'] = 20
+            packet2.context_field['packet_seq_num'] = 4
+            packet2.context_field['timestamp_begin'] = 1000
+            packet2.context_field['timestamp_end'] = 2000
+
+        packet3 = stream.create_packet(bt2.PreviousPacketAvailability.AVAILABLE, packet2)
+
+        if first:
+            return packet1
+        else:
+            return packet2
 
     def test_attr_stream(self):
         self.assertIsNotNone(self._packet.stream)
@@ -102,48 +130,35 @@ class PacketTestCase(unittest.TestCase):
         packet = self._create_packet(with_pc=False)
         self.assertIsNone(packet.context_field)
 
-    def _fill_packet(self, packet):
-        packet.header_field['magic'] = 0xc1fc1fc1
-        packet.header_field['stream_id'] = 23
-        packet.context_field['something'] = 17
-        packet.context_field['something_else'] = 188.88
+    def test_default_beginning_clock_value(self):
+        self.assertEqual(self._packet.default_beginning_clock_value, 1)
 
-    def test_eq(self):
-        packet1 = self._create_packet()
-        self._fill_packet(packet1)
-        packet2 = self._create_packet()
-        self._fill_packet(packet2)
-        self.assertEqual(packet1, packet2)
+    def test_default_end_clock_value(self):
+        self.assertEqual(self._packet.default_end_clock_value, 500)
 
-    def test_ne_header_field(self):
-        packet1 = self._create_packet()
-        self._fill_packet(packet1)
-        packet2 = self._create_packet()
-        self._fill_packet(packet2)
-        packet2.header_field['stream_id'] = 18
-        self.assertNotEqual(packet1, packet2)
+    def test_previous_packet_default_end_clock_value(self):
+        packet = self._create_packet(first=False)
+        self.assertEqual(packet.previous_packet_default_end_clock_value, 500)
 
-    def test_ne_context_field(self):
-        packet1 = self._create_packet()
-        self._fill_packet(packet1)
-        packet2 = self._create_packet()
-        self._fill_packet(packet2)
-        packet2.context_field['something_else'] = 1948.11
-        self.assertNotEqual(packet1, packet2)
+    def test_discarded_event_counter(self):
+        packet = self._create_packet(first=True)
+        self.assertEqual(packet.discarded_event_counter, 5)
+        packet = self._create_packet(first=False)
+        self.assertEqual(packet.discarded_event_counter, 20)
 
-    def test_eq_invalid(self):
-        self.assertFalse(self._packet == 23)
+    def test_sequence_number(self):
+        packet = self._create_packet(first=False)
+        self.assertEqual(packet.sequence_number, 4)
 
-    def _test_copy(self, func):
-        packet = self._create_packet()
-        self._fill_packet(packet)
-        cpy = func(packet)
-        self.assertIsNot(packet, cpy)
-        self.assertNotEqual(packet.addr, cpy.addr)
-        self.assertEqual(packet, cpy)
+    def test_discarded_event_count(self):
+        packet = self._create_packet(first=False)
+        self.assertEqual(packet.discarded_event_count, 15)
 
-    def test_copy(self):
-        self._test_copy(copy.copy)
+    def test_discarded_packet_count(self):
+        packet = self._create_packet(first=False)
+        self.assertEqual(packet.discarded_packet_count, 3)
 
-    def test_deepcopy(self):
-        self._test_copy(copy.deepcopy)
+    def test_props_no_previous_packet(self):
+        self.assertIsNone(self._packet.previous_packet_default_end_clock_value)
+        self.assertIsNone(self._packet.discarded_event_count)
+        self.assertIsNone(self._packet.discarded_packet_count)

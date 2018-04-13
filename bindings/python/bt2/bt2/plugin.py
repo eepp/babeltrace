@@ -20,10 +20,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from bt2 import native_bt, object, utils
 import collections.abc
-import bt2.component
 import os.path
+from bt2 import native_bt, utils
+from bt2.internal import object
+import bt2.component
 import bt2
 
 
@@ -53,7 +54,7 @@ def find_plugin(name):
     return _Plugin._create_from_ptr(ptr)
 
 
-class _PluginSet(object._Object, collections.abc.Sequence):
+class _PluginSet(object._SharedObject, collections.abc.Sequence):
     def __len__(self):
         count = native_bt.plugin_set_get_plugin_count(self._ptr)
         assert(count >= 0)
@@ -170,7 +171,7 @@ class _PluginComponentClasses(collections.abc.Mapping):
         return _PluginComponentClassesIterator(self)
 
 
-class _Plugin(object._Object):
+class _Plugin(object._SharedObject):
     @property
     def name(self):
         name = native_bt.plugin_get_name(self._ptr)

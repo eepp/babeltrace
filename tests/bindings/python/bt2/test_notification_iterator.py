@@ -117,7 +117,7 @@ class PrivateConnectionNotificationIteratorTestCase(unittest.TestCase):
         sink_comp = graph.add_component(MySink, 'sink')
         graph.connect_ports(src_comp.output_ports['out'],
                             sink_comp.input_ports['in'])
-        self.assertEqual(src_comp, upstream_comp)
+        self.assertEqual(src_comp._ptr, upstream_comp._ptr)
         del upstream_comp
 
 
@@ -142,17 +142,22 @@ class OutputPortNotificationIteratorTestCase(unittest.TestCase):
                 self._stream = self._sc()
                 self._packet = self._stream.create_packet()
 
-            def _create_event(self, value):
-                ev = self._ec()
-                ev.payload_field['my_int'] = value
-                ev.packet = self._packet
-                return ev
-
             def __next__(self):
-                if self._at == 5:
+                if self._at == 7:
                     raise bt2.Stop
 
-                notif = bt2.EventNotification(self._create_event(self._at * 3))
+                if self._at == 0:
+                    notif = self._create_stream_beginning_notification(self._stream)
+                elif self._at == 1:
+                    notif = self._create_packet_beginning_notification(self._packet)
+                elif self._at == 5:
+                    notif = self._create_packet_end_notification(self._packet)
+                elif self._at == 6:
+                    notif = self._create_stream_end_notification(self._stream)
+                else:
+                    notif = self._create_event_notification(self._ec, self._packet)
+                    notif.event.payload_field['my_int'] = self._at * 3
+
                 self._at += 1
                 return notif
 
@@ -163,11 +168,19 @@ class OutputPortNotificationIteratorTestCase(unittest.TestCase):
 
         graph = bt2.Graph()
         src = graph.add_component(MySource, 'src')
-        types = [bt2.EventNotification]
-        notif_iter = src.output_ports['out'].create_notification_iterator(types)
+        notif_iter = src.output_ports['out'].create_notification_iterator()
 
         for at, notif in enumerate(notif_iter):
-            self.assertIsInstance(notif, bt2.EventNotification)
-            self.assertEqual(notif.event.event_class.name, 'salut')
-            field = notif.event.payload_field['my_int']
-            self.assertEqual(field, at * 3)
+            if at == 0:
+                self.assertIsInstance(notif, bt2.notification._StreamBeginningNotification)
+            elif at == 1:
+                self.assertIsInstance(notif, bt2.notification._PacketBeginningNotification)
+            elif at == 5:
+                self.assertIsInstance(notif, bt2.notification._PacketEndNotification)
+            elif at == 6:
+                self.assertIsInstance(notif, bt2.notification._StreamEndNotification)
+            else:
+                self.assertIsInstance(notif, bt2.notification._EventNotification)
+                self.assertEqual(notif.event.event_class.name, 'salut')
+                field = notif.event.payload_field['my_int']
+                self.assertEqual(field, at * 3)

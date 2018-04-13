@@ -44,7 +44,7 @@ def main():
     dist = setup(name='bt2',
             version='@PACKAGE_VERSION@',
             description='Babeltrace 2 Python Bindings',
-            packages=['bt2'],
+            packages=['bt2', 'bt2.internal', 'bt2.ctfwriter'],
             package_dir={'bt2': 'bt2'},
             options={'build':
                 {

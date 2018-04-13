@@ -28,7 +28,7 @@ class UserComponentTestCase(unittest.TestCase):
         class MySink(bt2._UserSinkComponent):
             def __init__(comp_self, params):
                 nonlocal graph
-                self.assertEqual(comp_self.graph, graph)
+                self.assertEqual(comp_self.graph._ptr, graph._ptr)
 
             def _consume(self):
                 pass
@@ -101,7 +101,7 @@ class GenericComponentTestCase(unittest.TestCase):
 
         graph = bt2.Graph()
         comp = graph.add_component(MySink, 'lel')
-        self.assertEqual(comp.graph, graph)
+        self.assertEqual(comp.graph._ptr, graph._ptr)
 
     def test_class(self):
         class MySink(bt2._UserSinkComponent):

@@ -20,13 +20,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from bt2 import native_bt, object, utils
 import collections.abc
+import copy
+from bt2 import native_bt, utils
+from bt2.internal import object
 import bt2.component
 import bt2.connection
 import bt2.notification_iterator
 import bt2.notification
-import copy
 import bt2
 
 
@@ -44,7 +45,7 @@ def _create_from_ptr(ptr):
 
 
 def _create_private_from_ptr(ptr):
-    pub_ptr = native_bt.port_from_private(ptr)
+    pub_ptr = native_bt.port_borrow_from_private(ptr)
     utils._handle_ptr(pub_ptr, 'cannot get port object from private port object')
     port_type = native_bt.port_get_type(pub_ptr)
     assert(port_type == native_bt.PORT_TYPE_INPUT or port_type == native_bt.PORT_TYPE_OUTPUT)
@@ -59,7 +60,7 @@ def _create_private_from_ptr(ptr):
     return obj
 
 
-class _Port(object._Object):
+class _Port(object._SharedObject):
     @staticmethod
     def _name(ptr):
         name = native_bt.port_get_name(ptr)
@@ -102,12 +103,6 @@ class _Port(object._Object):
     def disconnect(self):
         self._disconnect(self._ptr)
 
-    def __eq__(self, other):
-        if type(other) is not type(self):
-            return False
-
-        return self.addr == other.addr
-
 
 class _InputPort(_Port):
     pass
@@ -124,7 +119,7 @@ class _OutputPort(_Port):
         if notif_iter_ptr is None:
             raise bt2.CreationError('cannot create output port notification iterator')
 
-        return bt2.notification_iterator._OutputPortNotificationIterator._create_from_ptr(notif_iter_ptr)
+        return bt2.notification_iterator._OutputPortNotificationIterator(notif_iter_ptr)
 
 
 class _PrivatePort(object._PrivateObject, _Port):
@@ -139,10 +134,9 @@ class _PrivatePort(object._PrivateObject, _Port):
         if comp_ptr is None:
             return
 
-        pub_comp_ptr = native_bt.component_from_private(comp_ptr)
+        pub_comp_ptr = native_bt.component_borrow_from_private(comp_ptr)
         assert(pub_comp_ptr)
         comp = bt2.component._create_generic_component_from_ptr(pub_comp_ptr)
-        native_bt.put(comp_ptr)
         return comp
 
     @property

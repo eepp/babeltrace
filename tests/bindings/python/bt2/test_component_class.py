@@ -1,6 +1,5 @@
 from bt2 import values
 import unittest
-import copy
 import bt2
 
 
@@ -263,13 +262,6 @@ class UserComponentClassTestCase(unittest.TestCase):
         })
         del query_params
 
-    def test_eq(self):
-        class MySink(bt2._UserSinkComponent):
-            def _consume(self):
-                pass
-
-        self.assertEqual(MySink, MySink)
-
 
 class GenericComponentClassTestCase(unittest.TestCase):
     def setUp(self):
@@ -309,13 +301,6 @@ class GenericComponentClassTestCase(unittest.TestCase):
     def test_addr(self):
         self.assertIsInstance(self._comp_cls.addr, int)
         self.assertNotEqual(self._comp_cls.addr, 0)
-
-    def test_eq_invalid(self):
-        self.assertFalse(self._comp_cls == 23)
-
-    def test_eq(self):
-        self.assertEqual(self._comp_cls, self._comp_cls)
-        self.assertEqual(self._py_comp_cls, self._comp_cls)
 
     def test_query(self):
         res = bt2.QueryExecutor().query(self._comp_cls, 'an object',

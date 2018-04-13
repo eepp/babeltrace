@@ -20,9 +20,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from bt2 import native_bt, object, utils
-import bt2.notification
 import collections.abc
+from bt2 import native_bt, utils
+from bt2.internal import object
+import bt2.notification
 import bt2.component
 import bt2
 
@@ -44,23 +45,28 @@ class _NotificationIterator(collections.abc.Iterator):
         raise NotImplementedError
 
 
-class _GenericNotificationIterator(object._Object, _NotificationIterator):
-    def _get_notif(self):
-        notif_ptr = native_bt.notification_iterator_get_notification(self._ptr)
-        utils._handle_ptr(notif_ptr, "cannot get notification iterator object's current notification object")
-        return bt2.notification._create_from_ptr(notif_ptr)
-
-    def _next(self):
-        status = native_bt.notification_iterator_next(self._ptr)
-        self._handle_status(status,
-                            'unexpected error: cannot advance the notification iterator')
+class _GenericNotificationIterator(object._SharedObject, _NotificationIterator):
+    def __init__(self, ptr):
+            self._current_notifs = []
+            self._at = 0
+            super().__init__(ptr)
 
     def __next__(self):
-        self._next()
-        return self._get_notif()
+        if len(self._current_notifs) == self._at:
+            status, notifs = self._GET_NOFICATION_RANGE(self._ptr)
+            self._handle_status(status,
+                                'unexpected error: cannot advance the notification iterator')
+            self._current_notifs = notifs
+            self._at = 0
+
+        notif_ptr = self._current_notifs[self._at]
+        self._at += 1
+
+        return bt2.notification._create_from_ptr(notif_ptr)
 
 
 class _PrivateConnectionNotificationIterator(_GenericNotificationIterator):
+    _GET_NOFICATION_RANGE = native_bt.py3_private_connection_get_notification_range
     @property
     def component(self):
         comp_ptr = native_bt.private_connection_notification_iterator_get_component(self._ptr)
@@ -69,7 +75,7 @@ class _PrivateConnectionNotificationIterator(_GenericNotificationIterator):
 
 
 class _OutputPortNotificationIterator(_GenericNotificationIterator):
-    pass
+    _GET_NOFICATION_RANGE = native_bt.py3_output_port_get_notification_range
 
 
 class _UserNotificationIterator(_NotificationIterator):
@@ -119,3 +125,21 @@ class _UserNotificationIterator(_NotificationIterator):
         # take a new reference for the native part
         notif._get()
         return int(notif._ptr)
+
+    def  _create_event_notification(self, event_class, packet):
+        return bt2.notification._EventNotification(self, event_class, packet);
+
+    def _create_inactivity_notification(self):
+        return bt2.notification._InactivityNotification(self);
+
+    def _create_stream_beginning_notification(self, stream):
+        return bt2.notification._StreamBeginningNotification(self, stream);
+
+    def _create_stream_end_notification(self, stream):
+        return bt2.notification._StreamEndNotification(self, stream);
+
+    def _create_packet_beginning_notification(self, packet):
+        return bt2.notification._PacketBeginningNotification(self, packet);
+
+    def _create_packet_end_notification(self, packet):
+        return bt2.notification._PacketEndNotification(self, packet);

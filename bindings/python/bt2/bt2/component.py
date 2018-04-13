@@ -20,15 +20,16 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from bt2 import native_bt, object, utils
-import bt2.notification_iterator
 import collections.abc
-import bt2.values
-import traceback
-import bt2.port
-import sys
-import bt2
 import os
+import sys
+import traceback
+from bt2 import native_bt, utils
+from bt2.internal import object
+import bt2.notification_iterator
+import bt2.values
+import bt2.port
+import bt2
 
 
 _env_var = os.environ.get('BABELTRACE_PYTHON_BT2_NO_TRACEBACK')
@@ -39,7 +40,7 @@ _NO_PRINT_TRACEBACK = _env_var == '1'
 # have been created by Python code, but since we only have the pointer,
 # we can only wrap it in a generic way and lose the original Python
 # class.
-class _GenericComponentClass(object._Object):
+class _GenericComponentClass(object._SharedObject):
     @property
     def name(self):
         name = native_bt.component_class_get_name(self._ptr)
@@ -53,16 +54,6 @@ class _GenericComponentClass(object._Object):
     @property
     def help(self):
         return native_bt.component_class_get_help(self._ptr)
-
-    def __eq__(self, other):
-        if not isinstance(other, _GenericComponentClass):
-            try:
-                if not issubclass(other, _UserComponent):
-                    return False
-            except TypeError:
-                return False
-
-        return self.addr == other.addr
 
 
 class _GenericSourceComponentClass(_GenericComponentClass):
@@ -107,9 +98,8 @@ class _PortIterator(collections.abc.Iterator):
         assert(port_ptr)
 
         if comp_ports._is_private:
-            port_pub_ptr = native_bt.port_from_private(port_ptr)
+            port_pub_ptr = native_bt.port_borrow_from_private(port_ptr)
             name = native_bt.port_get_name(port_pub_ptr)
-            native_bt.put(port_pub_ptr)
         else:
             name = native_bt.port_get_name(port_ptr)
 
@@ -143,9 +133,8 @@ class _ComponentPorts(collections.abc.Mapping):
 
     def __len__(self):
         if self._is_private:
-            pub_ptr = native_bt.component_from_private(self._component._ptr)
+            pub_ptr = native_bt.component_borrow_from_private(self._component._ptr)
             count = self._get_port_count_fn(pub_ptr)
-            native_bt.put(pub_ptr)
         else:
             count = self._get_port_count_fn(self._component._ptr)
 
@@ -179,12 +168,6 @@ class _Component:
         assert(cc_ptr)
         return _create_generic_component_class_from_ptr(cc_ptr)
 
-    def __eq__(self, other):
-        if not hasattr(other, 'addr'):
-            return False
-
-        return self.addr == other.addr
-
 
 class _SourceComponent(_Component):
     pass
@@ -200,7 +183,7 @@ class _SinkComponent(_Component):
 
 # This is analogous to _GenericSourceComponentClass, but for source
 # component objects.
-class _GenericSourceComponent(object._Object, _SourceComponent):
+class _GenericSourceComponent(object._SharedObject, _SourceComponent):
     @property
     def output_ports(self):
         return _ComponentPorts(False, self,
@@ -211,7 +194,7 @@ class _GenericSourceComponent(object._Object, _SourceComponent):
 
 # This is analogous to _GenericFilterComponentClass, but for filter
 # component objects.
-class _GenericFilterComponent(object._Object, _FilterComponent):
+class _GenericFilterComponent(object._SharedObject, _FilterComponent):
     @property
     def output_ports(self):
         return _ComponentPorts(False, self,
@@ -229,7 +212,7 @@ class _GenericFilterComponent(object._Object, _FilterComponent):
 
 # This is analogous to _GenericSinkComponentClass, but for sink
 # component objects.
-class _GenericSinkComponent(object._Object, _SinkComponent):
+class _GenericSinkComponent(object._SharedObject, _SinkComponent):
     @property
     def input_ports(self):
         return _ComponentPorts(False, self,
@@ -515,25 +498,22 @@ class _UserComponentType(type):
 class _UserComponent(metaclass=_UserComponentType):
     @property
     def name(self):
-        pub_ptr = native_bt.component_from_private(self._ptr)
+        pub_ptr = native_bt.component_borrow_from_private(self._ptr)
         name = native_bt.component_get_name(pub_ptr)
-        native_bt.put(pub_ptr)
         assert(name is not None)
         return name
 
     @property
     def graph(self):
-        pub_ptr = native_bt.component_from_private(self._ptr)
+        pub_ptr = native_bt.component_borrow_from_private(self._ptr)
         ptr = native_bt.component_get_graph(pub_ptr)
-        native_bt.put(pub_ptr)
         assert(ptr)
         return bt2.Graph._create_from_ptr(ptr)
 
     @property
     def component_class(self):
-        pub_ptr = native_bt.component_from_private(self._ptr)
+        pub_ptr = native_bt.component_borrow_from_private(self._ptr)
         cc_ptr = native_bt.component_get_class(pub_ptr)
-        native_bt.put(pub_ptr)
         assert(cc_ptr)
         return _create_generic_component_class_from_ptr(cc_ptr)
 

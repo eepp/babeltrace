@@ -20,11 +20,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from bt2 import native_bt, object, utils
-import bt2.notification_iterator
 import collections.abc
-import bt2.port
 import copy
+from bt2 import native_bt, utils
+from bt2.internal import object
+import bt2.notification_iterator
+import bt2.port
 import bt2
 
 
@@ -39,12 +40,12 @@ def _handle_status(status, gen_error_msg):
 
 def _create_private_from_ptr(ptr):
     obj = _PrivateConnection._create_from_ptr(ptr)
-    obj._pub_ptr = native_bt.connection_from_private(ptr)
+    obj._pub_ptr = native_bt.connection_borrow_from_private(ptr)
     assert(obj._pub_ptr)
     return obj
 
 
-class _Connection(object._Object):
+class _Connection(object._SharedObject):
     @staticmethod
     def _downstream_port(ptr):
         port_ptr = native_bt.connection_get_downstream_port(ptr)
@@ -73,19 +74,13 @@ class _Connection(object._Object):
     def is_ended(self):
         return self._is_ended(self._ptr)
 
-    def __eq__(self, other):
-        if type(other) not in (_Connection, _PrivateConnection):
-            return False
-
-        return self.addr == other.addr
-
 
 class _PrivateConnection(object._PrivateObject, _Connection):
     def create_notification_iterator(self):
         status, notif_iter_ptr = native_bt.py3_create_priv_conn_notif_iter(int(self._ptr))
         _handle_status(status, 'cannot create notification iterator object')
         assert(notif_iter_ptr)
-        return bt2.notification_iterator._PrivateConnectionNotificationIterator._create_from_ptr(notif_iter_ptr)
+        return bt2.notification_iterator._PrivateConnectionNotificationIterator(notif_iter_ptr)
 
     @property
     def is_ended(self):

@@ -20,13 +20,18 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from bt2 import native_bt, object, utils
-import collections.abc
-import functools
-import numbers
-import math
+__all__ = ['create_value', '_Value', 'ArrayValue', 'BoolValue', 'FloatValue',
+        'IntegerValue', 'MapValue', 'StringValue']
+
+
 import abc
 import bt2
+import collections.abc
+import functools
+import math
+import numbers
+from bt2 import native_bt, utils
+from bt2.internal import object
 
 
 def _handle_status(status, obj_name):
@@ -80,7 +85,17 @@ def create_value(value):
     raise TypeError("cannot create value object from '{}' object".format(value.__class__.__name__))
 
 
-class _Value(object._Object, metaclass=abc.ABCMeta):
+class _Value(object._SharedObject, metaclass=abc.ABCMeta):
+    def __deepcopy__(self, memo):
+        ptr = native_bt.value_copy(self._ptr)
+
+        if ptr is None:
+            raise RuntimeError('unexpected error: cannot deep-copy {} value object'.format(self._NAME))
+
+        copy = self.__class__._create_from_ptr(ptr)
+        memo[id(self)] = copy
+        return copy
+
     def __eq__(self, other):
         if other is None:
             # self is never the null value object
@@ -114,18 +129,9 @@ class _Value(object._Object, metaclass=abc.ABCMeta):
             raise bt2.CreationError('cannot create {} value object'.format(self._NAME.lower()))
 
 
-class _BasicCopy:
-    def __copy__(self):
-        return self.__class__(self._value)
-
-    def __deepcopy__(self, memo):
-        copy = self.__copy__()
-        memo[id(self)] = copy
-        return copy
-
 
 @functools.total_ordering
-class _NumericValue(_Value, _BasicCopy):
+class _NumericValue(_Value):
     @staticmethod
     def _extract_value(other):
         if isinstance(other, _NumericValue):
@@ -325,7 +331,7 @@ class _RealValue(_NumericValue, numbers.Real):
     pass
 
 
-class BoolValue(_Value, _BasicCopy):
+class BoolValue(_Value):
     _NAME = 'Boolean'
 
     def __init__(self, value=None):
@@ -436,7 +442,7 @@ class FloatValue(_RealValue):
 
 
 @functools.total_ordering
-class StringValue(_BasicCopy, collections.abc.Sequence, _Value):
+class StringValue(collections.abc.Sequence, _Value):
     _NAME = 'String'
 
     def __init__(self, value=None):
@@ -507,16 +513,6 @@ class _Container:
 
     def __copy__(self):
         return self.__class__(self)
-
-    def __deepcopy__(self, memo):
-        ptr = native_bt.value_copy(self._ptr)
-
-        if ptr is None:
-            raise RuntimeError('unexpected error: cannot deep-copy {} value object'.format(self._NAME))
-
-        copy = self.__class__._create_from_ptr(ptr)
-        memo[id(self)] = copy
-        return copy
 
     def __delitem__(self, index):
         raise NotImplementedError

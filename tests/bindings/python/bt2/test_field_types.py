@@ -10,10 +10,6 @@ class _TestCopySimple:
         self.assertNotEqual(cpy.addr, self._ft.addr)
         self.assertEqual(cpy, self._ft)
 
-    def test_copy(self):
-        cpy = copy.copy(self._ft)
-        self._test_copy(cpy)
-
     def test_deepcopy(self):
         cpy = copy.deepcopy(self._ft)
         self._test_copy(cpy)
@@ -75,7 +71,6 @@ class _TestIntegerFieldTypeProps:
     def test_assign_mapped_clock_class(self):
         cc = bt2.ClockClass('name', 1000)
         self._ft.mapped_clock_class = cc
-        self.assertEqual(self._ft.mapped_clock_class, cc)
 
     def test_assign_invalid_mapped_clock_class(self):
         with self.assertRaises(TypeError):
@@ -120,15 +115,6 @@ class IntegerFieldTypeTestCase(_TestIntegerFieldTypeProps, _TestCopySimple,
         self.assertTrue(ft.is_signed)
         self.assertEqual(ft.base, bt2.Base.OCTAL)
         self.assertEqual(ft.encoding, bt2.Encoding.NONE)
-        self.assertEqual(ft.mapped_clock_class, cc)
-
-    def test_create_field(self):
-        field = self._ft()
-        self.assertIsInstance(field, bt2.fields._IntegerField)
-
-    def test_create_field_init(self):
-        field = self._ft(23)
-        self.assertEqual(field, 23)
 
 
 class FloatingPointNumberFieldTypeTestCase(_TestCopySimple, _TestAlignmentProp,
@@ -169,14 +155,6 @@ class FloatingPointNumberFieldTypeTestCase(_TestCopySimple, _TestAlignmentProp,
         with self.assertRaises(TypeError):
             self._ft.mantissa_size = 'no'
 
-    def test_create_field(self):
-        field = self._ft()
-        self.assertIsInstance(field, bt2.fields._FloatingPointNumberField)
-
-    def test_create_field_init(self):
-        field = self._ft(17.5)
-        self.assertEqual(field, 17.5)
-
 
 class EnumerationFieldTypeTestCase(_TestIntegerFieldTypeProps, _TestInvalidEq,
                                    _TestCopySimple, _TestAlignmentProp,
@@ -212,7 +190,6 @@ class EnumerationFieldTypeTestCase(_TestIntegerFieldTypeProps, _TestInvalidEq,
         self.assertTrue(ft.is_signed)
         self.assertEqual(ft.base, bt2.Base.OCTAL)
         self.assertEqual(ft.encoding, bt2.Encoding.NONE)
-        #self.assertIsNone(ft.mapped_clock_class)
 
     def test_integer_field_type_prop(self):
         int_ft = bt2.IntegerFieldType(23)
@@ -415,16 +392,6 @@ class EnumerationFieldTypeTestCase(_TestIntegerFieldTypeProps, _TestInvalidEq,
     def test_find_by_value_unsigned(self):
         self._test_find_by_value(bt2.EnumerationFieldType(size=8))
 
-    def test_create_field(self):
-        self._ft.add_mapping('c', 4, 5)
-        field = self._ft()
-        self.assertIsInstance(field, bt2.fields._EnumerationField)
-
-    def test_create_field_init(self):
-        self._ft.add_mapping('c', 4, 5)
-        field = self._ft(4)
-        self.assertEqual(field, 4)
-
 
 class StringFieldTypeTestCase(_TestCopySimple, _TestInvalidEq,
                               unittest.TestCase):
@@ -448,14 +415,6 @@ class StringFieldTypeTestCase(_TestCopySimple, _TestInvalidEq,
     def test_assign_invalid_encoding(self):
         with self.assertRaises(TypeError):
             self._ft.encoding = 'yes'
-
-    def test_create_field(self):
-        field = self._ft()
-        self.assertIsInstance(field, bt2.fields._StringField)
-
-    def test_create_field_init(self):
-        field = self._ft('hola')
-        self.assertEqual(field, 'hola')
 
 
 class _TestFieldContainer(_TestInvalidEq, _TestCopySimple):
@@ -601,14 +560,6 @@ class StructureFieldTypeTestCase(_TestFieldContainer, unittest.TestCase):
         with self.assertRaises(AttributeError):
             self._ft.min_alignment
 
-    def test_create_field(self):
-        field = self._ft()
-        self.assertIsInstance(field, bt2.fields._StructureField)
-
-    def test_create_field_init_invalid(self):
-        with self.assertRaises(bt2.Error):
-            field = self._ft(23)
-
 
 class VariantFieldTypeTestCase(_TestFieldContainer, unittest.TestCase):
     def setUp(self):
@@ -659,14 +610,6 @@ class ArrayFieldTypeTestCase(_TestInvalidEq, _TestCopySimple,
         with self.assertRaises(TypeError):
             self._ft = bt2.ArrayFieldType(bt2.StringFieldType(), 'the length')
 
-    def test_create_field(self):
-        field = self._ft()
-        self.assertIsInstance(field, bt2.fields._ArrayField)
-
-    def test_create_field_init_invalid(self):
-        with self.assertRaises(bt2.Error):
-            field = self._ft(23)
-
 
 class SequenceFieldTypeTestCase(_TestInvalidEq, _TestCopySimple,
                                 unittest.TestCase):
@@ -689,11 +632,3 @@ class SequenceFieldTypeTestCase(_TestInvalidEq, _TestCopySimple,
     def test_create_invalid_length_type(self):
         with self.assertRaises(TypeError):
             self._ft = bt2.SequenceFieldType(bt2.StringFieldType(), 17)
-
-    def test_create_field(self):
-        field = self._ft()
-        self.assertIsInstance(field, bt2.fields._SequenceField)
-
-    def test_create_field_init_invalid(self):
-        with self.assertRaises(bt2.Error):
-            field = self._ft(23)

@@ -20,88 +20,97 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from bt2 import native_bt, object, utils
-import bt2.fields
-import bt2.stream
 import copy
-import abc
+from bt2 import native_bt, utils, domain
+from bt2.internal import object
+from . import domain
+import bt2.fields
 import bt2
 
+__all__ = ['PreviousPacketAvailability']
 
-class _Packet(object._Object):
+class PreviousPacketAvailability:
+	AVAILABLE = native_bt.PACKET_PREVIOUS_PACKET_AVAILABILITY_AVAILABLE
+	NOT_AVAILABLE = native_bt.PACKET_PREVIOUS_PACKET_AVAILABILITY_NOT_AVAILABLE
+	NONE = native_bt.PACKET_PREVIOUS_PACKET_AVAILABILITY_NONE
+
+class _Packet(object._SharedObject):
     @property
     def stream(self):
         stream_ptr = native_bt.packet_get_stream(self._ptr)
         assert(stream_ptr)
-        return bt2.stream._Stream._create_from_ptr(stream_ptr)
+        return domain._Domain.create_stream_from_ptr(stream_ptr)
+
+    @property
+    def default_beginning_clock_value(self):
+        prop_avail_status, value_ptr = native_bt.packet_borrow_default_beginning_clock_value(self._ptr)
+        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
+            return
+
+        return bt2.clock_value._create_clock_value_from_ptr(value_ptr, self._ptr)
+
+    @property
+    def default_end_clock_value(self):
+        prop_avail_status, value_ptr = native_bt.packet_borrow_default_end_clock_value(self._ptr)
+        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
+            return
+
+        return bt2.clock_value._create_clock_value_from_ptr(value_ptr, self._ptr)
+
+    @property
+    def previous_packet_default_end_clock_value(self):
+        prop_avail_status, value_ptr = native_bt.packet_borrow_previous_packet_default_end_clock_value(self._ptr)
+        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
+            return
+
+        return bt2.clock_value._create_clock_value_from_ptr(value_ptr, self._ptr)
+
+    @property
+    def discarded_event_counter(self):
+        prop_avail_status, discarded_event_counter = native_bt.packet_get_discarded_event_counter(self._ptr)
+        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
+            return
+
+        return discarded_event_counter
+
+    @property
+    def sequence_number(self):
+        prop_avail_status, sequence_number = native_bt.packet_get_sequence_number(self._ptr)
+        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
+            return
+
+        return sequence_number
+
+    @property
+    def discarded_event_count(self):
+        prop_avail_status, discarded_event_count = native_bt.packet_get_discarded_event_count(self._ptr)
+        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
+            return
+
+        return discarded_event_count
+
+    @property
+    def discarded_packet_count(self):
+        prop_avail_status, discarded_packet_count = native_bt.packet_get_discarded_packet_count(self._ptr)
+        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
+            return
+
+        return discarded_packet_count
 
     @property
     def header_field(self):
-        field_ptr = native_bt.packet_get_header(self._ptr)
+        field_ptr = native_bt.packet_borrow_header(self._ptr)
 
         if field_ptr is None:
             return
 
-        return bt2.fields._create_from_ptr(field_ptr)
-
-    @header_field.setter
-    def header_field(self, header_field):
-        header_field_ptr = None
-
-        if header_field is not None:
-            utils._check_type(header_field, bt2.fields._Field)
-            header_field_ptr = header_field._ptr
-
-        ret = native_bt.packet_set_header(self._ptr, header_field_ptr)
-        utils._handle_ret(ret, "cannot set packet object's header field")
+        return domain._Domain.create_field_from_ptr(field_ptr, self._ptr)
 
     @property
     def context_field(self):
-        field_ptr = native_bt.packet_get_context(self._ptr)
+        field_ptr = native_bt.packet_borrow_context(self._ptr)
 
         if field_ptr is None:
             return
 
-        return bt2.fields._create_from_ptr(field_ptr)
-
-    @context_field.setter
-    def context_field(self, context_field):
-        context_field_ptr = None
-
-        if context_field is not None:
-            utils._check_type(context_field, bt2.fields._Field)
-            context_field_ptr = context_field._ptr
-
-        ret = native_bt.packet_set_context(self._ptr, context_field_ptr)
-        utils._handle_ret(ret, "cannot set packet object's context field")
-
-    def __eq__(self, other):
-        if type(other) is not type(self):
-            return False
-
-        if self.addr == other.addr:
-            return True
-
-        self_props = (
-            self.header_field,
-            self.context_field,
-        )
-        other_props = (
-            other.header_field,
-            other.context_field,
-        )
-        return self_props == other_props
-
-    def _copy(self, copy_func):
-        cpy = self.stream.create_packet()
-        cpy.header_field = copy_func(self.header_field)
-        cpy.context_field = copy_func(self.context_field)
-        return cpy
-
-    def __copy__(self):
-        return self._copy(copy.copy)
-
-    def __deepcopy__(self, memo):
-        cpy = self._copy(copy.deepcopy)
-        memo[id(self)] = cpy
-        return cpy
+        return domain._Domain.create_field_from_ptr(field_ptr, self._ptr)

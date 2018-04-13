@@ -5,60 +5,104 @@ AM_LDFLAGS=-L$(top_builddir)/lib/.libs
 
 INSTALLED_FILES=$(builddir)/installed_files.txt
 
-STATIC_BINDINGS_DEPS =					\
-	bt2/logging.c					\
-	bt2/logging.h					\
-	bt2/native_btccpriomap.i			\
-	bt2/native_btclockclass.i			\
-	bt2/native_btcomponentclass.i			\
-	bt2/native_btcomponent.i			\
-	bt2/native_btconnection.i			\
-	bt2/native_btctfwriter.i			\
-	bt2/native_bteventclass.i			\
-	bt2/native_btevent.i				\
-	bt2/native_btfields.i				\
-	bt2/native_btft.i				\
-	bt2/native_btgraph.i				\
-	bt2/native_bt.i					\
-	bt2/native_btlogging.i				\
-	bt2/native_btnotification.i			\
-	bt2/native_btnotifiter.i			\
-	bt2/native_btpacket.i				\
-	bt2/native_btplugin.i				\
-	bt2/native_btport.i				\
-	bt2/native_btqueryexec.i			\
-	bt2/native_btref.i				\
-	bt2/native_btstreamclass.i			\
-	bt2/native_btstream.i				\
-	bt2/native_bttrace.i				\
-	bt2/native_btvalues.i				\
-	bt2/native_btversion.i				\
-	bt2/clock_class_priority_map.py			\
+STATIC_BINDINGS_INTERNAL_DEPS =
+	bt2/internal/clock_value.py					\
+	bt2/internal/domain.py						\
+	bt2/internal/event.py						\
+	bt2/internal/event_class.py					\
+	bt2/internal/field_types.py					\
+	bt2/internal/fields.py						\
+	bt2/internal/object.py						\
+	bt2/internal/packet.py						\
+	bt2/internal/stream.py						\
+	bt2/internal/stream_class.py				\
+	bt2/internal/trace.py						\
+	bt2/internal/trace_collection_notification_iterator.py	\
+	bt2/internal/utils.py
+
+STATIC_BINDINGS_IR_DEPS =			\
 	bt2/clock_class.py				\
 	bt2/clock_value.py				\
-	bt2/component.py				\
-	bt2/connection.py				\
-	bt2/ctf_writer.py				\
-	bt2/event_class.py				\
+	bt2/domain.py					\
 	bt2/event.py					\
-	bt2/fields.py					\
+	bt2/event_class.py				\
 	bt2/field_types.py				\
-	bt2/graph.py					\
-	bt2/logging.py					\
-	bt2/notification_iterator.py			\
-	bt2/notification.py				\
-	bt2/object.py					\
+	bt2/fields.py					\
 	bt2/packet.py					\
-	bt2/plugin.py					\
-	bt2/port.py					\
-	bt2/py_plugin.py				\
-	bt2/query_executor.py				\
-	bt2/stream_class.py				\
 	bt2/stream.py					\
+	bt2/stream_class.py				\
 	bt2/trace.py					\
 	bt2/trace_collection_notification_iterator.py	\
 	bt2/utils.py					\
 	bt2/values.py
+
+STATIC_BINDINGS_GRAPH_DEPS =
+	bt2/component.py				\
+	bt2/connection.py				\
+	bt2/graph.py					\
+	bt2/logging.py					\
+	bt2/notification.py				\
+	bt2/notification_iterator.py	\
+	bt2/plugin.py					\
+	bt2/port.py						\
+	bt2/py_plugin.py				\
+	bt2/query_executor.py
+
+STATIC_BINDINGS_CTFWRITER_DEPS =		\
+	bt2/ctfwriter/CtfWriter.py			\
+	bt2/ctfwriter/__init__.py			\
+	bt2/ctfwriter/clock.py				\
+	bt2/ctfwriter/clock_class.py		\
+	bt2/ctfwriter/domain.py				\
+	bt2/ctfwriter/event.py				\
+	bt2/ctfwriter/event_class.py		\
+	bt2/ctfwriter/field_types.py		\
+	bt2/ctfwriter/fields.py				\
+	bt2/ctfwriter/stream.py				\
+	bt2/ctfwriter/stream_class.py		\
+	bt2/ctfwriter/trace.py				\
+	bt2/ctfwriter/native_btctf_clock.i			\
+	bt2/ctfwriter/native_btctf_clockclass.i		\
+	bt2/ctfwriter/native_btctf_event.i			\
+	bt2/ctfwriter/native_btctf_eventclass.i		\
+	bt2/ctfwriter/native_btctf_fieldtypes.i		\
+	bt2/ctfwriter/native_btctf_fields.i			\
+	bt2/ctfwriter/native_btctf_stream.i			\
+	bt2/ctfwriter/native_btctf_streamclass.i	\
+	bt2/ctfwriter/native_btctf_trace.i			\
+	bt2/ctfwriter/native_btctf_writer.i
+
+
+STATIC_BINDINGS_DEPS =					\
+	bt2/logging.c						\
+	bt2/logging.h						\
+	bt2/native_bt_clockclass.i			\
+	bt2/native_bt_componentclass.i		\
+	bt2/native_bt_component.i			\
+	bt2/native_bt_connection.i			\
+	bt2/native_bt_eventclass.i			\
+	bt2/native_bt_event.i				\
+	bt2/native_bt_fields.i				\
+	bt2/native_bt_fieldtypes.i			\
+	bt2/native_bt_graph.i				\
+	bt2/native_bt.i						\
+	bt2/native_bt_logging.i				\
+	bt2/native_bt_notification.i		\
+	bt2/native_bt_notifiter.i			\
+	bt2/native_bt_packet.i				\
+	bt2/native_bt_plugin.i				\
+	bt2/native_bt_port.i				\
+	bt2/native_bt_queryexec.i			\
+	bt2/native_bt_ref.i					\
+	bt2/native_bt_streamclass.i			\
+	bt2/native_bt_stream.i				\
+	bt2/native_bt_trace.i				\
+	bt2/native_bt_values.i				\
+	bt2/native_bt_version.i
+
+STATIC_BINDINGS_DEPS += $(STATIC_BINDINGS_INTERNAL_DEPS)
+STATIC_BINDINGS_DEPS += $(STATIC_BINDINGS_IR_DEPS)
+STATIC_BINDINGS_DEPS += $(STATIC_BINDINGS_GRAPH_DEPS)
 
 GENERATED_BINDINGS_DEPS =	\
 	bt2/__init__.py		\

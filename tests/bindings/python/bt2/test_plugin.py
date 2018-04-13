@@ -103,4 +103,5 @@ class PluginTestCase(unittest.TestCase):
         self.assertEqual(len(plugin.filter_component_classes), 2)
 
     def test_sink_comp_classes_len(self):
+        import pdb;pdb.set_trace()
         self.assertEqual(len(self._plugin.sink_component_classes), 1)

@@ -756,29 +756,6 @@ class PortTestCase(unittest.TestCase):
         comp = self._create_comp(MySink)
         self.assertFalse(comp.input_ports['clear'].is_connected)
 
-    def test_eq(self):
-        class MySink(bt2._UserSinkComponent):
-            def __init__(comp_self, params):
-                comp_self._add_input_port('clear')
-
-            def _consume(self):
-                pass
-
-        comp = self._create_comp(MySink)
-        self.assertEqual(comp.input_ports['clear'],
-                         comp.input_ports['clear'])
-
-    def test_eq_invalid(self):
-        class MySink(bt2._UserSinkComponent):
-            def __init__(comp_self, params):
-                comp_self._add_input_port('clear')
-
-            def _consume(self):
-                pass
-
-        comp = self._create_comp(MySink)
-        self.assertNotEqual(comp.input_ports['clear'], 23)
-
     def test_disconnect_no_connection(self):
         class MySink(bt2._UserSinkComponent):
             def __init__(comp_self, params):
@@ -805,7 +782,7 @@ class PortTestCase(unittest.TestCase):
         class MySink(bt2._UserSinkComponent):
             def __init__(comp_self, params):
                 port = comp_self._add_input_port('clear')
-                self.assertEqual(port.component, comp_self)
+                self.assertEqual(port.component._ptr, comp_self._ptr)
 
             def _consume(self):
                 pass
@@ -828,28 +805,6 @@ class PortTestCase(unittest.TestCase):
             def __init__(comp_self, params):
                 port = comp_self._add_input_port('clear')
                 self.assertFalse(port.is_connected)
-
-            def _consume(self):
-                pass
-
-        comp = self._create_comp(MySink)
-
-    def test_priv_eq(self):
-        class MySink(bt2._UserSinkComponent):
-            def __init__(comp_self, params):
-                port = comp_self._add_input_port('clear')
-                self.assertEqual(port, port)
-
-            def _consume(self):
-                pass
-
-        comp = self._create_comp(MySink)
-
-    def test_priv_eq_invalid(self):
-        class MySink(bt2._UserSinkComponent):
-            def __init__(comp_self, params):
-                port = comp_self._add_input_port('clear')
-                self.assertNotEqual(port, 23)
 
             def _consume(self):
                 pass

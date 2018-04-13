@@ -20,18 +20,21 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from bt2 import native_bt, object, utils
+__all__ = []
+
 import uuid as uuidp
 import numbers
+from bt2 import native_bt, utils
+from bt2.internal import object
 import bt2
 
 
-def _create_clock_value_from_ptr(ptr):
-    clock_value = _ClockValue._create_from_ptr(ptr)
+def _create_clock_value_from_ptr(ptr, owner_ptr):
+    clock_value = _ClockValue._create_from_ptr(ptr, owner_ptr)
     return clock_value
 
 
-class _ClockValue(object._Object):
+class _ClockValue(object._UniqueObject):
     def __init__(self, clock_class_ptr, cycles):
         utils._check_uint64(cycles)
         ptr = native_bt.clock_value_create(clock_class_ptr, cycles)
@@ -60,24 +63,6 @@ class _ClockValue(object._Object):
         return ns
 
     def __eq__(self, other):
-        if isinstance(other, numbers.Integral):
-            return int(other) == self.cycles
-
-        if not isinstance(other, self.__class__):
-            # not comparing apples to apples
-            return False
-
-        if self.addr == other.addr:
-            return True
-
-        self_props = self.clock_class, self.cycles
-        other_props = other.clock_class, other.cycles
-        return self_props == other_props
-
-    def __copy__(self):
-        return self.clock_class(self.cycles)
-
-    def __deepcopy__(self, memo):
-        cpy = self.__copy__()
-        memo[id(self)] = cpy
-        return cpy
+        if not isinstance(other, numbers.Integral):
+            raise NotImplementedError
+        return int(other) == self.cycles

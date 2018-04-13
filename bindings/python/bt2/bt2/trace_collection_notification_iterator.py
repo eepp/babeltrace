@@ -20,14 +20,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-from bt2 import utils
-import bt2
+from collections import namedtuple
 import itertools
-import bt2.notification_iterator
 import datetime
 import collections.abc
-from collections import namedtuple
 import numbers
+from bt2 import utils
+import bt2
+import bt2.notification_iterator
 
 
 # a pair of component and ComponentSpec

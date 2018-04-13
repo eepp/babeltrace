@@ -26,6 +26,7 @@
 
 import babeltrace.common as common
 import bt2
+import bt2.ctfwriter
 
 
 class EnumerationMapping:
@@ -42,7 +43,7 @@ class EnumerationMapping:
         mapping to a single value.
         """
 
-        self._enum_mapping = bt2._EnumerationFieldTypeMapping(self, start, end)
+        self._enum_mapping = bt2.ctfwriter._EnumerationFieldTypeMapping(self, start, end)
 
     @property
     def name(self):
@@ -75,7 +76,7 @@ class Clock:
         """
 
         try:
-            self._clock = bt2.CtfWriterClock(name)
+            self._clock = bt2.ctfwriter.Clock(name)
         except:
             raise ValueError("Invalid clock name.")
         assert self._clock
@@ -179,7 +180,7 @@ class Clock:
     @offset_seconds.setter
     def offset_seconds(self, offset_s):
         try:
-            self._clock.offset = bt2.ClockClassOffset(offset_s,
+            self._clock.offset = bt2.ctfwriter.ClockClassOffset(offset_s,
                                                       self._clock.offset.cycles)
         except:
             raise ValueError("Invalid offset value.")
@@ -203,7 +204,7 @@ class Clock:
     @offset.setter
     def offset(self, offset):
         try:
-            self._clock.offset = bt2.ClockClassOffset(self._clock.offset.seconds,
+            self._clock.offset = bt2.ctfwriter.ClockClassOffset(self._clock.offset.seconds,
                                                       offset)
         except:
             raise ValueError("Invalid offset value.")
@@ -447,7 +448,7 @@ class IntegerFieldDeclaration(FieldDeclaration, _EncodingProp):
         :exc:`ValueError` is raised on error.
         """
 
-        self._field_type = bt2.IntegerFieldType(size)
+        self._field_type = bt2.ctfwriter.IntegerFieldType(size)
         super().__init__()
 
     @property
@@ -531,7 +532,7 @@ class EnumerationFieldDeclaration(FieldDeclaration):
         if integer_type is None or not isinst:
             raise TypeError("Invalid integer container.")
 
-        self._field_type = bt2.EnumerationFieldType(integer_type._field_type)
+        self._field_type = bt2.ctfwriter.EnumerationFieldType(integer_type._field_type)
         super().__init__()
 
     @property
@@ -660,7 +661,7 @@ class FloatingPointFieldDeclaration(FieldDeclaration):
         :exc:`ValueError` is raised on error.
         """
 
-        self._field_type = bt2.FloatingPointNumberFieldType()
+        self._field_type = bt2.ctfwriter.FloatingPointNumberFieldType()
         super().__init__()
 
     @property
@@ -731,7 +732,7 @@ class StructureFieldDeclaration(FieldDeclaration):
         :exc:`ValueError` is raised on error.
         """
 
-        self._field_type = bt2.StructureFieldType()
+        self._field_type = bt2.ctfwriter.StructureFieldType()
         super().__init__()
 
     def add_field(self, field_type, field_name):
@@ -802,7 +803,7 @@ class VariantFieldDeclaration(FieldDeclaration):
         if enum_tag is None or not isinst:
             raise TypeError("Invalid tag type; must be of type EnumerationFieldDeclaration.")
 
-        self._field_type = bt2.VariantFieldType(tag_name=tag_name,
+        self._field_type = bt2.ctfwriter.VariantFieldType(tag_name=tag_name,
                                                 tag_field_type=enum_tag._field_type)
         super().__init__()
 
@@ -903,7 +904,7 @@ class ArrayFieldDeclaration(FieldDeclaration):
         """
 
         try:
-            self._field_type = bt2.ArrayFieldType(element_type._field_type, length)
+            self._field_type = bt2.ctfwriter.ArrayFieldType(element_type._field_type, length)
         except:
             raise ValueError('Failed to create ArrayFieldDeclaration.')
         super().__init__()
@@ -954,7 +955,7 @@ class SequenceFieldDeclaration(FieldDeclaration):
         """
 
         try:
-            self._field_type = bt2.SequenceFieldType(element_type, length_field_name)
+            self._field_type = bt2.ctfwriter.SequenceFieldType(element_type, length_field_name)
         except:
             raise ValueError('Failed to create SequenceFieldDeclaration.')
         super().__init__()
@@ -1001,7 +1002,7 @@ class StringFieldDeclaration(FieldDeclaration, _EncodingProp):
         :exc:`ValueError` is raised on error.
         """
 
-        self._field_type = bt2.StringFieldType()
+        self._field_type = bt2.ctfwriter.StringFieldType()
         super().__init__()
 
 
@@ -1053,14 +1054,14 @@ class Field:
     @staticmethod
     def _create_field(bt2_field):
         type_dict = {
-            bt2._IntegerField: IntegerField,
-            bt2._FloatingPointNumberField: FloatingPointField,
-            bt2._EnumerationField: EnumerationField,
-            bt2._StringField: StringField,
-            bt2._StructureField: StructureField,
-            bt2._VariantField: VariantField,
-            bt2._ArrayField: ArrayField,
-            bt2._SequenceField: SequenceField
+            bt2.ctfwriter._IntegerField: IntegerField,
+            bt2.ctfwriter._FloatingPointNumberField: FloatingPointField,
+            bt2.ctfwriter._EnumerationField: EnumerationField,
+            bt2.ctfwriter._StringField: StringField,
+            bt2.ctfwriter._StructureField: StructureField,
+            bt2.ctfwriter._VariantField: VariantField,
+            bt2.ctfwriter._ArrayField: ArrayField,
+            bt2.ctfwriter._SequenceField: SequenceField
         }
 
         if type(bt2_field) not in type_dict:
@@ -1349,7 +1350,7 @@ class EventClass:
         :exc:`ValueError` is raised on error.
         """
 
-        self._ec = bt2.EventClass(name)
+        self._ec = bt2.ctfwriter.EventClass(name)
 
         if self._ec is None:
             raise ValueError("Event class creation failed.")
@@ -1606,19 +1607,19 @@ class StreamClass:
 
         try:
             # Set default event header and packet context.
-            event_header_type = bt2.StructureFieldType()
-            uint32_ft = bt2.IntegerFieldType(32)
-            uint64_ft = bt2.IntegerFieldType(64)
+            event_header_type = bt2.ctfwriter.StructureFieldType()
+            uint32_ft = bt2.ctfwriter.IntegerFieldType(32)
+            uint64_ft = bt2.ctfwriter.IntegerFieldType(64)
             event_header_type.append_field('id', uint32_ft)
             event_header_type.append_field('timestamp', uint64_ft)
 
-            packet_context_type = bt2.StructureFieldType()
+            packet_context_type = bt2.ctfwriter.StructureFieldType()
             packet_context_type.append_field('timestamp_begin', uint64_ft)
             packet_context_type.append_field('timestamp_end', uint64_ft)
             packet_context_type.append_field('content_size', uint64_ft)
             packet_context_type.append_field('packet_size', uint64_ft)
             packet_context_type.append_field('events_discarded', uint64_ft)
-            sc = bt2.StreamClass(name,
+            sc = bt2.ctfwriter.StreamClass(name,
                                  event_header_field_type=event_header_type,
                                  packet_context_field_type=packet_context_type)
             self._stream_class = sc
@@ -1912,7 +1913,7 @@ class Writer:
         """
 
         try:
-            self._w = bt2.CtfWriter(path)
+            self._w = bt2.ctfwriter.CtfWriter(path)
         except:
             raise ValueError("Writer creation failed.")
 
@@ -2017,12 +2018,12 @@ class Writer:
 
 
 _BT2_FIELD_TYPE_TO_BT_DECLARATION = {
-    bt2.IntegerFieldType: IntegerFieldDeclaration,
-    bt2.FloatingPointNumberFieldType: FloatFieldDeclaration,
-    bt2.EnumerationFieldType: EnumerationFieldDeclaration,
-    bt2.StringFieldType: StringFieldDeclaration,
-    bt2.StructureFieldType: StructureFieldDeclaration,
-    bt2.ArrayFieldType: ArrayFieldDeclaration,
-    bt2.SequenceFieldType: SequenceFieldDeclaration,
-    bt2.VariantFieldType: VariantFieldDeclaration,
+    bt2.ctfwriter.IntegerFieldType: IntegerFieldDeclaration,
+    bt2.ctfwriter.FloatingPointNumberFieldType: FloatFieldDeclaration,
+    bt2.ctfwriter.EnumerationFieldType: EnumerationFieldDeclaration,
+    bt2.ctfwriter.StringFieldType: StringFieldDeclaration,
+    bt2.ctfwriter.StructureFieldType: StructureFieldDeclaration,
+    bt2.ctfwriter.ArrayFieldType: ArrayFieldDeclaration,
+    bt2.ctfwriter.SequenceFieldType: SequenceFieldDeclaration,
+    bt2.ctfwriter.VariantFieldType: VariantFieldDeclaration,
 }
