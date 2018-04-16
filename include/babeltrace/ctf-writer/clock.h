@@ -31,7 +31,11 @@
  */
 
 #include <stdint.h>
+
+/* For bt_get and bt_put. */
 #include <babeltrace/ref.h>
+
+/* For bt_bool. */
 #include <babeltrace/types.h>
 
 #ifdef __cplusplus
@@ -39,7 +43,6 @@ extern "C" {
 #endif
 
 struct bt_ctf_clock;
-struct bt_ctf_clock_class;
 
 /*
  * bt_ctf_clock_create: create a clock.

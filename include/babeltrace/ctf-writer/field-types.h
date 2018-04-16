@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
+/* For bt_bool. */
 #include <babeltrace/types.h>
 
 #ifdef __cplusplus

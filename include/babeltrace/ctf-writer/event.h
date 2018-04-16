@@ -30,6 +30,7 @@
  * http://www.efficios.com/ctf
  */
 
+/* For bt_get and bt_put. */
 #include <babeltrace/ref.h>
 
 #ifdef __cplusplus
