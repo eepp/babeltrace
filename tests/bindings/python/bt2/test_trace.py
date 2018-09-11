@@ -16,10 +16,10 @@ class TraceTestCase(unittest.TestCase):
     def _create_stream_class(self, name, id):
         ec1, ec2 = self._create_event_classes()
         packet_context_ft = bt2.StructureFieldType()
-        packet_context_ft.append_field('menu', bt2.FloatingPointNumberFieldType())
+        packet_context_ft.append_field('menu', bt2.RealFieldType())
         packet_context_ft.append_field('sticker', bt2.StringFieldType())
         event_header_ft = bt2.StructureFieldType()
-        event_header_ft.append_field('id', bt2.IntegerFieldType(19))
+        event_header_ft.append_field('id', bt2.SignedIntegerFieldType(19))
         event_context_ft = bt2.StructureFieldType()
         event_context_ft.append_field('msg', bt2.StringFieldType())
         return bt2.StreamClass(name=name, id=id,
@@ -31,7 +31,7 @@ class TraceTestCase(unittest.TestCase):
     def _create_event_classes(self):
         context_ft = bt2.StructureFieldType()
         context_ft.append_field('allo', bt2.StringFieldType())
-        context_ft.append_field('zola', bt2.IntegerFieldType(18))
+        context_ft.append_field('zola', bt2.SignedIntegerFieldType(18))
         payload_ft = bt2.StructureFieldType()
         payload_ft.append_field('zoom', bt2.StringFieldType())
         ec1 = bt2.EventClass('event23', id=23, context_field_type=context_ft,
@@ -45,8 +45,8 @@ class TraceTestCase(unittest.TestCase):
 
     def _get_std_header(self):
         header_ft = bt2.StructureFieldType()
-        header_ft.append_field('magic', bt2.IntegerFieldType(32))
-        header_ft.append_field('stream_id', bt2.IntegerFieldType(32))
+        header_ft.append_field('magic', bt2.SignedIntegerFieldType(32))
+        header_ft.append_field('stream_id', bt2.SignedIntegerFieldType(32))
         return header_ft
 
     def test_create_full(self):
@@ -89,7 +89,7 @@ class TraceTestCase(unittest.TestCase):
 
     def test_assign_packet_header_field_type(self):
         header_ft = bt2.StructureFieldType()
-        header_ft.append_field('magic', bt2.IntegerFieldType(32))
+        header_ft.append_field('magic', bt2.SignedIntegerFieldType(32))
         self._tc.packet_header_field_type = header_ft
         self.assertEqual(self._tc.packet_header_field_type, header_ft)
 

@@ -23,43 +23,73 @@
  */
 
 /* Type */
+struct bt_trace;
 struct bt_stream_class;
+struct bt_event_class;
+struct bt_clock_class;
+struct bt_event_header_field;
+struct bt_packet_context_field;
 
 /* Functions */
-struct bt_stream_class *bt_stream_class_create(const char *name);
-struct bt_trace *bt_stream_class_get_trace(
+struct bt_stream_class *bt_stream_class_create(struct bt_trace *trace);
+struct bt_stream_class *bt_stream_class_create_with_id(
+		struct bt_trace *trace, uint64_t id);
+struct bt_trace *bt_stream_class_borrow_trace(
 		struct bt_stream_class *stream_class);
 const char *bt_stream_class_get_name(
 		struct bt_stream_class *stream_class);
-int bt_stream_class_set_name(
-		struct bt_stream_class *stream_class, const char *name);
-int64_t bt_stream_class_get_id(
+int bt_stream_class_set_name(struct bt_stream_class *stream_class,
+		const char *name);
+bt_bool bt_stream_class_assigns_automatic_event_class_id(
 		struct bt_stream_class *stream_class);
-int bt_stream_class_set_id(
-		struct bt_stream_class *stream_class, uint64_t id);
-struct bt_field_type *bt_stream_class_get_packet_context_field_type(
+int bt_stream_class_set_assigns_automatic_event_class_id(
+		struct bt_stream_class *stream_class, bt_bool value);
+bt_bool bt_stream_class_assigns_automatic_stream_id(
+		struct bt_stream_class *stream_class);
+int bt_stream_class_set_assigns_automatic_stream_id(
+		struct bt_stream_class *stream_class, bt_bool value);
+uint64_t bt_stream_class_get_id(struct bt_stream_class *stream_class);
+struct bt_field_type *bt_stream_class_borrow_packet_context_field_type(
 		struct bt_stream_class *stream_class);
 int bt_stream_class_set_packet_context_field_type(
 		struct bt_stream_class *stream_class,
-		struct bt_field_type *packet_context_type);
+		struct bt_field_type *field_type);
 struct bt_field_type *
-bt_stream_class_get_event_header_field_type(
+bt_stream_class_borrow_event_header_field_type(
 		struct bt_stream_class *stream_class);
 int bt_stream_class_set_event_header_field_type(
 		struct bt_stream_class *stream_class,
-		struct bt_field_type *event_header_type);
+		struct bt_field_type *field_type);
 struct bt_field_type *
-bt_stream_class_get_event_context_field_type(
+bt_stream_class_borrow_event_common_context_field_type(
 		struct bt_stream_class *stream_class);
-int bt_stream_class_set_event_context_field_type(
+int bt_stream_class_set_event_common_context_field_type(
 		struct bt_stream_class *stream_class,
-		struct bt_field_type *event_context_type);
-int64_t bt_stream_class_get_event_class_count(
+		struct bt_field_type *field_type);
+uint64_t bt_stream_class_get_event_class_count(
 		struct bt_stream_class *stream_class);
-struct bt_event_class *bt_stream_class_get_event_class_by_index(
+struct bt_event_class *bt_stream_class_borrow_event_class_by_index(
 		struct bt_stream_class *stream_class, uint64_t index);
-struct bt_event_class *bt_stream_class_get_event_class_by_id(
-		struct bt_stream_class *stream_class, uint64_t id);
-int bt_stream_class_add_event_class(
+int bt_stream_class_set_default_clock_class(
 		struct bt_stream_class *stream_class,
-		struct bt_event_class *event_class);
+		struct bt_clock_class *clock_class);
+struct bt_clock_class *bt_stream_class_borrow_default_clock_class(
+		struct bt_stream_class *stream_class);
+bt_bool bt_stream_class_default_clock_is_always_known(
+		struct bt_stream_class *stream_class);
+bt_bool bt_stream_class_packets_have_discarded_event_counter_snapshot(
+		struct bt_stream_class *stream_class);
+int bt_stream_class_set_packets_have_discarded_event_counter_snapshot(
+		struct bt_stream_class *stream_class, bt_bool value);
+bt_bool bt_stream_class_packets_have_packet_counter_snapshot(
+		struct bt_stream_class *stream_class);
+int bt_stream_class_set_packets_have_packet_counter_snapshot(
+		struct bt_stream_class *stream_class, bt_bool value);
+bt_bool bt_stream_class_packets_have_default_beginning_clock_value(
+		struct bt_stream_class *stream_class);
+int bt_stream_class_set_packets_have_default_beginning_clock_value(
+		struct bt_stream_class *stream_class, bt_bool value);
+bt_bool bt_stream_class_packets_have_default_end_clock_value(
+		struct bt_stream_class *stream_class);
+int bt_stream_class_set_packets_have_default_end_clock_value(
+		struct bt_stream_class *stream_class, bt_bool value);

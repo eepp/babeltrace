@@ -21,17 +21,151 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-__all__ = ['EventClassLogLevel', 'EventClass']
-
-from . import domain
-from bt2 import internal
+__all__ = ['EventClassLogLevel']
 
 
-EventClassLogLevel = domain._DomainProvider._Domain.EventClassLogLevel
 
+import collections.abc
+import copy
 
-class EventClass(internal._EventClass, domain._DomainProvider):
-    pass
+from bt2 import utils, native_bt, internal
+import bt2
 
+from . import event, field_types
+class EventClassLogLevel:
+    EMERGENCY = native_bt.EVENT_CLASS_LOG_LEVEL_EMERGENCY
+    ALERT = native_bt.EVENT_CLASS_LOG_LEVEL_ALERT
+    CRITICAL = native_bt.EVENT_CLASS_LOG_LEVEL_CRITICAL
+    ERROR = native_bt.EVENT_CLASS_LOG_LEVEL_ERROR
+    WARNING = native_bt.EVENT_CLASS_LOG_LEVEL_WARNING
+    NOTICE = native_bt.EVENT_CLASS_LOG_LEVEL_NOTICE
+    INFO = native_bt.EVENT_CLASS_LOG_LEVEL_INFO
+    DEBUG_SYSTEM = native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_SYSTEM
+    DEBUG_PROGRAM = native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_PROGRAM
+    DEBUG_PROCESS = native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_PROCESS
+    DEBUG_MODULE = native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_MODULE
+    DEBUG_UNIT = native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_UNIT
+    DEBUG_FUNCTION = native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_FUNCTION
+    DEBUG_LINE = native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_LINE
+    DEBUG = native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG
 
-domain._Domain.EventClass = EventClass
+class _EventClass(internal.object._SharedObject):
+    def __init__(self, stream_class, id=None):
+        if id is None:
+            ptr = native_bt.event_class_create(stream_class)
+        else:
+            utils._check_uint64(id)
+            ptr = native_bt.event_class_create(stream_class, id)
+
+        if ptr is None:
+            raise bt2.CreationError('cannot create event class object')
+
+        super().__init__(ptr)
+
+    @property
+    def stream_class(self):
+        sc_ptr = native_bt.event_class_borrow_stream_class(self._ptr)
+        native_bt.get(sc_ptr)
+
+        if sc_ptr is not None:
+            return _StreamClass._create_from_ptr(sc_ptr)
+
+    @property
+    def name(self):
+        return native_bt.event_class_get_name(self._ptr)
+
+    @name.setter
+    def name(self, name):
+        utils._check_str(name)
+        return native_bt.event_class_set_name(self._ptr, name)
+
+    @property
+    def id(self):
+        id = native_bt.event_class_get_id(self._ptr)
+        return id if id >= 0 else None
+
+    @property
+    def log_level(self):
+        log_level = native_bt.event_class_get_log_level(self._ptr)
+        return log_level if log_level >= 0 else None
+
+    @log_level.setter
+    def log_level(self, log_level):
+        log_levels = (
+            EventClassLogLevel.UNSPECIFIED,
+            EventClassLogLevel.EMERGENCY,
+            EventClassLogLevel.ALERT,
+            EventClassLogLevel.CRITICAL,
+            EventClassLogLevel.ERROR,
+            EventClassLogLevel.WARNING,
+            EventClassLogLevel.NOTICE,
+            EventClassLogLevel.INFO,
+            EventClassLogLevel.DEBUG_SYSTEM,
+            EventClassLogLevel.DEBUG_PROGRAM,
+            EventClassLogLevel.DEBUG_PROCESS,
+            EventClassLogLevel.DEBUG_MODULE,
+            EventClassLogLevel.DEBUG_UNIT,
+            EventClassLogLevel.DEBUG_FUNCTION,
+            EventClassLogLevel.DEBUG_LINE,
+            EventClassLogLevel.DEBUG,
+        )
+
+        if log_level not in log_levels:
+            raise ValueError("'{}' is not a valid log level".format(log_level))
+
+        ret = native_bt.event_class_set_log_level(self._ptr, log_level)
+        utils._handle_ret(ret, "cannot set event class object's log level")
+
+    @property
+    def emf_uri(self):
+        return native_bt.event_class_get_emf_uri(self._ptr)
+
+    @emf_uri.setter
+    def emf_uri(self, emf_uri):
+        utils._check_str(emf_uri)
+        ret = native_bt.event_class_set_emf_uri(self._ptr, emf_uri)
+        utils._handle_ret(ret, "cannot set event class object's EMF URI")
+
+    @property
+    def specific_context_field_type(self):
+        ft_ptr = native_bt.event_class_borrow_specific_context_field_type(self._ptr)
+
+        if ft_ptr is None:
+            return
+
+        native_bt.get(ft_ptr)
+
+        return bt2.field_types._create_field_type_from_ptr(ft_ptr)
+
+    @specific_context_field_type.setter
+    def specific_context_field_type(self, context_field_type):
+        context_field_type_ptr = None
+
+        if context_field_type is not None:
+            utils._check_type(context_field_type, field_types._FieldType)
+            context_field_type_ptr = context_field_type._ptr
+
+        ret = native_bt.event_class_set_specific_context_field_type(self._ptr, context_field_type_ptr)
+        utils._handle_ret(ret, "cannot set event class object's context field type")
+
+    @property
+    def payload_field_type(self):
+        ft_ptr = native_bt.event_class_borrow_payload_field_type(self._ptr)
+
+        if ft_ptr is None:
+            return
+
+        native_bt.get(ft_ptr)
+
+        return bt2.field_types._create_field_type_from_ptr(ft_ptr)
+
+    @payload_field_type.setter
+    def payload_field_type(self, payload_field_type):
+        payload_field_type_ptr = None
+
+        if payload_field_type is not None:
+            utils._check_type(payload_field_type, field_types._FieldType)
+            payload_field_type_ptr = payload_field_type._ptr
+
+        ret = native_bt.event_class_set_payload_field_type(self._ptr, payload_field_type_ptr)
+        utils._handle_ret(ret, "cannot set event class object's payload field type")

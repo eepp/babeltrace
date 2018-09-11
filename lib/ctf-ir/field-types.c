@@ -364,7 +364,7 @@ void bt_field_type_unsigned_enumeration_mapping_ranges_get_range_by_index(
 }
 
 void bt_field_type_signed_enumeration_mapping_ranges_get_range_by_index(
-		struct bt_field_type_unsigned_enumeration_mapping_ranges *ranges,
+		struct bt_field_type_signed_enumeration_mapping_ranges *ranges,
 		uint64_t index, int64_t *lower, int64_t *upper)
 {
 	get_enumeration_field_type_mapping_range_at_index((void *) ranges,

@@ -24,55 +24,68 @@
 
 /* Type */
 struct bt_event_class;
+struct bt_field_type;
+struct bt_stream_class;
 
 /* Log levels */
 enum bt_event_class_log_level {
-	BT_EVENT_CLASS_LOG_LEVEL_UNKNOWN = -1,
-	BT_EVENT_CLASS_LOG_LEVEL_UNSPECIFIED = 255,
-	BT_EVENT_CLASS_LOG_LEVEL_EMERGENCY = 0,
-	BT_EVENT_CLASS_LOG_LEVEL_ALERT = 1,
-	BT_EVENT_CLASS_LOG_LEVEL_CRITICAL = 2,
-	BT_EVENT_CLASS_LOG_LEVEL_ERROR = 3,
-	BT_EVENT_CLASS_LOG_LEVEL_WARNING = 4,
-	BT_EVENT_CLASS_LOG_LEVEL_NOTICE = 5,
-	BT_EVENT_CLASS_LOG_LEVEL_INFO = 6,
-	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_SYSTEM = 7,
-	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_PROGRAM = 8,
-	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_PROCESS = 9,
-	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_MODULE = 10,
-	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_UNIT = 11,
-	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_FUNCTION = 12,
-	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_LINE = 13,
-	BT_EVENT_CLASS_LOG_LEVEL_DEBUG = 14,
+	BT_EVENT_CLASS_LOG_LEVEL_EMERGENCY,
+	BT_EVENT_CLASS_LOG_LEVEL_ALERT,
+	BT_EVENT_CLASS_LOG_LEVEL_CRITICAL,
+	BT_EVENT_CLASS_LOG_LEVEL_ERROR,
+	BT_EVENT_CLASS_LOG_LEVEL_WARNING,
+	BT_EVENT_CLASS_LOG_LEVEL_NOTICE,
+	BT_EVENT_CLASS_LOG_LEVEL_INFO,
+	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_SYSTEM,
+	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_PROGRAM,
+	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_PROCESS,
+	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_MODULE,
+	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_UNIT,
+	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_FUNCTION,
+	BT_EVENT_CLASS_LOG_LEVEL_DEBUG_LINE,
+	BT_EVENT_CLASS_LOG_LEVEL_DEBUG,
 };
 
 /* Functions */
-struct bt_event_class *bt_event_class_create(const char *name);
-struct bt_stream_class *bt_event_class_get_stream_class(
+struct bt_event_class *bt_event_class_create(
+		struct bt_stream_class *stream_class);
+
+struct bt_event_class *bt_event_class_create_with_id(
+		struct bt_stream_class *stream_class, uint64_t id);
+
+struct bt_stream_class *bt_event_class_borrow_stream_class(
 		struct bt_event_class *event_class);
-const char *bt_event_class_get_name(
-		struct bt_event_class *event_class);
-int64_t bt_event_class_get_id(
-		struct bt_event_class *event_class);
-int bt_event_class_set_id(
-		struct bt_event_class *event_class, uint64_t id);
-enum bt_event_class_log_level bt_event_class_get_log_level(
-		struct bt_event_class *event_class);
-int bt_event_class_set_log_level(
+
+const char *bt_event_class_get_name(struct bt_event_class *event_class);
+
+int bt_event_class_set_name(struct bt_event_class *event_class,
+		const char *name);
+
+uint64_t bt_event_class_get_id(struct bt_event_class *event_class);
+
+enum bt_property_availability bt_event_class_get_log_level(
 		struct bt_event_class *event_class,
+		enum bt_event_class_log_level *OUTPUTINIT);
+
+int bt_event_class_set_log_level(struct bt_event_class *event_class,
 		enum bt_event_class_log_level log_level);
+
 const char *bt_event_class_get_emf_uri(
 		struct bt_event_class *event_class);
-int bt_event_class_set_emf_uri(
-		struct bt_event_class *event_class,
+
+int bt_event_class_set_emf_uri(struct bt_event_class *event_class,
 		const char *emf_uri);
-struct bt_field_type *bt_event_class_get_context_field_type(
+
+struct bt_field_type *bt_event_class_borrow_specific_context_field_type(
 		struct bt_event_class *event_class);
-int bt_event_class_set_context_field_type(
+
+int bt_event_class_set_specific_context_field_type(
 		struct bt_event_class *event_class,
-		struct bt_field_type *context_type);
-struct bt_field_type *bt_event_class_get_payload_field_type(
+		struct bt_field_type *field_type);
+
+struct bt_field_type *bt_event_class_borrow_payload_field_type(
 		struct bt_event_class *event_class);
+
 int bt_event_class_set_payload_field_type(
 		struct bt_event_class *event_class,
-		struct bt_field_type *payload_type);
+		struct bt_field_type *field_type);

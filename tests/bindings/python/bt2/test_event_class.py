@@ -8,10 +8,13 @@ class EventClassTestCase(unittest.TestCase):
     def setUp(self):
         self._context_ft = bt2.StructureFieldType()
         self._context_ft.append_field('allo', bt2.StringFieldType())
-        self._context_ft.append_field('zola', bt2.IntegerFieldType(18))
+        self._context_ft.append_field('zola', bt2.SignedIntegerFieldType(18))
         self._payload_ft = bt2.StructureFieldType()
         self._payload_ft.append_field('zoom', bt2.StringFieldType())
-        self._ec = bt2.EventClass('my_event')
+        trace = bt2.Trace()
+        stream_class = trace.create_stream_class()
+        self._ec = stream_class.create_event_class()
+        self._ec.name = 'my_event'
         self._ec.id = 18
         self._ec.emf_uri = 'yes'
         self._ec.log_level = bt2.EventClassLogLevel.INFO

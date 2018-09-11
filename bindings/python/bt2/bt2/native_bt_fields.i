@@ -24,65 +24,64 @@
 
 /* Type */
 struct bt_field;
+struct bt_field_type;
+struct bt_field_type_enumeration_mapping_iterator;
+
 
 /* Common functions */
-struct bt_field_type *bt_field_get_type(
-		struct bt_field *field);
 struct bt_field_type *bt_field_borrow_type(struct bt_field *field);
+enum bt_field_type_id bt_field_get_type_id(struct bt_field *field);
 
 /* Integer field functions */
-int bt_field_integer_signed_get_value(struct bt_field *integer,
-		int64_t *OUTPUT);
-int bt_field_integer_signed_set_value(struct bt_field *integer,
+int64_t bt_field_signed_integer_get_value(struct bt_field *field);
+void bt_field_signed_integer_set_value(struct bt_field *field,
 		int64_t value);
-int bt_field_integer_unsigned_get_value(struct bt_field *integer,
-		uint64_t *OUTPUT);
-int bt_field_integer_unsigned_set_value(struct bt_field *integer,
+
+uint64_t bt_field_unsigned_integer_get_value(struct bt_field *field);
+void bt_field_unsigned_integer_set_value(struct bt_field *field,
 		uint64_t value);
 
-/* Floating point number field functions */
-int bt_field_floating_point_get_value(
-		struct bt_field *floating_point, double *OUTPUT);
-int bt_field_floating_point_set_value(
-		struct bt_field *floating_point,
-		double value);
+/* Real number field functions */
+double bt_field_real_get_value(struct bt_field *field);
+void bt_field_real_set_value(struct bt_field *field, double value);
 
 /* Enumeration field functions */
-struct bt_field_type_enumeration_mapping_iterator *
-bt_field_enumeration_get_mappings(struct bt_field *enum_field);
+int bt_field_unsigned_enumeration_get_mapping_labels(
+		struct bt_field *field,
+		bt_field_type_enumeration_mapping_label_array *label_array,
+		uint64_t *count);
+int bt_field_signed_enumeration_get_mapping_labels(
+		struct bt_field *field,
+		bt_field_type_enumeration_mapping_label_array *label_array,
+		uint64_t *count);
 
 /* String field functions */
-const char *bt_field_string_get_value(struct bt_field *string_field);
-int bt_field_string_set_value(struct bt_field *string_field,
-		const char *value);
-int bt_field_string_append(struct bt_field *string_field,
-		const char *value);
-int bt_field_string_append_len(
-		struct bt_field *string_field, const char *value,
-		unsigned int length);
-int bt_field_string_clear(struct bt_field *string_field);
+const char *bt_field_string_get_value(struct bt_field *field);
+uint64_t bt_field_string_get_length(struct bt_field *field);
+int bt_field_string_set_value(struct bt_field *field, const char *value);
+int bt_field_string_append(struct bt_field *field, const char *value);
+int bt_field_string_append_with_length(
+		struct bt_field *field, const char *value,
+		uint64_t length);
+int bt_field_string_clear(struct bt_field *field);
 
 /* Structure field functions */
-struct bt_field *bt_field_structure_borrow_field_by_name(
-		struct bt_field *struct_field, const char *name);
-
-struct bt_field *bt_field_structure_borrow_field_by_index(
-		struct bt_field *struct_field, uint64_t index);
+struct bt_field *bt_field_structure_borrow_member_field_by_index(
+		struct bt_field *field, uint64_t index);
+struct bt_field *bt_field_structure_borrow_member_field_by_name(
+		struct bt_field *field, const char *name);
 
 /* Array field functions */
-struct bt_field *bt_field_array_borrow_field(
-		struct bt_field *array, uint64_t index);
-
-/* Sequence field functions */
-struct bt_field *bt_field_sequence_borrow_field(
-		struct bt_field *sequence_field, uint64_t index);
-int bt_field_sequence_set_length(struct bt_field *sequence_field,
+uint64_t bt_field_array_get_length(struct bt_field *field);
+struct bt_field *bt_field_array_borrow_element_field_by_index(
+		struct bt_field *field, uint64_t index);
+int bt_field_dynamic_array_set_length(struct bt_field *field,
 		uint64_t length);
-uint64_t bt_field_sequence_get_length(struct bt_field *sequence);
 
 /* Variant field functions */
-int bt_field_variant_get_tag_signed(struct bt_field *variant, int64_t *OUTPUT);
-int bt_field_variant_get_tag_unsigned(struct bt_field *variant, uint64_t *OUTPUT);
-int bt_field_variant_set_tag_signed(struct bt_field *variant_field, int64_t tag);
-int bt_field_variant_set_tag_unsigned(struct bt_field *variant_field, uint64_t tag);
-struct bt_field *bt_field_variant_borrow_current_field(struct bt_field *variant_field);
+int bt_field_variant_select_option_field(struct bt_field *field,
+		uint64_t index);
+uint64_t bt_field_variant_get_selected_option_field_index(
+		struct bt_field *field);
+struct bt_field *bt_field_variant_borrow_selected_option_field(
+		struct bt_field *field);

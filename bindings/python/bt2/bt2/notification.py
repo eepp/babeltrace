@@ -62,7 +62,7 @@ class _EventNotification(_Notification):
     _TYPE = native_bt.NOTIFICATION_TYPE_EVENT
 
     def __init__(self, priv_conn_priv_iter, event_class, packet):
-        utils._check_type(event_class, bt2.event_class.EventClass)
+        utils._check_type(event_class, bt2.event_class._EventClass)
 
         ptr = native_bt.notification_event_create(priv_conn_priv_iter._ptr,
                 event_class._ptr, packet._ptr)
@@ -76,7 +76,7 @@ class _EventNotification(_Notification):
     def event(self):
         event_ptr = native_bt.notification_event_borrow_event(self._ptr)
         assert(event_ptr)
-        return domain._Domain.create_event_from_ptr(event_ptr, self._ptr)
+        return bt2.event._create_event_from_ptr(event_ptr, self._ptr)
 
 
 class _PacketBeginningNotification(_Notification):
@@ -133,7 +133,7 @@ class _StreamBeginningNotification(_Notification):
     def stream(self):
         stream_ptr = native_bt.notification_stream_begin_get_stream(self._ptr)
         assert(stream_ptr)
-        return domain._Domain.create_stream_from_ptr(stream_ptr)
+        return stream._create_stream_from_ptr(stream_ptr)
 
     def set_clock_value(self, clock_class, value, is_default=True):
         ret = native_bt.notification_stream_begin_set_clock_value(self._ptr, clock_class._ptr, value, is_default)
@@ -165,7 +165,7 @@ class _StreamEndNotification(_Notification):
     def stream(self):
         stream_ptr = native_bt.notification_stream_end_get_stream(self._ptr)
         assert(stream_ptr)
-        return domain._Domain.create_stream_from_ptr(stream_ptr)
+        return stream._create_stream_from_ptr(stream_ptr)
 
     def set_clock_value(self, clock_class, value, is_default=True):
         ret = native_bt.notification_stream_end_set_clock_value(self._ptr, clock_class._ptr, value, is_default)

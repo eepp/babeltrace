@@ -15,22 +15,22 @@ class StreamTestCase(unittest.TestCase):
         # event header
         eh = bt2.StructureFieldType()
         eh += OrderedDict((
-            ('id', bt2.IntegerFieldType(8)),
-            ('ts', bt2.IntegerFieldType(32)),
+            ('id', bt2.SignedIntegerFieldType(8)),
+            ('ts', bt2.SignedIntegerFieldType(32)),
         ))
 
         # stream event context
         sec = bt2.StructureFieldType()
         sec += OrderedDict((
-            ('cpu_id', bt2.IntegerFieldType(8)),
-            ('stuff', bt2.FloatingPointNumberFieldType()),
+            ('cpu_id', bt2.SignedIntegerFieldType(8)),
+            ('stuff', bt2.RealFieldType()),
         ))
 
         # packet context
         pc = bt2.StructureFieldType()
         pc += OrderedDict((
-            ('something', bt2.IntegerFieldType(8)),
-            ('something_else', bt2.FloatingPointNumberFieldType()),
+            ('something', bt2.SignedIntegerFieldType(8)),
+            ('something_else', bt2.RealFieldType()),
         ))
 
         # stream class
@@ -42,16 +42,16 @@ class StreamTestCase(unittest.TestCase):
         # event context
         ec = bt2.StructureFieldType()
         ec += OrderedDict((
-            ('ant', bt2.IntegerFieldType(16, is_signed=True)),
+            ('ant', bt2.SignedIntegerFieldType(16)),
             ('msg', bt2.StringFieldType()),
         ))
 
         # event payload
         ep = bt2.StructureFieldType()
         ep += OrderedDict((
-            ('giraffe', bt2.IntegerFieldType(32)),
-            ('gnu', bt2.IntegerFieldType(8)),
-            ('mosquito', bt2.IntegerFieldType(8)),
+            ('giraffe', bt2.SignedIntegerFieldType(32)),
+            ('gnu', bt2.SignedIntegerFieldType(8)),
+            ('mosquito', bt2.SignedIntegerFieldType(8)),
         ))
 
         # event class
@@ -63,8 +63,8 @@ class StreamTestCase(unittest.TestCase):
         # packet header
         ph = bt2.StructureFieldType()
         ph += OrderedDict((
-            ('magic', bt2.IntegerFieldType(32)),
-            ('stream_id', bt2.IntegerFieldType(16)),
+            ('magic', bt2.SignedIntegerFieldType(32)),
+            ('stream_id', bt2.SignedIntegerFieldType(16)),
         ))
 
         # trace c;ass

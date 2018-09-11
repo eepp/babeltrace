@@ -132,7 +132,7 @@ class OutputPortNotificationIteratorTestCase(unittest.TestCase):
                 self._trace = bt2.Trace()
                 self._sc = bt2.StreamClass()
                 self._ec = bt2.EventClass('salut')
-                self._my_int_ft = bt2.IntegerFieldType(32)
+                self._my_int_ft = bt2.SignedIntegerFieldType(32)
                 self._ec.payload_field_type = bt2.StructureFieldType()
                 self._ec.payload_field_type += collections.OrderedDict([
                     ('my_int', self._my_int_ft),

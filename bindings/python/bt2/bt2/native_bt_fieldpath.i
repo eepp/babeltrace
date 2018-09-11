@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2018 Francis Deslauriers <francis.deslauriers@efficios.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,14 +23,24 @@
  */
 
 /* Type */
-struct bt_stream;
-struct bt_stream_class;
+struct bt_field_path;
+
+/* Enumeration */
+enum bt_scope {
+	BT_SCOPE_PACKET_HEADER,
+	BT_SCOPE_PACKET_CONTEXT,
+	BT_SCOPE_EVENT_HEADER,
+	BT_SCOPE_EVENT_COMMON_CONTEXT,
+	BT_SCOPE_EVENT_SPECIFIC_CONTEXT,
+	BT_SCOPE_EVENT_PAYLOAD,
+};
 
 /* Functions */
-struct bt_stream *bt_stream_create(struct bt_stream_class *stream_class);
-struct bt_stream *bt_stream_create_with_id(
-		struct bt_stream_class *stream_class, uint64_t id);
-struct bt_stream_class *bt_stream_borrow_class(struct bt_stream *stream);
-const char *bt_stream_get_name(struct bt_stream *stream);
-int bt_stream_set_name(struct bt_stream *stream, const char *name);
-uint64_t bt_stream_get_id(struct bt_stream *stream);
+enum bt_scope bt_field_path_get_root_scope(
+		struct bt_field_path *field_path);
+
+uint64_t bt_field_path_get_index_count(
+		struct bt_field_path *field_path);
+
+uint64_t bt_field_path_get_index_by_index(
+		struct bt_field_path *field_path, uint64_t index);

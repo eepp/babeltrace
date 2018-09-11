@@ -73,7 +73,7 @@ int bt_packet_set_default_beginning_clock_value(struct bt_packet *packet,
 		uint64_t value_cycles);
 
 extern
-enum bt_clock_value_status bt_packet_borrow_default_end_clock_valeu(
+enum bt_clock_value_status bt_packet_borrow_default_end_clock_value(
 		struct bt_packet *packet, struct bt_clock_value **clock_value);
 
 extern

@@ -24,48 +24,33 @@
 
 /* Type */
 struct bt_packet;
-
-/* Enum */
-enum bt_packet_previous_packet_availability {
-	BT_PACKET_PREVIOUS_PACKET_AVAILABILITY_AVAILABLE,
-	BT_PACKET_PREVIOUS_PACKET_AVAILABILITY_NOT_AVAILABLE,
-	BT_PACKET_PREVIOUS_PACKET_AVAILABILITY_NONE,
-};
-
-enum bt_packet_property_availability {
-	BT_PACKET_PROPERTY_AVAILABILITY_AVAILABLE,
-	BT_PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE,
-};
+struct bt_packet_header_field;
+struct bt_packet_context_field;
+struct bt_stream;
+struct bt_clock_value;
 
 /* Functions */
-struct bt_packet *bt_packet_create(
-		struct bt_stream *stream,
-		enum bt_packet_previous_packet_availability prev_packet_avail,
-		struct bt_packet *prev_packet);
-struct bt_stream *bt_packet_borrow_stream(
-		struct bt_packet *packet);
-struct bt_stream *bt_packet_get_stream(
-		struct bt_packet *packet);
-struct bt_field *bt_packet_borrow_header(
-		struct bt_packet *packet);
-struct bt_field *bt_packet_borrow_context(
-		struct bt_packet *packet);
-enum bt_packet_property_availability
-bt_packet_borrow_default_beginning_clock_value(struct bt_packet *packet,
-		struct bt_clock_value **BTOUTCLOCKVALUE);
-enum bt_packet_property_availability
-bt_packet_borrow_default_end_clock_value(struct bt_packet *packet,
-		struct bt_clock_value **BTOUTCLOCKVALUE);
-enum bt_packet_previous_packet_availability
-bt_packet_get_previous_packet_availability(struct bt_packet *packet);
-enum bt_packet_property_availability
-bt_packet_borrow_previous_packet_default_end_clock_value(
-			struct bt_packet *packet, struct bt_clock_value **BTOUTCLOCKVALUE);
-enum bt_packet_property_availability bt_packet_get_discarded_event_counter(
+struct bt_packet *bt_packet_create(struct bt_stream *stream);
+struct bt_stream *bt_packet_borrow_stream(struct bt_packet *packet);
+struct bt_field *bt_packet_borrow_header_field(struct bt_packet *packet);
+int bt_packet_move_header_field(struct bt_packet *packet,
+		struct bt_packet_header_field *header);
+struct bt_field *bt_packet_borrow_context_field(struct bt_packet *packet);
+int bt_packet_move_context_field(struct bt_packet *packet,
+		struct bt_packet_context_field *context);
+enum bt_clock_value_status bt_packet_borrow_default_beginning_clock_value(
+		struct bt_packet *packet, struct bt_clock_value **BTOUTCLOCKVALUE);
+int bt_packet_set_default_beginning_clock_value(struct bt_packet *packet,
+		uint64_t value_cycles);
+enum bt_clock_value_status bt_packet_borrow_default_end_clock_value(
+		struct bt_packet *packet, struct bt_clock_value **BTOUTCLOCKVALUE);
+int bt_packet_set_default_end_clock_value(struct bt_packet *packet,
+		uint64_t value_cycles);
+enum bt_property_availability bt_packet_get_discarded_event_counter_snapshot(
 		struct bt_packet *packet, uint64_t *OUTPUTINIT);
-enum bt_packet_property_availability bt_packet_get_sequence_number(
+int bt_packet_set_discarded_event_counter_snapshot(struct bt_packet *packet,
+		uint64_t value);
+enum bt_property_availability bt_packet_get_packet_counter_snapshot(
 		struct bt_packet *packet, uint64_t *OUTPUTINIT);
-enum bt_packet_property_availability bt_packet_get_discarded_event_count(
-		struct bt_packet *packet, uint64_t *OUTPUTINIT);
-enum bt_packet_property_availability bt_packet_get_discarded_packet_count(
-		struct bt_packet *packet, uint64_t *OUTPUTINIT);
+int bt_packet_set_packet_counter_snapshot(struct bt_packet *packet,
+		uint64_t value);

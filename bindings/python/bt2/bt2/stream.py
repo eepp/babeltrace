@@ -26,18 +26,32 @@ from . import domain
 from bt2 import internal, native_bt
 import bt2.packet
 
+class _Stream(internal.object._SharedObject):
+    @property
+    def stream_class(self):
+        stream_class_ptr = native_bt.stream_borrow_class(self._ptr)
+        native_bt.get(stream_class_ptr)
+        assert(stream_class_ptr)
+        return bt2.stream_class._StreamClass._create_from_ptr(stream_class_ptr)
 
-class _Stream(internal._Stream, domain._DomainProvider):
-    def create_packet(self, previous_packet_availability, previous_packet):
-        previous_packet_ptr = None
-        if previous_packet is not None:
-            previous_packet_ptr = previous_packet._ptr
-        packet_ptr = native_bt.packet_create(self._ptr, previous_packet_availability, previous_packet_ptr)
+    @property
+    def name(self):
+        return native_bt.stream_get_name(self._ptr)
+
+    @name.setter
+    def name(self, name):
+        utils._check_str(name)
+        native_bt.stream_set_name(self._ptr, name)
+
+    @property
+    def id(self):
+        id = native_bt.stream_get_id(self._ptr)
+        return id if id >= 0 else None
+
+    def create_packet(self):
+        packet_ptr = native_bt.packet_create(self._ptr)
 
         if packet_ptr is None:
             raise bt2.CreationError('cannot create packet object')
 
         return bt2.packet._Packet._create_from_ptr(packet_ptr)
-
-
-domain._Domain.Stream = _Stream

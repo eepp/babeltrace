@@ -27,90 +27,80 @@ from . import domain
 import bt2.fields
 import bt2
 
-__all__ = ['PreviousPacketAvailability']
-
-class PreviousPacketAvailability:
-	AVAILABLE = native_bt.PACKET_PREVIOUS_PACKET_AVAILABILITY_AVAILABLE
-	NOT_AVAILABLE = native_bt.PACKET_PREVIOUS_PACKET_AVAILABILITY_NOT_AVAILABLE
-	NONE = native_bt.PACKET_PREVIOUS_PACKET_AVAILABILITY_NONE
-
 class _Packet(object._SharedObject):
     @property
     def stream(self):
-        stream_ptr = native_bt.packet_get_stream(self._ptr)
+        stream_ptr = native_bt.packet_borrow_stream(self._ptr)
+        native_bt.get(stream_ptr)
         assert(stream_ptr)
-        return domain._Domain.create_stream_from_ptr(stream_ptr)
+        return bt2.stream._Stream._create_from_ptr(stream_ptr)
 
     @property
     def default_beginning_clock_value(self):
         prop_avail_status, value_ptr = native_bt.packet_borrow_default_beginning_clock_value(self._ptr)
-        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
+        if prop_avail_status is bt2.PropertyAvailability.NOT_AVAILABLE:
             return
 
         return bt2.clock_value._create_clock_value_from_ptr(value_ptr, self._ptr)
+
+    @default_beginning_clock_value.setter
+    def default_beginning_clock_value(self, cycles):
+        utils._check_uint64(cycles)
+        native_bt.packet_set_default_beginning_clock_value(self._ptr, cycles)
 
     @property
     def default_end_clock_value(self):
         prop_avail_status, value_ptr = native_bt.packet_borrow_default_end_clock_value(self._ptr)
-        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
+        if prop_avail_status is bt2.PropertyAvailability.NOT_AVAILABLE:
             return
 
         return bt2.clock_value._create_clock_value_from_ptr(value_ptr, self._ptr)
 
-    @property
-    def previous_packet_default_end_clock_value(self):
-        prop_avail_status, value_ptr = native_bt.packet_borrow_previous_packet_default_end_clock_value(self._ptr)
-        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
-            return
-
-        return bt2.clock_value._create_clock_value_from_ptr(value_ptr, self._ptr)
+    @default_end_clock_value.setter
+    def default_end_clock_value(self, cycles):
+        utils._check_uint64(cycles)
+        native_bt.packet_set_default_end_clock_value(self._ptr, cycles)
 
     @property
-    def discarded_event_counter(self):
-        prop_avail_status, discarded_event_counter = native_bt.packet_get_discarded_event_counter(self._ptr)
-        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
+    def discarded_event_counter_snapshot(self):
+        prop_avail_status, discarded_event_counter = native_bt.packet_get_discarded_event_counter_snapshot(self._ptr)
+        if prop_avail_status is bt2.PropertyAvailability.NOT_AVAILABLE:
             return
 
         return discarded_event_counter
+    
+    @discarded_event_counter_snapshot.setter
+    def discarded_event_counter_snapshot(self, value):
+        ret =  native_bt.packet_set_discarded_event_counter_snapshot(self._ptr, value)
+        utils._handle_ret(ret, "cannot set discarded event counter snapshot")
 
     @property
-    def sequence_number(self):
-        prop_avail_status, sequence_number = native_bt.packet_get_sequence_number(self._ptr)
-        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
+    def packet_counter_snapshot(self):
+        prop_avail_status, packet_counter = native_bt.packet_get_packet_counter_snapshot(self._ptr)
+        if prop_avail_status is bt2.PropertyAvailability.NOT_AVAILABLE:
             return
 
-        return sequence_number
-
-    @property
-    def discarded_event_count(self):
-        prop_avail_status, discarded_event_count = native_bt.packet_get_discarded_event_count(self._ptr)
-        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
-            return
-
-        return discarded_event_count
-
-    @property
-    def discarded_packet_count(self):
-        prop_avail_status, discarded_packet_count = native_bt.packet_get_discarded_packet_count(self._ptr)
-        if prop_avail_status is native_bt.PACKET_PROPERTY_AVAILABILITY_NOT_AVAILABLE:
-            return
-
-        return discarded_packet_count
+        return packet_counter
+    
+    @packet_counter_snapshot.setter
+    def packet_counter_snapshot(self, value):
+        ret =  native_bt.packet_set_packet_counter_snapshot(self._ptr, value)
+        utils._handle_ret(ret, "cannot set discarded event counter snapshot")
 
     @property
     def header_field(self):
-        field_ptr = native_bt.packet_borrow_header(self._ptr)
+        field_ptr = native_bt.packet_borrow_header_field(self._ptr)
 
         if field_ptr is None:
             return
 
-        return domain._Domain.create_field_from_ptr(field_ptr, self._ptr)
+        return bt2.fields._create_field_from_ptr(field_ptr, self._ptr)
 
     @property
     def context_field(self):
-        field_ptr = native_bt.packet_borrow_context(self._ptr)
+        field_ptr = native_bt.packet_borrow_context_field(self._ptr)
 
         if field_ptr is None:
             return
 
-        return domain._Domain.create_field_from_ptr(field_ptr, self._ptr)
+        return bt2.fields._create_field_from_ptr(field_ptr, self._ptr)

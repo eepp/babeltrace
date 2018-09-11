@@ -128,7 +128,7 @@ extern void bt_field_type_unsigned_enumeration_mapping_ranges_get_range_by_index
 		uint64_t index, uint64_t *lower, uint64_t *upper);
 
 extern void bt_field_type_signed_enumeration_mapping_ranges_get_range_by_index(
-		struct bt_field_type_unsigned_enumeration_mapping_ranges *ranges,
+		struct bt_field_type_signed_enumeration_mapping_ranges *ranges,
 		uint64_t index, int64_t *lower, int64_t *upper);
 
 extern int bt_field_type_unsigned_enumeration_get_mapping_labels_by_value(

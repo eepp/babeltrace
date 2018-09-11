@@ -24,59 +24,59 @@
 
 /* Type */
 struct bt_trace;
+struct bt_stream;
+struct bt_stream_class;
+struct bt_field_type;
+struct bt_value;
+struct bt_packet_header_field;
+
+typedef void (* bt_trace_is_static_listener)(
+	struct bt_trace *trace, void *data);
+
+typedef void (* bt_trace_listener_removed)(
+	struct bt_trace *trace, void *data);
 
 /* Functions */
 struct bt_trace *bt_trace_create(void);
-const char *bt_trace_get_name(struct bt_trace *trace_class);
-int bt_trace_set_name(struct bt_trace *trace_class,
-		const char *name);
-enum bt_byte_order bt_trace_get_native_byte_order(
-		struct bt_trace *trace_class);
-int bt_trace_set_native_byte_order(struct bt_trace *trace_class,
-		enum bt_byte_order native_byte_order);
-BTUUID bt_trace_get_uuid(
-		struct bt_trace *trace_class);
-int bt_trace_set_uuid(struct bt_trace *trace_class,
-		BTUUID uuid);
-int64_t bt_trace_get_environment_field_count(
-		struct bt_trace *trace_class);
-const char *
-bt_trace_get_environment_field_name_by_index(
-		struct bt_trace *trace_class, uint64_t index);
-struct bt_value *
-bt_trace_get_environment_field_value_by_index(struct bt_trace *trace_class,
-		uint64_t index);
-struct bt_value *
-bt_trace_get_environment_field_value_by_name(
-		struct bt_trace *trace_class, const char *name);
-int bt_trace_set_environment_field(
-		struct bt_trace *trace_class, const char *name,
-		struct bt_value *value);
-struct bt_field_type *bt_trace_get_packet_header_field_type(
-		struct bt_trace *trace_class);
-int bt_trace_set_packet_header_field_type(struct bt_trace *trace_class,
+bt_bool bt_trace_assigns_automatic_stream_class_id(
+		struct bt_trace *trace);
+int bt_trace_set_assigns_automatic_stream_class_id(
+		struct bt_trace *trace, bt_bool value);
+const char *bt_trace_get_name(struct bt_trace *trace);
+int bt_trace_set_name(struct bt_trace *trace, const char *name);
+bt_uuid bt_trace_get_uuid(struct bt_trace *trace);
+int bt_trace_set_uuid(struct bt_trace *trace, bt_uuid uuid);
+uint64_t bt_trace_get_environment_entry_count(struct bt_trace *trace);
+void bt_trace_borrow_environment_entry_by_index(
+		struct bt_trace *trace, uint64_t index,
+		const char **name, struct bt_value **value);
+struct bt_value *bt_trace_borrow_environment_entry_value_by_name(
+		struct bt_trace *trace, const char *name);
+int bt_trace_set_environment_entry_integer(
+		struct bt_trace *trace, const char *name,
+		int64_t value);
+int bt_trace_set_environment_entry_string(
+		struct bt_trace *trace, const char *name,
+		const char *value);
+struct bt_field_type *bt_trace_borrow_packet_header_field_type(
+		struct bt_trace *trace);
+int bt_trace_set_packet_header_field_type(struct bt_trace *trace,
 		struct bt_field_type *packet_header_type);
-int64_t bt_trace_get_clock_class_count(
-		struct bt_trace *trace_class);
-struct bt_clock_class *bt_trace_get_clock_class_by_index(
-		struct bt_trace *trace_class, uint64_t index);
-struct bt_clock_class *bt_trace_get_clock_class_by_name(
-		struct bt_trace *trace_class, const char *name);
-int bt_trace_add_clock_class(struct bt_trace *trace_class,
-		struct bt_clock_class *clock_class);
-int64_t bt_trace_get_stream_class_count(
-		struct bt_trace *trace_class);
-struct bt_stream_class *bt_trace_get_stream_class_by_index(
-		struct bt_trace *trace_class, uint64_t index);
-struct bt_stream_class *bt_trace_get_stream_class_by_id(
-		struct bt_trace *trace_class, uint64_t id);
-int bt_trace_add_stream_class(struct bt_trace *trace_class,
-		struct bt_stream_class *stream_class);
-int64_t bt_trace_get_stream_count(struct bt_trace *trace_class);
-struct bt_stream *bt_trace_get_stream_by_index(
-		struct bt_trace *trace_class, uint64_t index);
-int bt_trace_is_static(struct bt_trace *trace_class);
-int bt_trace_set_is_static(struct bt_trace *trace_class);
+uint64_t bt_trace_get_stream_class_count(struct bt_trace *trace);
+struct bt_stream_class *bt_trace_borrow_stream_class_by_index(
+		struct bt_trace *trace, uint64_t index);
+uint64_t bt_trace_get_stream_count(struct bt_trace *trace);
+struct bt_stream *bt_trace_borrow_stream_by_index(
+		struct bt_trace *trace, uint64_t index);
+bt_bool bt_trace_is_static(struct bt_trace *trace);
+int bt_trace_make_static(struct bt_trace *trace);
+int bt_trace_add_is_static_listener(
+		struct bt_trace *trace,
+		bt_trace_is_static_listener listener,
+		bt_trace_listener_removed listener_removed, void *data,
+		uint64_t *listener_id);
+int bt_trace_remove_is_static_listener(
+		struct bt_trace *trace, uint64_t listener_id);
 
 /* Helper functions for Python */
 %{
@@ -104,18 +104,22 @@ void trace_listener_removed(struct bt_trace *trace, void *py_callable)
 	Py_DECREF(py_callable);
 }
 
-static int bt_py3_trace_add_is_static_listener(unsigned long long trace_addr,
+static uint64_t bt_py3_trace_add_is_static_listener(unsigned long long trace_addr,
 		PyObject *py_callable)
 {
 	struct bt_trace *trace = (void *) trace_addr;
 	int ret = 0;
+	uint64_t id = 0;
 
 	BT_ASSERT(trace);
 	BT_ASSERT(py_callable);
 	ret = bt_trace_add_is_static_listener(trace,
-		trace_is_static_listener, trace_listener_removed, py_callable);
+		trace_is_static_listener, trace_listener_removed, py_callable, &id);
 	if (ret >= 0) {
 		Py_INCREF(py_callable);
+	} else if (ret < 0) {
+		BT_LOGF_STR("Failed to add trace is static listener.");
+		abort();
 	}
 
 	return ret;

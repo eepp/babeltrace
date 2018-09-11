@@ -33,6 +33,7 @@
 #include "logging.h"
 
 #include <babeltrace/babeltrace.h>
+#include <babeltrace/property.h>
 #include <babeltrace/assert-internal.h>
 
 typedef const unsigned char *BTUUID;
@@ -128,6 +129,42 @@ typedef int bt_bool;
 }
 
 /* Output argument typemap for value output (always appends) */
+%typemap(in, numinputs=0) struct bt_field_type_unsigned_enumeration_mapping_ranges **BTOUTENUMMAPPINGRANGE (struct bt_field_type_unsigned_enumeration_mapping_ranges *temp_value = NULL) {
+	$1 = &temp_value;
+}
+
+%typemap(argout) struct bt_field_type_unsigned_enumeration_mapping_ranges **BTOUTENUMMAPPINGRANGE {
+	if (*$1) {
+		/* SWIG_Python_AppendOutput() steals the created object */
+		$result = SWIG_Python_AppendOutput($result,
+				SWIG_NewPointerObj(SWIG_as_voidptr(*$1),
+					SWIGTYPE_p_bt_field_type_unsigned_enumeration_mapping_ranges, 0));
+	} else {
+		/* SWIG_Python_AppendOutput() steals Py_None */
+		Py_INCREF(Py_None);
+		$result = SWIG_Python_AppendOutput($result, Py_None);
+	}
+}
+
+/* Output argument typemap for value output (always appends) */
+%typemap(in, numinputs=0) struct bt_field_type_signed_enumeration_mapping_ranges **BTOUTENUMMAPPINGRANGE (struct bt_field_type_signed_enumeration_mapping_ranges *temp_value = NULL) {
+	$1 = &temp_value;
+}
+
+%typemap(argout) struct bt_field_type_signed_enumeration_mapping_ranges **BTOUTENUMMAPPINGRANGE {
+	if (*$1) {
+		/* SWIG_Python_AppendOutput() steals the created object */
+		$result = SWIG_Python_AppendOutput($result,
+				SWIG_NewPointerObj(SWIG_as_voidptr(*$1),
+					SWIGTYPE_p_bt_field_type_signed_enumeration_mapping_ranges, 0));
+	} else {
+		/* SWIG_Python_AppendOutput() steals Py_None */
+		Py_INCREF(Py_None);
+		$result = SWIG_Python_AppendOutput($result, Py_None);
+	}
+}
+
+/* Output argument typemap for value output (always appends) */
 %typemap(in, numinputs=0) struct bt_value **BTOUTVALUE (struct bt_value *temp_value = NULL) {
 	$1 = &temp_value;
 }
@@ -160,12 +197,32 @@ typedef int bt_bool;
 }
 
 /* Output argument typemap for initialized uint64_t output parameter (always appends) */
+%typemap(in, numinputs=0) enum bt_event_class_log_level *OUTPUTINIT (enum bt_event_class_log_level temp = -1) {
+	$1 = &temp;
+}
+
+%typemap(argout) enum bt_event_class_log_level *OUTPUTINIT {
+	/* SWIG_Python_AppendOutput() steals the created object */
+	$result = SWIG_Python_AppendOutput($result, SWIG_NewPointerObj(SWIG_as_voidptr(*$1),
+				SWIGTYPE_p_bt_event_class_log_level, 0));
+}
+
+/* Output argument typemap for initialized uint64_t output parameter (always appends) */
 %typemap(in, numinputs=0) uint64_t *OUTPUTINIT (uint64_t temp = -1ULL) {
 	$1 = &temp;
 }
 
 %typemap(argout) uint64_t *OUTPUTINIT {
 	$result = SWIG_Python_AppendOutput(resultobj, SWIG_From_unsigned_SS_long_SS_long((*$1)));
+}
+
+/* Output argument typemap for initialized int64_t output parameter (always appends) */
+%typemap(in, numinputs=0) int64_t *OUTPUTINIT (int64_t temp = -1ULL) {
+	$1 = &temp;
+}
+
+%typemap(argout) int64_t *OUTPUTINIT {
+	$result = SWIG_Python_AppendOutput(resultobj, SWIG_From_long_SS_long((*$1)));
 }
 
 /* Output argument typemap for initialized unsigned int output parameter (always appends) */
@@ -209,6 +266,10 @@ typedef int bt_bool;
 	$result = $1;
 }
 
+enum bt_property_availability {
+	BT_PROPERTY_AVAILABILITY_AVAILABLE,
+	BT_PROPERTY_AVAILABILITY_NOT_AVAILABLE,
+};
 
 /* Per-module interface files */
 %include "native_bt_clockclass.i"
@@ -219,6 +280,7 @@ typedef int bt_bool;
 %include "native_bt_eventclass.i"
 %include "native_bt_fields.i"
 %include "native_bt_fieldtypes.i"
+%include "native_bt_fieldpath.i"
 %include "native_bt_graph.i"
 %include "native_bt_logging.i"
 %include "native_bt_notification.i"
@@ -240,7 +302,6 @@ typedef int bt_bool;
 %include "ctfwriter/native_btctf_streamclass.i"
 %include "ctfwriter/native_btctf_clock.i"
 %include "ctfwriter/native_btctf_writer.i"
-%include "ctfwriter/native_btctf_clockclass.i"
 %include "ctfwriter/native_btctf_fields.i"
 %include "ctfwriter/native_btctf_fieldtypes.i"
 %include "ctfwriter/native_btctf_trace.i"

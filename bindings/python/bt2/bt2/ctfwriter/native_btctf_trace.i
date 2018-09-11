@@ -25,7 +25,6 @@
 struct bt_ctf_trace;
 struct bt_ctf_stream_class;
 struct bt_ctf_stream;
-struct bt_ctf_clock_class;
 
 enum bt_ctf_byte_order bt_ctf_trace_get_native_byte_order(
 		struct bt_ctf_trace *trace);
@@ -71,18 +70,6 @@ struct bt_ctf_field_type *bt_ctf_trace_get_packet_header_field_type(
 
 int bt_ctf_trace_set_packet_header_field_type(struct bt_ctf_trace *trace,
 		struct bt_ctf_field_type *packet_header_type);
-
-int64_t bt_ctf_trace_get_clock_class_count(
-		struct bt_ctf_trace *trace);
-
-struct bt_ctf_clock_class *bt_ctf_trace_get_clock_class_by_index(
-		struct bt_ctf_trace *trace, uint64_t index);
-
-struct bt_ctf_clock_class *bt_ctf_trace_get_clock_class_by_name(
-		struct bt_ctf_trace *trace, const char *name);
-
-int bt_ctf_trace_add_clock_class(struct bt_ctf_trace *trace,
-		struct bt_ctf_clock_class *clock_class);
 
 int64_t bt_ctf_trace_get_stream_class_count(
 		struct bt_ctf_trace *trace);

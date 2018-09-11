@@ -23,20 +23,91 @@
 __all__ = ['_Event']
 
 import collections
-from . import domain
 from bt2 import native_bt, utils, internal
 import bt2.clock_value
 import bt2.packet
 import bt2
 
+def _create_event_from_ptr(ptr, owner_ptr):
+    # recreate the event class wrapper of this event's class (the
+    # identity could be different, but the underlying address should be
+    # the same)
+    event_class_ptr = native_bt.event_borrow_class(ptr)
+    native_bt.get(event_class_ptr)
+    utils._handle_ptr(event_class_ptr, "cannot get event object's class")
+    event_class = bt2.event_class._EventClass._create_from_ptr(event_class_ptr)
+    event = _Event._create_from_ptr(ptr, owner_ptr)
+    event._event_class = event_class
+    return event
 
-class _Event(internal._Event, domain._DomainProvider):
+
+class _Event(internal.object._UniqueObject):
+    @property
+    def event_class(self):
+        return self._event_class
+
+    @property
+    def name(self):
+        return self._event_class.name
+
+    @property
+    def id(self):
+        return self._event_class.id
+
+    @property
+    def stream(self):
+        stream_ptr = native_bt.event_borrow_stream(self._ptr)
+
+        if stream_ptr is None:
+            return stream_ptr
+
+        native_bt.get(stream_ptr)
+
+        return bt2._Stream._create_from_ptr(stream_ptr)
+
+    @property
+    def header_field(self):
+        field_ptr = native_bt.event_borrow_header_field(self._ptr)
+
+        if field_ptr is None:
+            return
+
+        return bt2.fields._create_field_from_ptr(field_ptr, self._owning_ptr)
+
+    @property
+    def common_context_field(self):
+        field_ptr = native_bt.event_borrow_common_context_field(self._ptr)
+
+        if field_ptr is None:
+            return
+
+        return bt2.fields._create_field_from_ptr(field_ptr, self._owning_ptr)
+
+    @property
+    def specific_context_field(self):
+        field_ptr = native_bt.event_borrow_specific_context_field(self._ptr)
+
+        if field_ptr is None:
+            return
+
+        return bt2.fields._create_field_from_ptr(field_ptr, self._owning_ptr)
+
+    @property
+    def payload_field(self):
+        field_ptr = native_bt.event_borrow_payload_field(self._ptr)
+
+        if field_ptr is None:
+            return
+
+        return bt2.fields._create_field_from_ptr(field_ptr, self._owning_ptr)
     @property
     def packet(self):
-        packet_ptr = native_bt.event_get_packet(self._ptr)
+        packet_ptr = native_bt.event_borrow_packet(self._ptr)
 
         if packet_ptr is None:
             return packet_ptr
+
+        native_bt.get(packet_ptr)
 
         return bt2.packet._Packet._create_from_ptr(packet_ptr)
 
@@ -47,12 +118,12 @@ class _Event(internal._Event, domain._DomainProvider):
         if payload_field is not None and key in payload_field:
             return payload_field[key]
 
-        context_field = self.context_field
+        specific_context_field = self.specific_context_field
 
-        if context_field is not None and key in context_field:
-            return context_field[key]
+        if specific_context_field is not None and key in specific_context_field:
+            return specific_context_field[key]
 
-        sec_field = self.stream_event_context_field
+        sec_field = self.common_context_field
 
         if sec_field is not None and key in sec_field:
             return sec_field[key]
@@ -79,21 +150,16 @@ class _Event(internal._Event, domain._DomainProvider):
 
         raise KeyError(key)
 
-    def set_clock_value(self, clock_class, value, is_default=True):
-        if clock_class is None:
-            raise ValueError('clock_class argument is None')
-
-        ret = native_bt.event_set_clock_value(self._ptr, clock_class._ptr, value, is_default);
-        utils._handle_ret(ret, "cannot set event default clock value")
-
     @property
     def default_clock_value(self):
-        value_ptr = native_bt.event_borrow_default_clock_value(self._ptr)
+        ret, value_ptr = native_bt.event_borrow_default_clock_value(self._ptr)
 
         if value_ptr is None:
             return
 
         return bt2.clock_value._create_clock_value_from_ptr(value_ptr, self._owning_ptr)
 
-
-domain._Domain.Event = _Event
+    @default_clock_value.setter
+    def default_clock_value(self, value):
+        ret = native_bt.event_set_default_clock_value(self._ptr, value);
+        utils._handle_ret(ret, "cannot set event default clock value")

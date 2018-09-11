@@ -6,7 +6,7 @@ import bt2
 class StreamClassTestCase(unittest.TestCase):
     def setUp(self):
         self._packet_context_ft = bt2.StructureFieldType()
-        self._packet_context_ft.append_field('menu', bt2.FloatingPointNumberFieldType())
+        self._packet_context_ft.append_field('menu', bt2.RealFieldType())
         self._packet_context_ft.append_field('sticker', bt2.StringFieldType())
         self._event_header_ft = bt2.StructureFieldType()
         self._event_header_ft.append_field('id', bt2.IntegerFieldType(19))

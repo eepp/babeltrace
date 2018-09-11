@@ -52,14 +52,13 @@ class _ClockValue(object._UniqueObject):
 
     @property
     def cycles(self):
-        ret, cycles = native_bt.clock_value_get_value(self._ptr)
-        assert(ret == 0)
+        cycles = native_bt.clock_value_get_value(self._ptr)
         return cycles
 
     @property
-    def ns_from_epoch(self):
-        ret, ns = native_bt.clock_value_get_value_ns_from_epoch(self._ptr)
-        utils._handle_ret(ret, "cannot get clock value object's nanoseconds from Epoch")
+    def ns_from_origin(self):
+        ret, ns = native_bt.clock_value_get_value_ns_from_origin(self._ptr)
+        utils._handle_ret(ret, "cannot get clock value object's nanoseconds from origin")
         return ns
 
     def __eq__(self, other):

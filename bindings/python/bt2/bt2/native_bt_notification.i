@@ -49,12 +49,12 @@ struct bt_event *bt_notification_event_borrow_event(
 
 /* Inactivity notification functions */
 struct bt_notification *bt_notification_inactivity_create(
-		struct bt_private_connection_private_notification_iterator *notification_iterator);
-int bt_notification_inactivity_set_clock_value(struct bt_notification *notif,                                              
-		struct bt_clock_class *clock_class, uint64_t raw_value,
-		bt_bool is_default);
+		struct bt_private_connection_private_notification_iterator *notification_iterator,
+		struct bt_clock_class *default_clock_class);
+int bt_notification_inactivity_set_default_clock_value(
+		struct bt_notification *notif, uint64_t raw_value);
 struct bt_clock_value *bt_notification_inactivity_borrow_default_clock_value(
-		struct bt_notification *notification);
+		struct bt_notification *notif);
 
 /* Packet notification functions */
 struct bt_notification *bt_notification_packet_begin_create(
@@ -81,15 +81,17 @@ struct bt_notification *bt_notification_stream_end_create(
 		struct bt_stream *stream);
 struct bt_stream *bt_notification_stream_begin_borrow_stream(
 		struct bt_notification *notification);
-struct bt_stream *bt_notification_stream_end_borrow_stream(
-		struct bt_notification *notification);
 struct bt_stream *bt_notification_stream_begin_get_stream(
+		struct bt_notification *notification);
+int bt_notification_stream_begin_set_default_clock_value(
+		struct bt_notification *notif, uint64_t value_cycles);
+struct bt_clock_value *bt_notification_stream_begin_borrow_default_clock_value(
+		struct bt_notification *notif);
+struct bt_stream *bt_notification_stream_end_borrow_stream(
 		struct bt_notification *notification);
 struct bt_stream *bt_notification_stream_end_get_stream(
 		struct bt_notification *notification);
-int bt_notification_stream_end_set_clock_value(
-		struct bt_notification *notif,
-		struct bt_clock_class *clock_class, uint64_t raw_value,
-		bt_bool is_default);
+int bt_notification_stream_end_set_default_clock_value(
+		struct bt_notification *notif, uint64_t value_cycles);
 struct bt_clock_value *bt_notification_stream_end_borrow_default_clock_value(
 		struct bt_notification *notif);
