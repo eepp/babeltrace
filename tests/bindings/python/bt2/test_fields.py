@@ -825,25 +825,6 @@ class EnumerationFieldTestCase(_TestIntegerFieldCommon, unittest.TestCase):
         del self._field
         del self._def
 
-    def test_mappings(self):
-        mappings = (
-            ('whole range', -(2 ** 31), (2 ** 31) - 1),
-            ('something', 17, 17),
-            ('zip', -45, 1001),
-        )
-
-        total = 0
-        index_set = set()
-
-        for fm in self._def.mappings:
-            total += 1
-            for index, mapping in enumerate(mappings):
-                if fm.name == mapping[0] and fm.lower == mapping[1] and fm.upper == mapping[2]:
-                    index_set.add(index)
-
-        self.assertEqual(total, 3)
-        self.assertTrue(0 in index_set and 1 in index_set and 2 in index_set)
-
     def test_str_op(self):
         expected_string_found = False
         s = str(self._def)
@@ -851,8 +832,8 @@ class EnumerationFieldTestCase(_TestIntegerFieldCommon, unittest.TestCase):
         # Establish all permutations of the three expected matches since
         # the order in which mappings are enumerated is not explicitly part of
         # the API.
-        for p in itertools.permutations(["'whole range'", "'something'",
-                                         "'zip'"]):
+        for p in itertools.permutations(['whole range', 'something',
+                                         'zip']):
             candidate = '{} ({})'.format(self._def_value, ', '.join(p))
             if candidate == s:
                 expected_string_found = True

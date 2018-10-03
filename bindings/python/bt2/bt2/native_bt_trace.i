@@ -49,7 +49,7 @@ int bt_trace_set_uuid(struct bt_trace *trace, bt_uuid uuid);
 uint64_t bt_trace_get_environment_entry_count(struct bt_trace *trace);
 void bt_trace_borrow_environment_entry_by_index(
 		struct bt_trace *trace, uint64_t index,
-		const char **name, struct bt_value **value);
+		const char **BTOUTSTR, struct bt_value **BTOUTVALUE);
 struct bt_value *bt_trace_borrow_environment_entry_value_by_name(
 		struct bt_trace *trace, const char *name);
 int bt_trace_set_environment_entry_integer(

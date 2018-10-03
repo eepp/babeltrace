@@ -133,7 +133,7 @@ class _StreamBeginningNotification(_Notification):
     def stream(self):
         stream_ptr = native_bt.notification_stream_begin_get_stream(self._ptr)
         assert(stream_ptr)
-        return stream._create_stream_from_ptr(stream_ptr)
+        return bt2.stream._create_stream_from_ptr(stream_ptr)
 
     def set_clock_value(self, clock_class, value, is_default=True):
         ret = native_bt.notification_stream_begin_set_clock_value(self._ptr, clock_class._ptr, value, is_default)
@@ -165,7 +165,7 @@ class _StreamEndNotification(_Notification):
     def stream(self):
         stream_ptr = native_bt.notification_stream_end_get_stream(self._ptr)
         assert(stream_ptr)
-        return stream._create_stream_from_ptr(stream_ptr)
+        return bt2.stream._create_stream_from_ptr(stream_ptr)
 
     def set_clock_value(self, clock_class, value, is_default=True):
         ret = native_bt.notification_stream_end_set_clock_value(self._ptr, clock_class._ptr, value, is_default)

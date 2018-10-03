@@ -203,8 +203,7 @@ typedef int bt_bool;
 
 %typemap(argout) enum bt_event_class_log_level *OUTPUTINIT {
 	/* SWIG_Python_AppendOutput() steals the created object */
-	$result = SWIG_Python_AppendOutput($result, SWIG_NewPointerObj(SWIG_as_voidptr(*$1),
-				SWIGTYPE_p_bt_event_class_log_level, 0));
+	$result = SWIG_Python_AppendOutput($result, SWIG_From_int(*$1));
 }
 
 /* Output argument typemap for initialized uint64_t output parameter (always appends) */

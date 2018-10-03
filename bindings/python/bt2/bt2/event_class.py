@@ -32,6 +32,7 @@ from bt2 import utils, native_bt, internal
 import bt2
 
 from . import event, field_types
+
 class EventClassLogLevel:
     EMERGENCY = native_bt.EVENT_CLASS_LOG_LEVEL_EMERGENCY
     ALERT = native_bt.EVENT_CLASS_LOG_LEVEL_ALERT
@@ -49,26 +50,15 @@ class EventClassLogLevel:
     DEBUG_LINE = native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_LINE
     DEBUG = native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG
 
+
 class _EventClass(internal.object._SharedObject):
-    def __init__(self, stream_class, id=None):
-        if id is None:
-            ptr = native_bt.event_class_create(stream_class)
-        else:
-            utils._check_uint64(id)
-            ptr = native_bt.event_class_create(stream_class, id)
-
-        if ptr is None:
-            raise bt2.CreationError('cannot create event class object')
-
-        super().__init__(ptr)
-
     @property
     def stream_class(self):
         sc_ptr = native_bt.event_class_borrow_stream_class(self._ptr)
         native_bt.get(sc_ptr)
 
         if sc_ptr is not None:
-            return _StreamClass._create_from_ptr(sc_ptr)
+            return bt2.stream_class._StreamClass._create_from_ptr(sc_ptr)
 
     @property
     def name(self):
@@ -86,13 +76,12 @@ class _EventClass(internal.object._SharedObject):
 
     @property
     def log_level(self):
-        log_level = native_bt.event_class_get_log_level(self._ptr)
-        return log_level if log_level >= 0 else None
+        is_available, log_level = native_bt.event_class_get_log_level(self._ptr)
+        return _EVENT_CLASS_LOG_LEVEL_TO_OBJ[log_level] if is_available == bt2.PropertyAvailability.AVAILABLE else None
 
     @log_level.setter
     def log_level(self, log_level):
         log_levels = (
-            EventClassLogLevel.UNSPECIFIED,
             EventClassLogLevel.EMERGENCY,
             EventClassLogLevel.ALERT,
             EventClassLogLevel.CRITICAL,
@@ -139,14 +128,10 @@ class _EventClass(internal.object._SharedObject):
 
     @specific_context_field_type.setter
     def specific_context_field_type(self, context_field_type):
-        context_field_type_ptr = None
-
         if context_field_type is not None:
             utils._check_type(context_field_type, field_types._FieldType)
-            context_field_type_ptr = context_field_type._ptr
-
-        ret = native_bt.event_class_set_specific_context_field_type(self._ptr, context_field_type_ptr)
-        utils._handle_ret(ret, "cannot set event class object's context field type")
+            ret = native_bt.event_class_set_specific_context_field_type(self._ptr, context_field_type._ptr)
+            utils._handle_ret(ret, "cannot set event class object's context field type")
 
     @property
     def payload_field_type(self):
@@ -161,11 +146,27 @@ class _EventClass(internal.object._SharedObject):
 
     @payload_field_type.setter
     def payload_field_type(self, payload_field_type):
-        payload_field_type_ptr = None
 
         if payload_field_type is not None:
             utils._check_type(payload_field_type, field_types._FieldType)
-            payload_field_type_ptr = payload_field_type._ptr
+            ret = native_bt.event_class_set_payload_field_type(self._ptr, payload_field_type._ptr)
+            utils._handle_ret(ret, "cannot set event class object's payload field type")
 
-        ret = native_bt.event_class_set_payload_field_type(self._ptr, payload_field_type_ptr)
-        utils._handle_ret(ret, "cannot set event class object's payload field type")
+_EVENT_CLASS_LOG_LEVEL_TO_OBJ = {
+        native_bt.EVENT_CLASS_LOG_LEVEL_EMERGENCY: EventClassLogLevel.EMERGENCY,
+        native_bt.EVENT_CLASS_LOG_LEVEL_ALERT: EventClassLogLevel.ALERT,
+        native_bt.EVENT_CLASS_LOG_LEVEL_CRITICAL: EventClassLogLevel.CRITICAL,
+        native_bt.EVENT_CLASS_LOG_LEVEL_ERROR: EventClassLogLevel.ERROR,
+        native_bt.EVENT_CLASS_LOG_LEVEL_WARNING: EventClassLogLevel.WARNING,
+        native_bt.EVENT_CLASS_LOG_LEVEL_NOTICE: EventClassLogLevel.NOTICE,
+        native_bt.EVENT_CLASS_LOG_LEVEL_INFO: EventClassLogLevel.INFO,
+        native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_SYSTEM: EventClassLogLevel.DEBUG_SYSTEM,
+        native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_PROGRAM: EventClassLogLevel.DEBUG_PROGRAM,
+        native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_PROCESS: EventClassLogLevel.DEBUG_PROCESS,
+        native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_MODULE: EventClassLogLevel.DEBUG_MODULE,
+        native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_UNIT: EventClassLogLevel.DEBUG_UNIT,
+        native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_FUNCTION: EventClassLogLevel.DEBUG_FUNCTION,
+        native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG_LINE: EventClassLogLevel.DEBUG_LINE,
+        native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG: EventClassLogLevel.DEBUG,
+}
+

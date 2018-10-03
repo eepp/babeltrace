@@ -37,10 +37,10 @@ class _EventClassIterator(collections.abc.Iterator):
         ec_ptr = native_bt.stream_class_borrow_event_class_by_index(self._stream_class._ptr,
                                                                                   self._at)
         assert(ec_ptr)
-        native_bt.event_class_get_id(ec_ptr)
-        utils._handle_ret(ev_id, "cannot get event class object's ID")
+        ec_id = native_bt.event_class_get_id(ec_ptr)
+        utils._handle_ret(ec_id, "cannot get event class object's ID")
         self._at += 1
-        return ev_id
+        return ec_id
 
 class _StreamClass(internal.object._SharedObject, collections.abc.Mapping):
     def __init__(self, ptr):
@@ -48,13 +48,14 @@ class _StreamClass(internal.object._SharedObject, collections.abc.Mapping):
 
     def __getitem__(self, key):
         utils._check_int64(key)
-        ec_ptr = native_bt.stream_class_borrow_event_class_by_id(self._ptr,
-                                                              key)
 
-        if ec_ptr is None:
-            raise KeyError(key)
+        for idx, event_class_id in enumerate(self):
+            if event_class_id == key:
+                ec_ptr = native_bt.stream_class_borrow_event_class_by_index(self._ptr, idx)
+                native_bt.get(ec_ptr)
+                return bt2.event_class._EventClass._create_from_ptr(ec_ptr)
 
-        return bt2.event_class._EventClass._create_from_ptr(ec_ptr)
+        raise KeyError(key)
 
     def __len__(self):
         count = native_bt.stream_class_get_event_class_count(self._ptr)
@@ -64,8 +65,14 @@ class _StreamClass(internal.object._SharedObject, collections.abc.Mapping):
     def __iter__(self):
         return _EventClassIterator(self)
 
-    def create_event_class(self):
-        ec_ptr = native_bt.event_class_create(self._ptr)
+    def create_event_class(self, id=None):
+        if self.assigns_automatic_event_class_id:
+            ec_ptr = native_bt.event_class_create(self._ptr)
+        else:
+            if id is None:
+                raise bt2.CreationError('cannot create event class object')
+            ec_ptr = native_bt.event_class_create_with_id(self._ptr, id)
+                
         return bt2.event_class._EventClass._create_from_ptr(ec_ptr)
 
     @property
@@ -92,7 +99,7 @@ class _StreamClass(internal.object._SharedObject, collections.abc.Mapping):
     @assigns_automatic_event_class_id.setter
     def assigns_automatic_event_class_id(self, auto_id):
         utils._check_bool(auto_id)
-        return native_bt.stream_class_set_assigns_automatic_event_class_id(self._ptr)
+        return native_bt.stream_class_set_assigns_automatic_event_class_id(self._ptr, auto_id)
 
     @property
     def assigns_automatic_stream_id(self):
@@ -114,7 +121,9 @@ class _StreamClass(internal.object._SharedObject, collections.abc.Mapping):
         if ft_ptr is None:
             return
 
-        return fields._create_field_type_from_ptr(ft_ptr)
+        native_bt.get(ft_ptr)
+
+        return bt2.field_types._create_field_type_from_ptr(ft_ptr)
 
     @event_header_field_type.setter
     def event_header_field_type(self, event_header_field_type):
@@ -134,8 +143,9 @@ class _StreamClass(internal.object._SharedObject, collections.abc.Mapping):
 
         if ft_ptr is None:
             return
+        native_bt.get(ft_ptr)
 
-        return fields._create_field_type_from_ptr(ft_ptr)
+        return bt2.field_types._create_field_type_from_ptr(ft_ptr)
 
     @packet_context_field_type.setter
     def packet_context_field_type(self, packet_context_field_type):
@@ -156,7 +166,9 @@ class _StreamClass(internal.object._SharedObject, collections.abc.Mapping):
         if ft_ptr is None:
             return
 
-        return fields._create_field_type_from_ptr(ft_ptr)
+        native_bt.get(ft_ptr)
+
+        return bt2.field_types._create_field_type_from_ptr(ft_ptr)
 
     @event_common_context_field_type.setter
     def event_common_context_field_type(self, event_common_context_field_type):
@@ -176,7 +188,6 @@ class _StreamClass(internal.object._SharedObject, collections.abc.Mapping):
         else:
             utils._check_uint64(id)
             stream_ptr = native_bt.stream_create_with_id(self._ptr, id)
-
 
         if stream_ptr is None:
             raise bt2.CreationError('cannot create stream object')

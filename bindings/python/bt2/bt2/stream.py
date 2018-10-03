@@ -26,6 +26,9 @@ from . import domain
 from bt2 import internal, native_bt
 import bt2.packet
 
+def _create_stream_from_ptr(ptr):
+    return _Stream._create_from_ptr(ptr)
+
 class _Stream(internal.object._SharedObject):
     @property
     def stream_class(self):

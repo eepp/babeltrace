@@ -8,15 +8,15 @@ import bt2
 class AllNotificationTestCase(unittest.TestCase):
     def setUp(self):
         _trace = bt2.Trace()
-        _sc = bt2.StreamClass()
-        self._event_class = bt2.EventClass('salut')
-        _my_int_ft = bt2.IntegerFieldType(32)
-        self._event_class.payload_field_type = bt2.StructureFieldType()
-        self._event_class.payload_field_type += collections.OrderedDict([
+        _sc = _trace.create_stream_class()
+        self._event_class = _sc.create_event_class()
+        self._event_class.name = 'salut'
+        _my_int_ft = bt2.SignedIntegerFieldType(32)
+        payload_ft = bt2.StructureFieldType()
+        payload_ft += collections.OrderedDict([
             ('my_int', _my_int_ft),
         ])
-        _sc.add_event_class(self._event_class)
-        _trace.add_stream_class(_sc)
+        self._event_class.payload_field_type = payload_ft
         self._stream = _sc()
         self._packet = self._stream.create_packet()
 
