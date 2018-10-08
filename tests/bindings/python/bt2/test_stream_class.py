@@ -10,8 +10,8 @@ class StreamClassTestCase(unittest.TestCase):
         self._packet_context_ft.append_field('sticker', bt2.StringFieldType())
         self._event_header_ft = bt2.StructureFieldType()
         self._event_header_ft.append_field('id', bt2.UnsignedIntegerFieldType(19))
-        self._event_context_ft = bt2.StructureFieldType()
-        self._event_context_ft.append_field('msg', bt2.StringFieldType())
+        self._event_common_context_ft = bt2.StructureFieldType()
+        self._event_common_context_ft.append_field('msg', bt2.StringFieldType())
 
         self._trace = bt2.Trace(automatic_stream_class_id=False)
 
@@ -19,7 +19,7 @@ class StreamClassTestCase(unittest.TestCase):
         self._sc.name='my_stream_class'
         self._sc.packet_context_field_type=self._packet_context_ft
         self._sc.event_header_field_type=self._event_header_ft
-        self._sc.event_common_context_field_type=self._event_context_ft
+        self._sc.event_common_context_field_type=self._event_common_context_ft
         self._sc.assigns_automatic_event_class_id = False
 
 
@@ -40,111 +40,97 @@ class StreamClassTestCase(unittest.TestCase):
     def tearDown(self):
         del self._packet_context_ft
         del self._event_header_ft
-        del self._event_context_ft
+        del self._event_common_context_ft
         del self._ec1
+        del self._ec2
         del self._sc
-
-    def _create_event_classes(self):
-        ec1 = bt2.EventClass('event23', id=23, context_field_type=context_ft,
-                             payload_field_type=payload_ft)
-        ec2 = bt2.EventClass('event17', id=17, context_field_type=payload_ft,
-                             payload_field_type=context_ft)
-        return ec1, ec2
 
     def test_create(self):
         self.assertEqual(self._sc.name, 'my_stream_class')
         self.assertEqual(self._sc.id, 12)
         self.assertEqual(self._sc.packet_context_field_type.addr, self._packet_context_ft.addr)
         self.assertEqual(self._sc.event_header_field_type.addr, self._event_header_ft.addr)
-        self.assertEqual(self._sc.event_common_context_field_type.addr, self._event_context_ft.addr)
+        self.assertEqual(self._sc.event_common_context_field_type.addr, self._event_common_context_ft.addr)
         self.assertEqual(self._sc[23]._ptr, self._ec1._ptr)
         self.assertEqual(self._sc[17]._ptr, self._ec2._ptr)
         self.assertEqual(len(self._sc), 2)
 
     def test_assign_name(self):
-        self._sc.name = 'lel'
-        self.assertEqual(self._sc.name, 'lel')
-#
-#    def test_assign_invalid_name(self):
-#        with self.assertRaises(TypeError):
-#            self._sc.name = 17
-#
-#    def test_assign_id(self):
-#        self._sc.id = 1717
-#        self.assertEqual(self._sc.id, 1717)
-#
-#    def test_assign_invalid_id(self):
-#        with self.assertRaises(TypeError):
-#            self._sc.id = 'lel'
-#
-#    def test_no_id(self):
-#        sc = bt2.StreamClass()
-#        self.assertIsNone(sc.id)
-#
-#    def test_assign_packet_context_field_type(self):
-#        self._sc.packet_context_field_type = self._event_context_ft
-#        self.assertEqual(self._sc.packet_context_field_type, self._event_context_ft)
-#
-#    def test_assign_no_packet_context_field_type(self):
-#        self._sc.packet_context_field_type = None
-#        self.assertIsNone(self._sc.packet_context_field_type)
-#
-#    def test_assign_invalid_packet_context_field_type(self):
-#        with self.assertRaises(TypeError):
-#            self._sc.packet_context_field_type = 'lel'
-#
-#    def test_assign_event_header_field_type(self):
-#        self._sc.event_header_field_type = self._event_header_ft
-#        self.assertEqual(self._sc.event_header_field_type, self._event_header_ft)
-#
-#    def test_assign_no_event_header_field_type(self):
-#        self._sc.event_header_field_type = None
-#        self.assertIsNone(self._sc.event_header_field_type)
-#
-#    def test_assign_invalid_event_header_field_type(self):
-#        with self.assertRaises(TypeError):
-#            self._sc.event_header_field_type = 'lel'
-#
-#    def test_assign_event_context_field_type(self):
-#        self._sc.event_context_field_type = self._packet_context_ft
-#        self.assertEqual(self._sc.event_context_field_type, self._packet_context_ft)
-#
-#    def test_assign_no_event_context_field_type(self):
-#        self._sc.event_context_field_type = None
-#        self.assertIsNone(self._sc.event_context_field_type)
-#
-#    def test_assign_invalid_event_context_field_type(self):
-#        with self.assertRaises(TypeError):
-#            self._sc.event_context_field_type = 'lel'
-#
-#    def test_trace_prop_no_tc(self):
-#        self.assertIsNone(self._sc.trace)
-#
-#    def test_trace_prop(self):
-#        tc = bt2.Trace()
-#        tc.add_stream_class(self._sc)
-#        self.assertEqual(self._sc.trace.addr, tc.addr)
-#
-#    def test_getitem(self):
-#        self.assertEqual(self._sc[23]._ptr, self._ec1._ptr)
-#        self.assertEqual(self._sc[17]._ptr, self._ec2._ptr)
-#
-#    def test_getitem_wrong_key_type(self):
-#        with self.assertRaises(TypeError):
-#            self._sc['event23']
-#
-#    def test_getitem_wrong_key(self):
-#        with self.assertRaises(KeyError):
-#            self._sc[19]
-#
-#    def test_len(self):
-#        self.assertEqual(len(self._sc), 2)
-#
-#    def test_iter(self):
-#        for ec_id, event_class in self._sc.items():
-#            self.assertIsInstance(event_class, bt2.EventClass)
-#
-#            if ec_id == 23:
-#                self.assertEqual(event_class._ptr, self._ec1._ptr)
-#            elif ec_id == 17:
-#                self.assertEqual(event_class._ptr, self._ec2._ptr)
+        sc = self._trace.create_stream_class(id=14)
+        sc.name = 'lel'
+        self.assertEqual(sc.name, 'lel')
+
+    def test_assign_invalid_name(self):
+        sc = self._trace.create_stream_class(id=14)
+        with self.assertRaises(TypeError):
+            sc.name = 17
+
+    def test_assign_id(self):
+        sc = self._trace.create_stream_class(id=1717)
+        self.assertEqual(sc.id, 1717)
+
+    def test_assign_invalid_id(self):
+        with self.assertRaises(TypeError):
+            sc = self._trace.create_stream_class(id='lel')
+
+    def test_assign_packet_context_field_type(self):
+        ft = bt2.StructureFieldType()
+        ft.append_field('champ', bt2.UnsignedIntegerFieldType(19))
+        sc = self._trace.create_stream_class(id=1717)
+        sc.packet_context_field_type = ft
+        self.assertEqual(sc.packet_context_field_type.addr, ft.addr)
+
+    def test_assign_no_packet_context_field_type(self):
+        sc = self._trace.create_stream_class(id=1717)
+        self.assertIsNone(sc.packet_context_field_type)
+
+    def test_assign_event_header_field_type(self):
+        ft = bt2.StructureFieldType()
+        ft.append_field('champ', bt2.UnsignedIntegerFieldType(19))
+        sc = self._trace.create_stream_class(id=1717)
+        sc.event_header_field_type = ft
+        self.assertEqual(sc.event_header_field_type.addr, ft.addr)
+
+    def test_assign_no_event_header_field_type(self):
+        sc = self._trace.create_stream_class(id=1717)
+        self.assertIsNone(sc.event_header_field_type)
+
+    def test_assign_event_common_context_field_type(self):
+        ft = bt2.StructureFieldType()
+        ft.append_field('champ', bt2.UnsignedIntegerFieldType(19))
+        sc = self._trace.create_stream_class(id=1717)
+        sc.event_common_context_field_type = ft
+        self.assertEqual(sc.event_common_context_field_type.addr, ft.addr)
+
+    def test_assign_no_event_common_context_field_type(self):
+        sc = self._trace.create_stream_class(id=1717)
+        self.assertIsNone(sc.event_common_context_field_type)
+
+    def test_trace_prop(self):
+        tc = bt2.Trace()
+        sc = tc.create_stream_class()
+        self.assertEqual(sc.trace.addr, tc.addr)
+
+    def test_getitem(self):
+        self.assertEqual(self._sc[23]._ptr, self._ec1._ptr)
+        self.assertEqual(self._sc[17]._ptr, self._ec2._ptr)
+
+    def test_getitem_wrong_key_type(self):
+        with self.assertRaises(TypeError):
+            self._sc['event23']
+
+    def test_getitem_wrong_key(self):
+        with self.assertRaises(KeyError):
+            self._sc[19]
+
+    def test_len(self):
+        self.assertEqual(len(self._sc), 2)
+
+    def test_iter(self):
+        for ec_id, event_class in self._sc.items():
+            self.assertIsInstance(event_class, bt2.event_class._EventClass)
+
+            if ec_id == 23:
+                self.assertEqual(event_class._ptr, self._ec1._ptr)
+            elif ec_id == 17:
+                self.assertEqual(event_class._ptr, self._ec2._ptr)

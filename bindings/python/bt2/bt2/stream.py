@@ -23,7 +23,7 @@
 __all__ = ['_Stream']
 
 from . import domain
-from bt2 import internal, native_bt
+from bt2 import internal, native_bt, utils
 import bt2.packet
 
 def _create_stream_from_ptr(ptr):

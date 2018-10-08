@@ -171,7 +171,7 @@ class Trace(object._SharedObject, collections.abc.Mapping):
     def __iter__(self):
         return _StreamClassIterator(self)
 
-    def create_stream_class(self, id=None):
+    def create_stream_class(self, id=None, automatic_event_class_id=None, automatic_stream_id=None):
         if self.assign_automatic_stream_class_id:
             sc_ptr = native_bt.stream_class_create(self._ptr)
         else:
@@ -179,7 +179,15 @@ class Trace(object._SharedObject, collections.abc.Mapping):
                 raise bt2.CreationError('cannot create stream class object')
             sc_ptr = native_bt.stream_class_create_with_id(self._ptr, id)
 
-        return bt2.stream_class._StreamClass._create_from_ptr(sc_ptr)
+        sc = bt2.stream_class._StreamClass._create_from_ptr(sc_ptr)
+
+        if automatic_event_class_id is not None:
+            sc.assigns_automatic_event_class_id = automatic_event_class_id
+
+        if automatic_stream_id is not None:
+            sc.assigns_automatic_stream_id = automatic_stream_id
+
+        return sc 
 
     @property
     def name(self):

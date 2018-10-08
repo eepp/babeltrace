@@ -78,6 +78,7 @@ class _StreamClass(internal.object._SharedObject, collections.abc.Mapping):
     @property
     def trace(self):
         tc_ptr = native_bt.stream_class_borrow_trace(self._ptr)
+        native_bt.get(tc_ptr)
 
         if tc_ptr is not None:
             return bt2.Trace._create_from_ptr(tc_ptr)
