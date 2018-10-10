@@ -23,7 +23,6 @@
 import collections.abc
 import copy
 from bt2 import native_bt, utils
-from bt2.internal import object
 import bt2.notification_iterator
 import bt2.port
 import bt2
@@ -45,7 +44,7 @@ def _create_private_from_ptr(ptr):
     return obj
 
 
-class _Connection(object._SharedObject):
+class _Connection(bt2.object._SharedObject):
     @staticmethod
     def _downstream_port(ptr):
         port_ptr = native_bt.connection_get_downstream_port(ptr)
@@ -75,7 +74,7 @@ class _Connection(object._SharedObject):
         return self._is_ended(self._ptr)
 
 
-class _PrivateConnection(object._PrivateObject, _Connection):
+class _PrivateConnection(bt2.object._PrivateObject, _Connection):
     def create_notification_iterator(self):
         status, notif_iter_ptr = native_bt.py3_create_priv_conn_notif_iter(int(self._ptr))
         _handle_status(status, 'cannot create notification iterator object')

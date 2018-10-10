@@ -18,7 +18,8 @@ class TraceTestCase(unittest.TestCase):
         header_ft = bt2.StructureFieldType()
         header_ft.append_field('magic', bt2.SignedIntegerFieldType(32))
 
-        tc = bt2.Trace(name='my name',
+        trace_uuid = uuid.UUID('da7d6b6f-3108-4706-89bd-ab554732611b')
+        tc = bt2.Trace(name='my name', uuid=trace_uuid,
                        env={'the_string': 'value', 'the_int': 23},
                        packet_header_field_type=header_ft,
                        automatic_stream_class_id=True)
@@ -26,9 +27,14 @@ class TraceTestCase(unittest.TestCase):
         sc = tc.create_stream_class()
 
         self.assertEqual(tc.name, 'my name')
+        self.assertEqual(tc.uuid, trace_uuid)
         self.assertEqual(tc.env['the_string'], 'value')
         self.assertEqual(tc.env['the_int'], 23)
         self.assertEqual(tc[sc.id]._ptr, sc._ptr)
+
+    def test_create_no_uuid(self):
+        tc = bt2.Trace()
+        self.assertIsNone(tc.uuid)
 
     def test_assign_invalid_name(self):
         with self.assertRaises(TypeError):
@@ -68,6 +74,16 @@ class TraceTestCase(unittest.TestCase):
         self.assertEqual(len(self._trace), 0)
         self._trace.create_stream_class()
         self.assertEqual(len(self._trace), 1)
+
+    def test_create_auto_event_class_id(self):
+        trace = bt2.Trace()
+        sc1 = trace.create_stream_class(automatic_event_class_id=False)
+        self.assertFalse(sc1.assigns_automatic_event_class_id)
+
+    def test_create_auto_stream_id(self):
+        trace = bt2.Trace()
+        sc1 = trace.create_stream_class(automatic_stream_id=False)
+        self.assertFalse(sc1.assigns_automatic_stream_id)
 
     def test_iter(self):
         trace = bt2.Trace(automatic_stream_class_id=False)

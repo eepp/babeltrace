@@ -71,12 +71,3 @@ int bt_clock_class_set_uuid(struct bt_clock_class *clock_class,
 int bt_clock_class_cycles_to_ns_from_origin(
 	struct bt_clock_class *clock_class,
 	uint64_t cycles, int64_t *OUTPUTINIT);
-
-struct bt_clock_class *bt_clock_value_borrow_clock_class(
-		struct bt_clock_value *clock_value);
-
-uint64_t bt_clock_value_get_value(
-		struct bt_clock_value *clock_value);
-
-int bt_clock_value_get_ns_from_origin(
-		struct bt_clock_value *clock_value, int64_t *OUTPUTINIT);

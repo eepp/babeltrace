@@ -23,6 +23,7 @@
 
 __version__ = '@PACKAGE_VERSION@'
 
+from bt2.object import *
 
 from bt2.clock_class import *
 from bt2.clock_value import *

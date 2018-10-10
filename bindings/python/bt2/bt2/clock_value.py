@@ -22,10 +22,8 @@
 
 __all__ = []
 
-import uuid as uuidp
 import numbers
 from bt2 import native_bt, utils
-from bt2.internal import object
 import bt2
 
 
@@ -34,21 +32,13 @@ def _create_clock_value_from_ptr(ptr, owner_ptr):
     return clock_value
 
 
-class _ClockValue(object._UniqueObject):
-    def __init__(self, clock_class_ptr, cycles):
-        utils._check_uint64(cycles)
-        ptr = native_bt.clock_value_create(clock_class_ptr, cycles)
-
-        if ptr is None:
-            raise bt2.CreationError('cannot create clock value object')
-
-        super().__init__(ptr)
-
+class _ClockValue(bt2.object._UniqueObject):
     @property
     def clock_class(self):
-        ptr = native_bt.clock_value_get_class(self._ptr)
-        assert(ptr)
-        return bt2.ClockClass._create_from_ptr(ptr)
+        cc_ptr = native_bt.clock_value_borrow_clock_class(self._ptr)
+        assert(cc_ptr)
+        native_bt.get(cc_ptr)
+        return bt2.ClockClass._create_from_ptr(cc_ptr)
 
     @property
     def cycles(self):
@@ -57,7 +47,7 @@ class _ClockValue(object._UniqueObject):
 
     @property
     def ns_from_origin(self):
-        ret, ns = native_bt.clock_value_get_value_ns_from_origin(self._ptr)
+        ret, ns = native_bt.clock_value_get_ns_from_origin(self._ptr)
         utils._handle_ret(ret, "cannot get clock value object's nanoseconds from origin")
         return ns
 

@@ -1,5 +1,6 @@
 [run]
-include = */babeltrace/bindings/python/bt2/*.py
+include = */bt2/*.py
+#include = /usr/local/lib/python3.5/dist-packages/bt2/*.py
 
 omit =
     *native_*.py

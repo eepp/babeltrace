@@ -20,11 +20,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import bt2.internal.domain
 import bt2.native_bt as native_bt
 
 
-class _Domain(bt2.internal.domain._Domain):
+class _Domain():
+    pass
     # Field type id
     FIELD_TYPE_ID_UNSIGNED_INTEGER = native_bt.FIELD_TYPE_ID_UNSIGNED_INTEGER
     FIELD_TYPE_ID_SIGNED_INTEGER = native_bt.FIELD_TYPE_ID_SIGNED_INTEGER

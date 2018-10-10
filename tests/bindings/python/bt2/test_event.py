@@ -191,6 +191,10 @@ class EventTestCase(unittest.TestCase):
         self.assertEqual(ev.payload_field['gnu'], 23)
         self.assertEqual(ev.payload_field['mosquito'], 42)
 
+    def test_no_payload_field(self):
+        ev = self._create_event(with_ep=False)
+        self.assertIsNone(ev.payload_field)
+
     def test_clock_value(self):
         ev = self._create_event(with_clockclass=True)
         ev.default_clock_value = 177

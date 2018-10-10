@@ -28,7 +28,7 @@ __all__ = ['EventClassLogLevel']
 import collections.abc
 import copy
 
-from bt2 import utils, native_bt, internal
+from bt2 import utils, native_bt
 import bt2
 
 from . import event, field_types
@@ -51,7 +51,7 @@ class EventClassLogLevel:
     DEBUG = native_bt.EVENT_CLASS_LOG_LEVEL_DEBUG
 
 
-class _EventClass(internal.object._SharedObject):
+class _EventClass(bt2.object._SharedObject):
     @property
     def stream_class(self):
         sc_ptr = native_bt.event_class_borrow_stream_class(self._ptr)

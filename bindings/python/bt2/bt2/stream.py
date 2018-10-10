@@ -23,13 +23,13 @@
 __all__ = ['_Stream']
 
 from . import domain
-from bt2 import internal, native_bt, utils
+from bt2 import native_bt, utils
 import bt2.packet
 
 def _create_stream_from_ptr(ptr):
     return _Stream._create_from_ptr(ptr)
 
-class _Stream(internal.object._SharedObject):
+class _Stream(bt2.object._SharedObject):
     @property
     def stream_class(self):
         stream_class_ptr = native_bt.stream_borrow_class(self._ptr)

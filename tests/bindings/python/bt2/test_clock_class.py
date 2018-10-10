@@ -9,45 +9,45 @@ from collections import OrderedDict
 
 class ClockClassOffsetTestCase(unittest.TestCase):
     def test_create_default(self):
-        cco = bt2.internal.ClockClassOffset()
+        cco = bt2.ClockClassOffset()
         self.assertEqual(cco.seconds, 0)
         self.assertEqual(cco.cycles, 0)
 
     def test_create(self):
-        cco = bt2.internal.ClockClassOffset(23, 4871232)
+        cco = bt2.ClockClassOffset(23, 4871232)
         self.assertEqual(cco.seconds, 23)
         self.assertEqual(cco.cycles, 4871232)
 
     def test_create_kwargs(self):
-        cco = bt2.internal.ClockClassOffset(seconds=23, cycles=4871232)
+        cco = bt2.ClockClassOffset(seconds=23, cycles=4871232)
         self.assertEqual(cco.seconds, 23)
         self.assertEqual(cco.cycles, 4871232)
 
     def test_create_invalid_seconds(self):
         with self.assertRaises(TypeError):
-            bt2.internal.ClockClassOffset('hello', 4871232)
+            bt2.ClockClassOffset('hello', 4871232)
 
     def test_create_invalid_cycles(self):
         with self.assertRaises(TypeError):
-            bt2.internal.ClockClassOffset(23, 'hello')
+            bt2.ClockClassOffset(23, 'hello')
 
     def test_eq(self):
-        cco1 = bt2.internal.ClockClassOffset(23, 42)
-        cco2 = bt2.internal.ClockClassOffset(23, 42)
+        cco1 = bt2.ClockClassOffset(23, 42)
+        cco2 = bt2.ClockClassOffset(23, 42)
         self.assertEqual(cco1, cco2)
 
     def test_ne_seconds(self):
-        cco1 = bt2.internal.ClockClassOffset(23, 42)
-        cco2 = bt2.internal.ClockClassOffset(24, 42)
+        cco1 = bt2.ClockClassOffset(23, 42)
+        cco2 = bt2.ClockClassOffset(24, 42)
         self.assertNotEqual(cco1, cco2)
 
     def test_ne_cycles(self):
-        cco1 = bt2.internal.ClockClassOffset(23, 42)
-        cco2 = bt2.internal.ClockClassOffset(23, 43)
+        cco1 = bt2.ClockClassOffset(23, 42)
+        cco2 = bt2.ClockClassOffset(23, 43)
         self.assertNotEqual(cco1, cco2)
 
     def test_eq_invalid(self):
-        self.assertFalse(bt2.internal.ClockClassOffset() == 23)
+        self.assertFalse(bt2.ClockClassOffset() == 23)
 
 
 class ClockClassTestCase(unittest.TestCase):
@@ -60,23 +60,23 @@ class ClockClassTestCase(unittest.TestCase):
     def test_create_default(self):
         self.assertEqual(self._cc.name, 'salut')
 
-    def test_create_invalid_no_name(self):
-        with self.assertRaises(TypeError):
-            bt2.ClockClass()
-
     def test_create_full(self):
         my_uuid = uuid.uuid1()
         cc = bt2.ClockClass(name='name', description='some description',
                             frequency=1001, precision=176,
-                            offset=bt2.internal.ClockClassOffset(45, 3003),
+                            offset=bt2.ClockClassOffset(45, 3),
                             is_absolute=True, uuid=my_uuid)
         self.assertEqual(cc.name, 'name')
         self.assertEqual(cc.description, 'some description')
         self.assertEqual(cc.frequency, 1001)
         self.assertEqual(cc.precision, 176)
-        self.assertEqual(cc.offset, bt2.internal.ClockClassOffset(45, 3003))
+        self.assertEqual(cc.offset, bt2.ClockClassOffset(45, 3))
         self.assertEqual(cc.is_absolute, True)
         self.assertEqual(cc.uuid, copy.deepcopy(my_uuid))
+
+    def test_create_no_uuid(self):
+        cc = bt2.ClockClass()
+        self.assertIsNone(cc.uuid)
 
     def test_assign_name(self):
         self._cc.name = 'the_clock'
@@ -111,8 +111,8 @@ class ClockClassTestCase(unittest.TestCase):
             self._cc.precision = 'lel'
 
     def test_assign_offset(self):
-        self._cc.offset = bt2.internal.ClockClassOffset(12, 56)
-        self.assertEqual(self._cc.offset, bt2.internal.ClockClassOffset(12, 56))
+        self._cc.offset = bt2.ClockClassOffset(12, 56)
+        self.assertEqual(self._cc.offset, bt2.ClockClassOffset(12, 56))
 
     def test_assign_invalid_offset(self):
         with self.assertRaises(TypeError):
@@ -121,6 +121,10 @@ class ClockClassTestCase(unittest.TestCase):
     def test_assign_absolute(self):
         self._cc.is_absolute = True
         self.assertTrue(self._cc.is_absolute)
+
+    def test_assign_not_absolute(self):
+        self._cc.is_absolute = False
+        self.assertFalse(self._cc.is_absolute)
 
     def test_assign_invalid_absolute(self):
         with self.assertRaises(TypeError):
@@ -138,18 +142,12 @@ class ClockClassTestCase(unittest.TestCase):
 
 class ClockValueTestCase(unittest.TestCase):
     def setUp(self):
+        _cc = bt2.ClockClass('my_cc', 1000, offset=bt2.ClockClassOffset(45, 354))
         _trace = bt2.Trace()
-        _sc = bt2.StreamClass()
-        _ec = bt2.EventClass('salut')
-        _cc = bt2.ClockClass('my_cc', 1000, offset=bt2.internal.ClockClassOffset(45, 354))
-        _my_int_ft = bt2.IntegerFieldType(32, mapped_clock_class=_cc)
-        _ec.payload_field_type = bt2.StructureFieldType()
-        _ec.payload_field_type += OrderedDict([
-            ('my_int', _my_int_ft),
-        ])
-        _sc.add_event_class(_ec)
-        _trace.add_stream_class(_sc)
-        _trace.add_clock_class(_cc)
+        _sc = _trace.create_stream_class()
+        _sc.default_clock_class = _cc
+        _ec = _sc.create_event_class()
+        _ec.name = 'salut'
         _stream = _sc()
         _packet = _stream.create_packet()
         self._packet = _packet
@@ -168,6 +166,7 @@ class ClockValueTestCase(unittest.TestCase):
                     notif = self._create_packet_beginning_notification(_packet)
                 elif self._at == 2:
                     notif = self._create_event_notification(_ec, _packet)
+                    notif.event.default_clock_value = 123
                 elif self._at == 3:
                     notif = self._create_packet_end_notification(_packet)
                 elif self._at == 4:
@@ -189,7 +188,6 @@ class ClockValueTestCase(unittest.TestCase):
 
         for i, notif in enumerate(self._notif_iter):
             if i == 2:
-                notif.event.set_clock_value(self._cc, 123)
                 self._cv = notif.event.default_clock_value
                 break
 
@@ -205,10 +203,10 @@ class ClockValueTestCase(unittest.TestCase):
         with self.assertRaises(TypeError):
             self._cc('yes')
 
-    def test_ns_from_epoch(self):
-        s_from_epoch = 45 + ((354 + 123) / 1000)
-        ns_from_epoch = int(s_from_epoch * 1e9)
-        self.assertEqual(self._cv.ns_from_epoch, ns_from_epoch)
+    def test_ns_from_origin(self):
+        s_from_origin = 45 + ((354 + 123) / 1000)
+        ns_from_origin = int(s_from_origin * 1e9)
+        self.assertEqual(self._cv.ns_from_origin, ns_from_origin)
 
     def test_eq_int(self):
         self.assertEqual(self._cv, 123)

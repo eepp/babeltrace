@@ -24,7 +24,7 @@ __all__ = ['_StaticArrayField', '_DynamicArrayField', '_UnsignedEnumerationField
         '_UnsignedEnumerationField', '_Field' ,'_RealField', '_IntegerField',
         '_StringField', '_StructureField', '_VariantField']
 
-from bt2 import field_types, native_bt, internal, utils
+from bt2 import field_types, native_bt, utils
 import abc
 import bt2
 import collections.abc
@@ -51,7 +51,7 @@ def _get_leaf_field(obj):
 
     return _get_leaf_field(obj.selected_field)
 
-class _Field(internal.object._UniqueObject):
+class _Field(bt2.object._UniqueObject):
     def __eq__(self, other):
         other = _get_leaf_field(other)
         return self._spec_eq(other)

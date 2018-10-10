@@ -5,21 +5,6 @@ AM_LDFLAGS=-L$(top_builddir)/lib/.libs
 
 INSTALLED_FILES=$(builddir)/installed_files.txt
 
-STATIC_BINDINGS_INTERNAL_DEPS =
-	bt2/internal/clock_value.py					\
-	bt2/internal/domain.py						\
-	bt2/internal/event.py						\
-	bt2/internal/event_class.py					\
-	bt2/internal/field_types.py					\
-	bt2/internal/fields.py						\
-	bt2/internal/object.py						\
-	bt2/internal/packet.py						\
-	bt2/internal/stream.py						\
-	bt2/internal/stream_class.py				\
-	bt2/internal/trace.py						\
-	bt2/internal/trace_collection_notification_iterator.py	\
-	bt2/internal/utils.py
-
 STATIC_BINDINGS_IR_DEPS =			\
 	bt2/clock_class.py				\
 	bt2/clock_value.py				\
@@ -28,6 +13,7 @@ STATIC_BINDINGS_IR_DEPS =			\
 	bt2/event_class.py				\
 	bt2/field_types.py				\
 	bt2/fields.py					\
+	bt2/object.py					\
 	bt2/packet.py					\
 	bt2/stream.py					\
 	bt2/stream_class.py				\

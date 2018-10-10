@@ -25,6 +25,7 @@ __all__ = ['Trace']
 
 import collections.abc
 
+import uuid as uuidp
 from bt2 import utils, native_bt
 import bt2
 from . import object, field_types, stream_class
@@ -141,6 +142,9 @@ class Trace(object._SharedObject, collections.abc.Mapping):
         if name is not None:
             self.name = name
 
+        if uuid is not None:
+            self.uuid = uuid
+
         if packet_header_field_type is not None:
             self.packet_header_field_type = packet_header_field_type
 
@@ -201,13 +205,17 @@ class Trace(object._SharedObject, collections.abc.Mapping):
 
     @property
     def uuid(self):
-        return native_bt.trace_get_uuid(self._ptr)
+        uuid_bytes = native_bt.trace_get_uuid(self._ptr)
+        if uuid_bytes is None:
+            return
+
+        return uuidp.UUID(bytes=uuid_bytes)
 
     @uuid.setter
     def uuid(self, uuid):
-        utils._check_str(name)
-        ret = native_bt.trace_set_uuid(self._ptr, uuid)
-        utils._handle_ret(ret, "cannot set trace class object's name")
+        utils._check_type(uuid, uuidp.UUID)
+        ret = native_bt.trace_set_uuid(self._ptr, uuid.bytes)
+        utils._handle_ret(ret, "cannot set trace class object's uuid")
 
     @property
     def env(self):

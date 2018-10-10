@@ -23,7 +23,7 @@
 __all__ = ['_Event']
 
 import collections
-from bt2 import native_bt, utils, internal
+from bt2 import native_bt, utils
 import bt2.clock_value
 import bt2.packet
 import bt2
@@ -41,7 +41,7 @@ def _create_event_from_ptr(ptr, owner_ptr):
     return event
 
 
-class _Event(internal.object._UniqueObject):
+class _Event(bt2.object._UniqueObject):
     @property
     def event_class(self):
         return self._event_class
@@ -59,7 +59,7 @@ class _Event(internal.object._UniqueObject):
         stream_ptr = native_bt.event_borrow_stream(self._ptr)
 
         if stream_ptr is None:
-            return stream_ptr
+            return
 
         native_bt.get(stream_ptr)
 
@@ -152,7 +152,10 @@ class _Event(internal.object._UniqueObject):
 
     @property
     def default_clock_value(self):
-        ret, value_ptr = native_bt.event_borrow_default_clock_value(self._ptr)
+        status, value_ptr = native_bt.event_borrow_default_clock_value(self._ptr)
+
+        if status is native_bt.CLOCK_VALUE_STATUS_UNKNOWN:
+            return
 
         if value_ptr is None:
             return

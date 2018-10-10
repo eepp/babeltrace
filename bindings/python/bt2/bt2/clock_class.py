@@ -26,7 +26,6 @@ __all__ = ['ClockClass', 'ClockClassOffset']
 import uuid as uuidp
 from bt2 import utils, native_bt
 import bt2
-from bt2.internal import object
 
 
 class ClockClassOffset:
@@ -51,11 +50,9 @@ class ClockClassOffset:
 
         return (self.seconds, self.cycles) == (other.seconds, other.cycles)
 
-class ClockClass(object._SharedObject):
+class ClockClass(bt2.object._SharedObject):
     def __init__(self, name=None, frequency=None, description=None, precision=None,
                  offset=None, is_absolute=None, uuid=None):
-        utils._check_str(name)
-        utils._check_uint64(frequency)
         ptr = native_bt.clock_class_create()
 
         if ptr is None:
@@ -132,23 +129,18 @@ class ClockClass(object._SharedObject):
 
     @property
     def offset(self):
-        ret, offset_s, offset_cycles = native_bt.clock_class_get_offset(self._ptr)
-        assert(ret == 0)
+        offset_s, offset_cycles = native_bt.clock_class_get_offset(self._ptr)
         return ClockClassOffset(offset_s, offset_cycles)
 
     @offset.setter
     def offset(self, offset):
         utils._check_type(offset, ClockClassOffset)
-        ret = native_bt.clock_class_set_offset_s(self._ptr, offset.seconds)
-        utils._handle_ret(ret, "cannot set clock class object's offset (seconds)")
-        ret = native_bt.clock_class_set_offset_cycles(self._ptr, offset.cycles)
-        utils._handle_ret(ret, "cannot set clock class object's offset (cycles)")
+        ret = native_bt.clock_class_set_offset(self._ptr, offset.seconds, offset.cycles)
+        utils._handle_ret(ret, "cannot set clock class object's offset")
 
     @property
     def is_absolute(self):
-        is_absolute = native_bt.clock_class_is_absolute(self._ptr)
-        assert(is_absolute >= 0)
-        return is_absolute > 0
+        return native_bt.clock_class_is_absolute(self._ptr)
 
     @is_absolute.setter
     def is_absolute(self, is_absolute):

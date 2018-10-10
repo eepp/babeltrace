@@ -37,6 +37,7 @@
 #include <babeltrace/assert-internal.h>
 
 typedef const unsigned char *BTUUID;
+typedef const uint8_t *bt_uuid;
 %}
 
 typedef int bt_bool;
@@ -234,18 +235,34 @@ typedef int bt_bool;
 }
 
 /* Input argument typemap for UUID bytes */
-%typemap(in) BTUUID {
+%typemap(in) bt_uuid {
 	$1 = (unsigned char *) PyBytes_AsString($input);
 }
 
 /* Output argument typemap for UUID bytes */
-%typemap(out) BTUUID {
+%typemap(out) bt_uuid {
 	if (!$1) {
 		Py_INCREF(Py_None);
 		$result = Py_None;
 	} else {
 		$result = PyBytes_FromStringAndSize((const char *) $1, 16);
 	}
+}
+
+/* Input argument typemap for bt_bool */
+%typemap(in) bt_bool {
+	$1 = PyObject_IsTrue($input);
+}
+
+/* Output argument typemap for bt_bool */
+%typemap(out) bt_bool {
+	if ($1 > 0) {
+		$result = Py_True;
+	} else {
+		$result = Py_False;
+	}
+	Py_INCREF($result);
+	return $result;
 }
 
 /*
@@ -272,6 +289,7 @@ enum bt_property_availability {
 
 /* Per-module interface files */
 %include "native_bt_clockclass.i"
+%include "native_bt_clockvalue.i"
 %include "native_bt_component.i"
 %include "native_bt_componentclass.i"
 %include "native_bt_connection.i"

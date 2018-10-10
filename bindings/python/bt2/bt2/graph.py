@@ -22,7 +22,6 @@
 
 import functools
 from bt2 import native_bt, utils
-from bt2.internal import object
 import bt2.connection
 import bt2.component
 import bt2.port
@@ -87,7 +86,7 @@ def _graph_ports_disconnected_listener_from_native(user_listener,
         pass
 
 
-class Graph(object._SharedObject):
+class Graph(bt2.object._SharedObject):
     def __init__(self):
         ptr = native_bt.graph_create()
 

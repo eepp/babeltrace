@@ -23,7 +23,7 @@
 import copy
 import collections
 from bt2 import native_bt, utils, domain
-from bt2.internal import object
+from bt2 import object
 import bt2.clock_value
 import bt2.event
 import bt2.packet

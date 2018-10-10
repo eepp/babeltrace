@@ -22,12 +22,11 @@
 
 import copy
 from bt2 import native_bt, utils, domain
-from bt2.internal import object
 from . import domain
 import bt2.fields
 import bt2
 
-class _Packet(object._SharedObject):
+class _Packet(bt2.object._SharedObject):
     @property
     def stream(self):
         stream_ptr = native_bt.packet_borrow_stream(self._ptr)

@@ -30,6 +30,8 @@ struct bt_event_class;
 struct bt_field;
 struct bt_packet;
 
+enum bt_clock_value_status;
+
 /* Functions */
 struct bt_event_class *bt_event_borrow_class(struct bt_event *event);
 

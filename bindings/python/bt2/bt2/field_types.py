@@ -26,7 +26,7 @@ __all__ = ['IntegerDisplayBase', 'UnsignedIntegerFieldType', 'SignedIntegerField
         'StaticArrayFieldType', 'DynamicArrayFieldType']
 
 import collections
-from bt2 import internal, native_bt, utils
+from bt2 import native_bt, utils, object
 
 def _create_field_type_from_ptr( ptr):
     typeid = native_bt.field_type_get_type_id(ptr)
@@ -38,7 +38,7 @@ class IntegerDisplayBase:
     DECIMAL = native_bt.FIELD_TYPE_INTEGER_PREFERRED_DISPLAY_BASE_DECIMAL
     HEXADECIMAL = native_bt.FIELD_TYPE_INTEGER_PREFERRED_DISPLAY_BASE_HEXADECIMAL 
 
-class _FieldType(internal.object._SharedObject):  
+class _FieldType(object._SharedObject):  
     def __init__(self, ptr):
         super().__init__(ptr)
 

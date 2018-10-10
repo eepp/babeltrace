@@ -22,7 +22,7 @@
 
 import collections.abc
 import copy
-from bt2 import native_bt, internal, utils
+from bt2 import native_bt, utils
 import bt2
 
 class _EventClassIterator(collections.abc.Iterator):
@@ -42,7 +42,7 @@ class _EventClassIterator(collections.abc.Iterator):
         self._at += 1
         return ec_id
 
-class _StreamClass(internal.object._SharedObject, collections.abc.Mapping):
+class _StreamClass(bt2.object._SharedObject, collections.abc.Mapping):
     def __init__(self, ptr):
         super().__init__(ptr)
 

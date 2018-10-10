@@ -22,7 +22,6 @@
 
 import collections.abc
 from bt2 import native_bt, utils
-from bt2.internal import object
 import bt2.notification
 import bt2.component
 import bt2
@@ -45,7 +44,7 @@ class _NotificationIterator(collections.abc.Iterator):
         raise NotImplementedError
 
 
-class _GenericNotificationIterator(object._SharedObject, _NotificationIterator):
+class _GenericNotificationIterator(bt2.object._SharedObject, _NotificationIterator):
     def __init__(self, ptr):
             self._current_notifs = []
             self._at = 0

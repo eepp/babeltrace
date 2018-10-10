@@ -31,7 +31,6 @@ import functools
 import math
 import numbers
 from bt2 import native_bt, utils
-from bt2.internal import object
 
 
 def _handle_status(status, obj_name):
@@ -85,7 +84,7 @@ def create_value(value):
     raise TypeError("cannot create value object from '{}' object".format(value.__class__.__name__))
 
 
-class _Value(object._SharedObject, metaclass=abc.ABCMeta):
+class _Value(bt2.object._SharedObject, metaclass=abc.ABCMeta):
     def __deepcopy__(self, memo):
         ptr = native_bt.value_copy(self._ptr)
 

@@ -23,7 +23,6 @@
 import collections.abc
 import copy
 from bt2 import native_bt, utils
-from bt2.internal import object
 import bt2.component
 import bt2.connection
 import bt2.notification_iterator
@@ -60,7 +59,7 @@ def _create_private_from_ptr(ptr):
     return obj
 
 
-class _Port(object._SharedObject):
+class _Port(bt2.object._SharedObject):
     @staticmethod
     def _name(ptr):
         name = native_bt.port_get_name(ptr)
@@ -122,7 +121,7 @@ class _OutputPort(_Port):
         return bt2.notification_iterator._OutputPortNotificationIterator(notif_iter_ptr)
 
 
-class _PrivatePort(object._PrivateObject, _Port):
+class _PrivatePort(bt2.object._PrivateObject, _Port):
     @property
     def name(self):
         return self._name(self._pub_ptr)
