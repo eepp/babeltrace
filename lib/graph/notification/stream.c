@@ -117,7 +117,7 @@ int bt_notification_stream_end_set_default_clock_value(
 
 	BT_ASSERT_PRE_NON_NULL(notif, "Notification");
 	BT_ASSERT_PRE_HOT(notif, "Notification", ": %!+n", notif);
-	BT_ASSERT_PRE_NOTIF_IS_TYPE(notif, BT_NOTIFICATION_TYPE_STREAM_BEGIN);
+	BT_ASSERT_PRE_NOTIF_IS_TYPE(notif, BT_NOTIFICATION_TYPE_STREAM_END);
 	BT_ASSERT_PRE(se_notif->stream->class->default_clock_class,
 		"Notification's stream class has no default clock class: "
 		"%![notif-]+n, %![sc-]+S", notif, se_notif->stream->class);
