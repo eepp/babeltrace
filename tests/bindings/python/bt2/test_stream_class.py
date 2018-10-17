@@ -60,6 +60,20 @@ class StreamClassTestCase(unittest.TestCase):
         sc.name = 'lel'
         self.assertEqual(sc.name, 'lel')
 
+    def test_automatic_ids(self):
+        sc = self._trace.create_stream_class(id=14, automatic_stream_id=True, automatic_event_class_id=True)
+        ec = sc.create_event_class()
+        stream = sc()
+        self.assertIsNotNone(ec.id)
+        self.assertIsNotNone(stream.id)
+
+    def test_no_automatic_ids(self):
+        sc = self._trace.create_stream_class(id=14, automatic_stream_id=False, automatic_event_class_id=False)
+        ec = sc.create_event_class(id=121)
+        stream = sc(id=0x1112)
+        self.assertIsNotNone(ec.id)
+        self.assertIsNotNone(stream.id)
+
     def test_assign_invalid_name(self):
         sc = self._trace.create_stream_class(id=14)
         with self.assertRaises(TypeError):
@@ -72,6 +86,22 @@ class StreamClassTestCase(unittest.TestCase):
     def test_assign_invalid_id(self):
         with self.assertRaises(TypeError):
             sc = self._trace.create_stream_class(id='lel')
+
+    def test_default_clock_class(self):
+        cc = bt2.ClockClass()
+        sc = self._trace.create_stream_class(id=1717)
+        sc.default_clock_class = cc
+        self.assertEqual(sc.default_clock_class.addr, cc.addr)
+
+    def test_no_default_clock_class(self):
+        sc = self._trace.create_stream_class(id=1717)
+        self.assertIsNone(sc.default_clock_class)
+
+    def test_clock_always_known(self):
+        cc = bt2.ClockClass()
+        sc = self._trace.create_stream_class(id=1717)
+        sc.default_clock_class = cc
+        self.assertTrue(sc.default_clock_always_known)
 
     def test_assign_packet_context_field_type(self):
         ft = bt2.StructureFieldType()
@@ -134,3 +164,21 @@ class StreamClassTestCase(unittest.TestCase):
                 self.assertEqual(event_class._ptr, self._ec1._ptr)
             elif ec_id == 17:
                 self.assertEqual(event_class._ptr, self._ec2._ptr)
+
+    def test_counter_snapshots(self):
+        sc = self._trace.create_stream_class(id=1717,
+                packets_have_packet_counter_snapshot=True,
+                packets_have_discarded_event_counter_snapshot=True)
+        
+        self.assertTrue(sc.packets_have_packet_counter_snapshot)
+        self.assertTrue(sc.packets_have_discarded_event_counter_snapshot)
+
+    def test_default_clock_values(self):
+        cc = bt2.ClockClass()
+        sc = self._trace.create_stream_class(id=1717,
+                default_clock_class=cc,
+                packets_have_default_beginning_clock_value=True,
+                packets_have_default_end_clock_value=True)
+
+        self.assertTrue(sc.packets_have_default_beginning_clock_value)
+        self.assertTrue(sc.packets_have_default_end_clock_value)

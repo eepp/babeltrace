@@ -263,239 +263,238 @@ class EnumerationFieldTypeTestCase(_TestIntegerFieldTypeProps, unittest.TestCase
         self._test_find_by_value(bt2.UnsignedEnumerationFieldType(range=8))
 
 
-#class StringFieldTypeTestCase(unittest.TestCase):
-#    def setUp(self):
-#        self._ft = bt2.StringFieldType()
-#
-#    def tearDown(self):
-#        del self._ft
-#
-#    def test_create_default(self):
-#        pass
-#
-#    def test_create_full(self):
-#        ft = bt2.StringFieldType(encoding=bt2.Encoding.UTF8)
-#        self.assertEqual(ft.encoding, bt2.Encoding.UTF8)
-#
-#    def test_assign_encoding(self):
-#        self._ft.encoding = bt2.Encoding.UTF8
-#        self.assertEqual(self._ft.encoding, bt2.Encoding.UTF8)
-#
-#    def test_assign_invalid_encoding(self):
-#        with self.assertRaises(TypeError):
-#            self._ft.encoding = 'yes'
-#
-#
-#class _TestFieldContainer():
-#    def test_append_field(self):
-#        int_field_type = bt2.SignedIntegerFieldType(32)
-#        self._ft.append_field('int32', int_field_type)
-#        field_type = self._ft['int32']
-#        self.assertEqual(field_type, int_field_type)
-#
-#    def test_append_field_kwargs(self):
-#        int_field_type = bt2.SignedIntegerFieldType(32)
-#        self._ft.append_field(name='int32', field_type=int_field_type)
-#        field_type = self._ft['int32']
-#        self.assertEqual(field_type, int_field_type)
-#
-#    def test_append_field_invalid_name(self):
-#        with self.assertRaises(TypeError):
-#            self._ft.append_field(23, bt2.StringFieldType())
-#
-#    def test_append_field_invalid_field_type(self):
-#        with self.assertRaises(TypeError):
-#            self._ft.append_field('yes', object())
-#
-#    def test_iadd(self):
-#        struct_ft = bt2.StructureFieldType()
-#        c_field_type = bt2.StringFieldType()
-#        d_field_type = bt2.SignedEnumerationFieldType(range=32)
-#        e_field_type = bt2.StructureFieldType()
-#        struct_ft.append_field('c_string', c_field_type)
-#        struct_ft.append_field('d_enum', d_field_type)
-#        struct_ft.append_field('e_struct', e_field_type)
-#        a_field_type = bt2.RealFieldType()
-#        b_field_type = bt2.SignedIntegerFieldType(17)
-#        self._ft.append_field('a_float', a_field_type)
-#        self._ft.append_field('b_int', b_field_type)
-#        self._ft += struct_ft
-#        self.assertEqual(self._ft['a_float'], a_field_type)
-#        self.assertEqual(self._ft['b_int'], b_field_type)
-#        self.assertEqual(self._ft['c_string'], c_field_type)
-#        self.assertEqual(self._ft['d_enum'], d_field_type)
-#        self.assertEqual(self._ft['e_struct'], e_field_type)
-#
-#    def test_bool_op(self):
-#        self.assertFalse(self._ft)
-#        self._ft.append_field('a', bt2.StringFieldType())
-#        self.assertTrue(self._ft)
-#
-#    def test_len(self):
-#        ft = bt2.StringFieldType()
-#        self._ft.append_field('a', ft)
-#        self._ft.append_field('b', ft)
-#        self._ft.append_field('c', ft)
-#        self.assertEqual(len(self._ft), 3)
-#
-#    def test_getitem(self):
-#        a_ft = bt2.SignedIntegerFieldType(32)
-#        b_ft = bt2.StringFieldType()
-#        c_ft = bt2.RealFieldType()
-#        self._ft.append_field('a', a_ft)
-#        self._ft.append_field('b', b_ft)
-#        self._ft.append_field('c', c_ft)
-#        self.assertEqual(self._ft['b'], b_ft)
-#
-#    def test_getitem_invalid_key_type(self):
-#        with self.assertRaises(TypeError):
-#            self._ft[0]
-#
-#    def test_getitem_invalid_key(self):
-#        with self.assertRaises(KeyError):
-#            self._ft['no way']
-#
-#    def test_contains(self):
-#        self.assertFalse('a' in self._ft)
-#        self._ft.append_field('a', bt2.StringFieldType())
-#        self.assertTrue('a' in self._ft)
-#
-#    def test_iter(self):
-#        a_ft = bt2.SignedIntegerFieldType(32)
-#        b_ft = bt2.StringFieldType()
-#        c_ft = bt2.RealFieldType()
-#        fields = (
-#            ('a', a_ft),
-#            ('b', b_ft),
-#            ('c', c_ft),
-#        )
-#
-#        for field in fields:
-#            self._ft.append_field(*field)
-#
-#        for (name, ft_field_type), field in zip(self._ft.items(), fields):
-#            self.assertEqual(name, field[0])
-#            self.assertEqual(ft_field_type, field[1])
-#
-#    def test_at_index(self):
-#        a_ft = bt2.SignedIntegerFieldType(32)
-#        b_ft = bt2.StringFieldType()
-#        c_ft = bt2.RealFieldType()
-#        self._ft.append_field('c', c_ft)
-#        self._ft.append_field('a', a_ft)
-#        self._ft.append_field('b', b_ft)
-#        self.assertEqual(self._ft.at_index(1), a_ft)
-#
-#    def test_at_index_invalid(self):
-#        self._ft.append_field('c', bt2.SignedIntegerFieldType(32))
-#
-#        with self.assertRaises(TypeError):
-#            self._ft.at_index('yes')
-#
-#    def test_at_index_out_of_bounds_after(self):
-#        self._ft.append_field('c', bt2.SignedIntegerFieldType(32))
-#
-#        with self.assertRaises(IndexError):
-#            self._ft.at_index(len(self._ft))
-#
-#
-#class StructureFieldTypeTestCase(_TestFieldContainer, unittest.TestCase):
-#    def setUp(self):
-#        self._ft = bt2.StructureFieldType()
-#
-#    def tearDown(self):
-#        del self._ft
-#
-#    def test_create_default(self):
-#        self.assertEqual(self._ft.alignment, 1)
-#
-#    def test_create_with_min_alignment(self):
-#        ft = bt2.StructureFieldType(8)
-#        self.assertEqual(ft.alignment, 8)
-#
-#    def test_assign_alignment(self):
-#        with self.assertRaises(AttributeError):
-#            self._ft.alignment = 32
-#
-#    def test_assign_min_alignment(self):
-#        self._ft.min_alignment = 64
-#        self.assertTrue(self._ft.alignment >= 64)
-#
-#    def test_assign_invalid_min_alignment(self):
-#        with self.assertRaises(ValueError):
-#            self._ft.min_alignment = 23
-#
-#    def test_assign_get_min_alignment(self):
-#        with self.assertRaises(AttributeError):
-#            self._ft.min_alignment
-#
-#
-#class VariantFieldTypeTestCase(_TestFieldContainer, unittest.TestCase):
-#    def setUp(self):
-#        self._ft = bt2.VariantFieldType('path.to.tag')
-#
-#    def tearDown(self):
-#        del self._ft
-#
-#    def test_create_default(self):
-#        self.assertEqual(self._ft.tag_name, 'path.to.tag')
-#
-#    def test_create_invalid_tag_name(self):
-#        with self.assertRaises(TypeError):
-#            self._ft = bt2.VariantFieldType(23)
-#
-#    def test_assign_tag_name(self):
-#        self._ft.tag_name = 'a.different.tag'
-#        self.assertEqual(self._ft.tag_name, 'a.different.tag')
-#
-#    def test_assign_invalid_tag_name(self):
-#        with self.assertRaises(TypeError):
-#            self._ft.tag_name = -17
-#
-#
-#class ArrayFieldTypeTestCase(unittest.TestCase):
-#    def setUp(self):
-#        self._elem_ft = bt2.SignedIntegerFieldType(23)
-#        self._ft = bt2.ArrayFieldType(self._elem_ft, 45)
-#
-#    def tearDown(self):
-#        del self._ft
-#        del self._elem_ft
-#
-#    def test_create_default(self):
-#        self.assertEqual(self._ft.element_field_type, self._elem_ft)
-#        self.assertEqual(self._ft.length, 45)
-#
-#    def test_create_invalid_field_type(self):
-#        with self.assertRaises(TypeError):
-#            self._ft = bt2.ArrayFieldType(object(), 45)
-#
-#    def test_create_invalid_length(self):
-#        with self.assertRaises(ValueError):
-#            self._ft = bt2.ArrayFieldType(bt2.StringFieldType(), -17)
-#
-#    def test_create_invalid_length_type(self):
-#        with self.assertRaises(TypeError):
-#            self._ft = bt2.ArrayFieldType(bt2.StringFieldType(), 'the length')
-#
-#
-#class SequenceFieldTypeTestCase(unittest.TestCase):
-#    def setUp(self):
-#        self._elem_ft = bt2.SignedIntegerFieldType(23)
-#        self._ft = bt2.SequenceFieldType(self._elem_ft, 'the.length')
-#
-#    def tearDown(self):
-#        del self._ft
-#        del self._elem_ft
-#
-#    def test_create_default(self):
-#        self.assertEqual(self._ft.element_field_type, self._elem_ft)
-#        self.assertEqual(self._ft.length_name, 'the.length')
-#
-#    def test_create_invalid_field_type(self):
-#        with self.assertRaises(TypeError):
-#            self._ft = bt2.ArrayFieldType(object(), 'the.length')
-#
-#    def test_create_invalid_length_type(self):
-#        with self.assertRaises(TypeError):
-#            self._ft = bt2.SequenceFieldType(bt2.StringFieldType(), 17)
+class StringFieldTypeTestCase(unittest.TestCase):
+    def setUp(self):
+        self._ft = bt2.StringFieldType()
+
+    def tearDown(self):
+        del self._ft
+
+    def test_create_default(self):
+        self.assertIsNotNone(self._ft)
+
+
+class _TestFieldContainer():
+    def test_append_field(self):
+        int_field_type = bt2.SignedIntegerFieldType(32)
+        self._ft.append_field('int32', int_field_type)
+        field_type = self._ft['int32']
+        self.assertEqual(field_type.addr, int_field_type.addr)
+
+    def test_append_field_kwargs(self):
+        int_field_type = bt2.SignedIntegerFieldType(32)
+        self._ft.append_field(name='int32', field_type=int_field_type)
+        field_type = self._ft['int32']
+        self.assertEqual(field_type.addr, int_field_type.addr)
+
+    def test_append_field_invalid_name(self):
+        with self.assertRaises(TypeError):
+            self._ft.append_field(23, bt2.StringFieldType())
+
+    def test_append_field_invalid_field_type(self):
+        with self.assertRaises(TypeError):
+            self._ft.append_field('yes', object())
+
+    def test_iadd(self):
+        struct_ft = bt2.StructureFieldType()
+        c_field_type = bt2.StringFieldType()
+        d_field_type = bt2.SignedEnumerationFieldType(range=32)
+        e_field_type = bt2.StructureFieldType()
+        struct_ft.append_field('c_string', c_field_type)
+        struct_ft.append_field('d_enum', d_field_type)
+        struct_ft.append_field('e_struct', e_field_type)
+        a_field_type = bt2.RealFieldType()
+        b_field_type = bt2.SignedIntegerFieldType(17)
+        self._ft.append_field('a_float', a_field_type)
+        self._ft.append_field('b_int', b_field_type)
+        self._ft += struct_ft
+        self.assertEqual(self._ft['a_float'].addr, a_field_type.addr)
+        self.assertEqual(self._ft['b_int'].addr, b_field_type.addr)
+        self.assertEqual(self._ft['c_string'].addr, c_field_type.addr)
+        self.assertEqual(self._ft['d_enum'].addr, d_field_type.addr)
+        self.assertEqual(self._ft['e_struct'].addr, e_field_type.addr)
+
+    def test_bool_op(self):
+        self.assertFalse(self._ft)
+        self._ft.append_field('a', bt2.StringFieldType())
+        self.assertTrue(self._ft)
+
+    def test_len(self):
+        ft = bt2.StringFieldType()
+        self._ft.append_field('a', ft)
+        self._ft.append_field('b', ft)
+        self._ft.append_field('c', ft)
+        self.assertEqual(len(self._ft), 3)
+
+    def test_getitem(self):
+        a_ft = bt2.SignedIntegerFieldType(32)
+        b_ft = bt2.StringFieldType()
+        c_ft = bt2.RealFieldType()
+        self._ft.append_field('a', a_ft)
+        self._ft.append_field('b', b_ft)
+        self._ft.append_field('c', c_ft)
+        self.assertEqual(self._ft['b'].addr, b_ft.addr)
+
+    def test_getitem_invalid_key_type(self):
+        with self.assertRaises(TypeError):
+            self._ft[0]
+
+    def test_getitem_invalid_key(self):
+        with self.assertRaises(KeyError):
+            self._ft['no way']
+
+    def test_contains(self):
+        self.assertFalse('a' in self._ft)
+        self._ft.append_field('a', bt2.StringFieldType())
+        self.assertTrue('a' in self._ft)
+
+    def test_iter(self):
+        a_ft = bt2.SignedIntegerFieldType(32)
+        b_ft = bt2.StringFieldType()
+        c_ft = bt2.RealFieldType()
+        fields = (
+            ('a', a_ft),
+            ('b', b_ft),
+            ('c', c_ft),
+        )
+
+        for field in fields:
+            self._ft.append_field(*field)
+
+        for (name, ft_field_type), field in zip(self._ft.items(), fields):
+            self.assertEqual(name, field[0])
+            self.assertEqual(ft_field_type.addr, field[1].addr)
+
+    def test_at_index(self):
+        a_ft = bt2.SignedIntegerFieldType(32)
+        b_ft = bt2.StringFieldType()
+        c_ft = bt2.RealFieldType()
+        self._ft.append_field('c', c_ft)
+        self._ft.append_field('a', a_ft)
+        self._ft.append_field('b', b_ft)
+        self.assertEqual(self._ft.at_index(1).addr, a_ft.addr)
+
+    def test_at_index_invalid(self):
+        self._ft.append_field('c', bt2.SignedIntegerFieldType(32))
+
+        with self.assertRaises(TypeError):
+            self._ft.at_index('yes')
+
+    def test_at_index_out_of_bounds_after(self):
+        self._ft.append_field('c', bt2.SignedIntegerFieldType(32))
+
+        with self.assertRaises(IndexError):
+            self._ft.at_index(len(self._ft))
+
+
+class StructureFieldTypeTestCase(_TestFieldContainer, unittest.TestCase):
+    def setUp(self):
+        self._ft = bt2.StructureFieldType()
+
+    def tearDown(self):
+        del self._ft
+
+    def test_create_default(self):
+        self.assertIsNotNone(self._ft)
+
+
+class VariantFieldTypeTestCase(_TestFieldContainer, unittest.TestCase):
+    def setUp(self):
+        selector_ft = bt2.UnsignedEnumerationFieldType(range=42)
+        selector_ft.map_range('first', 1)
+        selector_ft.map_range('second', 2, 434)
+
+        self._ft = bt2.VariantFieldType(selector_ft)
+
+    def tearDown(self):
+        del self._ft
+
+    def test_selector_field_path(self):
+        selector_ft = bt2.UnsignedEnumerationFieldType(range=42)
+        selector_ft.map_range('first', 1)
+        selector_ft.map_range('second', 2, 434)
+
+        ft = bt2.VariantFieldType(selector_ft)
+        ft.append_field('a', bt2.RealFieldType())
+        ft.append_field('b', bt2.SignedIntegerFieldType(21))
+        ft.append_field('c', bt2.UnsignedIntegerFieldType(34))
+
+        foo_ft = bt2.RealFieldType()
+        bar_ft = bt2.StringFieldType()
+        baz_ft = bt2.StringFieldType()
+
+        inner_struct_ft = bt2.StructureFieldType()
+        inner_struct_ft.append_field('selector', selector_ft)
+        inner_struct_ft.append_field('bar', bar_ft)
+        inner_struct_ft.append_field('baz', baz_ft)
+        inner_struct_ft.append_field('variant', ft)
+
+        outer_struct_ft = bt2.StructureFieldType()
+        outer_struct_ft.append_field('foo', foo_ft)
+        outer_struct_ft.append_field('inner_struct', inner_struct_ft)
+        trace = bt2.Trace(packet_header_field_type=outer_struct_ft)
+
+        self.assertEqual(list(ft.selector_field_path), [1, 0])
+
+
+class StaticArrayFieldTypeTestCase(unittest.TestCase):
+    def setUp(self):
+        self._elem_ft = bt2.SignedIntegerFieldType(23)
+        self._ft = bt2.StaticArrayFieldType(self._elem_ft, 45)
+
+    def tearDown(self):
+        del self._ft
+        del self._elem_ft
+
+    def test_create_default(self):
+        self.assertEqual(self._ft.element_field_type.addr, self._elem_ft.addr)
+        self.assertEqual(self._ft.length, 45)
+
+    def test_create_invalid_field_type(self):
+        with self.assertRaises(TypeError):
+            self._ft = bt2.StaticArrayFieldType(object(), 45)
+
+    def test_create_invalid_length(self):
+        with self.assertRaises(ValueError):
+            self._ft = bt2.StaticArrayFieldType(bt2.StringFieldType(), -17)
+
+    def test_create_invalid_length_type(self):
+        with self.assertRaises(TypeError):
+            self._ft = bt2.StaticArrayFieldType(bt2.StringFieldType(), 'the length')
+
+
+class DynamicArrayFieldTypeTestCase(unittest.TestCase):
+    def setUp(self):
+        self._elem_ft = bt2.SignedIntegerFieldType(23)
+        self._len_ft = bt2.UnsignedIntegerFieldType(12)
+        self._ft = bt2.DynamicArrayFieldType(self._elem_ft, self._len_ft)
+
+    def test_create_default(self):
+        self.assertEqual(self._ft.element_field_type.addr, self._elem_ft.addr)
+
+    def test_field_path(self):
+        foo_ft = bt2.RealFieldType()
+        bar_ft = bt2.StringFieldType()
+        baz_ft = bt2.StringFieldType()
+
+        inner_struct_ft = bt2.StructureFieldType()
+        inner_struct_ft.append_field('bar', bar_ft)
+        inner_struct_ft.append_field('baz', baz_ft)
+        inner_struct_ft.append_field('len', self._len_ft)
+        inner_struct_ft.append_field('dyn_array', self._ft)
+
+        outer_struct_ft = bt2.StructureFieldType()
+        outer_struct_ft.append_field('foo', foo_ft)
+        outer_struct_ft.append_field('inner_struct', inner_struct_ft)
+        trace = bt2.Trace(packet_header_field_type=outer_struct_ft)
+
+        self.assertEqual(list(self._ft.length_field_path), [1, 2])
+
+    def test_create_invalid_field_type(self):
+        len_ft = bt2.UnsignedIntegerFieldType(12)
+        with self.assertRaises(TypeError):
+            ft = bt2.DynamicArrayFieldType(object(), len_ft)
+
+    def test_create_invalid_length_type(self):
+        with self.assertRaises(TypeError):
+            ft = bt2.DynamicArrayFieldType(bt2.StringFieldType(), 17)

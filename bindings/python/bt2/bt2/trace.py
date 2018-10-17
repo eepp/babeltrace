@@ -175,7 +175,12 @@ class Trace(object._SharedObject, collections.abc.Mapping):
     def __iter__(self):
         return _StreamClassIterator(self)
 
-    def create_stream_class(self, id=None, automatic_event_class_id=None, automatic_stream_id=None):
+    def create_stream_class(self, id=None, event_header_ft=None, packet_context_ft=None,
+                event_common_context_ft=None, default_clock_class=None, default_clock_always_known=None,
+                packets_have_discarded_event_counter_snapshot=None, packets_have_packet_counter_snapshot=None,
+                packets_have_default_beginning_clock_value=None, packets_have_default_end_clock_value=None,
+                automatic_event_class_id=None, automatic_stream_id=None):
+
         if self.assign_automatic_stream_class_id:
             sc_ptr = native_bt.stream_class_create(self._ptr)
         else:
@@ -184,6 +189,34 @@ class Trace(object._SharedObject, collections.abc.Mapping):
             sc_ptr = native_bt.stream_class_create_with_id(self._ptr, id)
 
         sc = bt2.stream_class._StreamClass._create_from_ptr(sc_ptr)
+
+        if event_header_ft is not None:
+            sc.event_header_field_type = event_header_ft
+
+        if packet_context_ft is not None:
+            sc.packet_context_field_type = packet_context_ft
+
+        if event_common_context_ft is not None:
+            sc.event_common_context_field_type = event_common_context_ft
+
+        if default_clock_class is not None:
+            sc.default_clock_class = default_clock_class
+
+        if default_clock_always_known is not None:
+            # Ignored for now
+            pass
+
+        if packets_have_discarded_event_counter_snapshot is not None:
+            sc.packets_have_discarded_event_counter_snapshot = packets_have_discarded_event_counter_snapshot
+
+        if packets_have_packet_counter_snapshot is not None:
+            sc.packets_have_packet_counter_snapshot = packets_have_packet_counter_snapshot
+
+        if packets_have_default_beginning_clock_value is not None:
+            sc.packets_have_default_beginning_clock_value = packets_have_default_beginning_clock_value
+
+        if packets_have_default_end_clock_value is not None:
+            sc.packets_have_default_end_clock_value = packets_have_default_end_clock_value
 
         if automatic_event_class_id is not None:
             sc.assigns_automatic_event_class_id = automatic_event_class_id

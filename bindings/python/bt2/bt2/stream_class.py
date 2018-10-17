@@ -43,9 +43,6 @@ class _EventClassIterator(collections.abc.Iterator):
         return ec_id
 
 class _StreamClass(bt2.object._SharedObject, collections.abc.Mapping):
-    def __init__(self, ptr):
-        super().__init__(ptr)
-
     def __getitem__(self, key):
         utils._check_int64(key)
 
@@ -69,8 +66,7 @@ class _StreamClass(bt2.object._SharedObject, collections.abc.Mapping):
         if self.assigns_automatic_event_class_id:
             ec_ptr = native_bt.event_class_create(self._ptr)
         else:
-            if id is None:
-                raise bt2.CreationError('cannot create event class object')
+            utils._check_uint64(id)
             ec_ptr = native_bt.event_class_create_with_id(self._ptr, id)
                 
         return bt2.event_class._EventClass._create_from_ptr(ec_ptr)
@@ -184,7 +180,7 @@ class _StreamClass(bt2.object._SharedObject, collections.abc.Mapping):
             utils._handle_ret(ret, "cannot set stream class object's event context field type")
 
     def __call__(self, id=None):
-        if id is None:
+        if self.assigns_automatic_stream_id:
             stream_ptr = native_bt.stream_create(self._ptr)
         else:
             utils._check_uint64(id)
@@ -195,14 +191,18 @@ class _StreamClass(bt2.object._SharedObject, collections.abc.Mapping):
 
         return bt2.stream._Stream._create_from_ptr(stream_ptr)
 
-
     @property
     def default_clock_class(self):
-        return native_bt.stream_class_borrow_default_clock_class(self._ptr)
+        cc_ptr = native_bt.stream_class_borrow_default_clock_class(self._ptr)
+        if cc_ptr is None:
+            return
+
+        native_bt.get(cc_ptr)
+        return bt2.clock_class.ClockClass._create_from_ptr(cc_ptr)
 
     @default_clock_class.setter
     def default_clock_class(self, clock_class):
-        utils._check_type(clock_class, bt2.ClockClass)
+        utils._check_type(clock_class, bt2.clock_class.ClockClass)
         native_bt.stream_class_set_default_clock_class(self._ptr, clock_class._ptr)
 
     @property

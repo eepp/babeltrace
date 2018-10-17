@@ -160,7 +160,7 @@ class _Event(bt2.object._UniqueObject):
         if value_ptr is None:
             return
 
-        return bt2.clock_value._create_clock_value_from_ptr(value_ptr, self._owning_ptr)
+        return bt2.clock_value._ClockValue._create_from_ptr(value_ptr, self._owning_ptr)
 
     @default_clock_value.setter
     def default_clock_value(self, value):

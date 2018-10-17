@@ -27,8 +27,9 @@ __all__ = ['IntegerDisplayBase', 'UnsignedIntegerFieldType', 'SignedIntegerField
 
 import collections
 from bt2 import native_bt, utils, object
+import bt2
 
-def _create_field_type_from_ptr( ptr):
+def _create_field_type_from_ptr(ptr):
     typeid = native_bt.field_type_get_type_id(ptr)
     return _FIELD_TYPE_ID_TO_OBJ[typeid]._create_from_ptr(ptr)
 
@@ -250,22 +251,6 @@ class StringFieldType(_FieldType):
         super().__init__(ptr)
 
 
-class _StructureFieldTypeFieldIterator(collections.abc.Iterator):
-    def __init__(self, struct_field_type):
-        self._struct_field_type = struct_field_type
-        self._at = 0
-
-    def __next__(self):
-        if self._at == len(self._struct_field_type):
-            raise StopIteration
-
-        ret, name, field_type_ptr = native_bt.field_type_structure_borrow_field_by_index(
-                self._struct_field_type._ptr, self._at)
-        assert(ret == 0)
-        self._at += 1
-        return name
-
-
 class _FieldContainer(collections.abc.Mapping):
     def __len__(self):
         count = self._count()
@@ -276,7 +261,9 @@ class _FieldContainer(collections.abc.Mapping):
         if not isinstance(key, str):
             raise TypeError("'{}' is not a 'str' object".format(key.__class__.__name__))
 
-        ptr = self._get_field_type_ptr_by_name(key)
+        ptr = self._borrow_field_type_ptr_by_name(key)
+
+        native_bt.get(ptr)
 
         if ptr is None:
             raise KeyError(key)
@@ -332,7 +319,7 @@ class StructureFieldType(_FieldType, _FieldContainer):
     def _add_field(self, name, ptr):
         return native_bt.field_type_structure_append_member(self._ptr, name, ptr)
 
-    def _get_field_type_ptr_by_name(self, key):
+    def _borrow_field_type_ptr_by_name(self, key):
         field_type_ptr = native_bt.field_type_structure_borrow_member_field_type_by_name(self._ptr, key)
         return field_type_ptr
 
@@ -340,8 +327,8 @@ class StructureFieldType(_FieldType, _FieldContainer):
         if index < 0 or index >= len(self):
             raise IndexError
 
-        ret, name, field_type_ptr = native_bt.field_type_structure_borrow_member_by_index(self._ptr, index)
-        assert(ret == 0)
+        name, field_type_ptr = native_bt.field_type_structure_borrow_member_by_index(self._ptr, index)
+        native_bt.get(field_type_ptr)
         return _create_field_type_from_ptr(field_type_ptr)
 
 
@@ -354,7 +341,7 @@ class _VariantFieldTypeFieldIterator(collections.abc.Iterator):
         if self._at == len(self._variant_field_type):
             raise StopIteration
 
-        name, field_type_ptr = native_bt.field_type_variant_get_field_by_index(self._variant_field_type._ptr,
+        name, field_type_ptr = native_bt.field_type_variant_borrow_option_by_index(self._variant_field_type._ptr,
                                                                                     self._at)
         self._at += 1
         return name
@@ -363,15 +350,22 @@ class VariantFieldType(_FieldType, _FieldContainer):
     _NAME = 'Variant'
     _ITER_CLS = _VariantFieldTypeFieldIterator
 
-    def __init__(self):
+    def __init__(self, selector_ft=None):
         ptr = native_bt.field_type_variant_create()
         self._check_create_status(ptr)
         super().__init__(ptr)
 
+        if selector_ft is not None:
+            self.selector_field_type = selector_ft
+
     @property
     def selector_field_path(self):
         ptr = native_bt.field_type_variant_borrow_selector_field_path(self._ptr);
-        return create_file_path(ptr)
+        if ptr is None:
+            return
+
+        native_bt.get(ptr)
+        return bt2.FieldPath._create_from_ptr(ptr)
 
     def _set_selector_field_type(self, selector_ft):
         ret = native_bt.field_type_variant_set_selector_field_type(self._ptr, selector_ft._ptr)
@@ -385,7 +379,7 @@ class VariantFieldType(_FieldType, _FieldContainer):
     def _add_field(self, name, ptr):
         return native_bt.field_type_variant_append_option(self._ptr, name, ptr)
 
-    def _get_field_type_ptr_by_name(self, key):
+    def _borrow_field_type_ptr_by_name(self, key):
         field_type_ptr = native_bt.field_type_variant_borrow_option_field_type_by_name(self._ptr, key)
         return field_type_ptr
 
@@ -393,20 +387,23 @@ class VariantFieldType(_FieldType, _FieldContainer):
         if index < 0 or index >= len(self):
             raise IndexError
 
-        ret, name, field_type_ptr = native_bt.field_type_variant_borrow_option_by_index(self._ptr, index)
-        assert(ret == 0)
-        return bt2.field_types._create_field_type_from_ptr(field_type_ptr)
+        name, field_type_ptr = native_bt.field_type_variant_borrow_option_by_index(self._ptr, index)
+        native_bt.get(field_type_ptr)
+        return _create_field_type_from_ptr(field_type_ptr)
 
 
 class ArrayFieldType(_FieldType):
     @property
     def element_field_type(self):
         elem_ft_ptr = native_bt.field_type_array_borrow_element_field_type(self._ptr)
-        return _field_type_from_ptr(elem_ft_ptr)
+        native_bt.get(elem_ft_ptr)
+        return _create_field_type_from_ptr(elem_ft_ptr)
         
 
 class StaticArrayFieldType(ArrayFieldType):
     def __init__(self, elem_ft, length):
+        utils._check_type(elem_ft, _FieldType)
+        utils._check_uint64(length)
         ptr = native_bt.field_type_static_array_create(elem_ft._ptr, length)
         self._check_create_status(ptr)
         super().__init__(ptr)
@@ -417,20 +414,30 @@ class StaticArrayFieldType(ArrayFieldType):
 
 
 class DynamicArrayFieldType(ArrayFieldType):
-    def __init__(self, elem_ft):
+    def __init__(self, elem_ft, length_ft=None):
+        utils._check_type(elem_ft, _FieldType)
         ptr = native_bt.field_type_dynamic_array_create(elem_ft._ptr)
         self._check_create_status(ptr)
         super().__init__(ptr)
 
+        if length_ft is not None:
+            self.length_field_type = length_ft
+
     @property
     def length_field_path(self):
-        return native_bt.field_type_dynamic_array_borrow_length_field_path(self._ptr)
+        ptr = native_bt.field_type_dynamic_array_borrow_length_field_path(self._ptr)
+        if ptr is None:
+            return
+
+        native_bt.get(ptr)
+        return bt2.FieldPath._create_from_ptr(ptr)
 
     def _set_length_field_type(self, length_ft):
+        utils._check_type(length_ft, _UnsignedIntegerFieldType)
         ret = native_bt.field_type_dynamic_array_set_length_field_type(self._ptr, length_ft._ptr)
         utils._handle_ret(ret, "cannot set dynamic array length field type")
 
-    length_field_path = property(fset=_set_length_field_type)
+    length_field_type = property(fset=_set_length_field_type)
 
 
 _FIELD_TYPE_ID_TO_OBJ = {

@@ -199,6 +199,9 @@ class ClockValueTestCase(unittest.TestCase):
         self.assertEqual(self._cv.clock_class.addr, self._cc.addr)
         self.assertEqual(self._cv.cycles, 123)
 
+    def test_clock_class(self):
+        self.assertEqual(self._cv.clock_class.addr, self._cc.addr)
+
     def test_create_invalid_cycles_type(self):
         with self.assertRaises(TypeError):
             self._cc('yes')

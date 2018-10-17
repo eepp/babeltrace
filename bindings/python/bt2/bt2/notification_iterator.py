@@ -128,8 +128,8 @@ class _UserNotificationIterator(_NotificationIterator):
     def  _create_event_notification(self, event_class, packet):
         return bt2.notification._EventNotification(self, event_class, packet);
 
-    def _create_inactivity_notification(self):
-        return bt2.notification._InactivityNotification(self);
+    def _create_inactivity_notification(self, clock_class):
+        return bt2.notification._InactivityNotification(self, clock_class);
 
     def _create_stream_beginning_notification(self, stream):
         return bt2.notification._StreamBeginningNotification(self, stream);

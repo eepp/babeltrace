@@ -23,3 +23,12 @@ class StreamTestCase(unittest.TestCase):
 
     def test_attr_id(self):
         self.assertEqual(self._stream.id, 1608)
+
+    def test_default_clock_always_known(self):
+        pass
+
+    def test_counter_snapshots(self):
+        pass
+
+    def test_packet_default_clock_value(self):
+        pass

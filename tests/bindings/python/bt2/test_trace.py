@@ -133,3 +133,40 @@ class TraceTestCase(unittest.TestCase):
 
         self.assertEqual(len(sids), 3)
         self.assertTrue(12 in sids and 15 in sids and 17 in sids)
+
+    def test_create_stream_class_full(self):
+        event_header_ft = bt2.StructureFieldType()
+        event_header_ft.append_field('magic', bt2.SignedIntegerFieldType(32))
+
+        packet_context_ft = bt2.StructureFieldType()
+        packet_context_ft.append_field('magic', bt2.SignedIntegerFieldType(32))
+
+        event_common_context_ft = bt2.StructureFieldType()
+        event_common_context_ft.append_field('magic', bt2.SignedIntegerFieldType(32))
+        cc = bt2.ClockClass()
+        trace = bt2.Trace(automatic_stream_class_id=False)
+        sc = trace.create_stream_class(id=12,
+                event_header_ft=event_header_ft,
+                packet_context_ft=packet_context_ft,
+                event_common_context_ft=event_common_context_ft,
+                default_clock_class=cc,
+                default_clock_always_known=True,
+                packets_have_discarded_event_counter_snapshot=False,
+                packets_have_packet_counter_snapshot=False,
+                packets_have_default_beginning_clock_value=False,
+                packets_have_default_end_clock_value=False,
+                automatic_event_class_id=False,
+                automatic_stream_id=False)
+
+        self.assertEqual(sc.event_header_field_type.addr, event_header_ft.addr)
+        self.assertEqual(sc.packet_context_field_type.addr, packet_context_ft.addr)
+        self.assertEqual(sc.event_common_context_field_type.addr, event_common_context_ft.addr)
+        self.assertEqual(sc.default_clock_class.addr, cc.addr)
+        self.assertTrue(sc.default_clock_always_known)
+        self.assertFalse(sc.packets_have_discarded_event_counter_snapshot)
+        self.assertFalse(sc.packets_have_packet_counter_snapshot)
+        self.assertFalse(sc.packets_have_default_beginning_clock_value)
+        self.assertFalse(sc.packets_have_default_end_clock_value)
+        self.assertFalse(sc.assigns_automatic_event_class_id)
+        self.assertFalse(sc.assigns_automatic_stream_id)
+

@@ -41,19 +41,6 @@ def _create_from_ptr(ptr):
     return _NOTIF_TYPE_TO_CLS[notif_type]._create_from_ptr(ptr)
 
 
-def _notif_types_from_notif_classes(notification_types):
-    if notification_types is None:
-        notif_types = None
-    else:
-        for notif_cls in notification_types:
-            if notif_cls not in _NOTIF_TYPE_TO_CLS.values():
-                raise ValueError("'{}' is not a notification class".format(notif_cls))
-
-        notif_types = [notif_cls._TYPE for notif_cls in notification_types]
-
-    return notif_types
-
-
 class _Notification(object._SharedObject):
     pass
 
@@ -135,10 +122,6 @@ class _StreamBeginningNotification(_Notification):
         assert(stream_ptr)
         return bt2.stream._create_stream_from_ptr(stream_ptr)
 
-    def set_clock_value(self, clock_class, value, is_default=True):
-        ret = native_bt.notification_stream_begin_set_clock_value(self._ptr, clock_class._ptr, value, is_default)
-        utils._handle_ret(ret, "cannot set stream begin notification clock value")
-
     @property
     def default_clock_value(self):
         value_ptr = native_bt.notification_stream_begin_borrow_default_clock_value(self._ptr)
@@ -146,7 +129,12 @@ class _StreamBeginningNotification(_Notification):
         if value_ptr is None:
             return
 
-        return ClockValue._create_clock_value_from_ptr(value_ptr, self._ptr)
+        return bt2.clock_value._ClockValue._create_from_ptr(value_ptr, self._ptr)
+
+    @default_clock_value.setter
+    def default_clock_value(self, value):
+        ret = native_bt.notification_stream_begin_set_default_clock_value(self._ptr, value)
+        utils._handle_ret(ret, "cannot set stream begin notification clock value")
 
 
 class _StreamEndNotification(_Notification):
@@ -167,10 +155,6 @@ class _StreamEndNotification(_Notification):
         assert(stream_ptr)
         return bt2.stream._create_stream_from_ptr(stream_ptr)
 
-    def set_clock_value(self, clock_class, value, is_default=True):
-        ret = native_bt.notification_stream_end_set_clock_value(self._ptr, clock_class._ptr, value, is_default)
-        utils._handle_ret(ret, "cannot set stream end notification clock value")
-
     @property
     def default_clock_value(self):
         value_ptr = native_bt.notification_stream_end_borrow_default_clock_value(self._ptr)
@@ -178,23 +162,24 @@ class _StreamEndNotification(_Notification):
         if value_ptr is None:
             return
 
-        return ClockValue._create_clock_value_from_ptr(value_ptr, self._ptr)
+        return bt2.clock_value._ClockValue._create_from_ptr(value_ptr, self._ptr)
+
+    @default_clock_value.setter
+    def default_clock_value(self, value):
+        ret = native_bt.notification_stream_end_set_default_clock_value(self._ptr, value)
+        utils._handle_ret(ret, "cannot set stream end notification clock value")
 
 
 class _InactivityNotification(_Notification):
     _TYPE = native_bt.NOTIFICATION_TYPE_INACTIVITY
 
-    def __init__(self, priv_conn_priv_iter):
-        ptr = native_bt.notification_inactivity_create(priv_conn_priv_iter._ptr)
+    def __init__(self, priv_conn_priv_iter, clock_class):
+        ptr = native_bt.notification_inactivity_create(priv_conn_priv_iter._ptr, clock_class._ptr)
 
         if ptr is None:
             raise bt2.CreationError('cannot create inactivity notification object')
 
         super().__init__(ptr)
-
-    def set_clock_value(self, clock_class, value, is_default=True):
-        ret = native_bt.notification_inactivity_set_clock_value(self._ptr, clock_class._ptr, value, is_default)
-        utils._handle_ret(ret, "cannot set inactivity notification clock value")
 
     @property
     def default_clock_value(self):
@@ -203,7 +188,12 @@ class _InactivityNotification(_Notification):
         if value_ptr is None:
             return
 
-        return ClockValue._create_clock_value_from_ptr(value_ptr, self._ptr)
+        return bt2.clock_value._ClockValue._create_from_ptr(value_ptr, self._ptr)
+
+    @default_clock_value.setter
+    def default_clock_value(self, value):
+        ret = native_bt.notification_inactivity_set_default_clock_value(self._ptr, value)
+        utils._handle_ret(ret, "cannot set stream end notification clock value")
 
 
 _NOTIF_TYPE_TO_CLS = {

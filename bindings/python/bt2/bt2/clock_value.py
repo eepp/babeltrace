@@ -27,11 +27,6 @@ from bt2 import native_bt, utils
 import bt2
 
 
-def _create_clock_value_from_ptr(ptr, owner_ptr):
-    clock_value = _ClockValue._create_from_ptr(ptr, owner_ptr)
-    return clock_value
-
-
 class _ClockValue(bt2.object._UniqueObject):
     @property
     def clock_class(self):
