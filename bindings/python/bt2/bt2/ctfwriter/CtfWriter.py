@@ -23,13 +23,12 @@
 __all__ = ['CtfWriter']
 
 from bt2 import utils
-from bt2.internal import object
 import bt2
 import bt2.native_bt as native_bt
 from . import Clock
 
 
-class CtfWriter(object._SharedObject):
+class CtfWriter(bt2.object._SharedObject):
     def __init__(self, path):
         utils._check_str(path)
         ptr = native_bt.ctf_writer_create(path)

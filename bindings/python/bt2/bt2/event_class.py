@@ -24,7 +24,6 @@
 __all__ = ['EventClassLogLevel']
 
 
-
 import collections.abc
 import copy
 

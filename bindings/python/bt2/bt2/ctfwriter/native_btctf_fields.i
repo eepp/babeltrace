@@ -36,15 +36,15 @@ enum bt_ctf_field_type_id bt_ctf_field_get_type_id(
 		struct bt_ctf_field *field);
 struct bt_ctf_field *bt_ctf_field_copy(struct bt_ctf_field *field);
 int bt_ctf_field_integer_signed_get_value(
-		struct bt_ctf_field *integer_field, int64_t *value);
+		struct bt_ctf_field *integer_field, int64_t *OUTPUTINIT);
 int bt_ctf_field_integer_signed_set_value(
 		struct bt_ctf_field *integer_field, int64_t value);
 int bt_ctf_field_integer_unsigned_get_value(
-		struct bt_ctf_field *integer_field, uint64_t *value);
+		struct bt_ctf_field *integer_field, uint64_t *OUTPUTINIT);
 int bt_ctf_field_integer_unsigned_set_value(
 		struct bt_ctf_field *integer_field, uint64_t value);
 int bt_ctf_field_floating_point_get_value(
-		struct bt_ctf_field *float_field, double *value);
+		struct bt_ctf_field *float_field, double *OUTPUTINIT);
 int bt_ctf_field_floating_point_set_value(
 		struct bt_ctf_field *float_field, double value);
 struct bt_ctf_field *bt_ctf_field_enumeration_get_container(

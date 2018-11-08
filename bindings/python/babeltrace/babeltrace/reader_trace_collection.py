@@ -168,13 +168,17 @@ class TraceCollection:
     def _gen_events(self, begin_s=None, end_s=None):
         specs = [bt2.ComponentSpec('ctf', 'fs', th.path) for th in self._trace_handles]
 
+        
+        event_list = []
         try:
             iter_cls = bt2.TraceCollectionNotificationIterator
             tc_iter = iter_cls(specs,
                                stream_intersection_mode=self._intersect_mode,
-                               begin=begin_s, end=end_s,
-                               notification_types=[bt2.EventNotification])
-            return map(reader_event._create_event, tc_iter)
+                               begin=begin_s, end=end_s)
+            for notif in tc_iter:
+                if isinstance(notif, bt2.notification._EventNotification):
+                    event_list.append(reader_event._create_event(notif))
+            return event_list
         except:
             raise ValueError
 

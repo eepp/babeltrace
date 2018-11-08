@@ -27,6 +27,9 @@ struct bt_ctf_stream;
 struct bt_ctf_event;
 
 /* Functions */
+struct bt_ctf_stream *bt_ctf_stream_create(
+		struct bt_ctf_stream_class *stream_class,
+		const char *name, uint64_t id);
 int bt_ctf_stream_get_discarded_events_count(
 		struct bt_ctf_stream *stream, uint64_t *count);
 void bt_ctf_stream_append_discarded_events(struct bt_ctf_stream *stream,
@@ -39,9 +42,6 @@ int bt_ctf_stream_set_packet_header(struct bt_ctf_stream *stream,
 		struct bt_ctf_field *packet_header);
 struct bt_ctf_field *bt_ctf_stream_get_packet_context(
 		struct bt_ctf_stream *stream);
-struct bt_ctf_stream *bt_ctf_stream_create(
-		struct bt_ctf_stream_class *stream_class,
-		const char *name, uint64_t id);
 int bt_ctf_stream_set_packet_context(struct bt_ctf_stream *stream,
 		struct bt_ctf_field *packet_context);
 struct bt_ctf_stream_class *bt_ctf_stream_get_class(

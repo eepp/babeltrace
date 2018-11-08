@@ -33,9 +33,11 @@ class CtfWriterNoPacketContextTestCase(unittest.TestCase):
     def setUp(self):
         self._expected_event_count = 100
         self._trace_path = tempfile.mkdtemp()
+        print(self._trace_path)
 
     def tearDown(self):
-        shutil.rmtree(self._trace_path)
+        pass
+        #shutil.rmtree(self._trace_path)
 
     def _write_trace(self):
         trace = btw.Writer(self._trace_path)
@@ -81,5 +83,5 @@ class CtfWriterNoPacketContextTestCase(unittest.TestCase):
         trace_handle = traces.add_trace(self._trace_path, 'ctf')
         self.assertIsNotNone(trace_handle)
 
-        event_count = sum(1 for event in traces.events)
+        event_count = len(traces.events)
         self.assertEqual(self._expected_event_count, event_count)

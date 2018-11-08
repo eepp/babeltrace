@@ -21,6 +21,7 @@
 # THE SOFTWARE.
 
 import bt2
+import bt2.ctfwriter
 import babeltrace.common as common
 
 
@@ -328,14 +329,14 @@ _OBJ_TO_TYPE_ID = {
 }
 
 _BT2_BYTE_ORDER_TO_BYTE_ORDER = {
-    bt2.ByteOrder.NATIVE: common.ByteOrder.BYTE_ORDER_NATIVE,
-    bt2.ByteOrder.LITTLE_ENDIAN: common.ByteOrder.BYTE_ORDER_LITTLE_ENDIAN,
-    bt2.ByteOrder.BIG_ENDIAN: common.ByteOrder.BYTE_ORDER_BIG_ENDIAN,
-    bt2.ByteOrder.NETWORK: common.ByteOrder.BYTE_ORDER_NETWORK,
+    bt2.ctfwriter.ByteOrder.NATIVE: common.ByteOrder.BYTE_ORDER_NATIVE,
+    bt2.ctfwriter.ByteOrder.LITTLE_ENDIAN: common.ByteOrder.BYTE_ORDER_LITTLE_ENDIAN,
+    bt2.ctfwriter.ByteOrder.BIG_ENDIAN: common.ByteOrder.BYTE_ORDER_BIG_ENDIAN,
+    bt2.ctfwriter.ByteOrder.NETWORK: common.ByteOrder.BYTE_ORDER_NETWORK,
 }
 
 _BT2_ENCODING_TO_ENCODING = {
-    bt2.Encoding.NONE: common.CTFStringEncoding.NONE,
-    bt2.Encoding.ASCII: common.CTFStringEncoding.ASCII,
-    bt2.Encoding.UTF8: common.CTFStringEncoding.UTF8,
+    bt2.ctfwriter.Encoding.NONE: common.CTFStringEncoding.NONE,
+    bt2.ctfwriter.Encoding.ASCII: common.CTFStringEncoding.ASCII,
+    bt2.ctfwriter.Encoding.UTF8: common.CTFStringEncoding.UTF8,
 }

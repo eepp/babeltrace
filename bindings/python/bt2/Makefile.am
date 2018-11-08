@@ -47,6 +47,7 @@ STATIC_BINDINGS_CTFWRITER_DEPS =		\
 	bt2/ctfwriter/stream.py				\
 	bt2/ctfwriter/stream_class.py		\
 	bt2/ctfwriter/trace.py				\
+	bt2/ctfwriter/native_btctf.i			\
 	bt2/ctfwriter/native_btctf_clock.i			\
 	bt2/ctfwriter/native_btctf_clockclass.i		\
 	bt2/ctfwriter/native_btctf_event.i			\

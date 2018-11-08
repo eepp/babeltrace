@@ -72,7 +72,8 @@ class CtfWriterTestCase(unittest.TestCase):
         trace_handle = traces.add_trace(self._trace_path, 'ctf')
         self.assertIsNotNone(trace_handle)
 
+        
         self.assertEqual(self._expected_event_count, len(traces.events))
 
         self.assertEqual(traces.timestamp_begin, 0)
-        self.assertEqual(traces.timestamp_end, 19600)
+        self.assertEqual(traces.timestamp_end, 19800)

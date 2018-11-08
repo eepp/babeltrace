@@ -1,7 +1,6 @@
 # The MIT License (MIT)
 #
 # Copyright (c) 2016-2017 Philippe Proulx <pproulx@efficios.com>
-# Copyright (c) 2018 Francis Deslauriers <francis.deslauriers@efficios.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,74 +20,68 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-__all__ = ['_Stream']
+from bt2 import native_bt, object, utils
+import abc
+import bt2
+from bt2.ctfwriter import fields, event
 
-from . import domain
-import bt2.packet
-from bt2 import ctfwriter, internal, native_bt, utils
 
-
-class _Stream(internal._Stream, domain._DomainProvider):
+class _Stream(bt2.object._SharedObject):
     @property
-    def discarded_events_count(self):
-        ret, count = native_bt.stream_get_discarded_events_count(self._ptr)
-        utils._handle_ret(ret, "cannot get CTF writer stream object's discarded events count")
-        return count
+    def stream_class(self):
+        stream_class_ptr = native_bt.stream_get_class(self._ptr)
+        assert(stream_class_ptr)
+        return bt2.StreamClass._create_from_ptr(stream_class_ptr)
 
-    def append_discarded_events(self, count):
-        utils._check_uint64(count)
-        native_bt.stream_append_discarded_events(self._ptr, count)
+    @property
+    def name(self):
+        return native_bt.stream_get_name(self._ptr)
 
-    def append_event(self, event):
-        utils._check_type(event, bt2.ctfwriter.event._Event)
-        ret = native_bt.ctf_stream_append_event(self._ptr, event._ptr)
-        utils._handle_ret(ret, 'cannot append event object to CTF writer stream object')
+    @property
+    def id(self):
+        id = native_bt.stream_get_id(self._ptr)
+        return id if id >= 0 else None
+
+    def append_event(self, ev):
+        utils._check_type(ev, event._Event)
+        ret = native_bt.ctf_stream_append_event(self._ptr, ev._ptr)
+        utils._handle_ret(ret)
+
+    def append_discarded_event(self, nb_event):
+        native_bt.ctf_stream_append_discarded_event(self._ptr, nb_event)
+
+    @property
+    def packet_header(self):
+        field_ptr = native_bt.ctf_stream_get_packet_header(self._ptr)
+
+        if field_ptr is None:
+            return
+        
+        return bt2.ctfwriter.fields._create_from_ptr(field_ptr)
+
+    @packet_header.setter
+    def packet_header(self, packet_header):
+        utils._check_type(packet_header, fields._Field)
+        ret = native_bt.ctf_stream_set_packet_header(self._ptr, packet_header._ptr)
+        utils._handle_ret(ret)
+
+    @property
+    def packet_context(self):
+        field_ptr = native_bt.ctf_stream_get_packet_context(self._ptr)
+
+        if field_ptr is None:
+            return
+        
+        return bt2.ctfwriter.fields._create_from_ptr(field_ptr)
+
+    @packet_context.setter
+    def packet_context(self, packet_context):
+        utils._check_type(packet_context, fields._Field)
+        ret = native_bt.ctf_stream_set_packet_context(self._ptr, packet_context._ptr)
+        utils._handle_ret(ret)
 
     def flush(self):
         ret = native_bt.ctf_stream_flush(self._ptr)
-        utils._handle_ret(ret, 'cannot flush CTF writer stream object')
-
-    @property
-    def packet_header_field(self):
-        field_ptr = native_bt.stream_get_packet_header(self._ptr)
-
-        if field_ptr is None:
-            return
-
-        return bt2.fields._create_from_ptr(field_ptr)
-
-    @packet_header_field.setter
-    def packet_header_field(self, packet_header_field):
-        packet_header_field_ptr = None
-
-        if packet_header_field is not None:
-            utils._check_type(packet_header_field, bt2.fields._Field)
-            packet_header_field_ptr = packet_header_field._ptr
-
-        ret = native_bt.stream_set_packet_header(self._ptr,
-                                                 packet_header_field_ptr)
-        utils._handle_ret(ret, "cannot set CTF writer stream object's packet header field")
-
-    @property
-    def packet_context_field(self):
-        field_ptr = native_bt.stream_get_packet_context(self._ptr)
-
-        if field_ptr is None:
-            return
-
-        return bt2.fields._create_from_ptr(field_ptr)
-
-    @packet_context_field.setter
-    def packet_context_field(self, packet_context_field):
-        packet_context_field_ptr = None
-
-        if packet_context_field is not None:
-            utils._check_type(packet_context_field, bt2.fields._Field)
-            packet_context_field_ptr = packet_context_field._ptr
-
-        ret = native_bt.stream_set_packet_context(self._ptr,
-                                                  packet_context_field_ptr)
-        utils._handle_ret(ret, "cannot set CTF writer stream object's packet context field")
+        utils._handle_ret(ret)
 
 
-domain._Domain.Stream = _Stream

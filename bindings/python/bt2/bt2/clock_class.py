@@ -106,7 +106,6 @@ class ClockClass(bt2.object._SharedObject):
     @property
     def frequency(self):
         frequency = native_bt.clock_class_get_frequency(self._ptr)
-        assert(frequency >= 1)
         return frequency
 
     @frequency.setter
@@ -118,12 +117,12 @@ class ClockClass(bt2.object._SharedObject):
     @property
     def precision(self):
         precision = native_bt.clock_class_get_precision(self._ptr)
-        assert(precision >= 0)
         return precision
 
     @precision.setter
     def precision(self, precision):
         utils._check_uint64(precision)
+        assert(precision >= 0)
         ret = native_bt.clock_class_set_precision(self._ptr, precision)
         utils._handle_ret(ret, "cannot set clock class object's precision")
 
@@ -162,4 +161,3 @@ class ClockClass(bt2.object._SharedObject):
         utils._check_type(uuid, uuidp.UUID)
         ret = native_bt.clock_class_set_uuid(self._ptr, uuid.bytes)
         utils._handle_ret(ret, "cannot set clock class object's UUID")
-

@@ -233,6 +233,15 @@ typedef int bt_bool;
 %typemap(argout) unsigned int *OUTPUTINIT {
 	$result = SWIG_Python_AppendOutput(resultobj, SWIG_From_unsigned_SS_long_SS_long((uint64_t) (*$1)));
 }
+/* Output argument typemap for initialized double output parameter (always appends) */
+%typemap(in, numinputs=0) double *OUTPUTINIT (double temp = -1) {
+	$1 = &temp;
+}
+
+%typemap(argout) double *OUTPUTINIT {
+	$result = SWIG_Python_AppendOutput(resultobj, SWIG_From_int((*$1)));
+}
+
 
 /* Input argument typemap for UUID bytes */
 %typemap(in) bt_uuid {
@@ -313,6 +322,7 @@ enum bt_property_availability {
 %include "native_bt_values.i"
 %include "native_bt_version.i"
 
+%include "ctfwriter/native_btctf.i"
 %include "ctfwriter/native_btctf_event.i"
 %include "ctfwriter/native_btctf_eventclass.i"
 %include "ctfwriter/native_btctf_stream.i"

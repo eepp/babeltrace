@@ -92,12 +92,12 @@ class _Definition:
 
 
 _OBJ_TO_TYPE_ID = {
-    bt2._IntegerField: common.CTFTypeId.INTEGER,
-    bt2._FloatingPointNumberField: common.CTFTypeId.FLOAT,
-    bt2._EnumerationField: common.CTFTypeId.ENUM,
-    bt2._StringField: common.CTFTypeId.STRING,
-    bt2._StructureField: common.CTFTypeId.STRUCT,
-    bt2._ArrayField: common.CTFTypeId.ARRAY,
-    bt2._SequenceField: common.CTFTypeId.SEQUENCE,
-    bt2._VariantField: common.CTFTypeId.VARIANT,
+    bt2.ctfwriter._IntegerField: common.CTFTypeId.INTEGER,
+    bt2.ctfwriter._FloatingPointNumberField: common.CTFTypeId.FLOAT,
+    bt2.ctfwriter._EnumerationField: common.CTFTypeId.ENUM,
+    bt2.ctfwriter._StringField: common.CTFTypeId.STRING,
+    bt2.ctfwriter._StructureField: common.CTFTypeId.STRUCT,
+    bt2.ctfwriter._ArrayField: common.CTFTypeId.ARRAY,
+    bt2.ctfwriter._SequenceField: common.CTFTypeId.SEQUENCE,
+    bt2.ctfwriter._VariantField: common.CTFTypeId.VARIANT,
 }

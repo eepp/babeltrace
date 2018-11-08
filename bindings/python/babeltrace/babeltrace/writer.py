@@ -311,29 +311,29 @@ class IntegerBase:
 
 
 _BT2_BYTE_ORDER_TO_BYTE_ORDER = {
-    bt2.ByteOrder.NATIVE: common.ByteOrder.BYTE_ORDER_NATIVE,
-    bt2.ByteOrder.LITTLE_ENDIAN: common.ByteOrder.BYTE_ORDER_LITTLE_ENDIAN,
-    bt2.ByteOrder.BIG_ENDIAN: common.ByteOrder.BYTE_ORDER_BIG_ENDIAN,
-    bt2.ByteOrder.NETWORK: common.ByteOrder.BYTE_ORDER_NETWORK,
+    bt2.ctfwriter.ByteOrder.NATIVE: common.ByteOrder.BYTE_ORDER_NATIVE,
+    bt2.ctfwriter.ByteOrder.LITTLE_ENDIAN: common.ByteOrder.BYTE_ORDER_LITTLE_ENDIAN,
+    bt2.ctfwriter.ByteOrder.BIG_ENDIAN: common.ByteOrder.BYTE_ORDER_BIG_ENDIAN,
+    bt2.ctfwriter.ByteOrder.NETWORK: common.ByteOrder.BYTE_ORDER_NETWORK,
 }
 
 _BYTE_ORDER_TO_BT2_BYTE_ORDER = {
-    common.ByteOrder.BYTE_ORDER_NATIVE: bt2.ByteOrder.NATIVE,
-    common.ByteOrder.BYTE_ORDER_LITTLE_ENDIAN: bt2.ByteOrder.LITTLE_ENDIAN,
-    common.ByteOrder.BYTE_ORDER_BIG_ENDIAN: bt2.ByteOrder.BIG_ENDIAN,
-    common.ByteOrder.BYTE_ORDER_NETWORK: bt2.ByteOrder.NETWORK,
+    common.ByteOrder.BYTE_ORDER_NATIVE: bt2.ctfwriter.ByteOrder.NATIVE,
+    common.ByteOrder.BYTE_ORDER_LITTLE_ENDIAN: bt2.ctfwriter.ByteOrder.LITTLE_ENDIAN,
+    common.ByteOrder.BYTE_ORDER_BIG_ENDIAN: bt2.ctfwriter.ByteOrder.BIG_ENDIAN,
+    common.ByteOrder.BYTE_ORDER_NETWORK: bt2.ctfwriter.ByteOrder.NETWORK,
 }
 
 _BT2_ENCODING_TO_ENCODING = {
-    bt2.Encoding.NONE: common.CTFStringEncoding.NONE,
-    bt2.Encoding.ASCII: common.CTFStringEncoding.ASCII,
-    bt2.Encoding.UTF8: common.CTFStringEncoding.UTF8,
+    bt2.ctfwriter.Encoding.NONE: common.CTFStringEncoding.NONE,
+    bt2.ctfwriter.Encoding.ASCII: common.CTFStringEncoding.ASCII,
+    bt2.ctfwriter.Encoding.UTF8: common.CTFStringEncoding.UTF8,
 }
 
 _ENCODING_TO_BT2_ENCODING = {
-    common.CTFStringEncoding.NONE: bt2.Encoding.NONE,
-    common.CTFStringEncoding.ASCII: bt2.Encoding.ASCII,
-    common.CTFStringEncoding.UTF8: bt2.Encoding.UTF8,
+    common.CTFStringEncoding.NONE: bt2.ctfwriter.Encoding.NONE,
+    common.CTFStringEncoding.ASCII: bt2.ctfwriter.Encoding.ASCII,
+    common.CTFStringEncoding.UTF8: bt2.ctfwriter.Encoding.UTF8,
 }
 
 
@@ -1064,6 +1064,7 @@ class Field:
             bt2.ctfwriter._SequenceField: SequenceField
         }
 
+        print(bt2_field)
         if type(bt2_field) not in type_dict:
             raise TypeError("Invalid field instance.")
 
@@ -1526,7 +1527,7 @@ class Event:
         """
 
         try:
-            return Field._create_field(self._e.payload_field[field_name])
+            return self._e.payload_field[field_name]
         except:
             raise TypeError('Could not get field from event.')
 
@@ -1864,7 +1865,7 @@ class Stream:
         :exc:`ValueError` is raised on error.
         """
 
-        bt2_field = self._s.packet_context_field
+        bt2_field = self._s.packet_context
         if bt2_field is None:
             raise ValueError("Invalid Stream.")
 
@@ -1876,7 +1877,7 @@ class Stream:
             raise TypeError("Argument field must be of type StructureField")
 
         try:
-            self._s.packet_context_field = field._f
+            self._s.packet_context = field._f
         except:
             raise ValueError("Invalid packet context field.")
 
