@@ -56,6 +56,7 @@ void test_bin_info_build_id(const char *data_dir)
 	char *func_name = NULL;
 	struct bin_info *bin = NULL;
 	struct source_location *src_loc = NULL;
+	struct bt_fd_cache fdc;
 	uint8_t build_id[BUILD_ID_LEN] = {
 		0xcd, 0xd9, 0x8c, 0xdd, 0x87, 0xf7, 0xfe, 0x64, 0xc1, 0x3b,
 		0x6d, 0xaa, 0xd5, 0x53, 0x98, 0x7e, 0xaf, 0xd4, 0x0c, 0xbb
@@ -65,7 +66,9 @@ void test_bin_info_build_id(const char *data_dir)
 
 	snprintf(path, PATH_MAX, "%s/%s", data_dir, SO_NAME_BUILD_ID);
 
-	bin = bin_info_create(path, SO_LOW_ADDR, SO_MEMSZ, true, data_dir, NULL);
+	ret = bt_fd_cache_init(&fdc);
+	ok(ret == 0, "bt_fd_cache_init successful");
+	bin = bin_info_create(&fdc, path, SO_LOW_ADDR, SO_MEMSZ, true, data_dir, NULL);
 	ok(bin != NULL, "bin_info_create successful");
 
 	/* Test setting build_id */
@@ -97,6 +100,7 @@ void test_bin_info_build_id(const char *data_dir)
 	}
 
 	bin_info_destroy(bin);
+	bt_fd_cache_fini(&fdc);
 }
 
 static
@@ -109,12 +113,16 @@ void test_bin_info_debug_link(const char *data_dir)
 	struct source_location *src_loc = NULL;
 	char *dbg_filename = "libhello_debug_link_so.debug";
 	uint32_t crc = 0xe55c2b98;
+	struct bt_fd_cache fdc;
 
 	diag("bin-info tests - separate DWARF via debug link");
 
 	snprintf(path, PATH_MAX, "%s/%s", data_dir, SO_NAME_DEBUG_LINK);
 
-	bin = bin_info_create(path, SO_LOW_ADDR, SO_MEMSZ, true, data_dir, NULL);
+	ret = bt_fd_cache_init(&fdc);
+	ok(ret == 0, "bt_fd_cache_init successful");
+	bin = bin_info_create(&fdc, path, SO_LOW_ADDR, SO_MEMSZ, true, data_dir,
+			NULL);
 	ok(bin != NULL, "bin_info_create successful");
 
 	/* Test setting debug link */
@@ -148,6 +156,7 @@ void test_bin_info_debug_link(const char *data_dir)
 	}
 
 	bin_info_destroy(bin);
+	bt_fd_cache_fini(&fdc);
 }
 
 static
@@ -158,12 +167,15 @@ void test_bin_info_elf(const char *data_dir)
 	char *func_name = NULL;
 	struct bin_info *bin = NULL;
 	struct source_location *src_loc = NULL;
+	struct bt_fd_cache fdc;
 
 	diag("bin-info tests - ELF only");
 
 	snprintf(path, PATH_MAX, "%s/%s", data_dir, SO_NAME_ELF);
 
-	bin = bin_info_create(path, SO_LOW_ADDR, SO_MEMSZ, true, data_dir, NULL);
+	ret = bt_fd_cache_init(&fdc);
+	ok(ret == 0, "bt_fd_cache_init successful");
+	bin = bin_info_create(&fdc, path, SO_LOW_ADDR, SO_MEMSZ, true, data_dir, NULL);
 	ok(bin != NULL, "bin_info_create successful");
 
 	/* Test function name lookup (with ELF) */
@@ -189,6 +201,7 @@ void test_bin_info_elf(const char *data_dir)
 
 	source_location_destroy(src_loc);
 	bin_info_destroy(bin);
+	bt_fd_cache_fini(&fdc);
 }
 
 static
@@ -199,12 +212,16 @@ void test_bin_info(const char *data_dir)
 	char *func_name = NULL;
 	struct bin_info *bin = NULL;
 	struct source_location *src_loc = NULL;
+	struct bt_fd_cache fdc;
 
 	diag("bin-info tests - DWARF bundled with SO file");
 
+
 	snprintf(path, PATH_MAX, "%s/%s", data_dir, SO_NAME);
 
-	bin = bin_info_create(path, SO_LOW_ADDR, SO_MEMSZ, true, data_dir, NULL);
+	ret = bt_fd_cache_init(&fdc);
+	ok(ret == 0, "bt_fd_cache_init successful");
+	bin = bin_info_create(&fdc, path, SO_LOW_ADDR, SO_MEMSZ, true, data_dir, NULL);
 	ok(bin != NULL, "bin_info_create successful");
 
 	/* Test bin_info_has_address */
@@ -271,6 +288,7 @@ void test_bin_info(const char *data_dir)
 		"bin_info_lookup_source_location - fail on addr not found");
 
 	bin_info_destroy(bin);
+	bt_fd_cache_fini(&fdc);
 }
 
 int main(int argc, char **argv)
