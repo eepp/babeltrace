@@ -129,6 +129,9 @@ extern bt_field_class_variant_option *
 bt_field_class_variant_borrow_option_by_name(
 		bt_field_class *field_class, char *name);
 
+extern void bt_field_class_variant_option_set_selector_field_class_member_index(
+		bt_field_class_variant_option *option, uint64_t index);
+
 extern bt_field_class *bt_field_class_variant_option_borrow_field_class(
 		bt_field_class_variant_option *option);
 

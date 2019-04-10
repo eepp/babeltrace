@@ -60,13 +60,18 @@
 		_name " is not an array field class: %![fc-]+F", (_fc))
 
 #define BT_ASSERT_PRE_FC_HAS_ID(_fc, _type, _name)			\
-	BT_ASSERT_PRE(((const struct bt_field_class *) (_fc))->type == (_type), 	\
+	BT_ASSERT_PRE(((const struct bt_field_class *) (_fc))->type == (_type), \
 		_name " has the wrong type: expected-type=%s, "		\
 		"%![fc-]+F", bt_common_field_class_type_string(_type), (_fc))
 
 #define BT_ASSERT_PRE_FC_HOT(_fc, _name)				\
 	BT_ASSERT_PRE_HOT((const struct bt_field_class *) (_fc),		\
 		(_name), ": %!+F", (_fc))
+
+#define BT_ASSERT_PRE_NAMED_FC_HOT(_named_fc, _name)			\
+	BT_ASSERT_PRE_HOT((_named_fc)->container_fc, 			\
+		(_name), ": name=\"%s\", %![fc-]+F",			\
+		(_named_fc)->name->str, (_named_fc)->fc)
 
 #define BT_FIELD_CLASS_NAMED_FC_AT_INDEX(_fc, _index)		\
 	(&g_array_index(((struct bt_field_class_named_field_class_container *) (_fc))->named_fcs, \
@@ -159,12 +164,15 @@ struct bt_field_class_string {
 
 /* A named field class is a (name, field class) pair */
 struct bt_named_field_class {
+	/* Weak */
+	struct bt_field_class *container_fc;
+
 	GString *name;
 
 	/* Owned by this */
 	struct bt_field_class *fc;
 
-	bool frozen;
+	uint64_t var_sel_member_index;
 };
 
 struct bt_field_class_structure_member;
@@ -206,7 +214,14 @@ struct bt_field_class_static_array {
 struct bt_field_class_dynamic_array {
 	struct bt_field_class_array common;
 
-	/* Weak: never dereferenced, only use to find it elsewhere */
+	/*
+	 * Weak.
+	 *
+	 * This is guaranteed to exist, except at trace class
+	 * destruction time, as this dynamic array field class and
+	 * `length_fc` are part of the same trace class (which holds all
+	 * its stream classes and event classes alive).
+	 */
 	struct bt_field_class *length_fc;
 
 	/* Owned by this */
@@ -216,7 +231,14 @@ struct bt_field_class_dynamic_array {
 struct bt_field_class_variant {
 	struct bt_field_class_named_field_class_container common;
 
-	/* Weak: never dereferenced, only use to find it elsewhere */
+	/*
+	 * Weak.
+	 *
+	 * This is guaranteed to exist, except at trace class
+	 * destruction time, as this variant field class and
+	 * `selector_fc` are part of the same trace class (which holds
+	 * all its stream classes and event classes alive).
+	 */
 	struct bt_field_class *selector_fc;
 
 	/* Owned by this */
@@ -237,15 +259,6 @@ void _bt_field_class_freeze(const struct bt_field_class *field_class);
 # define bt_field_class_freeze		_bt_field_class_freeze
 #else
 # define bt_field_class_freeze(_fc)
-#endif
-
-BT_HIDDEN
-void _bt_named_field_class_freeze(const struct bt_named_field_class *named_fc);
-
-#ifdef BT_DEV_MODE
-# define bt_named_field_class_freeze		_bt_named_field_class_freeze
-#else
-# define bt_named_field_class_freeze(_named_fc)
 #endif
 
 /*

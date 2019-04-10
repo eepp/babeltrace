@@ -772,6 +772,8 @@ enum bt_field_class_status append_named_field_class_to_container_field_class(
 		struct bt_named_field_class, container_fc->named_fcs->len - 1);
 	named_fc->name = name_str;
 	named_fc->fc = fc;
+	named_fc->container_fc = (void *) container_fc;
+	named_fc->var_sel_member_index = UINT64_C(-1);
 	bt_object_get_no_null_check(fc);
 	g_hash_table_insert(container_fc->name_to_index, named_fc->name->str,
 		GUINT_TO_POINTER(container_fc->named_fcs->len - 1));
@@ -1077,6 +1079,41 @@ bt_field_class_variant_option_borrow_field_class(
 	return named_fc->fc;
 }
 
+void bt_field_class_variant_option_set_selector_field_class_member_index(
+		bt_field_class_variant_option *option, uint64_t index)
+{
+	const struct bt_field_class_variant *var_fc;
+	const struct bt_field_class_enumeration *enum_fc;
+	struct bt_named_field_class *named_fc = (void *) option;
+
+	BT_ASSERT_PRE_NON_NULL(option, "Variant field class option");
+	BT_ASSERT_PRE_NAMED_FC_HOT(named_fc, "Variant field class option");
+	var_fc = (const void *) named_fc->container_fc;
+	BT_ASSERT_PRE(var_fc->selector_fc,
+		"Variant field class has no selector field class: %!+F",
+		var_fc);
+	enum_fc = (const void *) var_fc->selector_fc;
+	BT_ASSERT_PRE_VALID_INDEX(index, enum_fc->mappings->len);
+	named_fc->var_sel_member_index = index;
+}
+
+uint64_t bt_field_class_variant_option_get_selector_field_class_member_index(
+		const bt_field_class_variant_option *option)
+{
+	const struct bt_field_class_variant *var_fc;
+	struct bt_named_field_class *named_fc = (void *) option;
+
+	BT_ASSERT_PRE_NON_NULL(option, "Variant field class option");
+	var_fc = (const void *) named_fc->container_fc;
+	BT_ASSERT_PRE(var_fc->selector_fc,
+		"Variant field class has no selector field class: %!+F",
+		var_fc);
+	BT_ASSERT_PRE(named_fc->var_sel_member_index != UINT64_C(-1),
+		"Variant field class option has no selector field class mapping index: "
+		"%![var-fc]+F, name=\"%s\"", var_fc, named_fc->name->str);
+	return named_fc->var_sel_member_index;
+}
+
 const struct bt_field_path *
 bt_field_class_variant_borrow_selector_field_path_const(
 		const struct bt_field_class *fc)
@@ -1293,36 +1330,6 @@ void _bt_field_class_freeze(const struct bt_field_class *c_fc)
 	 */
 	BT_ASSERT(fc);
 	fc->frozen = true;
-
-	switch (fc->type) {
-	case BT_FIELD_CLASS_TYPE_STRUCTURE:
-	case BT_FIELD_CLASS_TYPE_VARIANT:
-	{
-		struct bt_field_class_named_field_class_container *container_fc =
-			(void *) fc;
-		uint64_t i;
-
-		for (i = 0; i < container_fc->named_fcs->len; i++) {
-			struct bt_named_field_class *named_fc =
-				BT_FIELD_CLASS_NAMED_FC_AT_INDEX(
-					container_fc, i);
-
-			bt_named_field_class_freeze(named_fc);
-		}
-
-		break;
-	}
-	default:
-		break;
-	}
-}
-
-BT_HIDDEN
-void _bt_named_field_class_freeze(const struct bt_named_field_class *named_fc)
-{
-	BT_ASSERT(named_fc);
-	((struct bt_named_field_class *) named_fc)->frozen = true;
-	bt_field_class_freeze(named_fc->fc);
 }
 
 BT_HIDDEN

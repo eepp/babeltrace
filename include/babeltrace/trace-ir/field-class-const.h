@@ -174,6 +174,10 @@ extern const bt_field_class *
 bt_field_class_variant_option_borrow_field_class_const(
 		const bt_field_class_variant_option *option);
 
+extern uint64_t
+bt_field_class_variant_option_get_selector_field_class_member_index(
+		const bt_field_class_variant_option *option);
+
 extern void bt_field_class_get_ref(const bt_field_class *field_class);
 
 extern void bt_field_class_put_ref(const bt_field_class *field_class);
