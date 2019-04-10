@@ -113,25 +113,13 @@ bt_field_class_dynamic_array_set_length_field_class(
 extern bt_field_class *bt_field_class_variant_create(
 		bt_trace_class *trace_class);
 
-extern bt_field_class *bt_field_class_variant_with_selector_create(
-		bt_trace_class *trace_class,
+extern bt_field_class_status
+bt_field_class_variant_set_selector_field_class(bt_field_class *field_class,
 		bt_field_class *selector_field_class);
 
 extern bt_field_class_status bt_field_class_variant_append_option(
 		bt_field_class *var_field_class,
 		const char *name, bt_field_class *field_class);
-
-extern bt_field_class_status
-bt_field_class_variant_with_unsigned_selector_append_option(
-		bt_field_class *var_field_class,
-		const char *name, bt_field_class *field_class,
-		uint64_t range_lower, uint64_t range_upper);
-
-extern bt_field_class_status
-bt_field_class_variant_with_signed_selector_append_option(
-		bt_field_class *var_field_class,
-		const char *name, bt_field_class *field_class,
-		int64_t range_lower, int64_t range_upper);
 
 extern bt_field_class_variant_option *
 bt_field_class_variant_borrow_option_by_index(
@@ -141,40 +129,11 @@ extern bt_field_class_variant_option *
 bt_field_class_variant_borrow_option_by_name(
 		bt_field_class *field_class, char *name);
 
+extern void bt_field_class_variant_option_set_selector_field_class_member_index(
+		bt_field_class_variant_option *option, uint64_t index);
+
 extern bt_field_class *bt_field_class_variant_option_borrow_field_class(
 		bt_field_class_variant_option *option);
-
-extern bt_field_class_variant_with_unsigned_selector_option *
-bt_field_class_variant_with_unsigned_selector_borrow_option_by_index(
-		bt_field_class *field_class, uint64_t index);
-
-extern bt_field_class_variant_with_unsigned_selector_option *
-bt_field_class_variant_with_unsigned_selector_borrow_option_by_name(
-		bt_field_class *field_class, char *name);
-
-static inline
-bt_field_class_variant_option *
-bt_field_class_variant_with_unsigned_selector_option_as_field_class_variant_option(
-		bt_field_class_variant_with_unsigned_selector_option *option)
-{
-	return (void *) option;
-}
-
-extern bt_field_class_variant_with_signed_selector_option *
-bt_field_class_variant_with_signed_selector_borrow_option_by_index(
-		bt_field_class *field_class, uint64_t index);
-
-extern bt_field_class_variant_with_signed_selector_option *
-bt_field_class_variant_with_signed_selector_borrow_option_by_name(
-		bt_field_class *field_class, char *name);
-
-static inline
-bt_field_class_variant_option *
-bt_field_class_variant_with_signed_selector_option_as_field_class_variant_option(
-		bt_field_class_variant_with_signed_selector_option *option)
-{
-	return (void *) option;
-}
 
 #ifdef __cplusplus
 }

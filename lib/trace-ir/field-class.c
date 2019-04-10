@@ -44,6 +44,11 @@
 #include <inttypes.h>
 #include <stdlib.h>
 
+struct bt_field_class_unsigned_enumeration_mapping;
+struct bt_field_class_signed_enumeration_mapping;
+struct bt_field_class_structure_member;
+struct bt_field_class_variant_option;
+
 enum bt_field_class_type bt_field_class_get_type(
 		const struct bt_field_class *fc)
 {

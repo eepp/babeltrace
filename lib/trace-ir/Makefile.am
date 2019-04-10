@@ -12,6 +12,7 @@ libtrace_ir_la_SOURCES = \
 	field-path.c \
 	packet.c \
 	packet-context-field.c \
+	range-set.c \
 	resolve-field-path.c \
 	stream.c \
 	stream-class.c \

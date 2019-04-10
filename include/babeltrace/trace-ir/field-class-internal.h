@@ -27,6 +27,7 @@
 #include <babeltrace/assert-pre-internal.h>
 #include <babeltrace/trace-ir/clock-class.h>
 #include <babeltrace/trace-ir/field-class.h>
+#include <babeltrace/trace-ir/range-set-internal.h>
 #include <babeltrace/babeltrace-internal.h>
 #include <babeltrace/object-internal.h>
 #include <babeltrace/types.h>
@@ -116,23 +117,9 @@ struct bt_field_class_integer {
 	enum bt_field_class_integer_preferred_display_base base;
 };
 
-struct bt_field_class_enumeration_mapping_range {
-	union {
-		uint64_t u;
-		int64_t i;
-	} lower;
-
-	union {
-		uint64_t u;
-		int64_t i;
-	} upper;
-};
-
 struct bt_field_class_enumeration_mapping {
 	GString *label;
-
-	/* Array of `struct bt_field_class_enumeration_mapping_range` */
-	GArray *ranges;
+	struct bt_range_set range_set;
 };
 
 struct bt_field_class_enumeration {
@@ -174,9 +161,6 @@ struct bt_named_field_class {
 
 	uint64_t var_sel_member_index;
 };
-
-struct bt_field_class_structure_member;
-struct bt_field_class_variant_option;
 
 /*
  * This is the base field class for a container of named field classes.

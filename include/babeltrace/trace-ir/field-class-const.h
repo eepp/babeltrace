@@ -28,9 +28,11 @@
  */
 
 /*
- * For bt_bool, bt_field_class bt_field_path
- * bt_field_class_signed_enumeration_mapping_ranges
- * bt_field_class_unsigned_enumeration_mapping_ranges,
+ * For bt_bool, bt_field_class, bt_field_path,
+ * bt_field_class_unsigned_enumeration_mapping,
+ * bt_field_class_signed_enumeration_mapping,
+ * bt_range_set_unsigned, bt_range_set_signed,
+ * bt_field_class_structure_member, bt_field_class_variant_option,
  * bt_field_class_enumeration_mapping_label_array
  */
 #include <babeltrace/types.h>
@@ -57,7 +59,10 @@ typedef enum bt_field_class_type {
 	BT_FIELD_CLASS_TYPE_STRUCTURE,
 	BT_FIELD_CLASS_TYPE_STATIC_ARRAY,
 	BT_FIELD_CLASS_TYPE_DYNAMIC_ARRAY,
-	BT_FIELD_CLASS_TYPE_VARIANT,
+	BT_FIELD_CLASS_TYPE_DYNAMIC_ARRAY_WITH_LENGTH,
+	BT_FIELD_CLASS_TYPE_VARIANT_WITHOUT_SELECTOR,
+	BT_FIELD_CLASS_TYPE_VARIANT_WITH_UNSIGNED_SELECTOR,
+	BT_FIELD_CLASS_TYPE_VARIANT_WITH_SIGNED_SELECTOR,
 } bt_field_class_type;
 
 typedef enum bt_field_class_integer_preferred_display_base {
@@ -83,33 +88,21 @@ extern bt_bool bt_field_class_real_is_single_precision(
 extern uint64_t bt_field_class_enumeration_get_mapping_count(
 		const bt_field_class *field_class);
 
-extern void bt_field_class_unsigned_enumeration_borrow_mapping_by_index_const(
-		const bt_field_class *field_class, uint64_t index,
-		const char **label,
-		const bt_field_class_unsigned_enumeration_mapping_ranges **ranges);
+extern const bt_field_class_unsigned_enumeration_mapping *
+bt_field_class_unsigned_enumeration_borrow_mapping_by_index_const(
+		const bt_field_class *field_class, uint64_t index);
 
-extern void bt_field_class_signed_enumeration_borrow_mapping_by_index_const(
-		const bt_field_class *field_class, uint64_t index,
-		const char **label,
-		const bt_field_class_signed_enumeration_mapping_ranges **ranges);
+extern const bt_field_class_signed_enumeration_mapping *
+bt_field_class_signed_enumeration_borrow_mapping_by_index_const(
+		const bt_field_class *field_class, uint64_t index);
 
-extern uint64_t
-bt_field_class_unsigned_enumeration_mapping_ranges_get_range_count(
-		const bt_field_class_unsigned_enumeration_mapping_ranges *ranges);
+extern const bt_range_set_unsigned *
+bt_field_class_unsigned_enumeration_mapping_borrow_range_set_const(
+	const bt_field_class_unsigned_enumeration_mapping *mapping);
 
-extern uint64_t
-bt_field_class_signed_enumeration_mapping_ranges_get_range_count(
-		const bt_field_class_signed_enumeration_mapping_ranges *ranges);
-
-extern void
-bt_field_class_unsigned_enumeration_mapping_ranges_get_range_by_index(
-		const bt_field_class_unsigned_enumeration_mapping_ranges *ranges,
-		uint64_t index, uint64_t *lower, uint64_t *upper);
-
-extern void
-bt_field_class_signed_enumeration_mapping_ranges_get_range_by_index(
-		const bt_field_class_signed_enumeration_mapping_ranges *ranges,
-		uint64_t index, int64_t *lower, int64_t *upper);
+extern const bt_range_set_signed *
+bt_field_class_signed_enumeration_mapping_borrow_range_set_const(
+	const bt_field_class_signed_enumeration_mapping *mapping);
 
 extern bt_field_class_status
 bt_field_class_unsigned_enumeration_get_mapping_labels_by_value(
@@ -174,9 +167,29 @@ extern const bt_field_class *
 bt_field_class_variant_option_borrow_field_class_const(
 		const bt_field_class_variant_option *option);
 
-extern uint64_t
-bt_field_class_variant_option_get_selector_field_class_member_index(
-		const bt_field_class_variant_option *option);
+const bt_range_set_unsigned *
+bt_field_class_variant_with_unsigned_selector_option_borrow_range_set_const(
+		const bt_field_class_variant_with_unsigned_selector_option *option);
+
+static inline
+const bt_field_class_variant_option *
+bt_field_class_variant_with_unsigned_selector_option_as_field_class_variant_option_const(
+		const bt_field_class_variant_with_unsigned_selector_option *option)
+{
+	return (const void *) option;
+}
+
+const bt_range_set_signed *
+bt_field_class_variant_with_signed_selector_option_borrow_range_set_const(
+		const bt_field_class_variant_with_signed_selector_option *option);
+
+static inline
+const bt_field_class_variant_option *
+bt_field_class_variant_with_signed_selector_option_as_field_class_variant_option_const(
+		const bt_field_class_variant_with_signed_selector_option *option)
+{
+	return (const void *) option;
+}
 
 extern void bt_field_class_get_ref(const bt_field_class *field_class);
 
