@@ -27,6 +27,7 @@
 
 #include <babeltrace/common-internal.h>
 #include <babeltrace/babeltrace.h>
+#include <babeltrace/compat/uuid-internal.h>
 #include <plugins-common.h>
 #include <glib.h>
 #include <babeltrace/assert-internal.h>
@@ -598,6 +599,32 @@ void array_insert(GPtrArray *array, gpointer element, size_t pos)
 	array->pdata[pos] = element;
 }
 
+/* Insert ds_file_info in ds_file_group's list of ds_file_infos at the right
+   place to keep it sorted. */
+
+static
+void ds_file_group_insert_ds_file_info_sorted(
+		struct ctf_fs_ds_file_group *ds_file_group,
+		struct ctf_fs_ds_file_info *ds_file_info)
+{
+	guint i;
+
+	/* Find the spot where to insert this ds_file_info. */
+	for (i = 0; i < ds_file_group->ds_file_infos->len; i++) {
+		struct ctf_fs_ds_file_info *other_ds_file_info =
+			g_ptr_array_index(ds_file_group->ds_file_infos, i);
+
+		if (ds_file_info->begin_ns < other_ds_file_info->begin_ns) {
+			break;
+		}
+	}
+
+	array_insert(ds_file_group->ds_file_infos, ds_file_info, i);
+}
+
+/* Create a new ds_file_info using the provided path, begin_ns and index, then
+   add it to ds_file_group's list of ds_file_infos. */
+
 static
 int ctf_fs_ds_file_group_add_ds_file_info(
 		struct ctf_fs_ds_file_group *ds_file_group,
@@ -605,7 +632,6 @@ int ctf_fs_ds_file_group_add_ds_file_info(
 		struct ctf_fs_ds_index *index)
 {
 	struct ctf_fs_ds_file_info *ds_file_info;
-	gint i = 0;
 	int ret = 0;
 
 	/* Onwership of index is transferred. */
@@ -615,17 +641,8 @@ int ctf_fs_ds_file_group_add_ds_file_info(
 		goto error;
 	}
 
-	/* Find a spot to insert this one */
-	for (i = 0; i < ds_file_group->ds_file_infos->len; i++) {
-		struct ctf_fs_ds_file_info *other_ds_file_info =
-			g_ptr_array_index(ds_file_group->ds_file_infos, i);
+	ds_file_group_insert_ds_file_info_sorted(ds_file_group, ds_file_info);
 
-		if (begin_ns < other_ds_file_info->begin_ns) {
-			break;
-		}
-	}
-
-	array_insert(ds_file_group->ds_file_infos, ds_file_info, i);
 	ds_file_info = NULL;
 	goto end;
 
@@ -1273,6 +1290,229 @@ end:
 	return ret;
 }
 
+/* GCompareFunc to sort traces by UUID. */
+
+static
+int sort_traces_by_uuid(gconstpointer a, gconstpointer b)
+{
+	struct ctf_fs_trace *trace_a = *((struct ctf_fs_trace **) a);
+	struct ctf_fs_trace *trace_b = *((struct ctf_fs_trace **) b);
+
+	bool trace_a_has_uuid = trace_a->metadata->tc->is_uuid_set;
+	bool trace_b_has_uuid = trace_b->metadata->tc->is_uuid_set;
+
+	/* Order traces without uuid first. */
+	if (!trace_a_has_uuid && trace_b_has_uuid) {
+		return -1;
+	}
+
+	if (trace_a_has_uuid && !trace_b_has_uuid) {
+		return 1;
+	}
+
+	if (!trace_a_has_uuid && !trace_b_has_uuid) {
+		return 0;
+	}
+
+	return bt_uuid_compare(trace_a->metadata->tc->uuid, trace_b->metadata->tc->uuid);
+}
+
+/* Count the number of stream and event classes defined by this trace's metadata.
+
+   This is used to determine which metadata is the "latest", out of multiple
+   traces sharing the same UUID. */
+
+static
+unsigned int metadata_count_stream_and_event_classes(struct ctf_fs_trace *trace)
+{
+	unsigned int num = trace->metadata->tc->stream_classes->len;
+
+	for (guint i = 0; i < trace->metadata->tc->stream_classes->len; i++) {
+		struct ctf_stream_class *sc = trace->metadata->tc->stream_classes->pdata[i];
+		num += sc->event_classes->len;
+	}
+
+	return num;
+}
+
+/* Merge the src ds_file_group into dest.  This consists of merging their
+   ds_file_infos, making sure to keep the result sorted. */
+
+static
+void merge_ctf_fs_ds_file_groups(struct ctf_fs_ds_file_group *dest, struct ctf_fs_ds_file_group *src)
+{
+	for (guint i = 0; i < src->ds_file_infos->len; i++) {
+		struct ctf_fs_ds_file_info *ds_file_info =
+			g_ptr_array_index(src->ds_file_infos, i);
+
+		/* Ownership of the ds_file_info is transferred to dest. */
+		g_ptr_array_index(src->ds_file_infos, i) = NULL;
+
+		ds_file_group_insert_ds_file_info_sorted(dest, ds_file_info);
+	}
+}
+
+/* Merge src_trace's data stream file groups into dest_trace's. */
+
+static
+void merge_matching_ctf_fs_ds_file_groups(
+		struct ctf_fs_trace *dest_trace,
+		struct ctf_fs_trace *src_trace)
+{
+
+	GPtrArray *dest = dest_trace->ds_file_groups;
+	GPtrArray *src = src_trace->ds_file_groups;
+
+	/* Save the initial length of dest: we only want to check against the
+	   original elements in the inner loop.  */
+	const guint dest_len = dest->len;
+
+
+	for (guint s_i = 0; s_i < src->len; s_i++) {
+		struct ctf_fs_ds_file_group *src_group = src->pdata[s_i];
+		bool merged = false;
+
+		/* A stream instance without ID can't match a stream in the other trace.  */
+		if (src_group->stream_id != -1) {
+			/* Let's search for a matching ds_file_group in the destination.  */
+			for (guint d_i = 0; d_i < dest_len; d_i++) {
+				struct ctf_fs_ds_file_group *dest_group = dest->pdata[d_i];
+
+				/* Can't match a stream instance without ID.  */
+				if (dest_group->stream_id == -1) {
+					continue;
+				}
+
+				/* If the two groups have the same stream instance id
+					and belong to the same stream class (stream instance
+					ids are per-stream class), they represent the same
+					stream instance. */
+				if (dest_group->stream_id == src_group->stream_id &&
+					dest_group->sc->id == src_group->sc->id) {
+					merge_ctf_fs_ds_file_groups(dest_group, src_group);
+					merged = true;
+					break;
+				}
+			}
+		}
+
+		/* Didn't find a friend in dest to merge our src_group into?
+		   Add it as a new group to dest. */
+		if (!merged) {
+			g_ptr_array_add(dest, src_group);
+		}
+	}
+}
+
+/* Collapse the given traces, which must all share the same UUID, in a single
+   one.
+
+   The trace with the most expansive metadata is chosen and all other traces
+   are merged into that one.  The array slots of all the traces that get merged
+   in the chosen one are set to NULL, so only the slot of the chosen trace
+   remains non-NULL. */
+
+static
+void merge_ctf_fs_traces(struct ctf_fs_trace **traces, unsigned int num_traces)
+{
+	BT_ASSERT(num_traces >= 2);
+
+	unsigned int winner_count = metadata_count_stream_and_event_classes(traces[0]);
+	struct ctf_fs_trace *winner = traces[0];
+
+	/* Find the trace with the largest metadata. */
+	for (guint i = 1; i < num_traces; i++) {
+		struct ctf_fs_trace *candidate = traces[i];
+
+		/* A bit of sanity check. */
+		BT_ASSERT(bt_uuid_compare(winner->metadata->tc->uuid, candidate->metadata->tc->uuid) == 0);
+
+		unsigned int candidate_count = metadata_count_stream_and_event_classes(candidate);
+
+		if (candidate_count > winner_count) {
+			winner_count = candidate_count;
+			winner = candidate;
+		}
+	}
+
+	/* Merge all the other traces in the winning trace. */
+	for (guint i = 0; i < num_traces; i++) {
+		struct ctf_fs_trace *trace = traces[i];
+
+		/* Don't merge the winner into itself. */
+		if (trace == winner) {
+			continue;
+		}
+
+		/* Merge trace's data stream file groups into winner's. */
+		merge_matching_ctf_fs_ds_file_groups(winner, trace);
+
+		/* Free the trace that got merged into winner, clear the slot in the array. */
+		ctf_fs_trace_destroy(trace);
+		traces[i] = NULL;
+	}
+
+	/* Use the string representation of the UUID as the trace name. */
+	char uuid_str[BABELTRACE_UUID_STR_LEN];
+	bt_uuid_unparse(winner->metadata->tc->uuid, uuid_str);
+	g_string_printf(winner->name, "%s", uuid_str);
+}
+
+/* Merge all traces of `ctf_fs` that share the same UUID in a single trace.
+   Traces with no UUID are not merged. */
+
+static
+void merge_traces_with_same_uuid(struct ctf_fs_component *ctf_fs)
+{
+	GPtrArray *traces = ctf_fs->traces;
+
+	/* Sort the traces by uuid, then collapse traces with the same uuid in a single one. */
+	g_ptr_array_sort(traces, sort_traces_by_uuid);
+
+	guint range_start_idx = 0;
+	unsigned int num_traces = 0;
+
+	/* Find ranges of consecutive traces that share the same UUID.  */
+	while (range_start_idx < traces->len) {
+		struct ctf_fs_trace *range_start_trace = g_ptr_array_index(traces, range_start_idx);
+
+		/* Exclusive end of range. */
+		guint range_end_exc_idx = range_start_idx + 1;
+
+		while (range_end_exc_idx < traces->len) {
+			struct ctf_fs_trace *this_trace = g_ptr_array_index(traces, range_end_exc_idx);
+
+			if (!range_start_trace->metadata->tc->is_uuid_set ||
+				(bt_uuid_compare(range_start_trace->metadata->tc->uuid, this_trace->metadata->tc->uuid) != 0)) {
+				break;
+			}
+
+			range_end_exc_idx++;
+		}
+
+		/* If we have two or more traces with matching UUIDs, merge them. */
+		guint range_len = range_end_exc_idx - range_start_idx;
+		if (range_len > 1) {
+			struct ctf_fs_trace **range_start = (struct ctf_fs_trace **) &traces->pdata[range_start_idx];
+			merge_ctf_fs_traces(range_start, range_len);
+		}
+
+		num_traces++;
+		range_start_idx = range_end_exc_idx;
+	}
+
+	/* Clear any NULL slot (traces that got merged in another one) in the array.  */
+	for (guint i = 0; i < traces->len;) {
+		if (g_ptr_array_index(traces, i) == NULL) {
+			g_ptr_array_remove_index_fast(traces, i);
+		} else {
+			i++;
+		}
+	}
+
+	BT_ASSERT(num_traces == traces->len);
+}
+
 int create_ctf_fs_traces(bt_self_component_source *self_comp,
 		struct ctf_fs_component *ctf_fs,
 		const bt_value *paths_value)
@@ -1288,6 +1528,8 @@ int create_ctf_fs_traces(bt_self_component_source *self_comp,
 			goto error;
 		}
 	}
+
+	merge_traces_with_same_uuid(ctf_fs);
 
 error:
 	return ret;
