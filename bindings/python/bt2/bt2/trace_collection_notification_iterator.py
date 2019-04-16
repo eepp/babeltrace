@@ -42,7 +42,7 @@ class ComponentSpec:
         self._component_class_name = component_class_name
 
         if type(params) is str:
-            self._params = bt2.create_value({'path': params})
+            self._params = bt2.create_value({'paths': [params]})
         else:
             self._params = bt2.create_value(params)
 
@@ -129,11 +129,11 @@ class TraceCollectionNotificationIterator(bt2.notification_iterator._Notificatio
                 break
 
         try:
-            path = params['path']
-        except:
-            raise bt2.Error('all source components must be created with a "path" parameter in stream intersection mode')
+            paths = src_comp_and_spec.spec.params['paths']
+        except Exception as e:
+            raise bt2.Error('all source components must be created with a "paths" parameter in stream intersection mode') from e
 
-        params = {'path': str(path)}
+        params = {'paths': paths}
 
         # query the port's component for the `trace-info` object which
         # contains the stream intersection range for each exposed
