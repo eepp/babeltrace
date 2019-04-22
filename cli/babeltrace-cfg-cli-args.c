@@ -219,6 +219,58 @@ bt_value *ini_parse_neg_number(struct ini_parsing_state *state)
 	return value;
 }
 
+static bt_value *ini_parse_value(struct ini_parsing_state *state);
+
+/* Parse the current and following tokens as an array.  The current token should
+   be the opening square bracket of the array. */
+static
+bt_value *ini_parse_array(struct ini_parsing_state *state)
+{
+	/* The [ character should have already been ingested. */
+	BT_ASSERT(g_scanner_cur_token(state->scanner) == G_TOKEN_CHAR);
+	BT_ASSERT(g_scanner_cur_value(state->scanner).v_char == '[');
+
+	bt_value *array_value = bt_value_array_create ();
+
+	GTokenType token_type = g_scanner_get_next_token(state->scanner);
+
+	/* While the current token is not a ]... */
+	while (!(token_type == G_TOKEN_CHAR && g_scanner_cur_value(state->scanner).v_char == ']')) {
+		/* Parse the item... */
+		bt_value *item_value = ini_parse_value(state);
+		if (!item_value) {
+			goto error;
+		}
+
+		/* ... and add it to the result array. */
+		bt_value_array_append_element(array_value, item_value);
+		bt_value_put_ref(item_value);
+
+		/* Ingest the token following the value, it should be either a
+		   comma or closing square brace. */
+		token_type = g_scanner_get_next_token(state->scanner);
+
+		if (token_type == G_TOKEN_CHAR && g_scanner_cur_value(state->scanner).v_char == ',') {
+			/* Ingest the token following the comma.  If it happens
+			   to be a closing square bracket, we'll exit the loop
+			   and we are done (we allow trailing commas).
+			   Otherwise, we are ready for the next ini_parse_value call. */
+			token_type = g_scanner_get_next_token(state->scanner);
+		} else if (token_type == G_TOKEN_CHAR && g_scanner_cur_value(state->scanner).v_char == ']') {
+			/* Nothing, we'll exit the loop and we're done. */
+		} else {
+			ini_append_error_expecting(state, state->scanner, ", or ]");
+			goto error;
+		}
+	}
+
+	return array_value;
+
+error:
+	BT_VALUE_PUT_REF_AND_RESET(array_value);
+	return NULL;
+}
+
 /* Parse the current token (and the following ones if needed) as a value, return
    it as a bt_value.  */
 static
@@ -232,6 +284,9 @@ bt_value *ini_parse_value(struct ini_parsing_state *state)
 		if (state->scanner->value.v_char == '-') {
 			/* Negative number */
 			value = ini_parse_neg_number(state);
+		} else if (state->scanner->value.v_char == '[') {
+			/* Array */
+			value = ini_parse_array(state);
 		} else {
 			ini_append_error_expecting(state, state->scanner, "value");
 		}
