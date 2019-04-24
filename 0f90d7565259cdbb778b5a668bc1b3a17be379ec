@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "c209d099_804c5ec8",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 2
+      },
+      "lineNbr": 7,
+      "author": {
+        "id": 1016425
+      },
+      "writtenOn": "2019-04-24T20:18:01Z",
+      "side": 1,
+      "message": "je suis d\u0027accord",
+      "revId": "0f90d7565259cdbb778b5a668bc1b3a17be379ec",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    }
+  ]
+}
