@@ -1,35 +1,3 @@
-Format (CTF). The latest version of the CTF specification can be found at:
-
-  git tree:   git://git.efficios.com/ctf.git
-  gitweb:     http://git.efficios.com/?p=ctf.git
-
-The CE Workgroup of the Linux Foundation, Ericsson, and EfficiOS have
-sponsored this work.
-
-The current maintainers are:
-  Jérémie Galarneau <jeremie.galarneau@efficios.com>
-  Mathieu Desnoyers <mathieu.desnoyers@efficios.com>
-
-Questions should be addressed to this mailing list:
-  lttng-dev@lists.lttng.org
-
-
-BUILDING
---------
-
-	./bootstrap (skip if using tarball)
-	./configure
-	make
-	make install
-	ldconfig
-
-
-DEPENDENCIES
-------------
-
-To compile Babeltrace, you will need:
-
-	gcc 3.2 or better
 	libc6 development librairies
 	  (Debian : libc6, libc6-dev)
 	  (Fedora : glibc, glibc)
