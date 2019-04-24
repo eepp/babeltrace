@@ -1,0 +1,344 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "1fd3055a_e56a398a",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 130,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "I know it is somewhat unrelated, but can you apply the same format to stream file names (make_unique_stream_file_name())? It can be another patch.",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "845d5082_62c708fd",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 140,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Was it a requirement that we use LTTng\u0027s exact directory name format? Or can we use the ISO 8601 date string as is and be even more precise/regular than LTTng?\n\nAFAIK trace archive directories have this ISO 8601 string in them, but session directory names have the old format for backward compatibility reasons I believe.",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "3d28fe53_54f0c73c",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 155,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "We use GLib throughout the code to handle allocations.",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "972ec642_95da6f46",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 170,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "This can be part of the conditional block above.",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d62cfa6e_fb1e1246",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 183,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_integer().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "94ee0fd5_4a317bdc",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 190,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_integer().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "fedd457f_667da8ce",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 214,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_string().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "803510c4_738d2855",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 221,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_integer().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "209e6cb8_1d33c30a",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 228,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_string().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "65a1f841_731b3ed1",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 277,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_string().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "44e4e42e_41be4210",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 285,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use format:\n\n    Unrecognized tracer name: name\u003d\"mein tracer\"",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5e8ce0a6_028ef184",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 290,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_integer().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "73000c15_54f98d19",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 297,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_integer().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4c267baa_b0af030c",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 304,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Could we log (BT_LOGD()) that the version is not supported?\n\n    Unsupported LTTng version for automatic trace path: major\u003d2, minor\u003d10",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b2817052_cc26cadb",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 308,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_string().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "c9799e15_5352e09e",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 312,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use g_string_assign().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "47f895db_f78f4b0b",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 315,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_string().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "19c5f82c_347b97c7",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 322,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_string().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4bd425ae_4d25a725",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 335,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_string().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "fef373f6_280b253a",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 346,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T23:25:32Z",
+      "side": 1,
+      "message": "Use bt_value_is_string().",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    }
+  ]
+}
