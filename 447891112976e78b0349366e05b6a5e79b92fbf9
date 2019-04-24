@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3be4b84d_f541a61a",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 1
+      },
+      "lineNbr": 7,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T19:33:03Z",
+      "side": 1,
+      "message": "👨‍👩‍👦",
+      "revId": "447891112976e78b0349366e05b6a5e79b92fbf9",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "caff9c69_fdd3e5b8",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 120,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-24T19:33:03Z",
+      "side": 1,
+      "message": "This does not make any sense.\n\n🌵",
+      "revId": "447891112976e78b0349366e05b6a5e79b92fbf9",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    }
+  ]
+}
