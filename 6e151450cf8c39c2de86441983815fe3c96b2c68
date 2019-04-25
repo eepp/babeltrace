@@ -1,0 +1,89 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "00c67931_17474270",
+        "filename": "plugins/ctf/fs-sink/translate-ctf-ir-to-tsdl.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 248,
+      "author": {
+        "id": 1016425
+      },
+      "writtenOn": "2019-04-25T14:16:45Z",
+      "side": 1,
+      "message": "This would fit on a single line.",
+      "revId": "6e151450cf8c39c2de86441983815fe3c96b2c68",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "dd816111_ca8aceed",
+        "filename": "plugins/ctf/fs-sink/translate-ctf-ir-to-tsdl.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 250,
+      "author": {
+        "id": 1016425
+      },
+      "writtenOn": "2019-04-25T14:16:45Z",
+      "side": 1,
+      "message": "This would fit on a single line.",
+      "revId": "6e151450cf8c39c2de86441983815fe3c96b2c68",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "27499f57_6f8991fb",
+        "filename": "plugins/lttng-utils/debug-info/trace-ir-metadata-field-class-copy.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 214,
+      "author": {
+        "id": 1016425
+      },
+      "writtenOn": "2019-04-25T14:16:45Z",
+      "side": 1,
+      "message": "This function call could be on the previous line.",
+      "revId": "6e151450cf8c39c2de86441983815fe3c96b2c68",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "28da0811_fb624b48",
+        "filename": "plugins/lttng-utils/debug-info/trace-ir-metadata-field-class-copy.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 227,
+      "author": {
+        "id": 1016425
+      },
+      "writtenOn": "2019-04-25T14:16:45Z",
+      "side": 1,
+      "message": "Should we remove the extra tab when breaking long lines on the lines that we change? This entire file has two tabs on function calls. sorry...",
+      "revId": "6e151450cf8c39c2de86441983815fe3c96b2c68",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a125882d_a6976e01",
+        "filename": "plugins/lttng-utils/debug-info/trace-ir-metadata-field-class-copy.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 286,
+      "author": {
+        "id": 1016425
+      },
+      "writtenOn": "2019-04-25T14:16:45Z",
+      "side": 1,
+      "message": "This function call could be on the previous line.",
+      "revId": "6e151450cf8c39c2de86441983815fe3c96b2c68",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    }
+  ]
+}
