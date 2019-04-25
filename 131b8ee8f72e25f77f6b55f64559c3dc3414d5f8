@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "4c2f65a6_e07d6285",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 4
+      },
+      "lineNbr": 11,
+      "author": {
+        "id": 1016424
+      },
+      "writtenOn": "2019-04-25T15:23:48Z",
+      "side": 1,
+      "message": "Yes, as prescribed by the one true standard:\n\nhttps://en.wikipedia.org/wiki/GNU_coding_standards#Comments",
+      "parentUuid": "ea055ada_17d69c1f",
+      "revId": "131b8ee8f72e25f77f6b55f64559c3dc3414d5f8",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "9f674ce2_ab55aba4",
         "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
         "patchSetId": 4
