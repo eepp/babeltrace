@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9f674ce2_ab55aba4",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 4
+      },
+      "lineNbr": 153,
+      "author": {
+        "id": 1016424
+      },
+      "writtenOn": "2019-04-25T15:20:01Z",
+      "side": 1,
+      "message": "This glib function appeared in 2.26 (released in 2010).  I don\u0027t see any distro we support that has an older glib2 than this, so I think it would be fine to bump the requirement currently listed in the README.",
+      "revId": "131b8ee8f72e25f77f6b55f64559c3dc3414d5f8",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
+    }
+  ]
+}
