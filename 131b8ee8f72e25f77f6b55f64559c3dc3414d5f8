@@ -73,6 +73,24 @@
     },
     {
       "key": {
+        "uuid": "dc9c2ead_a5093571",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 4
+      },
+      "lineNbr": 11,
+      "author": {
+        "id": 1016424
+      },
+      "writtenOn": "2019-04-25T18:10:24Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "474ba29a_35150a6d",
+      "revId": "131b8ee8f72e25f77f6b55f64559c3dc3414d5f8",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "9f674ce2_ab55aba4",
         "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
         "patchSetId": 4
@@ -102,6 +120,24 @@
       "side": 1,
       "message": "RHEL 6 had 2.22 at some point, hence this requirement.\n\nCheck with Jérémie/Michael if we still need to support 2.22.",
       "parentUuid": "9f674ce2_ab55aba4",
+      "revId": "131b8ee8f72e25f77f6b55f64559c3dc3414d5f8",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4a48ea34_7e4c90d6",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 4
+      },
+      "lineNbr": 153,
+      "author": {
+        "id": 1016424
+      },
+      "writtenOn": "2019-04-25T18:10:24Z",
+      "side": 1,
+      "message": "Michael said that we use Centos 6 as a baseline.\n\nAccording to this, Centos 6 has 2.28, and RHEL6 should be the same:\n\nhttps://pkgs.org/download/glib2",
+      "parentUuid": "54968612_bc9104cf",
       "revId": "131b8ee8f72e25f77f6b55f64559c3dc3414d5f8",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
       "unresolved": true
