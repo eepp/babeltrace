@@ -108,6 +108,24 @@
     },
     {
       "key": {
+        "uuid": "0c578b76_c1ad87a3",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 140,
+      "author": {
+        "id": 1016415
+      },
+      "writtenOn": "2019-04-25T17:20:08Z",
+      "side": 1,
+      "message": "It is not a requirement per see.\n\nLets take the bold approach and revert to the \"conservative\" approach if the client find it weird.\n\nLets use the full iso8601 string.\n\nI would be in favor of parsing and reformatting to the same format since most of the code is already there and we need to \"validate\" the date anyway.",
+      "parentUuid": "8fdd21b3_993f11aa",
+      "revId": "f561890c5ec12d77410c838ce8a4fd8c402906e1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "3d28fe53_54f0c73c",
         "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
         "patchSetId": 2
