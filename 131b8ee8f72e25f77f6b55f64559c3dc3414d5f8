@@ -55,6 +55,24 @@
     },
     {
       "key": {
+        "uuid": "474ba29a_35150a6d",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 4
+      },
+      "lineNbr": 11,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-25T16:43:27Z",
+      "side": 1,
+      "message": "Honestly I don\u0027t really care for commit messages and internal comments, but we\u0027ll keep a single space for public documentation (Doxygen, man pages, Sphinx, etc.). Most documentation is eventually converted to HTML anyway and browsers rendering HTML do not care about multiple spaces.",
+      "parentUuid": "f1eeeee1_1327915c",
+      "revId": "131b8ee8f72e25f77f6b55f64559c3dc3414d5f8",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "9f674ce2_ab55aba4",
         "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
         "patchSetId": 4
@@ -69,6 +87,24 @@
       "revId": "131b8ee8f72e25f77f6b55f64559c3dc3414d5f8",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "54968612_bc9104cf",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 4
+      },
+      "lineNbr": 153,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-25T16:43:27Z",
+      "side": 1,
+      "message": "RHEL 6 had 2.22 at some point, hence this requirement.\n\nCheck with Jérémie/Michael if we still need to support 2.22.",
+      "parentUuid": "9f674ce2_ab55aba4",
+      "revId": "131b8ee8f72e25f77f6b55f64559c3dc3414d5f8",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
     }
   ]
 }
