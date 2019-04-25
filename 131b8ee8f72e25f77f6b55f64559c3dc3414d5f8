@@ -2,6 +2,23 @@
   "comments": [
     {
       "key": {
+        "uuid": "ea055ada_17d69c1f",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 4
+      },
+      "lineNbr": 11,
+      "author": {
+        "id": 1016415
+      },
+      "writtenOn": "2019-04-25T15:20:18Z",
+      "side": 1,
+      "message": "Double space before \"This\"",
+      "revId": "131b8ee8f72e25f77f6b55f64559c3dc3414d5f8",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "9f674ce2_ab55aba4",
         "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
         "patchSetId": 4
