@@ -141,6 +141,24 @@
       "revId": "131b8ee8f72e25f77f6b55f64559c3dc3414d5f8",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b90508e5_ab1254dc",
+        "filename": "plugins/ctf/fs-sink/fs-sink-trace.c",
+        "patchSetId": 4
+      },
+      "lineNbr": 153,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-25T19:27:48Z",
+      "side": 1,
+      "message": "That\u0027s great news then.",
+      "parentUuid": "4a48ea34_7e4c90d6",
+      "revId": "131b8ee8f72e25f77f6b55f64559c3dc3414d5f8",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
     }
   ]
 }
