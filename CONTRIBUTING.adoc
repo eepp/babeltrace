@@ -1,6 +1,6 @@
 = Babeltrace's contributor's guide
 Jérémie Galarneau, Philippe Proulx
-v0.1, 6 September 2017
+v0.1, 6 September 2022
 :toc:
 :toclevels: 5
 
