@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "44c682c4_52173117",
+        "filename": "CONTRIBUTING.adoc",
+        "patchSetId": 1
+      },
+      "lineNbr": 3,
+      "author": {
+        "id": 1016424
+      },
+      "writtenOn": "2019-04-26T19:31:23Z",
+      "side": 1,
+      "message": "It is a bit optimistic to think that bt2 will be released in 2022.",
+      "revId": "e856641c08850cc1e7e98afa256187dc71756f46",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
+    }
+  ]
+}
