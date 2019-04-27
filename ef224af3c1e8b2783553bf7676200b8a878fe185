@@ -51,6 +51,24 @@
       "revId": "ef224af3c1e8b2783553bf7676200b8a878fe185",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "e80c6f2a_d582f9a6",
+        "filename": "bindings/python/bt2/bt2/component.py",
+        "patchSetId": 3
+      },
+      "lineNbr": 328,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-27T06:44:48Z",
+      "side": 1,
+      "message": "I know, I had to deal with the same ones when replacing within the whole code base.",
+      "parentUuid": "22fbd496_ae7051da",
+      "revId": "ef224af3c1e8b2783553bf7676200b8a878fe185",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
     }
   ]
 }

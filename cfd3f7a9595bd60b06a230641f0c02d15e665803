@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3aefcbba_c4d6b510",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 5
+      },
+      "lineNbr": 7,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-27T06:44:48Z",
+      "side": 1,
+      "message": "I suggest you use the `bt2` prefix for those. Gives more space for the actual message, and we know it\u0027s the Python package.\n\nHave a look at the Git history.",
+      "revId": "cfd3f7a9595bd60b06a230641f0c02d15e665803",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    }
+  ]
+}
