@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "a05da4c4_ea3b9e05",
+        "filename": "tests/bindings/python/bt2/test_clock_class.py",
+        "patchSetId": 1
+      },
+      "lineNbr": 138,
+      "author": {
+        "id": 1001590
+      },
+      "writtenOn": "2019-04-27T06:55:51Z",
+      "side": 1,
+      "message": "Good catch to also replace those `cv` with `cs` 👍.",
+      "revId": "64d050cc02bfeec7f9c18704a7be8fa57bc90fb9",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
+    }
+  ]
+}
