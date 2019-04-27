@@ -69,6 +69,24 @@
       "revId": "ef224af3c1e8b2783553bf7676200b8a878fe185",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "33c0398a_2bb660b3",
+        "filename": "bindings/python/bt2/bt2/component.py",
+        "patchSetId": 3
+      },
+      "lineNbr": 328,
+      "author": {
+        "id": 1016424
+      },
+      "writtenOn": "2019-04-27T16:20:53Z",
+      "side": 1,
+      "message": "Ack",
+      "parentUuid": "e80c6f2a_d582f9a6",
+      "revId": "ef224af3c1e8b2783553bf7676200b8a878fe185",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": false
     }
   ]
 }
