@@ -1,0 +1,8 @@
+Code-Review+2: Philippe Proulx <eeppeliteloop@gmail.com>
+Code-Review+1: Simon Marchi <simon.marchi@polymtl.ca>
+Verified+1: Philippe Proulx <eeppeliteloop@gmail.com>
+Submitted-by: Philippe Proulx <eeppeliteloop@gmail.com>
+Submitted-at: Sun, 28 Apr 2019 16:05:12 +0000
+Reviewed-on: https://review.gerrithub.io/c/eepp/babeltrace/+/452302
+Project: eepp/babeltrace
+Branch: refs/heads/optimalize
