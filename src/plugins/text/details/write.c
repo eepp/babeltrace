@@ -20,10 +20,8 @@
  * SOFTWARE.
  */
 
-#define BT_LOG_TAG "PLUGIN-TEXT-DETAILS-SINK-WRITE"
-#include "logging.h"
-
 #include <babeltrace2/babeltrace.h>
+#include <stdio.h>
 
 #include "common/assert.h"
 #include "common/common.h"
