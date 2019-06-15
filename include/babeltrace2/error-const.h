@@ -1,9 +1,8 @@
-#ifndef BABELTRACE_GRAPH_SELF_COMPONENT_CLASS_SINK_H
-#define BABELTRACE_GRAPH_SELF_COMPONENT_CLASS_SINK_H
+#ifndef BABELTRACE_ERROR_CONST_H
+#define BABELTRACE_ERROR_CONST_H
 
 /*
- * Copyright 2017-2018 Philippe Proulx <pproulx@efficios.com>
- * Copyright 2016 Jérémie Galarneau <jeremie.galarneau@efficios.com>
+ * Copyright (c) 2019 Philippe Proulx <pproulx@efficios.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,35 +23,33 @@
  * SOFTWARE.
  */
 
-/*
- * For bt_component_class_sink, bt_self_component_class_sink,
- * bt_self_component_class, __BT_UPCAST_CONST
- */
+#include <stdint.h>
+#include <stddef.h>
+
+/* For bt_error, bt_error_cause */
 #include <babeltrace2/types.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-static inline
-const bt_component_class_sink *
-bt_self_component_class_sink_as_component_class_sink(
-		bt_self_component_class_sink *self_comp_cls_sink)
-{
-	return __BT_UPCAST_CONST(bt_component_class_sink, self_comp_cls_sink);
-}
+typedef enum bt_error_status {
+	BT_ERROR_STATUS_OK = 0,
+	BT_ERROR_STATUS_NOMEM = -12,
+} bt_error_status;
 
-static inline
-bt_self_component_class *
-bt_self_component_class_sink_as_self_component_class(
-		bt_self_component_class_sink *self_comp_cls_sink)
-{
-	return __BT_UPCAST(bt_self_component_class,
-		self_comp_cls_sink);
-}
+extern
+uint64_t bt_error_get_cause_count(const bt_error *error);
+
+extern
+const bt_error_cause *bt_error_borrow_cause_by_index(
+		const bt_error *error, uint64_t index);
+
+extern
+void bt_error_release(const bt_error *error);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* BABELTRACE_GRAPH_SELF_COMPONENT_CLASS_SINK_H */
+#endif /* BABELTRACE_ERROR_CONST_H */

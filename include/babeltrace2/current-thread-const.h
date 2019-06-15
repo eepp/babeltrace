@@ -1,9 +1,8 @@
-#ifndef BABELTRACE_GRAPH_SELF_COMPONENT_CLASS_SINK_H
-#define BABELTRACE_GRAPH_SELF_COMPONENT_CLASS_SINK_H
+#ifndef BABELTRACE_CURRENT_THREAD_CONST_H
+#define BABELTRACE_CURRENT_THREAD_CONST_H
 
 /*
- * Copyright 2017-2018 Philippe Proulx <pproulx@efficios.com>
- * Copyright 2016 Jérémie Galarneau <jeremie.galarneau@efficios.com>
+ * Copyright (c) 2019 Philippe Proulx <pproulx@efficios.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,35 +23,17 @@
  * SOFTWARE.
  */
 
-/*
- * For bt_component_class_sink, bt_self_component_class_sink,
- * bt_self_component_class, __BT_UPCAST_CONST
- */
-#include <babeltrace2/types.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-static inline
-const bt_component_class_sink *
-bt_self_component_class_sink_as_component_class_sink(
-		bt_self_component_class_sink *self_comp_cls_sink)
-{
-	return __BT_UPCAST_CONST(bt_component_class_sink, self_comp_cls_sink);
-}
-
-static inline
-bt_self_component_class *
-bt_self_component_class_sink_as_self_component_class(
-		bt_self_component_class_sink *self_comp_cls_sink)
-{
-	return __BT_UPCAST(bt_self_component_class,
-		self_comp_cls_sink);
-}
+typedef enum bt_current_thread_status {
+	BT_CURRENT_THREAD_STATUS_OK = 0,
+	BT_CURRENT_THREAD_STATUS_NOMEM = -12,
+} bt_current_thread_status;
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* BABELTRACE_GRAPH_SELF_COMPONENT_CLASS_SINK_H */
+#endif /* BABELTRACE_CURRENT_THREAD_CONST_H */

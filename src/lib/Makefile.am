@@ -7,6 +7,9 @@ libbabeltrace2_la_SOURCES = \
 	assert-pre.h \
 	babeltrace2.c \
 	func-status.h \
+	current-thread.c \
+	error.c \
+	error.h \
 	lib-logging.c \
 	logging.c \
 	logging.h \

@@ -26,7 +26,7 @@
 
 /*
  * For bt_component_class_filter, bt_self_component_class_filter,
- * __BT_UPCAST_CONST
+ * bt_self_component_class, __BT_UPCAST_CONST
  */
 #include <babeltrace2/types.h>
 
@@ -40,6 +40,15 @@ bt_self_component_class_filter_as_component_class_filter(
 		bt_self_component_class_filter *self_comp_cls_filter)
 {
 	return __BT_UPCAST_CONST(bt_component_class_filter,
+		self_comp_cls_filter);
+}
+
+static inline
+bt_self_component_class *
+bt_self_component_class_filter_as_self_component_class(
+		bt_self_component_class_filter *self_comp_cls_filter)
+{
+	return __BT_UPCAST(bt_self_component_class,
 		self_comp_cls_filter);
 }
 
