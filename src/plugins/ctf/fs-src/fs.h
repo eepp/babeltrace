@@ -40,6 +40,7 @@ extern bool ctf_fs_debug;
 
 struct ctf_fs_file {
 	bt_logging_level log_level;
+	bt_self_component *self_comp;
 
 	/* Owned by this */
 	GString *path;
@@ -72,7 +73,8 @@ struct ctf_fs_component {
 	bt_logging_level log_level;
 
 	/* Weak, guaranteed to exist */
-	bt_self_component_source *self_comp;
+	bt_self_component_source *self_comp_src;
+	bt_self_component *self_comp;
 
 	/* Array of struct ctf_fs_port_data *, owned by this */
 	GPtrArray *port_data;
@@ -85,6 +87,7 @@ struct ctf_fs_component {
 
 struct ctf_fs_trace {
 	bt_logging_level log_level;
+	bt_self_component *self_comp;
 
 	/* Owned by this */
 	struct ctf_fs_metadata *metadata;
@@ -175,6 +178,7 @@ struct ctf_fs_port_data {
 
 struct ctf_fs_msg_iter_data {
 	bt_logging_level log_level;
+	bt_self_component *self_comp;
 
 	/* Weak */
 	bt_self_message_iterator *pc_msg_iter;
@@ -230,7 +234,8 @@ bt_self_message_iterator_status ctf_fs_iterator_seek_beginning(
 /* Create and initialize a new, empty ctf_fs_component. */
 
 BT_HIDDEN
-struct ctf_fs_component *ctf_fs_component_create(bt_logging_level log_level);
+struct ctf_fs_component *ctf_fs_component_create(bt_logging_level log_level,
+		bt_self_component *self_comp);
 
 /*
  * Search recursively under all paths in `paths_value` (an array of strings),
