@@ -1519,7 +1519,7 @@ void bt_lib_maybe_log_and_append_cause(const char *func, const char *file,
 		 * BT_LIB_LOG*_APPEND_CAUSE() macro and that would be
 		 * cumbersome.
 		 */
-		BT_LOGW("Cannot append error cause to current thread's "
+		BT_LOGE("Cannot append error cause to current thread's "
 			"error object: status=%d", status);
 	}
 }
