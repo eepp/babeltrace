@@ -754,59 +754,6 @@ int is_unary_string(struct bt_list_head *head)
 }
 
 static
-char *concatenate_unary_strings(struct bt_list_head *head)
-{
-	int i = 0;
-	GString *str;
-	struct ctf_node *node;
-
-	str = g_string_new(NULL);
-	BT_ASSERT(str);
-
-	bt_list_for_each_entry(node, head, siblings) {
-		char *src_string;
-
-		if (
-			node->type != NODE_UNARY_EXPRESSION ||
-			node->u.unary_expression.type != UNARY_STRING ||
-			!(
-				(
-					node->u.unary_expression.link !=
-					UNARY_LINK_UNKNOWN
-				) ^ (i == 0)
-			)
-		) {
-			goto error;
-		}
-
-		switch (node->u.unary_expression.link) {
-		case UNARY_DOTLINK:
-			g_string_append(str, ".");
-			break;
-		case UNARY_ARROWLINK:
-			g_string_append(str, "->");
-			break;
-		case UNARY_DOTDOTDOT:
-			g_string_append(str, "...");
-			break;
-		default:
-			break;
-		}
-
-		src_string = node->u.unary_expression.u.string;
-		g_string_append(str, src_string);
-		i++;
-	}
-
-	/* Destroys the container, returns the underlying string */
-	return g_string_free(str, FALSE);
-
-error:
-	/* This always returns NULL */
-	return g_string_free(str, TRUE);
-}
-
-static
 const char *get_map_clock_name_value(struct bt_list_head *head)
 {
 	int i = 0;
@@ -977,38 +924,11 @@ end:
 	return ret;
 }
 
-static
 int get_unary_uuid(struct ctx *ctx, struct bt_list_head *head,
-		uint8_t *uuid)
+		bt_uuid_t uuid)
 {
-	int i = 0;
-	int ret = 0;
-	struct ctf_node *node;
-
-	bt_list_for_each_entry(node, head, siblings) {
-		int uexpr_type = node->u.unary_expression.type;
-		int uexpr_link = node->u.unary_expression.link;
-		const char *src_string;
-
-		if (node->type != NODE_UNARY_EXPRESSION ||
-				uexpr_type != UNARY_STRING ||
-				uexpr_link != UNARY_LINK_UNKNOWN ||
-				i != 0) {
-			ret = -EINVAL;
-			goto end;
-		}
-
-		src_string = node->u.unary_expression.u.string;
-		ret = bt_uuid_from_str(src_string, uuid);
-		if (ret) {
-			_BT_COMP_LOGE_NODE(node,
-				"Cannot parse UUID: uuid=\"%s\"", src_string);
-			goto end;
-		}
-	}
-
-end:
-	return ret;
+	return ctf_ast_get_unary_uuid(head, uuid, ctx->log_cfg.log_level,
+		ctx->log_cfg.self_comp);
 }
 
 static
@@ -1440,7 +1360,7 @@ int visit_field_class_declarator(struct ctx *ctx,
 		{
 			/* Lookup unsigned integer definition, create seq. */
 			struct ctf_field_class_sequence *seq_decl = NULL;
-			char *length_name = concatenate_unary_strings(length);
+			char *length_name = ctf_ast_concatenate_unary_strings(length);
 
 			if (!length_name) {
 				_BT_COMP_LOGE_NODE(node_field_class_declarator,
@@ -2541,7 +2461,7 @@ int visit_integer_decl(struct ctx *ctx,
 			}
 			case UNARY_STRING:
 			{
-				char *s_right = concatenate_unary_strings(
+				char *s_right = ctf_ast_concatenate_unary_strings(
 					&expression->u.ctf_expression.right);
 				if (!s_right) {
 					_BT_COMP_LOGE_NODE(right,
@@ -2609,7 +2529,7 @@ int visit_integer_decl(struct ctx *ctx,
 				goto error;
 			}
 
-			s_right = concatenate_unary_strings(
+			s_right = ctf_ast_concatenate_unary_strings(
 				&expression->u.ctf_expression.right);
 			if (!s_right) {
 				_BT_COMP_LOGE_NODE(right,
@@ -2661,7 +2581,7 @@ int visit_integer_decl(struct ctx *ctx,
 				get_map_clock_name_value(
 					&expression->u.ctf_expression.right);
 			if (!clock_name) {
-				char *s_right = concatenate_unary_strings(
+				char *s_right = ctf_ast_concatenate_unary_strings(
 					&expression->u.ctf_expression.right);
 
 				if (!s_right) {
@@ -2968,7 +2888,7 @@ int visit_string_decl(struct ctx *ctx,
 				goto error;
 			}
 
-			s_right = concatenate_unary_strings(
+			s_right = ctf_ast_concatenate_unary_strings(
 				&expression->u.ctf_expression.right);
 			if (!s_right) {
 				_BT_COMP_LOGE_NODE(right,
@@ -3168,7 +3088,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 		break;
 	case NODE_CTF_EXPRESSION:
 	{
-		left = concatenate_unary_strings(&node->u.ctf_expression.left);
+		left = ctf_ast_concatenate_unary_strings(&node->u.ctf_expression.left);
 		if (!left) {
 			_BT_COMP_LOGE_NODE(node, "Cannot concatenate unary strings.");
 			ret = -EINVAL;
@@ -3357,7 +3277,7 @@ int visit_event_decl_entry(struct ctx *ctx, struct ctf_node *node,
 				goto error;
 			}
 
-			right = concatenate_unary_strings(
+			right = ctf_ast_concatenate_unary_strings(
 				&node->u.ctf_expression.right);
 			if (!right) {
 				_BT_COMP_LOGE_NODE(node,
@@ -3415,7 +3335,7 @@ char *get_event_decl_name(struct ctx *ctx, struct ctf_node *node)
 			continue;
 		}
 
-		left = concatenate_unary_strings(&iter->u.ctf_expression.left);
+		left = ctf_ast_concatenate_unary_strings(&iter->u.ctf_expression.left);
 		if (!left) {
 			_BT_COMP_LOGE_NODE(iter,
 				"Cannot concatenate unary strings.");
@@ -3423,7 +3343,7 @@ char *get_event_decl_name(struct ctx *ctx, struct ctf_node *node)
 		}
 
 		if (!strcmp(left, "name")) {
-			name = concatenate_unary_strings(
+			name = ctf_ast_concatenate_unary_strings(
 				&iter->u.ctf_expression.right);
 			if (!name) {
 				_BT_COMP_LOGE_NODE(iter,
@@ -3730,7 +3650,7 @@ int visit_stream_decl_entry(struct ctx *ctx, struct ctf_node *node,
 		break;
 	case NODE_CTF_EXPRESSION:
 	{
-		left = concatenate_unary_strings(&node->u.ctf_expression.left);
+		left = ctf_ast_concatenate_unary_strings(&node->u.ctf_expression.left);
 		if (!left) {
 			_BT_COMP_LOGE_NODE(node, "Cannot concatenate unary strings.");
 			ret = -EINVAL;
@@ -4006,7 +3926,7 @@ int visit_trace_decl_entry(struct ctx *ctx, struct ctf_node *node, int *set)
 		break;
 	case NODE_CTF_EXPRESSION:
 	{
-		left = concatenate_unary_strings(&node->u.ctf_expression.left);
+		left = ctf_ast_concatenate_unary_strings(&node->u.ctf_expression.left);
 		if (!left) {
 			_BT_COMP_LOGE_NODE(node, "Cannot concatenate unary strings.");
 			ret = -EINVAL;
@@ -4224,7 +4144,7 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 			goto error;
 		}
 
-		left = concatenate_unary_strings(
+		left = ctf_ast_concatenate_unary_strings(
 			&entry_node->u.ctf_expression.left);
 		if (!left) {
 			_BT_COMP_LOGE_NODE(entry_node,
@@ -4234,7 +4154,7 @@ int visit_env(struct ctx *ctx, struct ctf_node *node)
 		}
 
 		if (is_unary_string(right_head)) {
-			char *right = concatenate_unary_strings(right_head);
+			char *right = ctf_ast_concatenate_unary_strings(right_head);
 
 			if (!right) {
 				_BT_COMP_LOGE_NODE(entry_node,
@@ -4309,7 +4229,7 @@ int set_trace_byte_order(struct ctx *ctx, struct ctf_node *trace_node)
 		if (node->type == NODE_CTF_EXPRESSION) {
 			struct ctf_node *right_node;
 
-			left = concatenate_unary_strings(
+			left = ctf_ast_concatenate_unary_strings(
 				&node->u.ctf_expression.left);
 			if (!left) {
 				_BT_COMP_LOGE_NODE(node,
@@ -4386,7 +4306,7 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 		goto error;
 	}
 
-	left = concatenate_unary_strings(&entry_node->u.ctf_expression.left);
+	left = ctf_ast_concatenate_unary_strings(&entry_node->u.ctf_expression.left);
 	if (!left) {
 		_BT_COMP_LOGE_NODE(entry_node, "Cannot concatenate unary strings.");
 		ret = -EINVAL;
@@ -4402,7 +4322,7 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			goto error;
 		}
 
-		right = concatenate_unary_strings(
+		right = ctf_ast_concatenate_unary_strings(
 			&entry_node->u.ctf_expression.right);
 		if (!right) {
 			_BT_COMP_LOGE_NODE(entry_node,
@@ -4444,7 +4364,7 @@ int visit_clock_decl_entry(struct ctx *ctx, struct ctf_node *entry_node,
 			goto error;
 		}
 
-		right = concatenate_unary_strings(
+		right = ctf_ast_concatenate_unary_strings(
 			&entry_node->u.ctf_expression.right);
 		if (!right) {
 			_BT_COMP_LOGE_NODE(entry_node,

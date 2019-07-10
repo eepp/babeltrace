@@ -416,3 +416,69 @@ int ctf_metadata_decoder_get_uuid(struct ctf_metadata_decoder *mdec,
 end:
 	return ret;
 }
+
+static
+enum ctf_metadata_decoder_status find_uuid_in_trace_decl(
+		struct ctf_metadata_decoder *mdec, struct ctf_node *node,
+		bt_uuid_t uuid)
+{
+	enum ctf_metadata_decoder_status status =
+		CTF_METADATA_DECODER_STATUS_OK;
+	struct ctf_node *entry_node;
+	struct bt_list_head *decl_list = &node->u.trace.declaration_list;
+	char *left = NULL;
+
+	bt_list_for_each_entry(entry_node, decl_list, siblings) {
+		if (entry_node->type == NODE_CTF_EXPRESSION) {
+			int ret;
+
+			left = ctf_ast_concatenate_unary_strings(
+				&node->u.ctf_expression.left);
+			if (!left) {
+				BT_COMP_LOGE("Cannot concatenate unary strings.");
+				status = CTF_METADATA_DECODER_STATUS_ERROR;
+				goto end;
+			}
+
+			if (strcmp(left, "uuid") == 0) {
+				ret = ctf_ast_get_unary_uuid(
+					&node->u.ctf_expression.right,
+					uuid, mdec->config.log_level,
+					mdec->config.self_comp);
+				if (ret) {
+					BT_COMP_LOGE("Invalid trace's `uuid` attribute.");
+					status = CTF_METADATA_DECODER_STATUS_ERROR;
+					goto end;
+				}
+
+				goto end;
+			}
+
+			g_free(left);
+			left = NULL;
+		}
+	}
+
+	status = CTF_METADATA_DECODER_STATUS_NONE;
+
+end:
+	return status;
+}
+
+BT_HIDDEN
+enum ctf_metadata_decoder_status ctf_metadata_decoder_get_trace_class_uuid(
+		struct ctf_metadata_decoder *mdec, bt_uuid_t uuid)
+{
+	enum ctf_metadata_decoder_status status =
+		CTF_METADATA_DECODER_STATUS_INCOMPLETE;
+	struct ctf_node *node = &mdec->scanner->ast->root;
+	struct ctf_node *iter;
+
+	bt_list_for_each_entry(iter, &node->u.root.trace, siblings) {
+		status = find_uuid_in_trace_decl(mdec, iter, uuid);
+		goto end;
+	}
+
+end:
+	return status;
+}
