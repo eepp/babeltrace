@@ -19,6 +19,7 @@ STATIC_BINDINGS_DEPS =					\
 	bt2/native_bt_field_path.i			\
 	bt2/native_bt_field.i				\
 	bt2/native_bt_graph.i				\
+	bt2/native_bt_integer_range_set.i		\
 	bt2/native_bt.i					\
 	bt2/native_bt_logging.i				\
 	bt2/native_bt_message.i				\
@@ -43,6 +44,7 @@ STATIC_BINDINGS_DEPS =					\
 	bt2/field_class.py				\
 	bt2/field_path.py				\
 	bt2/graph.py					\
+	bt2/integer_range_set.py			\
 	bt2/logging.py					\
 	bt2/message_iterator.py				\
 	bt2/message.py					\
