@@ -260,15 +260,25 @@ class _TraceClass(object._SharedObject, collections.abc.Mapping):
 
         return obj
 
-    def create_variant_field_class(self, selector_fc=None):
-        ptr = native_bt.field_class_variant_create(self._ptr)
-        self._check_create_status(ptr, 'variant')
-        obj = bt2.field_class._VariantFieldClass._create_from_ptr(ptr)
+    def create_variant_field_class_without_selector(self):
+        ptr = native_bt.field_class_variant_without_selector_create(self._ptr)
+        self._check_create_status(ptr, 'variant (without selector)')
+        return bt2.field_class._VariantFieldClassWithoutSelector._create_from_ptr(ptr)
 
-        if selector_fc is not None:
-            obj._selector_field_class = selector_fc
+    def create_variant_field_class_with_selector(self, selector_fc):
+        utils._check_type(selector_fc, bt2.field_class._IntegerFieldClass)
 
-        return obj
+        if isinstance(selector_fc, bt2.field_class._UnsignedIntegerFieldClass):
+            create_func = native_bt.field_class_variant_with_unsigned_selector_create
+            cls = bt2.field_class._VariantFieldClassWithUnsignedSelector
+        else:
+            assert isinstance(selector_fc, bt2.field_class._SignedIntegerFieldClass)
+            create_func = native_bt.field_class_variant_with_signed_selector_create
+            cls = bt2.field_class._VariantFieldClassWithSignedSelector
+
+        ptr = create_func(self._ptr, selector_fc._ptr)
+        self._check_create_status(ptr, 'variant (with selector)')
+        return cls._create_from_ptr(ptr)
 
     # Add a listener to be called when the trace class is destroyed.
 

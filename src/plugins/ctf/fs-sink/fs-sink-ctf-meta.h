@@ -311,8 +311,8 @@ struct fs_sink_ctf_field_class_variant *fs_sink_ctf_field_class_variant_create_e
 	fc->tag_ref = g_string_new(NULL);
 	BT_ASSERT(fc->tag_ref);
 	fc->tag_is_before =
-		bt_field_class_variant_borrow_selector_field_path_const(ir_fc) ==
-		NULL;
+		bt_field_class_get_type(fc->base.ir_fc) ==
+		BT_FIELD_CLASS_TYPE_VARIANT_WITHOUT_SELECTOR;
 	return fc;
 }
 

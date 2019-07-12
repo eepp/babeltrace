@@ -174,7 +174,8 @@ void cur_path_stack_pop(struct ctx *ctx)
  */
 static
 int create_relative_field_ref(struct ctx *ctx,
-		const bt_field_path *tgt_ir_field_path, GString *tgt_field_ref)
+		const bt_field_path *tgt_ir_field_path, GString *tgt_field_ref,
+		struct fs_sink_ctf_field_class **user_tgt_fc)
 {
 	int ret = 0;
 	struct fs_sink_ctf_field_class *tgt_fc = NULL;
@@ -307,6 +308,10 @@ int create_relative_field_ref(struct ctx *ctx,
 				if (named_fc->fc == tgt_fc) {
 					g_string_assign(tgt_field_ref,
 						tgt_fc_name);
+
+					if (user_tgt_fc) {
+						*user_tgt_fc = tgt_fc;
+					}
 				} else {
 					/*
 					 * Using only the target field
@@ -334,7 +339,8 @@ end:
  */
 static
 int create_absolute_field_ref(struct ctx *ctx,
-		const bt_field_path *tgt_ir_field_path, GString *tgt_field_ref)
+		const bt_field_path *tgt_ir_field_path, GString *tgt_field_ref,
+		struct fs_sink_ctf_field_class **user_tgt_fc)
 {
 	int ret = 0;
 	struct fs_sink_ctf_field_class *fc = NULL;
@@ -405,6 +411,10 @@ int create_absolute_field_ref(struct ctx *ctx,
 		fc = named_fc->fc;
 	}
 
+	if (user_tgt_fc) {
+		*user_tgt_fc = fc;
+	}
+
 end:
 	return ret;
 }
@@ -419,7 +429,8 @@ end:
 static
 void resolve_field_class(struct ctx *ctx,
 		const bt_field_path *tgt_ir_field_path,
-		GString *tgt_field_ref, bool *create_before)
+		GString *tgt_field_ref, bool *create_before,
+		struct fs_sink_ctf_field_class **user_tgt_fc)
 {
 	int ret;
 	bt_scope tgt_scope;
@@ -449,10 +460,10 @@ void resolve_field_class(struct ctx *ctx,
 		 *    requesting field class (fallback).
 		 */
 		ret = create_relative_field_ref(ctx, tgt_ir_field_path,
-			tgt_field_ref);
+			tgt_field_ref, tgt_fc, user_tgt_fc);
 		if (ret) {
 			ret = create_absolute_field_ref(ctx, tgt_ir_field_path,
-				tgt_field_ref);
+				tgt_field_ref, user_tgt_fc);
 			if (ret) {
 				*create_before = true;
 				ret = 0;
@@ -461,7 +472,7 @@ void resolve_field_class(struct ctx *ctx,
 		}
 	} else {
 		ret = create_absolute_field_ref(ctx, tgt_ir_field_path,
-			tgt_field_ref);
+			tgt_field_ref, user_tgt_fc);
 
 		/* It must always work in previous scopes */
 		BT_ASSERT(ret == 0);
@@ -595,6 +606,31 @@ end:
 	return ret;
 }
 
+/*
+ * This function returns whether or not a given field class `tag_fc`
+ * is valid as the tag field class of the variant field class `fc`.
+ *
+ * CTF 1.8 requires that the tag field class be an enumeration field
+ * class and that, for each variant field class option's range set, the
+ * tag field class contains a mapping which has the option's name and an
+ * equal range set.
+ */
+static inline
+bool _is_variant_field_class_tag_valid(
+		struct fs_sink_ctf_field_class_variant *fc,
+		struct fs_sink_ctf_field_class *tag_fc)
+{
+	bool is_valid = true;
+	bt_field_class_type ir_tag_fc_type = bt_field_class_get_type(
+		tag_fc->ir_fc);
+
+	if (ir_tag_fc_type != BT_FIELD_CLASS_TYPE_UNSIGNED_ENUMERATION &&
+			ir_tag_fc_type != BT_FIELD_CLASS_TYPE_SIGNED_ENUMERATION) {
+		is_valid = false;
+		goto end;
+	}
+}
+
 static inline
 int translate_variant_field_class(struct ctx *ctx)
 {
@@ -604,13 +640,27 @@ int translate_variant_field_class(struct ctx *ctx)
 		fs_sink_ctf_field_class_variant_create_empty(
 			cur_path_stack_top(ctx)->ir_fc,
 			cur_path_stack_top(ctx)->index_in_parent);
+	bt_field_class_type ir_fc_type;
+	const bt_field_path *ir_selector_field_path = NULL;
+	struct fs_sink_ctf_field_class *tgt_fc = NULL;
 
 	BT_ASSERT(fc);
+	ir_fc_type = bt_field_class_get_type(fc->base.ir_fc);
+
+	if (ir_fc_type == BT_FIELD_CLASS_TYPE_VARIANT_WITH_UNSIGNED_SELECTOR ||
+			ir_fc_type == BT_FIELD_CLASS_TYPE_VARIANT_WITH_SIGNED_SELECTOR) {
+		ir_selector_field_path = bt_field_class_variant_with_selector_borrow_selector_field_path_const(
+			fc->base.ir_fc);
+		BT_ASSERT(ir_selector_field_path);
+	}
 
 	/* Resolve tag field class before appending to parent */
-	resolve_field_class(ctx,
-		bt_field_class_variant_borrow_selector_field_path_const(
-			fc->base.ir_fc), fc->tag_ref, &fc->tag_is_before);
+	resolve_field_class(ctx, ir_selector_field_path, fc->tag_ref,
+		&fc->tag_is_before, &tgt_fc);
+
+	if (ir_selector_field_path && tgt_fc) {
+
+	}
 
 	append_to_parent_field_class(ctx, (void *) fc);
 
@@ -698,7 +748,7 @@ int translate_dynamic_array_field_class(struct ctx *ctx)
 	resolve_field_class(ctx,
 		bt_field_class_dynamic_array_borrow_length_field_path_const(
 			fc->base.base.ir_fc),
-		fc->length_ref, &fc->length_is_before);
+		fc->length_ref, &fc->length_is_before, NULL);
 
 	append_to_parent_field_class(ctx, (void *) fc);
 	ret = cur_path_stack_push(ctx, UINT64_C(-1), NULL, elem_ir_fc,
@@ -794,7 +844,9 @@ int translate_field_class(struct ctx *ctx)
 	case BT_FIELD_CLASS_TYPE_DYNAMIC_ARRAY:
 		ret = translate_dynamic_array_field_class(ctx);
 		break;
-	case BT_FIELD_CLASS_TYPE_VARIANT:
+	case BT_FIELD_CLASS_TYPE_VARIANT_WITHOUT_SELECTOR:
+	case BT_FIELD_CLASS_TYPE_VARIANT_WITH_UNSIGNED_SELECTOR:
+	case BT_FIELD_CLASS_TYPE_VARIANT_WITH_SIGNED_SELECTOR:
 		ret = translate_variant_field_class(ctx);
 		break;
 	default:
