@@ -30,6 +30,7 @@ dist_check_SCRIPTS = \
 	bindings/python/bt2/test_trace.py \
 	bindings/python/bt2/test_value.py \
 	bindings/python/bt2/utils.py \
+	cli/auto-source-discovery/test_auto_source_discovery \
 	cli/test_convert_args \
 	cli/test_intersection \
 	cli/test_output_ctf_metadata \
@@ -48,6 +49,7 @@ TESTS_BINDINGS += bindings/python/bt2/test_python_bt2
 endif
 
 TESTS_CLI = \
+	cli/auto-source-discovery/test_auto_source_discovery \
 	cli/test_trace_read \
 	cli/test_packet_seq_num \
 	cli/test_convert_args \
