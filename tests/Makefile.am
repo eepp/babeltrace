@@ -39,6 +39,7 @@ dist_check_SCRIPTS = \
 	cli/test_trace_copy \
 	cli/test_trace_read \
 	cli/test_trimmer \
+	plugins/src.ctf.lttng-live/test_succeed \
 	python-plugin-provider/bt_plugin_test_python_plugin_provider.py \
 	python-plugin-provider/test_python_plugin_provider \
 	python-plugin-provider/test_python_plugin_provider.py
@@ -105,6 +106,10 @@ if ENABLE_PYTHON_BINDINGS
 TESTS_CLI += cli/auto-source-discovery/test_auto_source_discovery
 TESTS_PLUGINS += plugins/flt.utils.trimmer/test_trimming
 endif
+endif
+
+if HAVE_PYTHON
+TESTS_PLUGINS += plugins/src.ctf.lttng-live/test_succeed
 endif
 
 TESTS_PYTHON_PLUGIN_PROVIDER =
