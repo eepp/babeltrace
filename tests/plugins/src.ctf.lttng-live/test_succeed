@@ -37,6 +37,124 @@ this_dir_relative="plugins/src.ctf.lttng-live"
 this_dir_build="$BT_TESTS_BUILDDIR/$this_dir_relative"
 test_data_dir="$BT_TESTS_DATADIR/$this_dir_relative"
 
+lttng_live_server() {
+	local temp_port_file="$1"
+	local port_file="$2"
+	local retcode_file="$3"
+	local pid_file="$4"
+	local server_args="$5"
+	local server_script="$test_data_dir/lttng_live_server.py"
+
+	# start server
+	echo "$server_args" | xargs "$BT_TESTS_PYTHON_BIN" "$server_script" "$temp_port_file" "$port_file" &
+
+	# write PID to file
+	echo $! > "$pid_file"
+
+	# wait for server to exit
+	wait
+
+	# write return code to file
+	echo $? > "$retcode_file"
+}
+
+kill_lttng_live_server() {
+	local pid_file="$1"
+
+	if [ ! -s "$pid_file" ]; then
+		return
+	fi
+
+	kill -9 $(<"$pid_file")
+}
+
+get_cli_output_with_lttng_live_server() {
+	local cli_args_template="$1"
+	local server_args="$2"
+	local cli_stdout_file="$3"
+	local port_file="$4"
+	local temp_port_file="$(mktemp)"
+	local server_pid_file="$(mktemp)"
+	local server_retcode_file="$(mktemp)"
+
+	diag "Starting LTTng live server '$server_name'"
+
+	# This starts the server, which eventually writes its listening
+	# port number to the `$port_file` file. The lttng_live_server()
+	# function itself writes the server's PID to the
+	# `$server_pid_file` file. When the server exits,
+	# lttng_live_server() writes its return code to the
+	# `$server_retcode_file` file.
+	lttng_live_server "$temp_port_file" "$port_file" \
+		"$server_pid_file" "$server_retcode_file" "$server_args" &
+
+	# get port number
+	local i=0
+
+	while [ ! -s "$port_file" ]; do
+		sleep .1
+
+		if $((i == 10)); then
+			# too long, kill it
+			kill_lttng_live_server "$server_pid_file"
+			wait
+			rm -f "$temp_port_file"
+			rm -f "$server_pid_file"
+			rm -f "$server_retcode_file"
+			return 1
+		fi
+
+		i=$((i + 1))
+	done
+
+	local port=$(<"$port_file")
+
+	diag "LTTng live port is $port"
+
+	local cli_args=$(echo "$cli_args_template" | sed s/@PORT@/$port/g)
+
+	diag "Running CLI: 'babeltrace2 $cli_args'"
+	echo "$cli_args" | xargs "$BT_TESTS_BT2_BIN" 1>"$cli_stdout_file" 2>/dev/null
+
+	if [ $? -ne 0]; then
+		# CLI failed: cancel everything else
+		kill_lttng_live_server "$server_pid_file"
+		wait
+		rm -f "$temp_port_file"
+		rm -f "$server_pid_file"
+		rm -f "$server_retcode_file"
+		return 1
+	fi
+
+	# get server's return code
+	i=0
+
+	while [ ! -s "$server_retcode_file" ]; do
+		sleep .1
+
+		if $((i == 3)); then
+			# too long, kill it
+			kill_lttng_live_server "$server_pid_file"
+			wait
+			rm -f "$temp_port_file"
+			rm -f "$server_pid_file"
+			rm -f "$server_retcode_file"
+			return 1
+		fi
+
+		i=$((i + 1))
+	done
+
+	wait
+
+	local ret=$(<"$server_retcode_file")
+
+	rm -f "$temp_port_file"
+	rm -f "$server_pid_file"
+	rm -f "$server_retcode_file"
+	return $ret
+}
+
 test_list_sessions() {
 	local server_name='lttng_live_list_sessions_faux_server'
 	local server_script="$test_data_dir/$server_name.py"
