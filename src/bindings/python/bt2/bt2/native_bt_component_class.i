@@ -47,3 +47,4 @@ struct bt_component_class_filter *bt_bt2_component_class_filter_create(
 struct bt_component_class_sink *bt_bt2_component_class_sink_create(
 		PyObject *py_cls, const char *name, const char *description,
 		const char *help);
+bool bt_bt2_is_python_component_class(unsigned long long addr);

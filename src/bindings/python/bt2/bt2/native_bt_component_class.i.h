@@ -22,7 +22,9 @@
  * THE SOFTWARE.
  */
 
+#include <stdio.h>
 #include "logging/comp-logging.h"
+#include "compat/glib.h"
 
 /*
  * This hash table associates a BT component class object address to a
@@ -169,6 +171,14 @@ int py_exc_to_status_message_iterator(
 	return py_exc_to_status(NULL, NULL, self_message_iterator, NULL, -1);
 }
 
+static
+bool bt_bt2_is_python_component_class(unsigned long long addr)
+{
+	printf("# --> addr: %llu    ptr: %p\n", addr, (gpointer) (uintptr_t) addr);
+	return bt_g_hash_table_contains(bt_cc_ptr_to_py_cls,
+		(gpointer) (uintptr_t) addr);
+}
+
 /* Component class proxy methods (delegate to the attached Python object) */
 
 static
@@ -189,11 +199,17 @@ bt_component_class_init_method_status component_class_init(
 	bt_logging_level log_level = get_self_component_log_level(
 		self_component);
 
-	(void) init_method_data;
-
 	BT_ASSERT(self_component);
 	BT_ASSERT(self_component_v);
 	BT_ASSERT(self_comp_cls_type_swig_type);
+
+	/*
+	 * If there's any `init_method_data`, assume this component is
+	 * getting initialized from Python, so that `init_method_data`
+	 * is a Python object to pass to the user's __init__() method.
+	 */
+	BT_ASSERT(!init_method_data ||
+			bt_bt2_is_python_component_class((uintptr_t) component_class));
 
 	/*
 	 * Get the user-defined Python class which created this
@@ -228,13 +244,21 @@ bt_component_class_init_method_status component_class_init(
 	/*
 	 * Do the equivalent of this:
 	 *
-	 *     py_comp = py_cls._bt_init_from_native(py_comp_ptr, py_params_ptr)
+	 *     py_comp = py_cls._bt_init_from_native(py_comp_ptr,
+	 *         py_params_ptr, init_method_data ? init_method_data : Py_None)
 	 *
 	 * _UserComponentType._bt_init_from_native() calls the Python
 	 * component object's __init__() function.
+	 *
+	 * We don't take any reference on `init_method_data` which, if
+	 * not `NULL`, is assumed to be a `PyObject *`: the user's
+	 * __init__() function will eventually take a reference if
+	 * needed. If `init_method_data` is `NULL`, then we pass
+	 * `Py_None` as the initialization's Python object.
 	 */
 	py_comp = PyObject_CallMethod(py_cls,
-		"_bt_init_from_native", "(OO)", py_comp_ptr, py_params_ptr);
+		"_bt_init_from_native", "(OOO)", py_comp_ptr, py_params_ptr,
+		init_method_data ? init_method_data : Py_None);
 	if (!py_comp) {
 		BT_COMP_LOG_CUR_LVL(BT_LOG_WARNING, log_level, self_component,
 			"Failed to call Python class's _bt_init_from_native() method: "
