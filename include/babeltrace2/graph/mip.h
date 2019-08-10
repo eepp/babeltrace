@@ -1,8 +1,8 @@
-#ifndef BABELTRACE_FUNC_STATUS_INTERNAL_H
-#define BABELTRACE_FUNC_STATUS_INTERNAL_H
+#ifndef BABELTRACE2_GRAPH_MIP_H
+#define BABELTRACE2_GRAPH_MIP_H
 
 /*
- * Copyright (c) 2019 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2010-2019 EfficiOS Inc. and Linux Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,22 +23,34 @@
  * SOFTWARE.
  */
 
-#define __BT_IN_BABELTRACE_H
-#include <babeltrace2/func-status.h>
+#ifndef __BT_IN_BABELTRACE_H
+# error "Please include <babeltrace2/babeltrace.h> instead."
+#endif
 
-/*
- * Aliases without a `__` prefix for internal code: this is just easier
- * to read.
- */
-#define BT_FUNC_STATUS_AGAIN		__BT_FUNC_STATUS_AGAIN
-#define BT_FUNC_STATUS_END		__BT_FUNC_STATUS_END
-#define BT_FUNC_STATUS_ERROR		__BT_FUNC_STATUS_ERROR
-#define BT_FUNC_STATUS_INTERRUPTED	__BT_FUNC_STATUS_INTERRUPTED
-#define BT_FUNC_STATUS_UNKNOWN_OBJECT	__BT_FUNC_STATUS_UNKNOWN_OBJECT
-#define BT_FUNC_STATUS_MEMORY_ERROR	__BT_FUNC_STATUS_MEMORY_ERROR
-#define BT_FUNC_STATUS_NO_MATCH		__BT_FUNC_STATUS_NO_MATCH
-#define BT_FUNC_STATUS_NOT_FOUND	__BT_FUNC_STATUS_NOT_FOUND
-#define BT_FUNC_STATUS_OK		__BT_FUNC_STATUS_OK
-#define BT_FUNC_STATUS_OVERFLOW_ERROR	__BT_FUNC_STATUS_OVERFLOW_ERROR
+#include <stdint.h>
 
-#endif /* BABELTRACE_FUNC_STATUS_INTERNAL_H */
+#include <babeltrace2/types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef enum bt_get_operative_mip_version_status {
+	BT_GET_OPERATIVE_MIP_VERSION_STATUS_OK			= __BT_FUNC_STATUS_OK,
+	BT_GET_OPERATIVE_MIP_VERSION_STATUS_ERROR		= __BT_FUNC_STATUS_ERROR,
+	BT_GET_OPERATIVE_MIP_VERSION_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+	BT_GET_OPERATIVE_MIP_VERSION_STATUS_NO_MATCH		= __BT_FUNC_STATUS_NO_MATCH,
+} bt_get_operative_mip_version_status;
+
+extern bt_get_operative_mip_version_status
+bt_get_greatest_operative_mip_version(
+		const bt_component_descriptor_set *comp_descriptor_set,
+		bt_logging_level log_level, uint64_t *operative_mip_version);
+
+extern uint64_t bt_get_maximal_mip_version(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* BABELTRACE2_GRAPH_MIP_H */
