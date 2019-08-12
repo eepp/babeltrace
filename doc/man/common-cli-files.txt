@@ -1,5 +1,5 @@
-FILES
------
+== FILES
+
 `$HOME/.local/lib/babeltrace2/plugins`::
     User plugin directory.
 
