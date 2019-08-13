@@ -1823,6 +1823,87 @@ class StructureFieldTestCase(unittest.TestCase):
         self.assertTrue(expected_string_found)
 
 
+class OptionFieldTestCase(unittest.TestCase):
+    def _create_fc(self, tc):
+        fc = tc.create_option_field_class(tc.create_string_field_class())
+        top_fc = tc.create_structure_field_class()
+        top_fc.append_member('opt_field', fc)
+        return top_fc
+
+    def setUp(self):
+        self._tc = get_default_trace_class()
+        fld = _create_field(self._tc, self._create_fc(self._tc))
+        self._def = fld['opt_field']
+
+    """
+    def test_bool_op(self):
+        self._def.selected_option_index = 2
+        self._def.value = -17.34
+        with self.assertRaises(NotImplementedError):
+            bool(self._def)
+
+    def test_selected_option_index(self):
+        self._def.selected_option_index = 2
+        self.assertEqual(self._def.selected_option_index, 2)
+
+    def test_selected_option(self):
+        self._def.selected_option_index = 2
+        self._def.value = -17.34
+        self.assertEqual(self._def.selected_option, -17.34)
+
+        self._def.selected_option_index = 3
+        self._def.value = 1921
+        self.assertEqual(self._def.selected_option, 1921)
+
+    def test_eq(self):
+        field = _create_field(self._tc, self._create_fc(self._tc))
+        field = field['opt_field']
+        field.selected_option_index = 0
+        field.value = 1774
+        self._def.selected_option_index = 0
+        self._def.value = 1774
+        self.assertEqual(self._def, field)
+
+    def test_eq_invalid_type(self):
+        self._def.selected_option_index = 1
+        self._def.value = 'gerry'
+        self.assertNotEqual(self._def, 23)
+
+    def test_str_op_int(self):
+        field = _create_field(self._tc, self._create_fc(self._tc))
+        field = field['opt_field']
+        field.selected_option_index = 0
+        field.value = 1774
+        other_field = _create_field(self._tc, self._create_fc(self._tc))
+        other_field = other_field['opt_field']
+        other_field.selected_option_index = 0
+        other_field.value = 1774
+        self.assertEqual(str(field), str(other_field))
+
+    def test_str_op_str(self):
+        field = _create_field(self._tc, self._create_fc(self._tc))
+        field = field['opt_field']
+        field.selected_option_index = 1
+        field.value = 'un beau grand bateau'
+        other_field = _create_field(self._tc, self._create_fc(self._tc))
+        other_field = other_field['opt_field']
+        other_field.selected_option_index = 1
+        other_field.value = 'un beau grand bateau'
+        self.assertEqual(str(field), str(other_field))
+
+    def test_str_op_float(self):
+        field = _create_field(self._tc, self._create_fc(self._tc))
+        field = field['opt_field']
+        field.selected_option_index = 2
+        field.value = 14.4245
+        other_field = _create_field(self._tc, self._create_fc(self._tc))
+        other_field = other_field['opt_field']
+        other_field.selected_option_index = 2
+        other_field.value = 14.4245
+        self.assertEqual(str(field), str(other_field))
+    """
+
+
 class VariantFieldTestCase(unittest.TestCase):
     def _create_fc(self, tc):
         ft0 = tc.create_signed_integer_field_class(32)
