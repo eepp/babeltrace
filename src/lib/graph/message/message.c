@@ -27,7 +27,7 @@
 #include "common/assert.h"
 #include "lib/assert-pre.h"
 #include "lib/assert-post.h"
-#include <babeltrace2/graph/message-const.h>
+#include <babeltrace2/graph/message.h>
 #include "lib/graph/message/message.h"
 #include "lib/graph/graph.h"
 
