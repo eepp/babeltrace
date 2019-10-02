@@ -505,22 +505,59 @@ class _OptionFieldClassConst(_FieldClassConst):
     _borrow_field_class_ptr = staticmethod(
         native_bt.field_class_option_borrow_field_class_const
     )
-    _borrow_selector_field_path = staticmethod(
-        native_bt.field_class_option_borrow_selector_field_path_const
-    )
 
     @property
     def field_class(self):
         elem_fc_ptr = self._borrow_field_class_ptr(self._ptr)
         return self._create_field_class_from_ptr_and_get_ref(elem_fc_ptr)
 
+
+class _OptionWithSelectorFieldClassConst(_OptionFieldClassConst):
     @property
     def selector_field_path(self):
-        ptr = self._borrow_selector_field_path(self._ptr)
+        ptr = native_bt.field_class_option_borrow_selector_field_path_const(self._ptr)
         if ptr is None:
             return
 
         return bt2_field_path._FieldPathConst._create_from_ptr_and_get_ref(ptr)
+
+
+class _OptionWithBoolSelectorFieldClassConst(_OptionWithSelectorFieldClassConst):
+    @property
+    def selector_is_reversed(self):
+        return bool(
+            native_bt.field_class_option_with_selector_bool_selector_is_reversed(
+                self._ptr
+            )
+        )
+
+
+class _OptionWithIntegerSelectorFieldClassConst(_OptionWithSelectorFieldClassConst):
+    pass
+
+
+class _OptionWithUnsignedIntegerSelectorFieldClassConst(
+    _OptionWithIntegerSelectorFieldClassConst
+):
+    @property
+    def ranges(self):
+        range_set_ptr = native_bt.field_class_option_with_selector_integer_unsigned_borrow_ranges_const(
+            self._ptr
+        )
+        assert range_set_ptr is not None
+        return bt2_integer_range_set.UnsignedIntegerRangeSet(range_set_ptr)
+
+
+class _OptionWithSignedIntegerSelectorFieldClassConst(
+    _OptionWithIntegerSelectorFieldClassConst
+):
+    @property
+    def ranges(self):
+        range_set_ptr = native_bt.field_class_option_with_selector_integer_signed_borrow_ranges_const(
+            self._ptr
+        )
+        assert range_set_ptr is not None
+        return bt2_integer_range_set.SignedIntegerRangeSet(range_set_ptr)
 
 
 class _OptionFieldClass(_OptionFieldClassConst, _FieldClass):
@@ -531,6 +568,44 @@ class _OptionFieldClass(_OptionFieldClassConst, _FieldClass):
     _create_field_class_from_ptr_and_get_ref = staticmethod(
         _create_field_class_from_ptr_and_get_ref
     )
+
+
+class _OptionWithSelectorFieldClass(
+    _OptionWithSelectorFieldClassConst, _OptionFieldClass
+):
+    pass
+
+
+class _OptionWithBoolSelectorFieldClass(
+    _OptionWithBoolSelectorFieldClassConst, _OptionWithSelectorFieldClass
+):
+    def _selector_is_reversed(self, selector_is_reversed):
+        utils._check_bool(selector_is_reversed)
+        native_bt.field_class_option_with_selector_bool_set_selector_is_reversed(
+            self._ptr, value._ptr
+        )
+
+    _selector_is_reversed = property(fset=_selector_is_reversed)
+
+
+class _OptionWithIntegerSelectorFieldClass(
+    _OptionWithIntegerSelectorFieldClassConst, _OptionWithSelectorFieldClass
+):
+    pass
+
+
+class _OptionWithUnsignedIntegerSelectorFieldClass(
+    _OptionWithUnsignedIntegerSelectorFieldClassConst,
+    _OptionWithIntegerSelectorFieldClass,
+):
+    pass
+
+
+class _OptionWithSignedIntegerSelectorFieldClass(
+    _OptionWithSignedIntegerSelectorFieldClassConst,
+    _OptionWithIntegerSelectorFieldClass,
+):
+    pass
 
 
 class _VariantFieldClassOptionConst:
@@ -919,7 +994,10 @@ _FIELD_CLASS_TYPE_TO_CONST_OBJ = {
     native_bt.FIELD_CLASS_TYPE_STRUCTURE: _StructureFieldClassConst,
     native_bt.FIELD_CLASS_TYPE_STATIC_ARRAY: _StaticArrayFieldClassConst,
     native_bt.FIELD_CLASS_TYPE_DYNAMIC_ARRAY: _DynamicArrayFieldClassConst,
-    native_bt.FIELD_CLASS_TYPE_OPTION: _OptionFieldClassConst,
+    native_bt.FIELD_CLASS_TYPE_OPTION_WITHOUT_SELECTOR: _OptionFieldClassConst,
+    native_bt.FIELD_CLASS_TYPE_OPTION_WITH_BOOL_SELECTOR: _OptionWithBoolSelectorFieldClassConst,
+    native_bt.FIELD_CLASS_TYPE_OPTION_WITH_UNSIGNED_INTEGER_SELECTOR: _OptionWithUnsignedIntegerSelectorFieldClassConst,
+    native_bt.FIELD_CLASS_TYPE_OPTION_WITH_SIGNED_INTEGER_SELECTOR: _OptionWithSignedIntegerSelectorFieldClassConst,
     native_bt.FIELD_CLASS_TYPE_VARIANT_WITHOUT_SELECTOR: _VariantFieldClassWithoutSelectorConst,
     native_bt.FIELD_CLASS_TYPE_VARIANT_WITH_UNSIGNED_SELECTOR: _VariantFieldClassWithUnsignedSelectorConst,
     native_bt.FIELD_CLASS_TYPE_VARIANT_WITH_SIGNED_SELECTOR: _VariantFieldClassWithSignedSelectorConst,
@@ -938,7 +1016,10 @@ _FIELD_CLASS_TYPE_TO_OBJ = {
     native_bt.FIELD_CLASS_TYPE_STRUCTURE: _StructureFieldClass,
     native_bt.FIELD_CLASS_TYPE_STATIC_ARRAY: _StaticArrayFieldClass,
     native_bt.FIELD_CLASS_TYPE_DYNAMIC_ARRAY: _DynamicArrayFieldClass,
-    native_bt.FIELD_CLASS_TYPE_OPTION: _OptionFieldClass,
+    native_bt.FIELD_CLASS_TYPE_OPTION_WITHOUT_SELECTOR: _OptionFieldClass,
+    native_bt.FIELD_CLASS_TYPE_OPTION_WITH_BOOL_SELECTOR: _OptionWithBoolSelectorFieldClass,
+    native_bt.FIELD_CLASS_TYPE_OPTION_WITH_UNSIGNED_INTEGER_SELECTOR: _OptionWithUnsignedIntegerSelectorFieldClass,
+    native_bt.FIELD_CLASS_TYPE_OPTION_WITH_SIGNED_INTEGER_SELECTOR: _OptionWithSignedIntegerSelectorFieldClass,
     native_bt.FIELD_CLASS_TYPE_VARIANT_WITHOUT_SELECTOR: _VariantFieldClassWithoutSelector,
     native_bt.FIELD_CLASS_TYPE_VARIANT_WITH_UNSIGNED_SELECTOR: _VariantFieldClassWithUnsignedSelector,
     native_bt.FIELD_CLASS_TYPE_VARIANT_WITH_SIGNED_SELECTOR: _VariantFieldClassWithSignedSelector,
