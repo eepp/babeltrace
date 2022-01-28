@@ -26,8 +26,11 @@
 #include "field-class.h"
 #include "field.h"
 #include "field-path.h"
+#include "trace-class.h"
 #include "utils.h"
 #include "lib/func-status.h"
+#include "lib/graph/component.h"
+#include "lib/graph/graph.h"
 #include "lib/integer-range-set.h"
 #include "lib/value.h"
 #include "lib/trace-ir/trace-class.h"
@@ -1299,6 +1302,7 @@ struct bt_field_class *bt_field_class_option_with_selector_field_bool_create(
 		struct bt_field_class *selector_fc)
 {
 	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_TC_MIP_VERSION_EQ(trace_class, 0);
 
 	return create_option_field_class(trace_class,
 		BT_FIELD_CLASS_TYPE_OPTION_WITH_BOOL_SELECTOR_FIELD,
@@ -1317,6 +1321,7 @@ bt_field_class_option_with_selector_field_integer_unsigned_create(
 		(const void *) u_range_set;
 
 	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_TC_MIP_VERSION_EQ(trace_class, 0);
 	BT_ASSERT_PRE_INT_RANGE_SET_NON_NULL(range_set);
 	BT_ASSERT_PRE_INT_RANGE_SET_NOT_EMPTY(range_set);
  	fc = (void *) create_option_field_class(trace_class,
@@ -1347,6 +1352,7 @@ bt_field_class_option_with_selector_field_integer_signed_create(
 		(const void *) i_range_set;
 
 	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_TC_MIP_VERSION_EQ(trace_class, 0);
 	BT_ASSERT_PRE_INT_RANGE_SET_NON_NULL(range_set);
 	BT_ASSERT_PRE_INT_RANGE_SET_NOT_EMPTY(range_set);
  	fc = (void *) create_option_field_class(trace_class,
@@ -1394,6 +1400,7 @@ bt_field_class_option_with_selector_field_borrow_selector_field_path_const(
 
 	BT_ASSERT_PRE_FC_NON_NULL(fc);
 	BT_ASSERT_PRE_FC_IS_OPTION_WITH_SEL("field-class", fc, "Field class");
+	BT_ASSERT_PRE_FC_MIP_VERSION_EQ(fc, 0);
 	return opt_fc->selector_field_path;
 }
 
@@ -1493,6 +1500,7 @@ struct bt_field_class *bt_field_class_variant_create(
 
 	BT_ASSERT_PRE_NO_ERROR();
 	BT_ASSERT_PRE_TC_NON_NULL(trace_class);
+	BT_ASSERT_PRE_TC_MIP_VERSION_EQ(trace_class, 0);
 
 	if (selector_fc) {
 		BT_ASSERT_PRE_FC_IS_INT("selector-field-class", selector_fc,
@@ -1950,6 +1958,7 @@ bt_field_class_variant_with_selector_field_borrow_selector_field_path_const(
 	BT_ASSERT_PRE_DEV_FC_NON_NULL(fc);
 	BT_ASSERT_PRE_DEV_FC_IS_VARIANT_WITH_SEL("field-class", fc,
 		"Field class");
+	BT_ASSERT_PRE_FC_MIP_VERSION_EQ(fc, 0);
 	return var_fc->selector_field_path;
 }
 
@@ -2086,6 +2095,7 @@ struct bt_field_class *bt_field_class_array_dynamic_create(
 
 	BT_ASSERT_PRE_NO_ERROR();
 	BT_ASSERT_PRE_TC_NON_NULL(trace_class);
+	BT_ASSERT_PRE_TC_MIP_VERSION_EQ(trace_class, 0);
 	BT_ASSERT_PRE_NON_NULL("element-field-class", element_fc,
 		"Element field class");
 	BT_LOGD_STR("Creating default dynamic array field class object.");
@@ -2135,6 +2145,7 @@ bt_field_class_array_dynamic_with_length_field_borrow_length_field_path_const(
 		"dynamic-array-field-class-with-length-field",
 		BT_FIELD_CLASS_TYPE_DYNAMIC_ARRAY_WITH_LENGTH_FIELD,
 		"Field class");
+	BT_ASSERT_PRE_FC_MIP_VERSION_EQ(fc, 0);
 	return seq_fc->length_field_path;
 }
 
