@@ -19,6 +19,8 @@ libtrace_ir_la_SOURCES = \
 	field.h \
 	field-path.c \
 	field-path.h \
+	field-location.c \
+	field-location.h \
 	field-wrapper.c \
 	field-wrapper.h \
 	packet.c \
