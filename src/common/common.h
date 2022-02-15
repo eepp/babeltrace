@@ -568,7 +568,7 @@ const char *bt_common_field_class_integer_preferred_display_base_string(enum bt_
 }
 
 static inline
-const char *bt_common_scope_string(enum bt_field_path_scope scope)
+const char *bt_common_field_path_scope_string(enum bt_field_path_scope scope)
 {
 	switch (scope) {
 	case BT_FIELD_PATH_SCOPE_PACKET_CONTEXT:
@@ -578,6 +578,23 @@ const char *bt_common_scope_string(enum bt_field_path_scope scope)
 	case BT_FIELD_PATH_SCOPE_EVENT_SPECIFIC_CONTEXT:
 		return "EVENT_SPECIFIC_CONTEXT";
 	case BT_FIELD_PATH_SCOPE_EVENT_PAYLOAD:
+		return "EVENT_PAYLOAD";
+	}
+
+	bt_common_abort();
+}
+
+static inline
+const char *bt_common_field_location_scope_string(enum bt_field_location_scope scope)
+{
+	switch (scope) {
+	case BT_FIELD_LOCATION_SCOPE_PACKET_CONTEXT:
+		return "PACKET_CONTEXT";
+	case BT_FIELD_LOCATION_SCOPE_EVENT_COMMON_CONTEXT:
+		return "EVENT_COMMON_CONTEXT";
+	case BT_FIELD_LOCATION_SCOPE_EVENT_SPECIFIC_CONTEXT:
+		return "EVENT_SPECIFIC_CONTEXT";
+	case BT_FIELD_LOCATION_SCOPE_EVENT_PAYLOAD:
 		return "EVENT_PAYLOAD";
 	}
 
@@ -663,7 +680,7 @@ GString *bt_common_field_path_string(struct bt_field_path *path)
 		goto end;
 	}
 
-	g_string_append_printf(str, "[%s", bt_common_scope_string(
+	g_string_append_printf(str, "[%s", bt_common_field_path_scope_string(
 		bt_field_path_get_root_scope(path)));
 
 	for (i = 0; i < bt_field_path_get_item_count(path); i++) {

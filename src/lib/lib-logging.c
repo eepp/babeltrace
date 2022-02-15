@@ -49,6 +49,7 @@
 #include "trace-ir/event.h"
 #include "trace-ir/field-class.h"
 #include "trace-ir/field.h"
+#include "trace-ir/field-location.h"
 #include "trace-ir/field-path.h"
 #include "trace-ir/packet.h"
 #include "trace-ir/stream-class.h"
@@ -113,6 +114,9 @@ static inline void format_clock_snapshot(char **buf_ch, bool extended,
 
 static inline void format_field_path(char **buf_ch, bool extended,
 		const char *prefix, const struct bt_field_path *field_path);
+
+static inline void format_field_location(char **buf_ch, bool extended,
+		const char *prefix, const struct bt_field_location *field_location);
 
 static inline void format_object(char **buf_ch, bool extended,
 		const char *prefix, const struct bt_object *obj)
@@ -460,7 +464,7 @@ static inline void format_field_path(char **buf_ch, bool extended,
 	}
 
 	BUF_APPEND(", %spath=[%s",
-		PRFIELD(bt_common_scope_string(field_path->root)));
+		PRFIELD(bt_common_field_path_scope_string(field_path->root)));
 
 	for (i = 0; i < bt_field_path_get_item_count(field_path); i++) {
 		const struct bt_field_path_item *fp_item =
@@ -477,6 +481,33 @@ static inline void format_field_path(char **buf_ch, bool extended,
 		default:
 			bt_common_abort();
 		}
+	}
+
+	BUF_APPEND("%s", "]");
+}
+
+static inline void format_field_location(char **buf_ch, bool extended,
+		const char *prefix, const struct bt_field_location *field_location)
+{
+	uint64_t i;
+
+	BT_ASSERT(field_location->items);
+
+	BUF_APPEND(", %sitem-count=%u", PRFIELD(field_location->items->len));
+
+	if (!extended) {
+		return;
+	}
+
+	BUF_APPEND(", %sloc=[%s",
+		PRFIELD(bt_common_field_location_scope_string(field_location->scope)));
+
+	for (i = 0; i < bt_field_location_get_item_count(field_location); i++) {
+		const char *item =
+			bt_field_location_get_item_by_index (field_location, i);
+
+		BUF_APPEND(", %s", item);
+		break;
 	}
 
 	BUF_APPEND("%s", "]");
@@ -1402,6 +1433,9 @@ static inline void handle_conversion_specifier_bt(void *priv_data,
 		break;
 	case 'P':
 		format_field_path(buf_ch, extended, prefix, obj);
+		break;
+	case 'L':
+		format_field_location(buf_ch, extended, prefix, obj);
 		break;
 	case 'E':
 		format_event_class(buf_ch, extended, prefix, obj);
