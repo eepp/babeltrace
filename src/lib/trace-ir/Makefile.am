@@ -27,6 +27,7 @@ libtrace_ir_la_SOURCES = \
 	packet.h \
 	resolve-field-path.c \
 	resolve-field-path.h \
+	resolve-field-xref.h \
 	stream.c \
 	stream-class.c \
 	stream-class.h \
