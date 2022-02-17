@@ -1046,7 +1046,7 @@ uint64_t bt_field_class_structure_get_member_count(
 	struct bt_field_class_structure *struct_fc = (void *) fc;
 
 	BT_ASSERT_PRE_DEV_FC_NON_NULL(fc);
-	BT_ASSERT_PRE_FC_IS_STRUCT("field-class", fc, "Field class");
+	BT_ASSERT_PRE_DEV_FC_IS_STRUCT("field-class", fc, "Field class");
 	return (uint64_t) struct_fc->common.named_fcs->len;
 }
 
@@ -1067,7 +1067,7 @@ bt_field_class_structure_borrow_member_by_index_const(
 		const struct bt_field_class *fc, uint64_t index)
 {
 	BT_ASSERT_PRE_DEV_FC_NON_NULL(fc);
-	BT_ASSERT_PRE_FC_IS_STRUCT("field-class", fc, "Field class");
+	BT_ASSERT_PRE_DEV_FC_IS_STRUCT("field-class", fc, "Field class");
 	return (const void *)
 		borrow_named_field_class_from_container_field_class_at_index(
 			(void *) fc, index, __func__);
@@ -1078,7 +1078,7 @@ bt_field_class_structure_borrow_member_by_index(
 		struct bt_field_class *fc, uint64_t index)
 {
 	BT_ASSERT_PRE_DEV_FC_NON_NULL(fc);
-	BT_ASSERT_PRE_FC_IS_STRUCT("field-class", fc, "Field class");
+	BT_ASSERT_PRE_DEV_FC_IS_STRUCT("field-class", fc, "Field class");
 	return (void *)
 		borrow_named_field_class_from_container_field_class_at_index(
 			(void *) fc, index, __func__);
@@ -1112,7 +1112,7 @@ bt_field_class_structure_borrow_member_by_name_const(
 		const struct bt_field_class *fc, const char *name)
 {
 	BT_ASSERT_PRE_DEV_FC_NON_NULL(fc);
-	BT_ASSERT_PRE_FC_IS_STRUCT("field-class", fc, "Field class");
+	BT_ASSERT_PRE_DEV_FC_IS_STRUCT("field-class", fc, "Field class");
 	return (const void *)
 		borrow_named_field_class_from_container_field_class_by_name(
 			(void *) fc, name, __func__);
@@ -1123,7 +1123,7 @@ bt_field_class_structure_borrow_member_by_name(
 		struct bt_field_class *fc, const char *name)
 {
 	BT_ASSERT_PRE_DEV_FC_NON_NULL(fc);
-	BT_ASSERT_PRE_FC_IS_STRUCT("field-class", fc, "Field class");
+	BT_ASSERT_PRE_DEV_FC_IS_STRUCT("field-class", fc, "Field class");
 	return (void *)
 		borrow_named_field_class_from_container_field_class_by_name(
 			(void *) fc, name, __func__);
@@ -1827,7 +1827,7 @@ bt_field_class_variant_with_selector_field_integer_unsigned_borrow_option_by_nam
 		const struct bt_field_class *fc, const char *name)
 {
 	BT_ASSERT_PRE_DEV_FC_NON_NULL(fc);
-	BT_ASSERT_PRE_FC_HAS_TYPE("field-class", fc,
+	BT_ASSERT_PRE_DEV_FC_HAS_TYPE("field-class", fc,
 		"variant-field-class-with-unsigned-integer-selector-field",
 		BT_FIELD_CLASS_TYPE_VARIANT_WITH_UNSIGNED_INTEGER_SELECTOR_FIELD,
 		"Field class");
@@ -1841,7 +1841,7 @@ bt_field_class_variant_with_selector_field_integer_unsigned_borrow_option_by_ind
 		const struct bt_field_class *fc, uint64_t index)
 {
 	BT_ASSERT_PRE_DEV_FC_NON_NULL(fc);
-	BT_ASSERT_PRE_FC_HAS_TYPE("field-class", fc,
+	BT_ASSERT_PRE_DEV_FC_HAS_TYPE("field-class", fc,
 		"variant-field-class-with-unsigned-integer-selector-field",
 		BT_FIELD_CLASS_TYPE_VARIANT_WITH_UNSIGNED_INTEGER_SELECTOR_FIELD,
 		"Field class");
@@ -1855,7 +1855,7 @@ bt_field_class_variant_with_selector_field_integer_signed_borrow_option_by_name_
 		const struct bt_field_class *fc, const char *name)
 {
 	BT_ASSERT_PRE_DEV_FC_NON_NULL(fc);
-	BT_ASSERT_PRE_FC_HAS_TYPE("field-class", fc,
+	BT_ASSERT_PRE_DEV_FC_HAS_TYPE("field-class", fc,
 		"variant-field-class-with-signed-integer-selector-field",
 		BT_FIELD_CLASS_TYPE_VARIANT_WITH_SIGNED_INTEGER_SELECTOR_FIELD,
 		"Field class");
@@ -1869,7 +1869,7 @@ bt_field_class_variant_with_selector_field_integer_signed_borrow_option_by_index
 		const struct bt_field_class *fc, uint64_t index)
 {
 	BT_ASSERT_PRE_DEV_FC_NON_NULL(fc);
-	BT_ASSERT_PRE_FC_HAS_TYPE("field-class", fc,
+	BT_ASSERT_PRE_DEV_FC_HAS_TYPE("field-class", fc,
 		"variant-field-class-with-signed-integer-selector-field",
 		BT_FIELD_CLASS_TYPE_VARIANT_WITH_SIGNED_INTEGER_SELECTOR_FIELD,
 		"Field class");
@@ -2042,7 +2042,7 @@ uint64_t bt_field_class_array_static_get_length(const struct bt_field_class *fc)
 	const struct bt_field_class_array_static *array_fc = (const void *) fc;
 
 	BT_ASSERT_PRE_DEV_FC_NON_NULL(fc);
-	BT_ASSERT_PRE_FC_HAS_TYPE("field-class", fc,
+	BT_ASSERT_PRE_DEV_FC_HAS_TYPE("field-class", fc,
 		"static-array-field-class", BT_FIELD_CLASS_TYPE_STATIC_ARRAY,
 		"Field class");
 	return (uint64_t) array_fc->length;
