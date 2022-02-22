@@ -1515,6 +1515,21 @@ bt_field_variant_with_selector_field_integer_signed_borrow_selected_option_class
 
 /*! @} */
 
+extern uint8_t *bt_field_blob_get_data(bt_field *field);
+
+extern const uint8_t *bt_field_blob_get_data_const(const bt_field *field);
+
+extern uint64_t bt_field_blob_get_length(const bt_field *field);
+
+typedef enum bt_field_blob_dynamic_set_length_status {
+	BT_FIELD_DYNAMIC_BLOB_SET_LENGTH_STATUS_OK		= __BT_FUNC_STATUS_OK,
+
+	BT_FIELD_DYNAMIC_BLOB_SET_LENGTH_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_field_blob_dynamic_set_length_status;
+
+extern bt_field_blob_dynamic_set_length_status bt_field_blob_dynamic_set_length(
+		bt_field *field, uint64_t length);
+
 #ifdef __cplusplus
 }
 #endif
