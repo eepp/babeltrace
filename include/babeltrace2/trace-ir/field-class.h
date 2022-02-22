@@ -1471,6 +1471,16 @@ typedef enum bt_field_class_type {
 	*/
 	BT_FIELD_CLASS_TYPE_VARIANT_WITH_SIGNED_INTEGER_SELECTOR_FIELD		= (1ULL << 28) | BT_FIELD_CLASS_TYPE_VARIANT_WITH_INTEGER_SELECTOR_FIELD,
 
+	BT_FIELD_CLASS_TYPE_BLOB						= (1ULL << 29),
+
+	BT_FIELD_CLASS_TYPE_STATIC_BLOB						= (1ULL << 30) | BT_FIELD_CLASS_TYPE_BLOB,
+
+	BT_FIELD_CLASS_TYPE_DYNAMIC_BLOB					= (1ULL << 31) | BT_FIELD_CLASS_TYPE_BLOB,
+
+	BT_FIELD_CLASS_TYPE_DYNAMIC_BLOB_WITHOUT_LENGTH_FIELD			= (1ULL << 32) | BT_FIELD_CLASS_TYPE_DYNAMIC_BLOB,
+
+	BT_FIELD_CLASS_TYPE_DYNAMIC_BLOB_WITH_LENGTH_FIELD			= (1ULL << 33) | BT_FIELD_CLASS_TYPE_DYNAMIC_BLOB,
+
 	/*
 	 * Make sure the enumeration type is a 64-bit integer in case
 	 * the project needs field class types in the future.
@@ -4595,6 +4605,35 @@ bt_field_class_variant_with_selector_field_integer_signed_option_as_option_const
 }
 
 /*! @} */
+
+typedef enum bt_field_class_blob_set_media_type_status {
+	BT_FIELD_CLASS_BLOB_SET_MEDIA_TYPE_STATUS_OK		= __BT_FUNC_STATUS_OK,
+
+	BT_FIELD_CLASS_BLOB_SET_MEDIA_TYPE_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_field_class_blob_set_media_type_status;
+
+extern bt_field_class_blob_set_media_type_status bt_field_class_blob_set_media_type(
+		bt_field_class *field_class, const char *media_type);
+
+extern const char *bt_field_class_blob_get_media_type(
+		const bt_field_class *field_class);
+
+extern bt_field_class *bt_field_class_blob_static_create(
+		bt_trace_class *trace_class, uint64_t length);
+
+extern uint64_t bt_field_class_blob_static_get_length(
+		const bt_field_class *field_class);
+
+extern bt_field_class *bt_field_class_blob_dynamic_without_length_field_location_create(
+		bt_trace_class *trace_class);
+
+extern bt_field_class *bt_field_class_blob_dynamic_with_length_field_location_create(
+		bt_trace_class *trace_class,
+		const bt_field_location *length_field_location);
+
+extern const bt_field_location *
+bt_field_class_blob_dynamic_with_length_field_borrow_length_field_location_const(
+		const bt_field_class *field_class);
 
 /*!
 @name Reference count
