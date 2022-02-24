@@ -28,6 +28,13 @@ struct bt_stream_class {
 
 		/* NULL or `str->str` above */
 		const char *value;
+	} ns;
+
+	struct {
+		GString *str;
+
+		/* NULL or `str->str` above */
+		const char *value;
 	} name;
 
 	uint64_t id;

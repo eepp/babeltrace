@@ -47,6 +47,12 @@ void destroy_stream_class(struct bt_object *obj)
 		stream_class->event_classes = NULL;
 	}
 
+	if (stream_class->ns.str) {
+		g_string_free(stream_class->ns.str, TRUE);
+		stream_class->ns.str = NULL;
+		stream_class->ns.value = NULL;
+	}
+
 	if (stream_class->name.str) {
 		g_string_free(stream_class->name.str, TRUE);
 		stream_class->name.str = NULL;
@@ -119,6 +125,12 @@ struct bt_stream_class *create_stream_class_with_id(
 
 	stream_class->name.str = g_string_new(NULL);
 	if (!stream_class->name.str) {
+		BT_LIB_LOGE_APPEND_CAUSE("Failed to allocate a GString.");
+		goto error;
+	}
+
+	stream_class->ns.str = g_string_new(NULL);
+	if (!stream_class->ns.str) {
 		BT_LIB_LOGE_APPEND_CAUSE("Failed to allocate a GString.");
 		goto error;
 	}
@@ -197,6 +209,31 @@ const struct bt_trace_class *bt_stream_class_borrow_trace_class_const(
 		const struct bt_stream_class *stream_class)
 {
 	return bt_stream_class_borrow_trace_class((void *) stream_class);
+}
+
+BT_EXPORT
+const char *bt_stream_class_get_namespace(
+		const struct bt_stream_class *stream_class)
+{
+	BT_ASSERT_PRE_DEV_SC_NON_NULL(stream_class);
+	BT_ASSERT_PRE_SC_MIP_VERSION_GE(stream_class, 1);
+	return stream_class->ns.value;
+}
+
+BT_EXPORT
+enum bt_stream_class_set_namespace_status bt_stream_class_set_namespace(
+		struct bt_stream_class *stream_class,
+		const char *ns)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_SC_NON_NULL(stream_class);
+	BT_ASSERT_PRE_SC_MIP_VERSION_GE(stream_class, 1);
+	BT_ASSERT_PRE_NAMESPACE_NON_NULL(ns);
+	BT_ASSERT_PRE_DEV_STREAM_CLASS_HOT(stream_class);
+	g_string_assign(stream_class->ns.str, ns);
+	stream_class->ns.value = stream_class->ns.str->str;
+	BT_LIB_LOGD("Set stream class's namespace: %!+S", stream_class);
+	return BT_FUNC_STATUS_OK;
 }
 
 BT_EXPORT

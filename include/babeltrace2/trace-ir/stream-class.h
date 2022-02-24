@@ -838,6 +838,18 @@ See the \ref api-tir-stream-cls-prop-id "numeric ID" property.
 extern uint64_t bt_stream_class_get_id(
 		const bt_stream_class *stream_class) __BT_NOEXCEPT;
 
+typedef enum bt_stream_class_set_namespace_status {
+	BT_STREAM_CLASS_SET_NAMESPACE_STATUS_OK			= __BT_FUNC_STATUS_OK,
+
+	BT_STREAM_CLASS_SET_NAMESPACE_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_stream_class_set_namespace_status;
+
+extern bt_stream_class_set_namespace_status bt_stream_class_set_namespace(
+		bt_stream_class *stream_class, const char *ns);
+
+extern const char *bt_stream_class_get_namespace(
+		const bt_stream_class *stream_class);
+
 /*!
 @brief
     Status codes for bt_stream_class_set_name().
