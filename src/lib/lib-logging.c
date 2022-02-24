@@ -640,6 +640,11 @@ static inline void format_stream_class(char **buf_ch, bool extended,
 
 	BUF_APPEND(", %sid=%" PRIu64, PRFIELD(stream_class->id));
 
+	if (stream_class->ns.value) {
+		BUF_APPEND(", %snamespace=\"%s\"",
+			PRFIELD(stream_class->ns.value));
+	}
+
 	if (stream_class->name.value) {
 		BUF_APPEND(", %sname=\"%s\"",
 			PRFIELD(stream_class->name.value));
