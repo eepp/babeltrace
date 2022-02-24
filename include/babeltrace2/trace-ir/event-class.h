@@ -466,6 +466,17 @@ If \bt_p{event_class} has no name, this function returns \c NULL.
 */
 extern const char *bt_event_class_get_name(const bt_event_class *event_class);
 
+typedef enum bt_event_class_set_namespace_status {
+	BT_EVENT_CLASS_SET_NAMESPACE_STATUS_OK			= __BT_FUNC_STATUS_OK,
+
+	BT_EVENT_CLASS_SET_NAMESPACE_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_event_class_set_namespace_status;
+
+extern bt_event_class_set_namespace_status bt_event_class_set_namespace(
+		bt_event_class *event_class, const char *ns);
+
+extern const char *bt_event_class_get_namespace(const bt_event_class *event_class);
+
 /*!
 @brief
     Event class log level enumerators.

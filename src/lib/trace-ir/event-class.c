@@ -51,6 +51,11 @@ void destroy_event_class(struct bt_object *obj)
 		event_class->name.str = NULL;
 	}
 
+	if (event_class->ns.str) {
+		g_string_free(event_class->ns.str, TRUE);
+		event_class->ns.str = NULL;
+	}
+
 	if (event_class->emf_uri.str) {
 		g_string_free(event_class->emf_uri.str, TRUE);
 		event_class->emf_uri.str = NULL;
@@ -124,8 +129,15 @@ struct bt_event_class *create_event_class_with_id(
 	event_class->id = id;
 	bt_property_uint_init(&event_class->log_level,
 			BT_PROPERTY_AVAILABILITY_NOT_AVAILABLE, 0);
+
 	event_class->name.str = g_string_new(NULL);
 	if (!event_class->name.str) {
+		BT_LIB_LOGE_APPEND_CAUSE("Failed to allocate a GString.");
+		goto error;
+	}
+
+	event_class->ns.str = g_string_new(NULL);
+	if (!event_class->ns.str) {
 		BT_LIB_LOGE_APPEND_CAUSE("Failed to allocate a GString.");
 		goto error;
 	}
@@ -202,6 +214,27 @@ enum bt_event_class_set_name_status bt_event_class_set_name(
 	g_string_assign(event_class->name.str, name);
 	event_class->name.value = event_class->name.str->str;
 	BT_LIB_LOGD("Set event class's name: %!+E", event_class);
+	return BT_FUNC_STATUS_OK;
+}
+
+const char *bt_event_class_get_namespace(const struct bt_event_class *event_class)
+{
+	BT_ASSERT_PRE_DEV_EC_NON_NULL(event_class);
+	BT_ASSERT_PRE_EC_MIP_VERSION_GE(event_class, 1);
+	return event_class->ns.value;
+}
+
+enum bt_event_class_set_namespace_status bt_event_class_set_namespace(
+		struct bt_event_class *event_class, const char *ns)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_EC_NON_NULL(event_class);
+	BT_ASSERT_PRE_EC_MIP_VERSION_GE(event_class, 1);
+	BT_ASSERT_PRE_NAMESPACE_NON_NULL(ns);
+	BT_ASSERT_PRE_DEV_EVENT_CLASS_HOT(event_class);
+	g_string_assign(event_class->ns.str, ns);
+	event_class->ns.value = event_class->ns.str->str;
+	BT_LIB_LOGD("Set event class's namespace: %!+E", event_class);
 	return BT_FUNC_STATUS_OK;
 }
 
