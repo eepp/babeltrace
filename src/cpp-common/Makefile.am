@@ -15,6 +15,7 @@ libcppcommon_la_SOURCES = \
 	string_view.hpp \
 	text-loc.hpp text-loc.cpp \
 	text-loc-str.hpp text-loc-str.cpp \
-	uuid-view.hpp
+	uuid-view.hpp \
+	str-scanner.hpp str-scanner.cpp
 
 EXTRA_DIST = bt2
