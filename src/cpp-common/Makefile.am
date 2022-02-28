@@ -14,6 +14,7 @@ libcppcommon_la_SOURCES = \
 	cfg-logging-error-reporting.hpp \
 	cfg-logging-error-reporting-throw.hpp \
 	text-loc.hpp text-loc.cpp \
-	text-parse-error.hpp text-parse-error.cpp
+	text-parse-error.hpp text-parse-error.cpp \
+	str-scanner.hpp str-scanner.cpp
 
 EXTRA_DIST = bt2
