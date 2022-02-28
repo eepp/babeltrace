@@ -1,5 +1,18 @@
 # SPDX-License-Identifier: MIT
 
-EXTRA_DIST = bt2 optional.hpp string_view.hpp uuid-view.hpp nlohmann/json.hpp log-cfg.hpp \
-	exc.hpp comp-logging.hpp cfg-logging.hpp cfg-logging-error-reporting.hpp \
-	cfg-logging-error-reporting-throw.hpp
+noinst_LTLIBRARIES = libcppcommon.la
+
+libcppcommon_la_SOURCES = \
+	optional.hpp \
+	string_view.hpp \
+	uuid-view.hpp \
+	nlohmann/json.hpp \
+	log-cfg.hpp \
+	exc.hpp \
+	comp-logging.hpp \
+	cfg-logging.hpp \
+	cfg-logging-error-reporting.hpp \
+	cfg-logging-error-reporting-throw.hpp \
+	text-loc.hpp text-loc.cpp
+
+EXTRA_DIST = bt2
