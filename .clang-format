@@ -70,7 +70,7 @@ DeriveLineEnding: false
 DerivePointerAlignment: false
 DisableFormat: false
 EmptyLineBeforeAccessModifier: Always
-FixNamespaceComments: true
+FixNamespaceComments: false
 ForEachMacros: [
   'bt_list_for_each',
   'bt_list_for_each_entry',
