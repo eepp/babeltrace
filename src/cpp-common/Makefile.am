@@ -17,6 +17,7 @@ libcppcommon_la_SOURCES = \
 	text-loc-str.hpp text-loc-str.cpp \
 	uuid-view.hpp \
 	str-scanner.hpp str-scanner.cpp \
-	parse-json.hpp
+	parse-json.hpp \
+	make-unique.hpp
 
 EXTRA_DIST = bt2
