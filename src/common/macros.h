@@ -81,6 +81,10 @@ extern "C" {
 	((void) sizeof((void) (_expr1), (void) (_expr2),		\
 		(void) (_expr3), (void) (_expr4), (void) (_expr5), 0))
 
+#define BT_DIAG_PUSH _Pragma("GCC diagnostic push")
+#define BT_DIAG_POP _Pragma("GCC diagnostic pop")
+#define BT_DIAG_IGNORE_NULL_DEREFERENCE _Pragma("GCC diagnostic ignored \"-Wnull-dereference\"")
+
 #ifdef __cplusplus
 }
 #endif
