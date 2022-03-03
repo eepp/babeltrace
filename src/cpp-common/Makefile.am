@@ -19,6 +19,7 @@ libcppcommon_la_SOURCES = \
 	parse-json.hpp \
 	make-unique.hpp \
 	json-val.hpp json-val.cpp \
-	parse-json-as-val.hpp parse-json-as-val.cpp
+	parse-json-as-val.hpp parse-json-as-val.cpp \
+	bt2-value-from-json-val.hpp bt2-value-from-json-val.cpp
 
 EXTRA_DIST = bt2
