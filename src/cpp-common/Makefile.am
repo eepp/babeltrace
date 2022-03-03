@@ -20,6 +20,7 @@ libcppcommon_la_SOURCES = \
 	str-scanner.hpp str-scanner.cpp \
 	parse-json.hpp \
 	make-unique.hpp \
-	json-val.hpp json-val.cpp
+	json-val.hpp json-val.cpp \
+	parse-json-as-val.hpp parse-json-as-val.cpp
 
 EXTRA_DIST = bt2
