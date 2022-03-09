@@ -12,6 +12,12 @@
 #include <babeltrace2/babeltrace.h>
 #include "common/macros.h"
 
+bt_component_class_get_supported_mip_versions_method_status
+muxer_supported_mip_versions(bt_self_component_class_filter *self_component_class,
+		const bt_value *params, void *initialize_method_data,
+		bt_logging_level logging_level,
+		bt_integer_range_set_unsigned *supported_versions);
+
 bt_component_class_initialize_method_status muxer_init(
 		bt_self_component_filter *self_comp,
 		bt_self_component_filter_configuration *config,
