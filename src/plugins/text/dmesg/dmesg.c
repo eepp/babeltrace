@@ -70,6 +70,16 @@ struct dmesg_component {
 	bt_clock_class *clock_class;
 };
 
+BT_HIDDEN
+bt_component_class_get_supported_mip_versions_method_status
+dmesg_supported_mip_versions(bt_self_component_class_source *self_component_class,
+		const bt_value *params, void *initialize_method_data,
+		bt_logging_level logging_level,
+		bt_integer_range_set_unsigned *supported_versions)
+{
+	return (int) bt_integer_range_set_unsigned_add_range(supported_versions, 0, 1);
+}
+
 static
 bt_field_class *create_event_payload_fc(struct dmesg_component *dmesg_comp,
 		bt_trace_class *trace_class)

@@ -127,6 +127,17 @@ struct trimmer_iterator_stream_state {
 	const bt_packet *cur_packet;
 };
 
+BT_HIDDEN
+bt_component_class_get_supported_mip_versions_method_status
+trimmer_supported_mip_versions(
+		bt_self_component_class_filter *self_component_class,
+		const bt_value *params, void *initialize_method_data,
+		bt_logging_level logging_level,
+		bt_integer_range_set_unsigned *supported_versions)
+{
+	return (int) bt_integer_range_set_unsigned_add_range(supported_versions, 0, 1);
+}
+
 static
 void destroy_trimmer_comp(struct trimmer_comp *trimmer_comp)
 {

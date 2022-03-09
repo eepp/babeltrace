@@ -36,6 +36,7 @@ struct muxer_comp {
 	bt_logging_level log_level;
 };
 
+
 struct muxer_upstream_msg_iter {
 	struct muxer_comp *muxer_comp;
 
@@ -103,6 +104,16 @@ struct muxer_msg_iter {
 	bt_message_iterator_class_next_method_status next_saved_status;
 	const struct bt_error *next_saved_error;
 };
+
+BT_HIDDEN
+bt_component_class_get_supported_mip_versions_method_status
+muxer_supported_mip_versions(bt_self_component_class_filter *self_component_class,
+		const bt_value *params, void *initialize_method_data,
+		bt_logging_level logging_level,
+		bt_integer_range_set_unsigned *supported_versions)
+{
+	return (int) bt_integer_range_set_unsigned_add_range(supported_versions, 0, 1);
+}
 
 static
 void empty_message_queue(struct muxer_upstream_msg_iter *upstream_msg_iter)
