@@ -83,6 +83,7 @@ TESTS_LIB = \
 	lib/test_bt_uuid \
 	lib/test_bt_values \
 	lib/test_graph_topo \
+	lib/test_mip \
 	lib/test_remove_destruction_listener_in_destruction_listener \
 	lib/test_simple_sink \
 	lib/test_trace_ir_ref
