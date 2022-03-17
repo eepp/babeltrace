@@ -96,6 +96,15 @@ template <typename LibObjT>
 class CommonDynamicArrayWithLengthFieldClass;
 
 template <typename LibObjT>
+class CommonBlobFieldClass;
+
+template <typename LibObjT>
+class CommonStaticBlobFieldClass;
+
+template <typename LibObjT>
+class CommonDynamicBlobWithLengthFieldClass;
+
+template <typename LibObjT>
 class CommonOptionFieldClass;
 
 template <typename LibObjT>
@@ -131,7 +140,7 @@ class CommonStreamClass;
 template <typename LibObjT>
 class CommonTraceClass;
 
-enum class FieldClassType
+enum class FieldClassType : std::uint64_t
 {
     BOOL = BT_FIELD_CLASS_TYPE_BOOL,
     BIT_ARRAY = BT_FIELD_CLASS_TYPE_BIT_ARRAY,
@@ -157,6 +166,10 @@ enum class FieldClassType
         BT_FIELD_CLASS_TYPE_VARIANT_WITH_UNSIGNED_INTEGER_SELECTOR_FIELD,
     VARIANT_WITH_SIGNED_INTEGER_SELECTOR =
         BT_FIELD_CLASS_TYPE_VARIANT_WITH_SIGNED_INTEGER_SELECTOR_FIELD,
+    STATIC_BLOB = BT_FIELD_CLASS_TYPE_STATIC_BLOB,
+    DYNAMIC_BLOB = BT_FIELD_CLASS_TYPE_DYNAMIC_BLOB,
+    DYNAMIC_BLOB_WITHOUT_LENGTH_FIELD = BT_FIELD_CLASS_TYPE_DYNAMIC_BLOB_WITHOUT_LENGTH_FIELD,
+    DYNAMIC_BLOB_WITH_LENGTH_FIELD = BT_FIELD_CLASS_TYPE_DYNAMIC_BLOB_WITH_LENGTH_FIELD,
 };
 
 template <typename LibObjT>
@@ -374,6 +387,31 @@ public:
         return this->_libTypeIs(BT_FIELD_CLASS_TYPE_VARIANT_WITH_SIGNED_INTEGER_SELECTOR_FIELD);
     }
 
+    bool isBlob() const noexcept
+    {
+        return this->_libTypeIs(BT_FIELD_CLASS_TYPE_BLOB);
+    }
+
+    bool isStaticBlob() const noexcept
+    {
+        return this->_libTypeIs(BT_FIELD_CLASS_TYPE_STATIC_BLOB);
+    }
+
+    bool isDynamicBlob() const noexcept
+    {
+        return this->_libTypeIs(BT_FIELD_CLASS_TYPE_DYNAMIC_BLOB);
+    }
+
+    bool isDynamicBlobWithoutLength() const noexcept
+    {
+        return this->_libTypeIs(BT_FIELD_CLASS_TYPE_DYNAMIC_BLOB_WITHOUT_LENGTH_FIELD);
+    }
+
+    bool isDynamicBlobWithLength() const noexcept
+    {
+        return this->_libTypeIs(BT_FIELD_CLASS_TYPE_DYNAMIC_BLOB_WITH_LENGTH_FIELD);
+    }
+
     CommonBitArrayFieldClass<LibObjT> asBitArray() const noexcept;
     CommonIntegerFieldClass<LibObjT> asInteger() const noexcept;
     CommonBaseEnumerationFieldClass<LibObjT> asEnumeration() const noexcept;
@@ -389,6 +427,9 @@ public:
     CommonArrayFieldClass<LibObjT> asArray() const noexcept;
     CommonStaticArrayFieldClass<LibObjT> asStaticArray() const noexcept;
     CommonDynamicArrayWithLengthFieldClass<LibObjT> asDynamicArrayWithLength() const noexcept;
+    CommonBlobFieldClass<LibObjT> asBlob() const noexcept;
+    CommonStaticBlobFieldClass<LibObjT> asStaticBlob() const noexcept;
+    CommonDynamicBlobWithLengthFieldClass<LibObjT> asDynamicBlobWithLength() const noexcept;
     CommonOptionFieldClass<LibObjT> asOption() const noexcept;
     CommonOptionWithSelectorFieldClass<LibObjT> asOptionWithSelector() const noexcept;
     CommonOptionWithBoolSelectorFieldClass<LibObjT> asOptionWithBoolSelector() const noexcept;
@@ -1475,6 +1516,223 @@ struct TypeDescr<DynamicArrayWithLengthFieldClass> :
 template <>
 struct TypeDescr<ConstDynamicArrayWithLengthFieldClass> :
     public DynamicArrayWithLengthFieldClassTypeDescr
+{
+};
+
+} /* namespace internal */
+
+template <typename LibObjT>
+class CommonBlobFieldClass : public CommonFieldClass<LibObjT>
+{
+private:
+    using typename CommonFieldClass<LibObjT>::_ThisCommonFieldClass;
+
+protected:
+    using typename CommonFieldClass<LibObjT>::_LibObjPtr;
+    using _ThisCommonBlobFieldClass = CommonBlobFieldClass<LibObjT>;
+
+public:
+    using Shared = internal::SharedFieldClass<CommonBlobFieldClass<LibObjT>, LibObjT>;
+
+    explicit CommonBlobFieldClass(const _LibObjPtr libObjPtr) noexcept :
+        _ThisCommonFieldClass {libObjPtr}
+    {
+        BT_ASSERT_DBG(this->isBlob());
+    }
+
+    template <typename OtherLibObjT>
+    CommonBlobFieldClass(const CommonBlobFieldClass<OtherLibObjT>& fc) noexcept :
+        _ThisCommonFieldClass {fc}
+    {
+    }
+
+    template <typename OtherLibObjT>
+    CommonBlobFieldClass& operator=(const CommonBlobFieldClass<OtherLibObjT>& fc) noexcept
+    {
+        _ThisCommonFieldClass::operator=(fc);
+        return *this;
+    }
+
+    bpstd::string_view mediaType() const noexcept
+    {
+        return bt_field_class_blob_get_media_type(this->libObjPtr());
+    }
+
+    void mediaType(const char * const mediaType)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto status = bt_field_class_blob_set_media_type(this->libObjPtr(), mediaType);
+
+        if (status == BT_FIELD_CLASS_BLOB_SET_MEDIA_TYPE_STATUS_MEMORY_ERROR) {
+            throw LibMemoryError {};
+        }
+    }
+
+    void mediaType(const std::string& mediaType)
+    {
+        this->mediaType(mediaType.data());
+    }
+
+    Shared shared() const noexcept
+    {
+        return Shared {*this};
+    }
+};
+
+using BlobFieldClass = CommonBlobFieldClass<bt_field_class>;
+using ConstBlobFieldClass = CommonBlobFieldClass<const bt_field_class>;
+
+namespace internal {
+
+struct BlobFieldClassTypeDescr
+{
+    using Const = ConstBlobFieldClass;
+    using NonConst = BlobFieldClass;
+};
+
+template <>
+struct TypeDescr<BlobFieldClass> : public BlobFieldClassTypeDescr
+{
+};
+
+template <>
+struct TypeDescr<ConstBlobFieldClass> : public BlobFieldClassTypeDescr
+{
+};
+
+} /* namespace internal */
+
+template <typename LibObjT>
+class CommonStaticBlobFieldClass final : public CommonBlobFieldClass<LibObjT>
+{
+private:
+    using typename CommonBlobFieldClass<LibObjT>::_ThisCommonBlobFieldClass;
+    using typename CommonFieldClass<LibObjT>::_LibObjPtr;
+
+public:
+    using Shared = internal::SharedFieldClass<CommonStaticBlobFieldClass<LibObjT>, LibObjT>;
+
+    explicit CommonStaticBlobFieldClass(const _LibObjPtr libObjPtr) noexcept :
+        _ThisCommonBlobFieldClass {libObjPtr}
+    {
+        BT_ASSERT_DBG(this->isStaticBlob());
+    }
+
+    template <typename OtherLibObjT>
+    CommonStaticBlobFieldClass(const CommonStaticBlobFieldClass<OtherLibObjT>& fc) noexcept :
+        _ThisCommonBlobFieldClass {fc}
+    {
+    }
+
+    template <typename OtherLibObjT>
+    CommonStaticBlobFieldClass&
+    operator=(const CommonStaticBlobFieldClass<OtherLibObjT>& fc) noexcept
+    {
+        _ThisCommonBlobFieldClass::operator=(fc);
+        return *this;
+    }
+
+    std::uint64_t length() const noexcept
+    {
+        return bt_field_class_blob_static_get_length(this->libObjPtr());
+    }
+
+    Shared shared() const noexcept
+    {
+        return Shared {*this};
+    }
+};
+
+using StaticBlobFieldClass = CommonStaticBlobFieldClass<bt_field_class>;
+using ConstStaticBlobFieldClass = CommonStaticBlobFieldClass<const bt_field_class>;
+
+namespace internal {
+
+struct StaticBlobFieldClassTypeDescr
+{
+    using Const = ConstStaticBlobFieldClass;
+    using NonConst = StaticBlobFieldClass;
+};
+
+template <>
+struct TypeDescr<StaticBlobFieldClass> : public StaticBlobFieldClassTypeDescr
+{
+};
+
+template <>
+struct TypeDescr<ConstStaticBlobFieldClass> : public StaticBlobFieldClassTypeDescr
+{
+};
+
+} /* namespace internal */
+
+template <typename LibObjT>
+class CommonDynamicBlobWithLengthFieldClass final : public CommonBlobFieldClass<LibObjT>
+{
+private:
+    using typename CommonBlobFieldClass<LibObjT>::_ThisCommonBlobFieldClass;
+    using typename CommonFieldClass<LibObjT>::_LibObjPtr;
+
+public:
+    using Shared =
+        internal::SharedFieldClass<CommonDynamicBlobWithLengthFieldClass<LibObjT>, LibObjT>;
+
+    explicit CommonDynamicBlobWithLengthFieldClass(const _LibObjPtr libObjPtr) noexcept :
+        _ThisCommonBlobFieldClass {libObjPtr}
+    {
+        BT_ASSERT_DBG(this->isDynamicBlobWithLength());
+    }
+
+    template <typename OtherLibObjT>
+    CommonDynamicBlobWithLengthFieldClass(
+        const CommonDynamicBlobWithLengthFieldClass<OtherLibObjT>& fc) noexcept :
+        _ThisCommonBlobFieldClass {fc}
+    {
+    }
+
+    template <typename OtherLibObjT>
+    CommonDynamicBlobWithLengthFieldClass&
+    operator=(const CommonDynamicBlobWithLengthFieldClass<OtherLibObjT>& fc) noexcept
+    {
+        _ThisCommonBlobFieldClass::operator=(fc);
+        return *this;
+    }
+
+    ConstFieldLocation lengthFieldLocation() const noexcept
+    {
+        return ConstFieldLocation {
+            bt_field_class_blob_dynamic_with_length_field_borrow_length_field_location_const(
+                this->libObjPtr())};
+    }
+
+    Shared shared() const noexcept
+    {
+        return Shared {*this};
+    }
+};
+
+using DynamicBlobWithLengthFieldClass = CommonDynamicBlobWithLengthFieldClass<bt_field_class>;
+
+using ConstDynamicBlobWithLengthFieldClass =
+    CommonDynamicBlobWithLengthFieldClass<const bt_field_class>;
+
+namespace internal {
+
+struct DynamicBlobWithLengthFieldClassTypeDescr
+{
+    using Const = ConstDynamicBlobWithLengthFieldClass;
+    using NonConst = DynamicBlobWithLengthFieldClass;
+};
+
+template <>
+struct TypeDescr<DynamicBlobWithLengthFieldClass> : public DynamicBlobWithLengthFieldClassTypeDescr
+{
+};
+
+template <>
+struct TypeDescr<ConstDynamicBlobWithLengthFieldClass> :
+    public DynamicBlobWithLengthFieldClassTypeDescr
 {
 };
 
@@ -2663,6 +2921,28 @@ CommonFieldClass<LibObjT>::asDynamicArrayWithLength() const noexcept
 {
     BT_ASSERT_DBG(this->isDynamicArrayWithLength());
     return CommonDynamicArrayWithLengthFieldClass<LibObjT> {this->libObjPtr()};
+}
+
+template <typename LibObjT>
+CommonBlobFieldClass<LibObjT> CommonFieldClass<LibObjT>::asBlob() const noexcept
+{
+    BT_ASSERT_DBG(this->isBlob());
+    return CommonBlobFieldClass<LibObjT> {this->libObjPtr()};
+}
+
+template <typename LibObjT>
+CommonStaticBlobFieldClass<LibObjT> CommonFieldClass<LibObjT>::asStaticBlob() const noexcept
+{
+    BT_ASSERT_DBG(this->isStaticBlob());
+    return CommonStaticBlobFieldClass<LibObjT> {this->libObjPtr()};
+}
+
+template <typename LibObjT>
+CommonDynamicBlobWithLengthFieldClass<LibObjT>
+CommonFieldClass<LibObjT>::asDynamicBlobWithLength() const noexcept
+{
+    BT_ASSERT_DBG(this->isDynamicBlobWithLength());
+    return CommonDynamicBlobWithLengthFieldClass<LibObjT> {this->libObjPtr()};
 }
 
 template <typename LibObjT>
