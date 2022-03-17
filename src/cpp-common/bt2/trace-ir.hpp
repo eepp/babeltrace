@@ -2219,6 +2219,40 @@ public:
             DynamicArrayWithLengthFieldClass {libObjPtr}};
     }
 
+    StaticBlobFieldClass::Shared createStaticBlobFieldClass(const std::uint64_t length)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr = bt_field_class_blob_static_create(this->libObjPtr(), length);
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return StaticBlobFieldClass::Shared {StaticBlobFieldClass {libObjPtr}};
+    }
+
+    BlobFieldClass::Shared createDynamicBlobWithoutLengthFieldLocationFieldClass()
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr =
+            bt_field_class_blob_dynamic_without_length_field_location_create(this->libObjPtr());
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return BlobFieldClass::Shared {BlobFieldClass {libObjPtr}};
+    }
+
+    DynamicBlobWithLengthFieldClass::Shared createDynamicBlobWithLengthFieldLocationFieldClass(
+        const ConstFieldLocation& lengthFieldLocation)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr = bt_field_class_blob_dynamic_with_length_field_location_create(
+            this->libObjPtr(), lengthFieldLocation.libObjPtr());
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return DynamicBlobWithLengthFieldClass::Shared {
+            DynamicBlobWithLengthFieldClass {libObjPtr}};
+    }
+
     StructureFieldClass::Shared createStructureFieldClass()
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
