@@ -24,6 +24,7 @@ libcppcommon_la_SOURCES = \
 	bt2-value-from-json-val.hpp bt2-value-from-json-val.cpp \
 	val-req.hpp \
 	json-val-req.hpp \
-	safe-ops.hpp
+	safe-ops.hpp \
+	data-len.hpp
 
 EXTRA_DIST = bt2
