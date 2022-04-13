@@ -23,9 +23,9 @@
 #include "metadata.hpp"
 #include "data-stream-file.hpp"
 #include "file.hpp"
-#include "../common/metadata/decoder.hpp"
-#include "../common/metadata/ctf-meta-configure-ir-trace.hpp"
-#include "../common/msg-iter/msg-iter.hpp"
+#include "../common/src/metadata/tsdl/decoder.hpp"
+#include "../common/src/metadata/tsdl/ctf-meta-configure-ir-trace.hpp"
+#include "../common/src/msg-iter/msg-iter.hpp"
 #include "query.hpp"
 #include "plugins/common/param-validation/param-validation.h"
 

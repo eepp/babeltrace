@@ -27,7 +27,7 @@
 #include <glib.h>
 
 #include "bfcr.hpp"
-#include "../metadata/ctf-meta.hpp"
+#include "../metadata/tsdl/ctf-meta.hpp"
 
 #define DIV8(_x)                ((_x) >> 3)
 #define BYTES_TO_BITS(_x)       ((_x) *8)

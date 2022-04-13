@@ -12,7 +12,7 @@
 
 #include <glib.h>
 
-#include "../common/msg-iter/msg-iter.hpp"
+#include "../common/src/msg-iter/msg-iter.hpp"
 #include "lttng-live.hpp"
 
 enum lttng_live_iterator_status lttng_live_lazy_msg_init(struct lttng_live_session *session,

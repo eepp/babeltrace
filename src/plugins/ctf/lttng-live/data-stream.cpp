@@ -20,7 +20,7 @@
 
 #include <babeltrace2/babeltrace.h>
 
-#include "../common/msg-iter/msg-iter.hpp"
+#include "../common/src/msg-iter/msg-iter.hpp"
 #include "common/assert.h"
 #include "compat/mman.h"
 #include "data-stream.hpp"

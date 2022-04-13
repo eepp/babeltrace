@@ -26,10 +26,10 @@
 .deps
 *.bkp
 *.trs
-/src/plugins/ctf/common/metadata/lexer.cpp
-/src/plugins/ctf/common/metadata/parser.cpp
-/src/plugins/ctf/common/metadata/parser.hpp
-/src/plugins/ctf/common/metadata/parser.output
+/src/plugins/ctf/common/src/metadata/tsdl/lexer.cpp
+/src/plugins/ctf/common/src/metadata/tsdl/parser.cpp
+/src/plugins/ctf/common/src/metadata/tsdl/parser.hpp
+/src/plugins/ctf/common/src/metadata/tsdl/parser.output
 /src/cli/babeltrace2
 /src/cli/babeltrace2.bin
 /src/cli/babeltrace2-log

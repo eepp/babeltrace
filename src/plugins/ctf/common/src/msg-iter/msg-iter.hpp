@@ -17,7 +17,7 @@
 #include <babeltrace2/babeltrace.h>
 #include "common/macros.h"
 
-#include "../metadata/ctf-meta.hpp"
+#include "../metadata/tsdl/ctf-meta.hpp"
 
 /**
  * @file ctf-msg-iter.h

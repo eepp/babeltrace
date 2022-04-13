@@ -15,7 +15,7 @@
 #include <babeltrace2/babeltrace.h>
 #include "data-stream-file.hpp"
 #include "metadata.hpp"
-#include "../common/metadata/decoder.hpp"
+#include "../common/src/metadata/tsdl/decoder.hpp"
 
 extern bool ctf_fs_debug;
 

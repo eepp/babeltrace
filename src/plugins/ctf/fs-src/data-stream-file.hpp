@@ -13,7 +13,7 @@
 #include "common/macros.h"
 #include <babeltrace2/babeltrace.h>
 
-#include "../common/msg-iter/msg-iter.hpp"
+#include "../common/src/msg-iter/msg-iter.hpp"
 #include "lttng-index.hpp"
 
 struct ctf_fs_component;
