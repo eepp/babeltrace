@@ -23,7 +23,7 @@
 #include "common/common.h"
 #include "file.hpp"
 #include "metadata.hpp"
-#include "../common/msg-iter/msg-iter.hpp"
+#include "../common/src/msg-iter/msg-iter.hpp"
 #include "common/assert.h"
 #include "data-stream-file.hpp"
 #include <string.h>

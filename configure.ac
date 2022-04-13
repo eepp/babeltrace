@@ -815,10 +815,12 @@ AC_CONFIG_FILES([
   src/plugins/common/Makefile
   src/plugins/common/muxing/Makefile
   src/plugins/common/param-validation/Makefile
-  src/plugins/ctf/common/bfcr/Makefile
   src/plugins/ctf/common/Makefile
-  src/plugins/ctf/common/metadata/Makefile
-  src/plugins/ctf/common/msg-iter/Makefile
+  src/plugins/ctf/common/src/bfcr/Makefile
+  src/plugins/ctf/common/src/Makefile
+  src/plugins/ctf/common/src/metadata/Makefile
+  src/plugins/ctf/common/src/metadata/tsdl/Makefile
+  src/plugins/ctf/common/src/msg-iter/Makefile
   src/plugins/ctf/fs-sink/Makefile
   src/plugins/ctf/fs-src/Makefile
   src/plugins/ctf/lttng-live/Makefile

@@ -20,8 +20,8 @@
 #include <babeltrace2/babeltrace.h>
 
 #include "metadata.hpp"
-#include "../common/metadata/decoder.hpp"
-#include "../common/metadata/ctf-meta-configure-ir-trace.hpp"
+#include "../common/src/metadata/tsdl/decoder.hpp"
+#include "../common/src/metadata/tsdl/ctf-meta-configure-ir-trace.hpp"
 
 #define TSDL_MAGIC 0x75d11d57
 

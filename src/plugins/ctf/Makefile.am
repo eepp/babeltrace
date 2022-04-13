@@ -17,7 +17,7 @@ babeltrace_plugin_ctf_la_LDFLAGS = \
 	-avoid-version -module $(LD_NOTEXT)
 
 babeltrace_plugin_ctf_la_LIBADD = \
-	common/libbabeltrace2-plugin-ctf-common.la \
+	common/src/libbabeltrace2-plugin-ctf-common-src.la \
 	fs-sink/libbabeltrace2-plugin-ctf-fs-sink.la \
 	fs-src/libbabeltrace2-plugin-ctf-fs-src.la \
 	lttng-live/libbabeltrace2-plugin-ctf-lttng-live.la \
