@@ -19,7 +19,7 @@
 #include <sys/stat.h>
 #include "common/assert.h"
 #include "metadata.hpp"
-#include "../common/metadata/decoder.hpp"
+#include "../common/src/metadata/tsdl/decoder.hpp"
 #include "common/common.h"
 #include "common/macros.h"
 #include <babeltrace2/babeltrace.h>

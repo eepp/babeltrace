@@ -22,7 +22,7 @@
 #include "fs.hpp"
 #include "file.hpp"
 #include "metadata.hpp"
-#include "../common/metadata/decoder.hpp"
+#include "../common/src/metadata/tsdl/decoder.hpp"
 
 BT_HIDDEN
 FILE *ctf_fs_metadata_open_file(const char *trace_path)
