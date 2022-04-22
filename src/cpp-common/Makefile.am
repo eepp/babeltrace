@@ -27,6 +27,7 @@ libcppcommon_la_SOURCES = \
 	json-val-req.hpp \
 	safe-ops.hpp \
 	data-len.hpp \
-	endian.hpp
+	endian.hpp \
+	align.hpp
 
 EXTRA_DIST = bt2
