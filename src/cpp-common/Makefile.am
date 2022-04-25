@@ -27,6 +27,7 @@ libcppcommon_la_SOURCES = \
 	data-len.hpp \
 	endian.hpp \
 	align.hpp \
-	std-int.hpp
+	std-int.hpp \
+	read-fixed-len-int.hpp
 
 EXTRA_DIST = bt2
