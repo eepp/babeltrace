@@ -42,7 +42,7 @@ public:
         return bt_uuid_compare(_mUuid, other._mUuid) < 0;
     }
 
-    std::string string() const
+    std::string str() const
     {
         std::array<char, BT_UUID_STR_LEN> buf;
 
