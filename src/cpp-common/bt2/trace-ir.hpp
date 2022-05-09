@@ -1038,6 +1038,33 @@ public:
         return bt_event_class_get_id(this->libObjPtr());
     }
 
+    void nameSpace(const char * const nameSpace)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto status = bt_event_class_set_namespace(this->libObjPtr(), nameSpace);
+
+        if (status == BT_EVENT_CLASS_SET_NAMESPACE_STATUS_MEMORY_ERROR) {
+            throw LibMemoryError {};
+        }
+    }
+
+    void nameSpace(const std::string& nameSpace)
+    {
+        this->nameSpace(nameSpace.data());
+    }
+
+    nonstd::optional<bpstd::string_view> nameSpace() const noexcept
+    {
+        const auto ns = bt_event_class_get_namespace(this->libObjPtr());
+
+        if (ns) {
+            return ns;
+        }
+
+        return nonstd::nullopt;
+    }
+
     void name(const char * const name)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
@@ -1420,6 +1447,33 @@ public:
     std::uint64_t id() const noexcept
     {
         return bt_stream_class_get_id(this->libObjPtr());
+    }
+
+    void nameSpace(const char * const nameSpace)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto status = bt_stream_class_set_namespace(this->libObjPtr(), nameSpace);
+
+        if (status == BT_STREAM_CLASS_SET_NAMESPACE_STATUS_MEMORY_ERROR) {
+            throw LibMemoryError {};
+        }
+    }
+
+    void nameSpace(const std::string& nameSpace)
+    {
+        this->nameSpace(nameSpace.data());
+    }
+
+    nonstd::optional<bpstd::string_view> nameSpace() const noexcept
+    {
+        const auto ns = bt_stream_class_get_namespace(this->libObjPtr());
+
+        if (ns) {
+            return ns;
+        }
+
+        return nonstd::nullopt;
     }
 
     void name(const char * const name)
