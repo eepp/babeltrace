@@ -9,6 +9,8 @@
 
 #include <type_traits>
 #include <cstdint>
+#include <vector>
+#include <algorithm>
 #include <babeltrace2/babeltrace.h>
 
 #include "internal/borrowed-obj.hpp"
@@ -19,6 +21,7 @@
 #include "field-class.hpp"
 #include "field.hpp"
 #include "value.hpp"
+#include "field-location.hpp"
 #include "internal/utils.hpp"
 
 namespace bt2 {
@@ -2014,6 +2017,34 @@ public:
 
         internal::validateCreatedObjPtr(libObjPtr);
         return Trace::Shared {Trace {libObjPtr}};
+    }
+
+    ConstFieldLocation::Shared createFieldLocation(const ConstFieldLocation::Scope scope,
+                                                   const std::vector<const char *>& items)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr =
+            bt_field_location_create(this->libObjPtr(), static_cast<bt_field_location_scope>(scope),
+                                     items.data(), items.size());
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return ConstFieldLocation::Shared {ConstFieldLocation {libObjPtr}};
+    }
+
+    ConstFieldLocation::Shared createFieldLocation(const ConstFieldLocation::Scope scope,
+                                                   const std::vector<std::string>& items)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        std::vector<const char *> ptrItems;
+
+        std::transform(items.begin(), items.end(), std::back_inserter(ptrItems),
+                       [](const std::string& item) {
+                           return item.data();
+                       });
+
+        return this->createFieldLocation(scope, ptrItems);
     }
 
     StreamClass::Shared createStreamClass()
