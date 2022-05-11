@@ -1107,17 +1107,10 @@ BT_HIDDEN
 struct bt_bfcr *bt_bfcr_create(struct bt_bfcr_cbs cbs, void *data, bt_logging_level log_level,
                                bt_self_component *self_comp)
 {
-    struct bt_bfcr *bfcr;
-
     BT_COMP_LOG_CUR_LVL(BT_LOG_DEBUG, log_level, self_comp,
                         "Creating binary field class reader (BFCR).");
-    bfcr = g_new0(struct bt_bfcr, 1);
-    if (!bfcr) {
-        BT_COMP_LOG_CUR_LVL(BT_LOG_ERROR, log_level, self_comp,
-                            "Failed to allocate one binary class reader.");
-        goto end;
-    }
 
+    bt_bfcr *bfcr = new bt_bfcr;
     bfcr->log_level = log_level;
     bfcr->self_comp = self_comp;
     bfcr->stack = stack_new(bfcr);
@@ -1145,7 +1138,7 @@ void bt_bfcr_destroy(struct bt_bfcr *bfcr)
     }
 
     BT_COMP_LOGD("Destroying BFCR: addr=%p", bfcr);
-    g_free(bfcr);
+    delete bfcr;
 }
 
 static void reset(struct bt_bfcr *bfcr)
