@@ -21,6 +21,7 @@
 #include "lib-error.hpp"
 #include "integer-range-set.hpp"
 #include "field-path.hpp"
+#include "field-location.hpp"
 #include "value.hpp"
 
 namespace bt2 {
@@ -1436,6 +1437,13 @@ public:
     {
         return ConstFieldPath {
             bt_field_class_array_dynamic_with_length_field_borrow_length_field_path_const(
+                this->libObjPtr())};
+    }
+
+    ConstFieldLocation lengthFieldLocation() const noexcept
+    {
+        return ConstFieldLocation {
+            bt_field_class_array_dynamic_with_length_field_borrow_length_field_location_const(
                 this->libObjPtr())};
     }
 

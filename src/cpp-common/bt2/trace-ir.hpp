@@ -2194,6 +2194,31 @@ public:
             DynamicArrayWithLengthFieldClass {libObjPtr}};
     }
 
+    ArrayFieldClass::Shared
+    createDynamicArrayWithoutLengthFieldLocationFieldClass(const FieldClass& elementFieldClass)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr = bt_field_class_array_dynamic_without_length_field_location_create(
+            this->libObjPtr(), elementFieldClass.libObjPtr());
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return ArrayFieldClass::Shared {ArrayFieldClass {libObjPtr}};
+    }
+
+    DynamicArrayWithLengthFieldClass::Shared createDynamicArrayWithLengthFieldLocationFieldClass(
+        const FieldClass& elementFieldClass, const ConstFieldLocation& lengthFieldLocation)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr = bt_field_class_array_dynamic_with_length_field_location_create(
+            this->libObjPtr(), elementFieldClass.libObjPtr(), lengthFieldLocation.libObjPtr());
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return DynamicArrayWithLengthFieldClass::Shared {
+            DynamicArrayWithLengthFieldClass {libObjPtr}};
+    }
+
     StructureFieldClass::Shared createStructureFieldClass()
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
