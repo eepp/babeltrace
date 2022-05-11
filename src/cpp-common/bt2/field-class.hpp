@@ -2429,6 +2429,13 @@ public:
                 this->libObjPtr())};
     }
 
+    ConstFieldLocation selectorFieldLocation() const noexcept
+    {
+        return ConstFieldLocation {
+            bt_field_class_variant_with_selector_field_borrow_selector_field_location_const(
+                this->libObjPtr())};
+    }
+
     Shared shared() const noexcept
     {
         return Shared {*this};
