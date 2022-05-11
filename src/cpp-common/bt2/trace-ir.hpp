@@ -2356,6 +2356,18 @@ public:
             VariantWithoutSelectorFieldClass {libObjPtr}};
     }
 
+    VariantWithoutSelectorFieldClass::Shared createVariantWithoutSelectorFieldLocationFieldClass()
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr =
+            bt_field_class_variant_without_selector_field_location_create(this->libObjPtr());
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return VariantWithoutSelectorFieldClass::Shared {
+            VariantWithoutSelectorFieldClass {libObjPtr}};
+    }
+
     VariantWithUnsignedIntegerSelectorFieldClass::Shared
     createVariantWithUnsignedIntegerSelectorFieldClass(const IntegerFieldClass& selectorFieldClass)
     {
@@ -2364,12 +2376,42 @@ public:
                 this->_createVariantWithIntegerSelectorFieldClass(selectorFieldClass)}};
     }
 
+    VariantWithUnsignedIntegerSelectorFieldClass::Shared
+    createVariantWithUnsignedIntegerSelectorFieldLocationFieldClass(
+        const ConstFieldLocation& selectorFieldLocation)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr =
+            bt_field_class_variant_with_selector_field_location_integer_unsigned_create(
+                this->libObjPtr(), selectorFieldLocation.libObjPtr());
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return VariantWithUnsignedIntegerSelectorFieldClass::Shared {
+            VariantWithUnsignedIntegerSelectorFieldClass {libObjPtr}};
+    }
+
     VariantWithSignedIntegerSelectorFieldClass::Shared
     createVariantWithSignedIntegerSelectorFieldClass(const IntegerFieldClass& selectorFieldClass)
     {
         return VariantWithSignedIntegerSelectorFieldClass::Shared {
             VariantWithSignedIntegerSelectorFieldClass {
                 this->_createVariantWithIntegerSelectorFieldClass(selectorFieldClass)}};
+    }
+
+    VariantWithSignedIntegerSelectorFieldClass::Shared
+    createVariantWithSignedIntegerSelectorFieldLocationFieldClass(
+        const ConstFieldLocation& selectorFieldLocation)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr =
+            bt_field_class_variant_with_selector_field_location_integer_signed_create(
+                this->libObjPtr(), selectorFieldLocation.libObjPtr());
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return VariantWithSignedIntegerSelectorFieldClass::Shared {
+            VariantWithSignedIntegerSelectorFieldClass {libObjPtr}};
     }
 
     void assignsAutomaticStreamClassId(const bool val) noexcept
