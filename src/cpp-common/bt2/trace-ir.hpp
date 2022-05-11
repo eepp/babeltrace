@@ -2240,6 +2240,18 @@ public:
         return OptionFieldClass::Shared {OptionFieldClass {libObjPtr}};
     }
 
+    OptionFieldClass::Shared
+    createOptionWithoutSelectorFieldLocationFieldClass(const FieldClass& optionalFieldClass)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr = bt_field_class_option_without_selector_field_location_create(
+            this->libObjPtr(), optionalFieldClass.libObjPtr());
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return OptionFieldClass::Shared {OptionFieldClass {libObjPtr}};
+    }
+
     OptionWithBoolSelectorFieldClass::Shared
     createOptionWithBoolSelectorFieldClass(const FieldClass& optionalFieldClass,
                                            const FieldClass& selectorFieldClass)
@@ -2248,6 +2260,19 @@ public:
 
         const auto libObjPtr = bt_field_class_option_with_selector_field_bool_create(
             this->libObjPtr(), optionalFieldClass.libObjPtr(), selectorFieldClass.libObjPtr());
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return OptionWithBoolSelectorFieldClass::Shared {
+            OptionWithBoolSelectorFieldClass {libObjPtr}};
+    }
+
+    OptionWithBoolSelectorFieldClass::Shared createOptionWithBoolSelectorFieldLocationFieldClass(
+        const FieldClass& optionalFieldClass, const ConstFieldLocation& selectorFieldLocation)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr = bt_field_class_option_with_selector_field_location_bool_create(
+            this->libObjPtr(), optionalFieldClass.libObjPtr(), selectorFieldLocation.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
         return OptionWithBoolSelectorFieldClass::Shared {
@@ -2270,6 +2295,23 @@ public:
             OptionWithUnsignedIntegerSelectorFieldClass {libObjPtr}};
     }
 
+    OptionWithUnsignedIntegerSelectorFieldClass::Shared
+    createOptionWithUnsignedIntegerSelectorFieldLocationFieldClass(
+        const FieldClass& optionalFieldClass, const ConstFieldLocation& selectorFieldLocation,
+        const ConstUnsignedIntegerRangeSet& ranges)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr =
+            bt_field_class_option_with_selector_field_location_integer_unsigned_create(
+                this->libObjPtr(), optionalFieldClass.libObjPtr(),
+                selectorFieldLocation.libObjPtr(), ranges.libObjPtr());
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return OptionWithUnsignedIntegerSelectorFieldClass::Shared {
+            OptionWithUnsignedIntegerSelectorFieldClass {libObjPtr}};
+    }
+
     OptionWithSignedIntegerSelectorFieldClass::Shared
     createOptionWithSignedIntegerSelectorFieldClass(const FieldClass& optionalFieldClass,
                                                     const IntegerFieldClass& selectorFieldClass,
@@ -2280,6 +2322,23 @@ public:
         const auto libObjPtr = bt_field_class_option_with_selector_field_integer_signed_create(
             this->libObjPtr(), optionalFieldClass.libObjPtr(), selectorFieldClass.libObjPtr(),
             ranges.libObjPtr());
+
+        internal::validateCreatedObjPtr(libObjPtr);
+        return OptionWithSignedIntegerSelectorFieldClass::Shared {
+            OptionWithSignedIntegerSelectorFieldClass {libObjPtr}};
+    }
+
+    OptionWithSignedIntegerSelectorFieldClass::Shared
+    createOptionWithSignedIntegerSelectorFieldLocationFieldClass(
+        const FieldClass& optionalFieldClass, const ConstFieldLocation& selectorFieldLocation,
+        const ConstSignedIntegerRangeSet& ranges)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        const auto libObjPtr =
+            bt_field_class_option_with_selector_field_location_integer_signed_create(
+                this->libObjPtr(), optionalFieldClass.libObjPtr(),
+                selectorFieldLocation.libObjPtr(), ranges.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
         return OptionWithSignedIntegerSelectorFieldClass::Shared {
