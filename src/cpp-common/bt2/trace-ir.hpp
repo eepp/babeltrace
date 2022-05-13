@@ -371,7 +371,7 @@ public:
 
     Shared shared() const noexcept
     {
-        return Shared {*this};
+        return Shared::createWithRef(*this);
     }
 };
 
@@ -529,7 +529,7 @@ public:
         const auto libObjPtr = bt_packet_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return Packet::Shared {Packet {libObjPtr}};
+        return Packet::Shared::createWithoutRef(libObjPtr);
     }
 
     CommonStreamClass<const bt_stream_class> cls() const noexcept;
@@ -589,7 +589,7 @@ public:
 
     Shared shared() const noexcept
     {
-        return Shared {*this};
+        return Shared::createWithRef(*this);
     }
 };
 
@@ -938,7 +938,7 @@ public:
 
     Shared shared() const noexcept
     {
-        return Shared {*this};
+        return Shared::createWithRef(*this);
     }
 };
 
@@ -1306,7 +1306,7 @@ public:
 
     Shared shared() const noexcept
     {
-        return Shared {*this};
+        return Shared::createWithRef(*this);
     }
 };
 
@@ -1507,7 +1507,7 @@ public:
         const auto libObjPtr = bt_stream_create(this->libObjPtr(), trace.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return Stream::Shared {Stream {libObjPtr}};
+        return Stream::Shared::createWithoutRef(libObjPtr);
     }
 
     Stream::Shared instantiate(const Trace& trace, const std::uint64_t id)
@@ -1517,7 +1517,7 @@ public:
         const auto libObjPtr = bt_stream_create_with_id(this->libObjPtr(), trace.libObjPtr(), id);
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return Stream::Shared {Stream {libObjPtr}};
+        return Stream::Shared::createWithoutRef(libObjPtr);
     }
 
     EventClass::Shared createEventClass()
@@ -1527,7 +1527,7 @@ public:
         const auto libObjPtr = bt_event_class_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return EventClass::Shared {EventClass {libObjPtr}};
+        return EventClass::Shared::createWithoutRef(libObjPtr);
     }
 
     EventClass::Shared createEventClass(const std::uint64_t id)
@@ -1537,7 +1537,7 @@ public:
         const auto libObjPtr = bt_event_class_create_with_id(this->libObjPtr(), id);
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return EventClass::Shared {EventClass {libObjPtr}};
+        return EventClass::Shared::createWithoutRef(libObjPtr);
     }
 
     CommonTraceClass<const bt_trace_class> traceClass() const noexcept;
@@ -1856,7 +1856,7 @@ public:
 
     Shared shared() const noexcept
     {
-        return Shared {*this};
+        return Shared::createWithRef(*this);
     }
 };
 
@@ -2016,7 +2016,7 @@ public:
         const auto libObjPtr = bt_trace_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return Trace::Shared {Trace {libObjPtr}};
+        return Trace::Shared::createWithoutRef(libObjPtr);
     }
 
     ConstFieldLocation::Shared createFieldLocation(const ConstFieldLocation::Scope scope,
@@ -2029,7 +2029,7 @@ public:
                                      items.data(), items.size());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return ConstFieldLocation::Shared {ConstFieldLocation {libObjPtr}};
+        return ConstFieldLocation::Shared::createWithoutRef(libObjPtr);
     }
 
     ConstFieldLocation::Shared createFieldLocation(const ConstFieldLocation::Scope scope,
@@ -2054,7 +2054,7 @@ public:
         const auto libObjPtr = bt_stream_class_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return StreamClass::Shared {StreamClass {libObjPtr}};
+        return StreamClass::Shared::createWithoutRef(libObjPtr);
     }
 
     StreamClass::Shared createStreamClass(const std::uint64_t id)
@@ -2064,7 +2064,7 @@ public:
         const auto libObjPtr = bt_stream_class_create_with_id(this->libObjPtr(), id);
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return StreamClass::Shared {StreamClass {libObjPtr}};
+        return StreamClass::Shared::createWithoutRef(libObjPtr);
     }
 
     FieldClass::Shared createBoolFieldClass()
@@ -2074,7 +2074,7 @@ public:
         const auto libObjPtr = bt_field_class_bool_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return FieldClass::Shared {FieldClass {libObjPtr}};
+        return FieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     BitArrayFieldClass::Shared createBitArrayFieldClass(const std::uint64_t length)
@@ -2084,7 +2084,7 @@ public:
         const auto libObjPtr = bt_field_class_bit_array_create(this->libObjPtr(), length);
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return BitArrayFieldClass::Shared {BitArrayFieldClass {libObjPtr}};
+        return BitArrayFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     IntegerFieldClass::Shared createUnsignedIntegerFieldClass()
@@ -2094,7 +2094,7 @@ public:
         const auto libObjPtr = bt_field_class_integer_unsigned_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return IntegerFieldClass::Shared {IntegerFieldClass {libObjPtr}};
+        return IntegerFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     IntegerFieldClass::Shared createSignedIntegerFieldClass()
@@ -2104,7 +2104,7 @@ public:
         const auto libObjPtr = bt_field_class_integer_signed_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return IntegerFieldClass::Shared {IntegerFieldClass {libObjPtr}};
+        return IntegerFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     UnsignedEnumerationFieldClass::Shared createUnsignedEnumerationFieldClass()
@@ -2114,7 +2114,7 @@ public:
         const auto libObjPtr = bt_field_class_enumeration_unsigned_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return UnsignedEnumerationFieldClass::Shared {UnsignedEnumerationFieldClass {libObjPtr}};
+        return UnsignedEnumerationFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     SignedEnumerationFieldClass::Shared createSignedEnumerationFieldClass()
@@ -2124,7 +2124,7 @@ public:
         const auto libObjPtr = bt_field_class_enumeration_signed_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return SignedEnumerationFieldClass::Shared {SignedEnumerationFieldClass {libObjPtr}};
+        return SignedEnumerationFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     FieldClass::Shared createSinglePrecisionRealFieldClass()
@@ -2134,7 +2134,7 @@ public:
         const auto libObjPtr = bt_field_class_real_single_precision_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return FieldClass::Shared {FieldClass {libObjPtr}};
+        return FieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     FieldClass::Shared createDoublePrecisionRealFieldClass()
@@ -2144,7 +2144,7 @@ public:
         const auto libObjPtr = bt_field_class_real_double_precision_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return FieldClass::Shared {FieldClass {libObjPtr}};
+        return FieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     FieldClass::Shared createStringFieldClass()
@@ -2154,7 +2154,7 @@ public:
         const auto libObjPtr = bt_field_class_string_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return FieldClass::Shared {FieldClass {libObjPtr}};
+        return FieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     StaticArrayFieldClass::Shared createStaticArrayFieldClass(const FieldClass& elementFieldClass,
@@ -2166,7 +2166,7 @@ public:
             this->libObjPtr(), elementFieldClass.libObjPtr(), length);
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return StaticArrayFieldClass::Shared {StaticArrayFieldClass {libObjPtr}};
+        return StaticArrayFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     ArrayFieldClass::Shared createDynamicArrayFieldClass(const FieldClass& elementFieldClass)
@@ -2177,7 +2177,7 @@ public:
             this->libObjPtr(), elementFieldClass.libObjPtr(), nullptr);
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return ArrayFieldClass::Shared {ArrayFieldClass {libObjPtr}};
+        return ArrayFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     DynamicArrayWithLengthFieldClass::Shared
@@ -2190,8 +2190,7 @@ public:
             this->libObjPtr(), elementFieldClass.libObjPtr(), lengthFieldClass.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return DynamicArrayWithLengthFieldClass::Shared {
-            DynamicArrayWithLengthFieldClass {libObjPtr}};
+        return DynamicArrayWithLengthFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     ArrayFieldClass::Shared
@@ -2203,7 +2202,7 @@ public:
             this->libObjPtr(), elementFieldClass.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return ArrayFieldClass::Shared {ArrayFieldClass {libObjPtr}};
+        return ArrayFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     DynamicArrayWithLengthFieldClass::Shared createDynamicArrayWithLengthFieldLocationFieldClass(
@@ -2215,8 +2214,7 @@ public:
             this->libObjPtr(), elementFieldClass.libObjPtr(), lengthFieldLocation.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return DynamicArrayWithLengthFieldClass::Shared {
-            DynamicArrayWithLengthFieldClass {libObjPtr}};
+        return DynamicArrayWithLengthFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     StaticBlobFieldClass::Shared createStaticBlobFieldClass(const std::uint64_t length)
@@ -2226,7 +2224,7 @@ public:
         const auto libObjPtr = bt_field_class_blob_static_create(this->libObjPtr(), length);
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return StaticBlobFieldClass::Shared {StaticBlobFieldClass {libObjPtr}};
+        return StaticBlobFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     BlobFieldClass::Shared createDynamicBlobWithoutLengthFieldLocationFieldClass()
@@ -2237,7 +2235,7 @@ public:
             bt_field_class_blob_dynamic_without_length_field_location_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return BlobFieldClass::Shared {BlobFieldClass {libObjPtr}};
+        return BlobFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     DynamicBlobWithLengthFieldClass::Shared createDynamicBlobWithLengthFieldLocationFieldClass(
@@ -2249,8 +2247,7 @@ public:
             this->libObjPtr(), lengthFieldLocation.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return DynamicBlobWithLengthFieldClass::Shared {
-            DynamicBlobWithLengthFieldClass {libObjPtr}};
+        return DynamicBlobWithLengthFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     StructureFieldClass::Shared createStructureFieldClass()
@@ -2260,7 +2257,7 @@ public:
         const auto libObjPtr = bt_field_class_structure_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return StructureFieldClass::Shared {StructureFieldClass {libObjPtr}};
+        return StructureFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     OptionFieldClass::Shared createOptionFieldClass(const FieldClass& optionalFieldClass)
@@ -2271,7 +2268,7 @@ public:
             this->libObjPtr(), optionalFieldClass.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return OptionFieldClass::Shared {OptionFieldClass {libObjPtr}};
+        return OptionFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     OptionFieldClass::Shared
@@ -2283,7 +2280,7 @@ public:
             this->libObjPtr(), optionalFieldClass.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return OptionFieldClass::Shared {OptionFieldClass {libObjPtr}};
+        return OptionFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     OptionWithBoolSelectorFieldClass::Shared
@@ -2296,8 +2293,7 @@ public:
             this->libObjPtr(), optionalFieldClass.libObjPtr(), selectorFieldClass.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return OptionWithBoolSelectorFieldClass::Shared {
-            OptionWithBoolSelectorFieldClass {libObjPtr}};
+        return OptionWithBoolSelectorFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     OptionWithBoolSelectorFieldClass::Shared createOptionWithBoolSelectorFieldLocationFieldClass(
@@ -2309,8 +2305,7 @@ public:
             this->libObjPtr(), optionalFieldClass.libObjPtr(), selectorFieldLocation.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return OptionWithBoolSelectorFieldClass::Shared {
-            OptionWithBoolSelectorFieldClass {libObjPtr}};
+        return OptionWithBoolSelectorFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     OptionWithUnsignedIntegerSelectorFieldClass::Shared
@@ -2325,8 +2320,7 @@ public:
             ranges.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return OptionWithUnsignedIntegerSelectorFieldClass::Shared {
-            OptionWithUnsignedIntegerSelectorFieldClass {libObjPtr}};
+        return OptionWithUnsignedIntegerSelectorFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     OptionWithUnsignedIntegerSelectorFieldClass::Shared
@@ -2342,8 +2336,7 @@ public:
                 selectorFieldLocation.libObjPtr(), ranges.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return OptionWithUnsignedIntegerSelectorFieldClass::Shared {
-            OptionWithUnsignedIntegerSelectorFieldClass {libObjPtr}};
+        return OptionWithUnsignedIntegerSelectorFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     OptionWithSignedIntegerSelectorFieldClass::Shared
@@ -2358,8 +2351,7 @@ public:
             ranges.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return OptionWithSignedIntegerSelectorFieldClass::Shared {
-            OptionWithSignedIntegerSelectorFieldClass {libObjPtr}};
+        return OptionWithSignedIntegerSelectorFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     OptionWithSignedIntegerSelectorFieldClass::Shared
@@ -2375,8 +2367,7 @@ public:
                 selectorFieldLocation.libObjPtr(), ranges.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return OptionWithSignedIntegerSelectorFieldClass::Shared {
-            OptionWithSignedIntegerSelectorFieldClass {libObjPtr}};
+        return OptionWithSignedIntegerSelectorFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     VariantWithoutSelectorFieldClass::Shared createVariantFieldClass()
@@ -2386,8 +2377,7 @@ public:
         const auto libObjPtr = bt_field_class_variant_create(this->libObjPtr(), nullptr);
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return VariantWithoutSelectorFieldClass::Shared {
-            VariantWithoutSelectorFieldClass {libObjPtr}};
+        return VariantWithoutSelectorFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     VariantWithoutSelectorFieldClass::Shared createVariantWithoutSelectorFieldLocationFieldClass()
@@ -2398,16 +2388,15 @@ public:
             bt_field_class_variant_without_selector_field_location_create(this->libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return VariantWithoutSelectorFieldClass::Shared {
-            VariantWithoutSelectorFieldClass {libObjPtr}};
+        return VariantWithoutSelectorFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     VariantWithUnsignedIntegerSelectorFieldClass::Shared
     createVariantWithUnsignedIntegerSelectorFieldClass(const IntegerFieldClass& selectorFieldClass)
     {
-        return VariantWithUnsignedIntegerSelectorFieldClass::Shared {
-            VariantWithUnsignedIntegerSelectorFieldClass {
-                this->_createVariantWithIntegerSelectorFieldClass(selectorFieldClass)}};
+        return VariantWithUnsignedIntegerSelectorFieldClass {
+            this->_createVariantWithIntegerSelectorFieldClass(selectorFieldClass)}
+            .shared();
     }
 
     VariantWithUnsignedIntegerSelectorFieldClass::Shared
@@ -2421,16 +2410,15 @@ public:
                 this->libObjPtr(), selectorFieldLocation.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return VariantWithUnsignedIntegerSelectorFieldClass::Shared {
-            VariantWithUnsignedIntegerSelectorFieldClass {libObjPtr}};
+        return VariantWithUnsignedIntegerSelectorFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     VariantWithSignedIntegerSelectorFieldClass::Shared
     createVariantWithSignedIntegerSelectorFieldClass(const IntegerFieldClass& selectorFieldClass)
     {
-        return VariantWithSignedIntegerSelectorFieldClass::Shared {
-            VariantWithSignedIntegerSelectorFieldClass {
-                this->_createVariantWithIntegerSelectorFieldClass(selectorFieldClass)}};
+        return VariantWithSignedIntegerSelectorFieldClass {
+            this->_createVariantWithIntegerSelectorFieldClass(selectorFieldClass)}
+            .shared();
     }
 
     VariantWithSignedIntegerSelectorFieldClass::Shared
@@ -2444,8 +2432,7 @@ public:
                 this->libObjPtr(), selectorFieldLocation.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return VariantWithSignedIntegerSelectorFieldClass::Shared {
-            VariantWithSignedIntegerSelectorFieldClass {libObjPtr}};
+        return VariantWithSignedIntegerSelectorFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
     void assignsAutomaticStreamClassId(const bool val) noexcept
@@ -2519,7 +2506,7 @@ public:
 
     Shared shared() const noexcept
     {
-        return Shared {*this};
+        return Shared::createWithRef(*this);
     }
 
 private:
