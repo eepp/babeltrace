@@ -958,7 +958,7 @@ Variant field classes have the following common property:
     Each option has:
 
     - A name, unique amongst all the option names of the same
-      variant field class.
+      variant field class. [TODO DOCS]
     - A field class.
     - User attributes.
 
@@ -3896,7 +3896,7 @@ bt_field_class_variant_borrow_option_by_index_const(
 /*!
 @brief
     Borrows the option having the name \bt_p{name} from the
-    \bt_var_fc \bt_p{field_class}.
+    \bt_var_fc \bt_p{field_class}. [TODO DOCS]
 
 See the \ref api-tir-fc-var-prop-opts "options" property.
 
@@ -3958,7 +3958,7 @@ bt_field_class_variant_borrow_option_by_name_const(
 
 /*!
 @brief
-    Returns the name of the \bt_var_fc option \bt_p{option}.
+    Returns the name of the \bt_var_fc option \bt_p{option}. [TODO DOCS]
 
 See the \ref api-tir-fc-var-prop-opts "options" property.
 
@@ -4138,7 +4138,7 @@ See the \ref api-tir-fc-var-prop-opts "options" property.
 @bt_pre_is_var_wos_fc{field_class}
 @pre
     \bt_p{field_class} has no option with the name \bt_p{name}.
-@bt_pre_not_null{name}
+@bt_pre_not_null{name} [TODO DOCS]
 @bt_pre_not_null{option_field_class}
 @bt_pre_fc_not_in_tc{option_field_class}
 
@@ -4249,7 +4249,7 @@ See the \ref api-tir-fc-var-prop-opts "options" property.
 @bt_pre_is_var_wuis_fc{field_class}
 @pre
     \bt_p{field_class} has no option with the name \bt_p{name}.
-@bt_pre_not_null{name}
+@bt_pre_not_null{name} [TODO DOCS]
 @bt_pre_not_null{option_field_class}
 @bt_pre_fc_not_in_tc{option_field_class}
 @bt_pre_not_null{ŗanges}
@@ -4310,7 +4310,7 @@ bt_field_class_variant_with_selector_field_integer_unsigned_borrow_option_by_ind
 @brief
     Borrows the option having the name \bt_p{name} from the
     \bt_var_fc (with an unsigned integer selector field)
-    \bt_p{field_class}.
+    \bt_p{field_class}. [TODO DOCS]
 
 See the \ref api-tir-fc-var-prop-opts "options" property.
 
@@ -4445,7 +4445,7 @@ See the \ref api-tir-fc-var-prop-opts "options" property.
 @bt_pre_is_var_wsis_fc{field_class}
 @pre
     \bt_p{field_class} has no option with the name \bt_p{name}.
-@bt_pre_not_null{name}
+@bt_pre_not_null{name} [TODO DOCS]
 @bt_pre_not_null{option_field_class}
 @bt_pre_fc_not_in_tc{option_field_class}
 @bt_pre_not_null{ŗanges}
@@ -4507,7 +4507,7 @@ bt_field_class_variant_with_selector_field_integer_signed_borrow_option_by_index
 @brief
     Borrows the option having the name \bt_p{name} from the
     \bt_var_fc (with a signed integer selector field)
-    \bt_p{field_class}.
+    \bt_p{field_class}. [TODO DOCS]
 
 See the \ref api-tir-fc-var-prop-opts "options" property.
 
