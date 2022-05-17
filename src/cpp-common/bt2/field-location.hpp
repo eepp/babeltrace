@@ -14,6 +14,7 @@
 #include "cpp-common/string_view.hpp"
 #include "internal/borrowed-obj.hpp"
 #include "internal/shared-obj.hpp"
+#include "common-iter.hpp"
 
 namespace bt2 {
 namespace internal {
@@ -41,6 +42,8 @@ private:
 public:
     using Shared = internal::SharedObj<ConstFieldLocation, const bt_field_location,
                                        internal::FieldLocationRefFuncs>;
+
+    using Iterator = CommonIterator<ConstFieldLocation, bpstd::string_view>;
 
     enum class Scope
     {
@@ -78,6 +81,16 @@ public:
     bpstd::string_view operator[](const std::uint64_t index) const noexcept
     {
         return bt_field_location_get_item_by_index(this->libObjPtr(), index);
+    }
+
+    Iterator begin() const noexcept
+    {
+        return Iterator {*this, 0};
+    }
+
+    Iterator end() const noexcept
+    {
+        return Iterator {*this, this->size()};
     }
 
     Shared shared() const noexcept
