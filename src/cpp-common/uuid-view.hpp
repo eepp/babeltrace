@@ -51,10 +51,10 @@ public:
 
     std::string str() const
     {
-        std::array<char, BT_UUID_STR_LEN> buf;
+        std::string str(BT_UUID_STR_LEN, 'x');
 
-        bt_uuid_to_str(_mUuid, buf.data());
-        return {buf.data(), buf.size()};
+        bt_uuid_to_str(_mUuid, &str[0]);
+        return str;
     }
 
     bool operator==(const UuidView& other) const noexcept
