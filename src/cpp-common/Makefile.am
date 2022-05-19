@@ -27,6 +27,7 @@ libcppcommon_la_SOURCES = \
 	safe-ops.hpp \
 	data-len.hpp \
 	endian.hpp \
-	align.hpp
+	align.hpp \
+	std-int.hpp
 
 EXTRA_DIST = bt2
