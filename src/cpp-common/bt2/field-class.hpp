@@ -412,6 +412,12 @@ public:
         return this->_libTypeIs(BT_FIELD_CLASS_TYPE_DYNAMIC_BLOB_WITH_LENGTH_FIELD);
     }
 
+    template <typename FieldClassT>
+    FieldClassT as() const noexcept
+    {
+        return FieldClassT {this->libObjPtr()};
+    }
+
     CommonBitArrayFieldClass<LibObjT> asBitArray() const noexcept;
     CommonIntegerFieldClass<LibObjT> asInteger() const noexcept;
     CommonBaseEnumerationFieldClass<LibObjT> asEnumeration() const noexcept;
