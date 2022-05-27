@@ -4,8 +4,8 @@
  * Copyright 2019 Philippe Proulx <pproulx@efficios.com>
  */
 
-#define BT_COMP_LOG_SELF_COMP (ctx->self_comp)
-#define BT_LOG_OUTPUT_LEVEL   (ctx->log_level)
+#define BT_COMP_LOG_SELF_COMP (ctx->logCfg.selfComp())
+#define BT_LOG_OUTPUT_LEVEL   (ctx->logCfg.logLevel())
 #define BT_LOG_TAG            "PLUGIN/SINK.CTF.FS/TRANSLATE-TRACE-IR-TO-CTF-IR"
 #include "logging/comp-logging.h"
 
@@ -39,8 +39,11 @@ namespace sink {
 
 struct TraceIrToCtfIrCtx
 {
-    bt_logging_level log_level = BT_LOGGING_LEVEL_NONE;
-    bt_self_component *self_comp = nullptr;
+    explicit TraceIrToCtfIrCtx(const bt2_common::LogCfg& logCfgParam) : logCfg {logCfgParam}
+    {
+    }
+
+    const bt2_common::LogCfg logCfg;
 
     /* Weak */
     struct fs_sink_ctf_stream_class *cur_sc = nullptr;
@@ -1473,8 +1476,6 @@ static inline void ctx_init(ctf::sink::TraceIrToCtfIrCtx *ctx, struct fs_sink_co
 {
     ctx->cur_path = g_array_new(FALSE, TRUE, sizeof(struct field_path_elem));
     BT_ASSERT(ctx->cur_path);
-    ctx->log_level = fs_sink->log_level;
-    ctx->self_comp = fs_sink->self_comp;
 }
 
 static inline void ctx_fini(ctf::sink::TraceIrToCtfIrCtx *ctx)
@@ -1490,7 +1491,7 @@ static int translate_event_class(struct fs_sink_comp *fs_sink, struct fs_sink_ct
                                  struct fs_sink_ctf_event_class **out_ec)
 {
     int ret = 0;
-    ctf::sink::TraceIrToCtfIrCtx ctx;
+    ctf::sink::TraceIrToCtfIrCtx ctx {fs_sink->logCfg};
     struct fs_sink_ctf_event_class *ec;
 
     BT_ASSERT(sc);
@@ -1588,7 +1589,7 @@ static int translate_stream_class(struct fs_sink_comp *fs_sink, struct fs_sink_c
                                   struct fs_sink_ctf_stream_class **out_sc)
 {
     int ret = 0;
-    ctf::sink::TraceIrToCtfIrCtx ctx;
+    ctf::sink::TraceIrToCtfIrCtx ctx {fs_sink->logCfg};
 
     BT_ASSERT(trace);
     BT_ASSERT(ir_sc);
@@ -1698,7 +1699,8 @@ struct fs_sink_ctf_trace *translate_trace_trace_ir_to_ctf_ir(struct fs_sink_comp
         bt_trace_borrow_environment_entry_by_index_const(ir_trace, i, &name, &val);
 
         if (!ist_valid_identifier(name)) {
-            BT_COMP_LOG_CUR_LVL(BT_LOG_ERROR, fs_sink->log_level, fs_sink->self_comp,
+            BT_COMP_LOG_CUR_LVL(BT_LOG_ERROR, fs_sink->logCfg.logLevel(),
+                                fs_sink->logCfg.selfComp(),
                                 "Unsupported trace class's environment entry name: "
                                 "name=\"%s\"",
                                 name);
@@ -1710,7 +1712,8 @@ struct fs_sink_ctf_trace *translate_trace_trace_ir_to_ctf_ir(struct fs_sink_comp
         case BT_VALUE_TYPE_STRING:
             break;
         default:
-            BT_COMP_LOG_CUR_LVL(BT_LOG_ERROR, fs_sink->log_level, fs_sink->self_comp,
+            BT_COMP_LOG_CUR_LVL(BT_LOG_ERROR, fs_sink->logCfg.logLevel(),
+                                fs_sink->logCfg.selfComp(),
                                 "Unsupported trace class's environment entry value type: "
                                 "type=%s",
                                 bt_common_value_type_string(bt_value_get_type(val)));

@@ -4,7 +4,7 @@
  * Copyright 2019 Philippe Proulx <pproulx@efficios.com>
  */
 
-#define BT_COMP_LOG_SELF_COMP (stream->trace->fs_sink->self_comp)
+#define BT_COMP_LOG_SELF_COMP (stream->trace->fs_sink->logCfg.selfComp())
 #define BT_LOG_OUTPUT_LEVEL   (stream->log_level)
 #define BT_LOG_TAG            "PLUGIN/SINK.CTF.FS/STREAM"
 #include "logging/comp-logging.h"

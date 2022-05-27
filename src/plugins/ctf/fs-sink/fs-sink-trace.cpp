@@ -4,7 +4,7 @@
  * Copyright 2019 Philippe Proulx <pproulx@efficios.com>
  */
 
-#define BT_COMP_LOG_SELF_COMP (trace->fs_sink->self_comp)
+#define BT_COMP_LOG_SELF_COMP (trace->fs_sink->logCfg.selfComp())
 #define BT_LOG_OUTPUT_LEVEL   (trace->log_level)
 #define BT_LOG_TAG            "PLUGIN/SINK.CTF.FS/TRACE"
 #include "logging/comp-logging.h"
@@ -558,7 +558,7 @@ struct fs_sink_trace *fs_sink_trace_create(struct fs_sink_comp *fs_sink, const b
         goto end;
     }
 
-    trace->log_level = fs_sink->log_level;
+    trace->log_level = fs_sink->logCfg.logLevel();
     trace->fs_sink = fs_sink;
     trace->ir_trace = ir_trace;
     trace->ir_trace_destruction_listener_id = UINT64_C(-1);
