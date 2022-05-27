@@ -9,6 +9,7 @@
 
 #include "common/macros.h"
 #include <babeltrace2/babeltrace.h>
+#include "cpp-common/log-cfg.hpp"
 #include "ctfser/ctfser.h"
 #include <glib.h>
 #include <stdbool.h>
@@ -20,7 +21,7 @@ struct fs_sink_trace;
 
 struct fs_sink_stream
 {
-    bt_logging_level log_level;
+    bt2_common::LogCfg logCfg;
     struct fs_sink_trace *trace;
     struct bt_ctfser ctfser;
 
