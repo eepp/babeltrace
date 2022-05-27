@@ -19,7 +19,7 @@ struct fs_sink_comp;
 
 struct fs_sink_trace
 {
-    bt_logging_level log_level;
+    bt2_common::LogCfg logCfg;
     struct fs_sink_comp *fs_sink;
 
     /* Owned by this */

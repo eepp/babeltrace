@@ -4,9 +4,9 @@
  * Copyright 2019 Philippe Proulx <pproulx@efficios.com>
  */
 
-#define BT_COMP_LOG_SELF_COMP (stream->trace->fs_sink->self_comp)
-#define BT_LOG_OUTPUT_LEVEL   (stream->log_level)
-#define BT_LOG_TAG            "PLUGIN/SINK.CTF.FS/STREAM"
+#define BT_CLOG_CFG         (stream->logCfg)
+#define BT_LOG_OUTPUT_LEVEL (stream->logCfg.logLevel())
+#define BT_LOG_TAG          "PLUGIN/SINK.CTF.FS/STREAM"
 #include "logging/comp-logging.h"
 
 #include <babeltrace2/babeltrace.h>
@@ -16,6 +16,7 @@
 #include "common/assert.h"
 #include "ctfser/ctfser.h"
 #include "compat/endian.h"
+#include "cpp-common/cfg-logging.hpp"
 
 #include "fs-sink.hpp"
 #include "fs-sink-trace.hpp"
@@ -132,7 +133,7 @@ struct fs_sink_stream *fs_sink_stream_create(struct fs_sink_trace *trace,
         goto end;
     }
 
-    stream->log_level = trace->log_level;
+    stream->logCfg = trace->logCfg;
     stream->trace = trace;
     stream->ir_stream = ir_stream;
     stream->packet_state.beginning_cs = UINT64_C(-1);
@@ -148,7 +149,7 @@ struct fs_sink_stream *fs_sink_stream_create(struct fs_sink_trace *trace,
 
     set_stream_file_name(stream);
     g_string_append_printf(path, "/%s", stream->file_name->str);
-    ret = bt_ctfser_init(&stream->ctfser, path->str, stream->log_level);
+    ret = bt_ctfser_init(&stream->ctfser, path->str, stream->logCfg.logLevel());
     if (ret) {
         goto error;
     }
@@ -578,8 +579,7 @@ int fs_sink_stream_open_packet(struct fs_sink_stream *stream, const bt_clock_sna
     ret = bt_ctfser_write_byte_aligned_unsigned_int(&stream->ctfser, UINT64_C(0xc1fc1fc1), 8, 32,
                                                     BYTE_ORDER);
     if (ret) {
-        BT_COMP_LOGE("Error writing packet header magic: stream-file-name=%s",
-                     stream->file_name->str);
+        BT_CLOGE("Error writing packet header magic: stream-file-name=%s", stream->file_name->str);
         goto end;
     }
 
@@ -588,8 +588,8 @@ int fs_sink_stream_open_packet(struct fs_sink_stream *stream, const bt_clock_sna
         ret = bt_ctfser_write_byte_aligned_unsigned_int(
             &stream->ctfser, (uint64_t) stream->sc->trace->uuid[i], 8, 8, BYTE_ORDER);
         if (ret) {
-            BT_COMP_LOGE("Error writing packet header UUID: stream-file-name=%s",
-                         stream->file_name->str);
+            BT_CLOGE("Error writing packet header UUID: stream-file-name=%s",
+                     stream->file_name->str);
             goto end;
         }
     }
@@ -598,9 +598,9 @@ int fs_sink_stream_open_packet(struct fs_sink_stream *stream, const bt_clock_sna
     ret = bt_ctfser_write_byte_aligned_unsigned_int(
         &stream->ctfser, bt_stream_class_get_id(stream->sc->ir_sc), 8, 64, BYTE_ORDER);
     if (ret) {
-        BT_COMP_LOGE("Error writing packet header stream class id: "
-                     "stream-file-name=%s, stream-class-id=%" PRIu64,
-                     stream->file_name->str, bt_stream_class_get_id(stream->sc->ir_sc));
+        BT_CLOGE("Error writing packet header stream class id: "
+                 "stream-file-name=%s, stream-class-id=%" PRIu64,
+                 stream->file_name->str, bt_stream_class_get_id(stream->sc->ir_sc));
         goto end;
     }
 
@@ -608,9 +608,9 @@ int fs_sink_stream_open_packet(struct fs_sink_stream *stream, const bt_clock_sna
     ret = bt_ctfser_write_byte_aligned_unsigned_int(
         &stream->ctfser, bt_stream_get_id(stream->ir_stream), 8, 64, BYTE_ORDER);
     if (ret) {
-        BT_COMP_LOGE("Error writing packet header stream id: "
-                     "stream-file-name=%s, stream-id=%" PRIu64,
-                     stream->file_name->str, bt_stream_get_id(stream->ir_stream));
+        BT_CLOGE("Error writing packet header stream id: "
+                 "stream-file-name=%s, stream-id=%" PRIu64,
+                 stream->file_name->str, bt_stream_get_id(stream->ir_stream));
         goto end;
     }
 

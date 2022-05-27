@@ -4,9 +4,9 @@
  * Copyright 2019 Philippe Proulx <pproulx@efficios.com>
  */
 
-#define BT_COMP_LOG_SELF_COMP (fs_sink->self_comp)
-#define BT_LOG_OUTPUT_LEVEL   (fs_sink->log_level)
-#define BT_LOG_TAG            "PLUGIN/SINK.CTF.FS"
+#define BT_CLOG_CFG         (logCfg)
+#define BT_LOG_OUTPUT_LEVEL (logCfg.logLevel())
+#define BT_LOG_TAG          "PLUGIN/SINK.CTF.FS"
 #include "logging/comp-logging.h"
 
 #include <babeltrace2/babeltrace.h>
@@ -16,6 +16,8 @@
 #include "common/assert.h"
 #include "ctfser/ctfser.h"
 #include "plugins/common/param-validation/param-validation.h"
+#include "cpp-common/cfg-logging.hpp"
+#include "cpp-common/cfg-logging-error-reporting.hpp"
 
 #include "fs-sink.hpp"
 #include "fs-sink-trace.hpp"
@@ -32,12 +34,12 @@ ensure_output_dir_exists(struct fs_sink_comp *fs_sink)
     bt_component_class_initialize_method_status status =
         BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_OK;
     int ret;
+    const bt2_common::LogCfg& logCfg = fs_sink->logCfg;
 
     ret = g_mkdir_with_parents(fs_sink->output_dir_path->str, 0755);
     if (ret) {
-        BT_COMP_LOGE_APPEND_CAUSE_ERRNO(fs_sink->self_comp,
-                                        "Cannot create directories for output directory",
-                                        ": output-dir-path=\"%s\"", fs_sink->output_dir_path->str);
+        BT_CLOGE_ERRNO_APPEND_CAUSE("Cannot create directories for output directory",
+                                    ": output-dir-path=\"%s\"", fs_sink->output_dir_path->str);
         status = BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -66,12 +68,13 @@ static bt_component_class_initialize_method_status configure_component(struct fs
     const bt_value *value;
     enum bt_param_validation_status validation_status;
     gchar *validation_error;
+    const bt2_common::LogCfg& logCfg = fs_sink->logCfg;
 
     validation_status =
         bt_param_validation_validate(params, fs_sink_params_descr, &validation_error);
     if (validation_status == BT_PARAM_VALIDATION_STATUS_VALIDATION_ERROR) {
         status = BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "%s", validation_error);
+        BT_CLOGE_APPEND_CAUSE("%s", validation_error);
         goto end;
     } else if (validation_status == BT_PARAM_VALIDATION_STATUS_MEMORY_ERROR) {
         status = BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
@@ -143,10 +146,9 @@ ctf_fs_sink_init(bt_self_component_sink *self_comp_sink,
     bt_self_component *self_comp = bt_self_component_sink_as_self_component(self_comp_sink);
     bt_logging_level log_level =
         bt_component_get_logging_level(bt_self_component_as_component(self_comp));
+    const bt2_common::LogCfg logCfg {log_level, *self_comp};
 
-    fs_sink = new fs_sink_comp;
-    fs_sink->log_level = log_level;
-    fs_sink->self_comp = self_comp;
+    fs_sink = new fs_sink_comp {logCfg};
     fs_sink->output_dir_path = g_string_new(NULL);
     status = configure_component(fs_sink, params);
     if (status != BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_OK) {
@@ -156,9 +158,8 @@ ctf_fs_sink_init(bt_self_component_sink *self_comp_sink,
 
     if (fs_sink->assume_single_trace &&
         g_file_test(fs_sink->output_dir_path->str, G_FILE_TEST_EXISTS)) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
-                                  "Single trace mode, but output path exists: output-path=\"%s\"",
-                                  fs_sink->output_dir_path->str);
+        BT_CLOGE_APPEND_CAUSE("Single trace mode, but output path exists: output-path=\"%s\"",
+                              fs_sink->output_dir_path->str);
         status = BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -172,7 +173,7 @@ ctf_fs_sink_init(bt_self_component_sink *self_comp_sink,
     fs_sink->traces = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL,
                                             (GDestroyNotify) fs_sink_trace_destroy);
     if (!fs_sink->traces) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Failed to allocate one GHashTable.");
+        BT_CLOGE_APPEND_CAUSE("Failed to allocate one GHashTable.");
         status = BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
         goto end;
     }
@@ -181,7 +182,7 @@ ctf_fs_sink_init(bt_self_component_sink *self_comp_sink,
         bt_self_component_sink_add_input_port(self_comp_sink, in_port_name, NULL, NULL);
     if (add_port_status != BT_SELF_COMPONENT_ADD_PORT_STATUS_OK) {
         status = (bt_component_class_initialize_method_status) add_port_status;
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Failed to add input port.");
+        BT_CLOGE_APPEND_CAUSE("Failed to add input port.");
         goto end;
     }
 
@@ -201,14 +202,14 @@ static inline struct fs_sink_stream *borrow_stream(struct fs_sink_comp *fs_sink,
     const bt_trace *ir_trace = bt_stream_borrow_trace_const(ir_stream);
     struct fs_sink_trace *trace;
     struct fs_sink_stream *stream = NULL;
+    const bt2_common::LogCfg& logCfg = fs_sink->logCfg;
 
     trace = (fs_sink_trace *) g_hash_table_lookup(fs_sink->traces, ir_trace);
     if (G_UNLIKELY(!trace)) {
         if (fs_sink->assume_single_trace && g_hash_table_size(fs_sink->traces) > 0) {
-            BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                      "Single trace mode, but getting more than one trace: "
-                                      "stream-name=\"%s\"",
-                                      bt_stream_get_name(ir_stream));
+            BT_CLOGE_APPEND_CAUSE("Single trace mode, but getting more than one trace: "
+                                  "stream-name=\"%s\"",
+                                  bt_stream_get_name(ir_stream));
             goto end;
         }
 
@@ -241,10 +242,11 @@ handle_event_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
     struct fs_sink_stream *stream;
     struct fs_sink_ctf_event_class *ec = NULL;
     const bt_clock_snapshot *cs = NULL;
+    const bt2_common::LogCfg& logCfg = fs_sink->logCfg;
 
     stream = borrow_stream(fs_sink, ir_stream);
     if (G_UNLIKELY(!stream)) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to borrow stream.");
+        BT_CLOGE_APPEND_CAUSE("Failed to borrow stream.");
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -252,7 +254,7 @@ handle_event_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
     ret = try_translate_event_class_trace_ir_to_ctf_ir(fs_sink, stream->sc,
                                                        bt_event_borrow_class_const(ir_event), &ec);
     if (ret) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to translate event class to CTF IR.");
+        BT_CLOGE_APPEND_CAUSE("Failed to translate event class to CTF IR.");
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -282,7 +284,7 @@ handle_event_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
              */
             ret = fs_sink_stream_close_packet(stream, NULL);
             if (ret) {
-                BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to close packet.");
+                BT_CLOGE_APPEND_CAUSE("Failed to close packet.");
                 status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
                 goto end;
             }
@@ -292,7 +294,7 @@ handle_event_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
             /* Stream's packet is not currently opened: open it */
             ret = fs_sink_stream_open_packet(stream, NULL, NULL);
             if (ret) {
-                BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to open packet.");
+                BT_CLOGE_APPEND_CAUSE("Failed to open packet.");
                 status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
                 goto end;
             }
@@ -302,7 +304,7 @@ handle_event_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
     BT_ASSERT_DBG(stream->packet_state.is_open);
     ret = fs_sink_stream_write_event(stream, cs, ir_event, ec);
     if (G_UNLIKELY(ret)) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to write event.");
+        BT_CLOGE_APPEND_CAUSE("Failed to write event.");
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -321,10 +323,11 @@ handle_packet_beginning_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
     const bt_stream *ir_stream = bt_packet_borrow_stream_const(ir_packet);
     struct fs_sink_stream *stream;
     const bt_clock_snapshot *cs = NULL;
+    const bt2_common::LogCfg& logCfg = fs_sink->logCfg;
 
     stream = borrow_stream(fs_sink, ir_stream);
     if (G_UNLIKELY(!stream)) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to borrow stream.");
+        BT_CLOGE_APPEND_CAUSE("Failed to borrow stream.");
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -374,17 +377,16 @@ handle_packet_beginning_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
         }
 
         if (stream->discarded_events_state.beginning_cs != expected_cs) {
-            BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                      "Incompatible discarded events message: "
-                                      "unexpected beginning time: "
-                                      "beginning-cs-val=%" PRIu64 ", "
-                                      "expected-beginning-cs-val=%" PRIu64 ", "
-                                      "stream-id=%" PRIu64 ", stream-name=\"%s\", "
-                                      "trace-name=\"%s\", path=\"%s/%s\"",
-                                      stream->discarded_events_state.beginning_cs, expected_cs,
-                                      bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
-                                      bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
-                                      stream->trace->path->str, stream->file_name->str);
+            BT_CLOGE_APPEND_CAUSE("Incompatible discarded events message: "
+                                  "unexpected beginning time: "
+                                  "beginning-cs-val=%" PRIu64 ", "
+                                  "expected-beginning-cs-val=%" PRIu64 ", "
+                                  "stream-id=%" PRIu64 ", stream-name=\"%s\", "
+                                  "trace-name=\"%s\", path=\"%s/%s\"",
+                                  stream->discarded_events_state.beginning_cs, expected_cs,
+                                  bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
+                                  bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
+                                  stream->trace->path->str, stream->file_name->str);
             status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
             goto end;
         }
@@ -422,31 +424,29 @@ handle_packet_beginning_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
          * this case.
          */
         if (stream->prev_packet_state.end_cs == UINT64_C(-1)) {
-            BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                      "Incompatible discarded packets message "
-                                      "occurring before the stream's first packet: "
-                                      "stream-id=%" PRIu64 ", stream-name=\"%s\", "
-                                      "trace-name=\"%s\", path=\"%s/%s\"",
-                                      bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
-                                      bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
-                                      stream->trace->path->str, stream->file_name->str);
+            BT_CLOGE_APPEND_CAUSE("Incompatible discarded packets message "
+                                  "occurring before the stream's first packet: "
+                                  "stream-id=%" PRIu64 ", stream-name=\"%s\", "
+                                  "trace-name=\"%s\", path=\"%s/%s\"",
+                                  bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
+                                  bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
+                                  stream->trace->path->str, stream->file_name->str);
             status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
             goto end;
         }
 
         if (stream->discarded_packets_state.beginning_cs != stream->prev_packet_state.end_cs) {
-            BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                      "Incompatible discarded packets message: "
-                                      "unexpected beginning time: "
-                                      "beginning-cs-val=%" PRIu64 ", "
-                                      "expected-beginning-cs-val=%" PRIu64 ", "
-                                      "stream-id=%" PRIu64 ", stream-name=\"%s\", "
-                                      "trace-name=\"%s\", path=\"%s/%s\"",
-                                      stream->discarded_packets_state.beginning_cs,
-                                      stream->prev_packet_state.end_cs, bt_stream_get_id(ir_stream),
-                                      bt_stream_get_name(ir_stream),
-                                      bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
-                                      stream->trace->path->str, stream->file_name->str);
+            BT_CLOGE_APPEND_CAUSE("Incompatible discarded packets message: "
+                                  "unexpected beginning time: "
+                                  "beginning-cs-val=%" PRIu64 ", "
+                                  "expected-beginning-cs-val=%" PRIu64 ", "
+                                  "stream-id=%" PRIu64 ", stream-name=\"%s\", "
+                                  "trace-name=\"%s\", path=\"%s/%s\"",
+                                  stream->discarded_packets_state.beginning_cs,
+                                  stream->prev_packet_state.end_cs, bt_stream_get_id(ir_stream),
+                                  bt_stream_get_name(ir_stream),
+                                  bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
+                                  stream->trace->path->str, stream->file_name->str);
             status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
             goto end;
         }
@@ -454,17 +454,16 @@ handle_packet_beginning_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
         expected_end_cs = bt_clock_snapshot_get_value(cs);
 
         if (stream->discarded_packets_state.end_cs != expected_end_cs) {
-            BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                      "Incompatible discarded packets message: "
-                                      "unexpected end time: "
-                                      "end-cs-val=%" PRIu64 ", "
-                                      "expected-end-cs-val=%" PRIu64 ", "
-                                      "stream-id=%" PRIu64 ", stream-name=\"%s\", "
-                                      "trace-name=\"%s\", path=\"%s/%s\"",
-                                      stream->discarded_packets_state.end_cs, expected_end_cs,
-                                      bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
-                                      bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
-                                      stream->trace->path->str, stream->file_name->str);
+            BT_CLOGE_APPEND_CAUSE("Incompatible discarded packets message: "
+                                  "unexpected end time: "
+                                  "end-cs-val=%" PRIu64 ", "
+                                  "expected-end-cs-val=%" PRIu64 ", "
+                                  "stream-id=%" PRIu64 ", stream-name=\"%s\", "
+                                  "trace-name=\"%s\", path=\"%s/%s\"",
+                                  stream->discarded_packets_state.end_cs, expected_end_cs,
+                                  bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
+                                  bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
+                                  stream->trace->path->str, stream->file_name->str);
             status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
             goto end;
         }
@@ -480,7 +479,7 @@ handle_packet_beginning_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
 
     ret = fs_sink_stream_open_packet(stream, cs, ir_packet);
     if (ret) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to open packet.");
+        BT_CLOGE_APPEND_CAUSE("Failed to open packet.");
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -499,10 +498,11 @@ handle_packet_end_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
     const bt_stream *ir_stream = bt_packet_borrow_stream_const(ir_packet);
     struct fs_sink_stream *stream;
     const bt_clock_snapshot *cs = NULL;
+    const bt2_common::LogCfg& logCfg = fs_sink->logCfg;
 
     stream = borrow_stream(fs_sink, ir_stream);
     if (G_UNLIKELY(!stream)) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to borrow stream.");
+        BT_CLOGE_APPEND_CAUSE("Failed to borrow stream.");
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -541,17 +541,16 @@ handle_packet_end_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
         expected_cs = bt_clock_snapshot_get_value(cs);
 
         if (stream->discarded_events_state.end_cs != expected_cs) {
-            BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                      "Incompatible discarded events message: "
-                                      "unexpected end time: "
-                                      "end-cs-val=%" PRIu64 ", "
-                                      "expected-end-cs-val=%" PRIu64 ", "
-                                      "stream-id=%" PRIu64 ", stream-name=\"%s\", "
-                                      "trace-name=\"%s\", path=\"%s/%s\"",
-                                      stream->discarded_events_state.end_cs, expected_cs,
-                                      bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
-                                      bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
-                                      stream->trace->path->str, stream->file_name->str);
+            BT_CLOGE_APPEND_CAUSE("Incompatible discarded events message: "
+                                  "unexpected end time: "
+                                  "end-cs-val=%" PRIu64 ", "
+                                  "expected-end-cs-val=%" PRIu64 ", "
+                                  "stream-id=%" PRIu64 ", stream-name=\"%s\", "
+                                  "trace-name=\"%s\", path=\"%s/%s\"",
+                                  stream->discarded_events_state.end_cs, expected_cs,
+                                  bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
+                                  bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
+                                  stream->trace->path->str, stream->file_name->str);
             status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
             goto end;
         }
@@ -559,7 +558,7 @@ handle_packet_end_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
 
     ret = fs_sink_stream_close_packet(stream, cs);
     if (ret) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to close packet.");
+        BT_CLOGE_APPEND_CAUSE("Failed to close packet.");
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -587,6 +586,7 @@ handle_stream_beginning_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
     bool packets_have_beginning_end_cs =
         bt_stream_class_packets_have_beginning_default_clock_snapshot(ir_sc) &&
         bt_stream_class_packets_have_end_default_clock_snapshot(ir_sc);
+    const bt2_common::LogCfg& logCfg = fs_sink->logCfg;
 
     /*
      * Not supported: discarded events or discarded packets support
@@ -597,15 +597,14 @@ handle_stream_beginning_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
         BT_ASSERT(!bt_stream_class_supports_discarded_packets(ir_sc));
 
         if (!fs_sink->ignore_discarded_events && bt_stream_class_supports_discarded_events(ir_sc)) {
-            BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                      "Unsupported stream: "
-                                      "stream does not support packets, "
-                                      "but supports discarded events: "
-                                      "stream-addr=%p, "
-                                      "stream-id=%" PRIu64 ", "
-                                      "stream-name=\"%s\"",
-                                      ir_stream, bt_stream_get_id(ir_stream),
-                                      bt_stream_get_name(ir_stream));
+            BT_CLOGE_APPEND_CAUSE("Unsupported stream: "
+                                  "stream does not support packets, "
+                                  "but supports discarded events: "
+                                  "stream-addr=%p, "
+                                  "stream-id=%" PRIu64 ", "
+                                  "stream-name=\"%s\"",
+                                  ir_stream, bt_stream_get_id(ir_stream),
+                                  bt_stream_get_name(ir_stream));
             status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
             goto end;
         }
@@ -618,15 +617,14 @@ handle_stream_beginning_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
     if (!fs_sink->ignore_discarded_events &&
         bt_stream_class_discarded_events_have_default_clock_snapshots(ir_sc) &&
         !packets_have_beginning_end_cs) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                  "Unsupported stream: discarded events have "
-                                  "default clock snapshots, but packets have no "
-                                  "beginning and/or end default clock snapshots: "
-                                  "stream-addr=%p, "
-                                  "stream-id=%" PRIu64 ", "
-                                  "stream-name=\"%s\"",
-                                  ir_stream, bt_stream_get_id(ir_stream),
-                                  bt_stream_get_name(ir_stream));
+        BT_CLOGE_APPEND_CAUSE("Unsupported stream: discarded events have "
+                              "default clock snapshots, but packets have no "
+                              "beginning and/or end default clock snapshots: "
+                              "stream-addr=%p, "
+                              "stream-id=%" PRIu64 ", "
+                              "stream-name=\"%s\"",
+                              ir_stream, bt_stream_get_id(ir_stream),
+                              bt_stream_get_name(ir_stream));
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -639,32 +637,31 @@ handle_stream_beginning_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
     if (!fs_sink->ignore_discarded_packets &&
         bt_stream_class_discarded_packets_have_default_clock_snapshots(ir_sc) &&
         !packets_have_beginning_end_cs) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                  "Unsupported stream: discarded packets have "
-                                  "default clock snapshots, but packets have no "
-                                  "beginning and/or end default clock snapshots: "
-                                  "stream-addr=%p, "
-                                  "stream-id=%" PRIu64 ", "
-                                  "stream-name=\"%s\"",
-                                  ir_stream, bt_stream_get_id(ir_stream),
-                                  bt_stream_get_name(ir_stream));
+        BT_CLOGE_APPEND_CAUSE("Unsupported stream: discarded packets have "
+                              "default clock snapshots, but packets have no "
+                              "beginning and/or end default clock snapshots: "
+                              "stream-addr=%p, "
+                              "stream-id=%" PRIu64 ", "
+                              "stream-name=\"%s\"",
+                              ir_stream, bt_stream_get_id(ir_stream),
+                              bt_stream_get_name(ir_stream));
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
 
     stream = borrow_stream(fs_sink, ir_stream);
     if (!stream) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to borrow stream.");
+        BT_CLOGE_APPEND_CAUSE("Failed to borrow stream.");
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
 
-    BT_COMP_LOGI("Created new, empty stream file: "
-                 "stream-id=%" PRIu64 ", stream-name=\"%s\", "
-                 "trace-name=\"%s\", path=\"%s/%s\"",
-                 bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
-                 bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
-                 stream->trace->path->str, stream->file_name->str);
+    BT_CLOGI("Created new, empty stream file: "
+             "stream-id=%" PRIu64 ", stream-name=\"%s\", "
+             "trace-name=\"%s\", path=\"%s/%s\"",
+             bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
+             bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)), stream->trace->path->str,
+             stream->file_name->str);
 
 end:
     return status;
@@ -677,10 +674,11 @@ handle_stream_end_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
         BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_OK;
     const bt_stream *ir_stream = bt_message_stream_end_borrow_stream_const(msg);
     struct fs_sink_stream *stream;
+    const bt2_common::LogCfg& logCfg = fs_sink->logCfg;
 
     stream = borrow_stream(fs_sink, ir_stream);
     if (!stream) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to borrow stream.");
+        BT_CLOGE_APPEND_CAUSE("Failed to borrow stream.");
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -690,18 +688,18 @@ handle_stream_end_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
         int ret = fs_sink_stream_close_packet(stream, NULL);
 
         if (ret) {
-            BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to close packet.");
+            BT_CLOGE_APPEND_CAUSE("Failed to close packet.");
             status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
             goto end;
         }
     }
 
-    BT_COMP_LOGI("Closing stream file: "
-                 "stream-id=%" PRIu64 ", stream-name=\"%s\", "
-                 "trace-name=\"%s\", path=\"%s/%s\"",
-                 bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
-                 bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
-                 stream->trace->path->str, stream->file_name->str);
+    BT_CLOGI("Closing stream file: "
+             "stream-id=%" PRIu64 ", stream-name=\"%s\", "
+             "trace-name=\"%s\", path=\"%s/%s\"",
+             bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
+             bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)), stream->trace->path->str,
+             stream->file_name->str);
 
     /*
      * This destroys the stream object and frees all its resources,
@@ -723,32 +721,32 @@ handle_discarded_events_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
     const bt_clock_snapshot *cs = NULL;
     bt_property_availability avail;
     uint64_t count;
+    const bt2_common::LogCfg& logCfg = fs_sink->logCfg;
 
     stream = borrow_stream(fs_sink, ir_stream);
     if (!stream) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to borrow stream.");
+        BT_CLOGE_APPEND_CAUSE("Failed to borrow stream.");
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
 
     if (fs_sink->ignore_discarded_events) {
-        BT_COMP_LOGI("Ignoring discarded events message: "
-                     "stream-id=%" PRIu64 ", stream-name=\"%s\", "
-                     "trace-name=\"%s\", path=\"%s/%s\"",
-                     bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
-                     bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
-                     stream->trace->path->str, stream->file_name->str);
+        BT_CLOGI("Ignoring discarded events message: "
+                 "stream-id=%" PRIu64 ", stream-name=\"%s\", "
+                 "trace-name=\"%s\", path=\"%s/%s\"",
+                 bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
+                 bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
+                 stream->trace->path->str, stream->file_name->str);
         goto end;
     }
 
     if (stream->discarded_events_state.in_range) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                  "Unsupported contiguous discarded events message: "
-                                  "stream-id=%" PRIu64 ", stream-name=\"%s\", "
-                                  "trace-name=\"%s\", path=\"%s/%s\"",
-                                  bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
-                                  bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
-                                  stream->trace->path->str, stream->file_name->str);
+        BT_CLOGE_APPEND_CAUSE("Unsupported contiguous discarded events message: "
+                              "stream-id=%" PRIu64 ", stream-name=\"%s\", "
+                              "trace-name=\"%s\", path=\"%s/%s\"",
+                              bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
+                              bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
+                              stream->trace->path->str, stream->file_name->str);
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -762,14 +760,13 @@ handle_discarded_events_msg(struct fs_sink_comp *fs_sink, const bt_message *msg)
      * time.
      */
     if (stream->packet_state.is_open && stream->sc->discarded_events_has_ts) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                  "Unsupported discarded events message with "
-                                  "default clock snapshots occurring within a packet: "
-                                  "stream-id=%" PRIu64 ", stream-name=\"%s\", "
-                                  "trace-name=\"%s\", path=\"%s/%s\"",
-                                  bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
-                                  bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
-                                  stream->trace->path->str, stream->file_name->str);
+        BT_CLOGE_APPEND_CAUSE("Unsupported discarded events message with "
+                              "default clock snapshots occurring within a packet: "
+                              "stream-id=%" PRIu64 ", stream-name=\"%s\", "
+                              "trace-name=\"%s\", path=\"%s/%s\"",
+                              bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
+                              bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
+                              stream->trace->path->str, stream->file_name->str);
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -822,32 +819,32 @@ handle_discarded_packets_msg(struct fs_sink_comp *fs_sink, const bt_message *msg
     const bt_clock_snapshot *cs = NULL;
     bt_property_availability avail;
     uint64_t count;
+    const bt2_common::LogCfg& logCfg = fs_sink->logCfg;
 
     stream = borrow_stream(fs_sink, ir_stream);
     if (!stream) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to borrow stream.");
+        BT_CLOGE_APPEND_CAUSE("Failed to borrow stream.");
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
 
     if (fs_sink->ignore_discarded_packets) {
-        BT_COMP_LOGI("Ignoring discarded packets message: "
-                     "stream-id=%" PRIu64 ", stream-name=\"%s\", "
-                     "trace-name=\"%s\", path=\"%s/%s\"",
-                     bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
-                     bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
-                     stream->trace->path->str, stream->file_name->str);
+        BT_CLOGI("Ignoring discarded packets message: "
+                 "stream-id=%" PRIu64 ", stream-name=\"%s\", "
+                 "trace-name=\"%s\", path=\"%s/%s\"",
+                 bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
+                 bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
+                 stream->trace->path->str, stream->file_name->str);
         goto end;
     }
 
     if (stream->discarded_packets_state.in_range) {
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                  "Unsupported contiguous discarded packets message: "
-                                  "stream-id=%" PRIu64 ", stream-name=\"%s\", "
-                                  "trace-name=\"%s\", path=\"%s/%s\"",
-                                  bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
-                                  bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
-                                  stream->trace->path->str, stream->file_name->str);
+        BT_CLOGE_APPEND_CAUSE("Unsupported contiguous discarded packets message: "
+                              "stream-id=%" PRIu64 ", stream-name=\"%s\", "
+                              "trace-name=\"%s\", path=\"%s/%s\"",
+                              bt_stream_get_id(ir_stream), bt_stream_get_name(ir_stream),
+                              bt_trace_get_name(bt_stream_borrow_trace_const(ir_stream)),
+                              stream->trace->path->str, stream->file_name->str);
         status = BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_ERROR;
         goto end;
     }
@@ -909,22 +906,22 @@ bt_component_class_sink_consume_method_status ctf_fs_sink_consume(bt_self_compon
 {
     bt_component_class_sink_consume_method_status status =
         BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_OK;
-    struct fs_sink_comp *fs_sink;
     bt_message_iterator_next_status next_status;
     uint64_t msg_count = 0;
     bt_message_array_const msgs;
 
-    fs_sink = (fs_sink_comp *) bt_self_component_get_data(
+    fs_sink_comp *fs_sink = (fs_sink_comp *) bt_self_component_get_data(
         bt_self_component_sink_as_self_component(self_comp));
     BT_ASSERT_DBG(fs_sink);
+    const bt2_common::LogCfg& logCfg = fs_sink->logCfg;
+
     BT_ASSERT_DBG(fs_sink->upstream_iter);
 
     /* Consume messages */
     next_status = bt_message_iterator_next(fs_sink->upstream_iter, &msgs, &msg_count);
     if (next_status < 0) {
         status = (bt_component_class_sink_consume_method_status) next_status;
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                  "Failed to get next message from upstream iterator.");
+        BT_CLOGE_APPEND_CAUSE("Failed to get next message from upstream iterator.");
         goto end;
     }
 
@@ -950,7 +947,7 @@ bt_component_class_sink_consume_method_status ctf_fs_sink_consume(bt_self_compon
                 break;
             case BT_MESSAGE_TYPE_MESSAGE_ITERATOR_INACTIVITY:
                 /* Ignore */
-                BT_COMP_LOGD_STR("Ignoring message iterator inactivity message.");
+                BT_CLOGD_STR("Ignoring message iterator inactivity message.");
                 break;
             case BT_MESSAGE_TYPE_STREAM_BEGINNING:
                 status = handle_stream_beginning_msg(fs_sink, msg);
@@ -971,11 +968,10 @@ bt_component_class_sink_consume_method_status ctf_fs_sink_consume(bt_self_compon
             BT_MESSAGE_PUT_REF_AND_RESET(msgs[i]);
 
             if (status != BT_COMPONENT_CLASS_SINK_CONSUME_METHOD_STATUS_OK) {
-                BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp,
-                                          "Failed to handle message: "
-                                          "generated CTF traces could be incomplete: "
-                                          "output-dir-path=\"%s\"",
-                                          fs_sink->output_dir_path->str);
+                BT_CLOGE_APPEND_CAUSE("Failed to handle message: "
+                                      "generated CTF traces could be incomplete: "
+                                      "output-dir-path=\"%s\"",
+                                      fs_sink->output_dir_path->str);
                 goto error;
             }
         }
@@ -1011,13 +1007,14 @@ ctf_fs_sink_graph_is_configured(bt_self_component_sink *self_comp)
     bt_message_iterator_create_from_sink_component_status msg_iter_status;
     fs_sink_comp *fs_sink = (fs_sink_comp *) bt_self_component_get_data(
         bt_self_component_sink_as_self_component(self_comp));
+    const bt2_common::LogCfg& logCfg = fs_sink->logCfg;
 
     msg_iter_status = bt_message_iterator_create_from_sink_component(
         self_comp, bt_self_component_sink_borrow_input_port_by_name(self_comp, in_port_name),
         &fs_sink->upstream_iter);
     if (msg_iter_status != BT_MESSAGE_ITERATOR_CREATE_FROM_SINK_COMPONENT_STATUS_OK) {
         status = (bt_component_class_sink_graph_is_configured_method_status) msg_iter_status;
-        BT_COMP_LOGE_APPEND_CAUSE(fs_sink->self_comp, "Failed to create upstream iterator.");
+        BT_CLOGE_APPEND_CAUSE("Failed to create upstream iterator.");
         goto end;
     }
 
