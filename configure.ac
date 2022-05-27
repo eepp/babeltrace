@@ -820,6 +820,7 @@ AC_CONFIG_FILES([
   src/plugins/ctf/common/src/bfcr/Makefile
   src/plugins/ctf/common/src/item-seq/Makefile
   src/plugins/ctf/common/src/Makefile
+  src/plugins/ctf/common/src/metadata/json/Makefile
   src/plugins/ctf/common/src/metadata/Makefile
   src/plugins/ctf/common/src/metadata/tsdl/Makefile
   src/plugins/ctf/common/src/msg-iter/Makefile

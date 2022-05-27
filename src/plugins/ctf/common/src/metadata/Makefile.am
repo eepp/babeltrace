@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-SUBDIRS = tsdl
+SUBDIRS = tsdl json
 
 noinst_LTLIBRARIES = libctf-src-metadata.la
 
@@ -11,4 +11,5 @@ libctf_src_metadata_la_SOURCES = \
 
 libctf_src_metadata_la_LIBADD = \
 	$(builddir)/tsdl/libctf-parser.la \
-	$(builddir)/tsdl/libctf-ast.la
+	$(builddir)/tsdl/libctf-ast.la \
+	$(builddir)/json/libctf-src-metadata-json.la
