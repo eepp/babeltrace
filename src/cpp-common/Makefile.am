@@ -32,6 +32,7 @@ libcppcommon_la_SOURCES = \
 	read-fixed-len-int.hpp \
 	uuid.hpp \
 	glib-up.hpp \
-	libc-up.hpp
+	libc-up.hpp \
+	file-utils.hpp file-utils.cpp
 
 EXTRA_DIST = bt2
