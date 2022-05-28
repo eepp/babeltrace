@@ -96,7 +96,7 @@ end:
 }
 
 BT_HIDDEN
-struct ctf_metadata_decoder *
+ctf_metadata_decoder_up
 ctf_metadata_decoder_create(const struct ctf_metadata_decoder_config *config)
 {
     BT_ASSERT(config);
@@ -144,7 +144,7 @@ error:
     mdec = NULL;
 
 end:
-    return mdec;
+    return ctf_metadata_decoder_up {mdec};
 }
 
 BT_HIDDEN
@@ -164,6 +164,11 @@ void ctf_metadata_decoder_destroy(struct ctf_metadata_decoder *mdec)
 
     BT_COMP_LOGD("Destroying CTF metadata decoder: addr=%p", mdec);
     delete mdec;
+}
+
+void ctf_metadata_decoder_deleter::operator()(ctf_metadata_decoder *decoder)
+{
+    ctf_metadata_decoder_destroy(decoder);
 }
 
 BT_HIDDEN
