@@ -25,6 +25,7 @@
 #include <babeltrace2/babeltrace.h>
 #include "fs.hpp"
 #include "logging/comp-logging.h"
+#include "cpp-common/libc-up.hpp"
 
 #define METADATA_TEXT_SIG "/* CTF 1.8"
 
@@ -43,7 +44,7 @@ bt_component_class_query_method_status metadata_info_query(const bt_value *param
     bt_component_class_query_method_status status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
     bt_value *result = NULL;
     const bt_value *path_value = NULL;
-    FILE *metadata_fp = NULL;
+    bt2_common::FileUP metadata_fp;
     int ret;
     int bo;
     const char *path;
@@ -84,14 +85,14 @@ bt_component_class_query_method_status metadata_info_query(const bt_value *param
     path = bt_value_string_get(path_value);
 
     BT_ASSERT(path);
-    metadata_fp = ctf_fs_metadata_open_file(path);
+    metadata_fp.reset(ctf_fs_metadata_open_file(path));
     if (!metadata_fp) {
         BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
                                         "Cannot open trace metadata: path=\"%s\".", path);
         goto error;
     }
 
-    ret = ctf_metadata_decoder_is_packetized(metadata_fp, &is_packetized, &bo, logCfg);
+    ret = ctf_metadata_decoder_is_packetized(metadata_fp.get(), &is_packetized, &bo, logCfg);
     if (ret) {
         BT_COMP_CLASS_LOGE_APPEND_CAUSE(
             logCfg.selfCompCls(),
@@ -107,8 +108,8 @@ bt_component_class_query_method_status metadata_info_query(const bt_value *param
         goto error;
     }
 
-    rewind(metadata_fp);
-    decoder_status = ctf_metadata_decoder_append_content(decoder, metadata_fp);
+    rewind(metadata_fp.get());
+    decoder_status = ctf_metadata_decoder_append_content(decoder, metadata_fp.get());
     if (decoder_status) {
         BT_COMP_CLASS_LOGE_APPEND_CAUSE(
             logCfg.selfCompCls(), "Cannot update metadata decoder's content: path=\"%s\".", path);
@@ -141,13 +142,6 @@ error:
 
 end:
     ctf_metadata_decoder_destroy(decoder);
-
-    if (metadata_fp) {
-        ret = fclose(metadata_fp);
-        if (ret) {
-            BT_LOGE_ERRNO("Cannot close metatada file stream", ": path=\"%s\"", path);
-        }
-    }
 
     *user_result = result;
     return status;
