@@ -17,6 +17,7 @@
 #include "data-stream-file.hpp"
 #include "metadata.hpp"
 #include "../common/src/metadata/tsdl/decoder.hpp"
+#include "cpp-common/glib-up.hpp"
 
 BT_HIDDEN
 extern bool ctf_fs_debug;
@@ -293,6 +294,6 @@ bool read_src_fs_parameters(const bt_value *params, const bt_value **paths,
  */
 
 BT_HIDDEN
-gchar *ctf_fs_make_port_name(struct ctf_fs_ds_file_group *ds_file_group);
+bt2_common::GCharUP ctf_fs_make_port_name(struct ctf_fs_ds_file_group *ds_file_group);
 
 #endif /* BABELTRACE_PLUGIN_CTF_FS_H */
