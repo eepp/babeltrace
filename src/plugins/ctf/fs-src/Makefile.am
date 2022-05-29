@@ -14,3 +14,6 @@ libbabeltrace2_plugin_ctf_fs_src_la_SOURCES = \
 	metadata.hpp \
 	query.hpp \
 	query.cpp
+
+libbabeltrace2_plugin_ctf_fs_src_la_LIBADD= \
+	$(top_builddir)/src/cpp-common/libcppcommon.la
