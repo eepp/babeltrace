@@ -2009,7 +2009,7 @@ public:
         return *this;
     }
 
-    Trace::Shared instantiate(const Trace trace)
+    Trace::Shared instantiate()
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
