@@ -154,12 +154,12 @@ public:
     }
 
     template <typename OtherLibObjT>
-    CommonEvent(const CommonEvent<OtherLibObjT>& event) noexcept : _ThisBorrowedObj {event}
+    CommonEvent(const CommonEvent<OtherLibObjT> event) noexcept : _ThisBorrowedObj {event}
     {
     }
 
     template <typename OtherLibObjT>
-    CommonEvent<LibObjT>& operator=(const CommonEvent<OtherLibObjT>& event) noexcept
+    CommonEvent<LibObjT>& operator=(const CommonEvent<OtherLibObjT> event) noexcept
     {
         _ThisBorrowedObj::operator=(event);
         return *this;
@@ -333,12 +333,12 @@ public:
     }
 
     template <typename OtherLibObjT>
-    CommonPacket(const CommonPacket<OtherLibObjT>& packet) noexcept : _ThisBorrowedObj {packet}
+    CommonPacket(const CommonPacket<OtherLibObjT> packet) noexcept : _ThisBorrowedObj {packet}
     {
     }
 
     template <typename OtherLibObjT>
-    _ThisCommonPacket& operator=(const CommonPacket<OtherLibObjT>& packet) noexcept
+    _ThisCommonPacket& operator=(const CommonPacket<OtherLibObjT> packet) noexcept
     {
         _ThisBorrowedObj::operator=(packet);
         return *this;
@@ -511,12 +511,12 @@ public:
     }
 
     template <typename OtherLibObjT>
-    CommonStream(const CommonStream<OtherLibObjT>& stream) noexcept : _ThisBorrowedObj {stream}
+    CommonStream(const CommonStream<OtherLibObjT> stream) noexcept : _ThisBorrowedObj {stream}
     {
     }
 
     template <typename OtherLibObjT>
-    _ThisCommonStream& operator=(const CommonStream<OtherLibObjT>& stream) noexcept
+    _ThisCommonStream& operator=(const CommonStream<OtherLibObjT> stream) noexcept
     {
         _ThisBorrowedObj::operator=(stream);
         return *this;
@@ -570,7 +570,7 @@ public:
     }
 
     template <typename LibValT>
-    void userAttributes(const CommonMapValue<LibValT>& userAttrs)
+    void userAttributes(const CommonMapValue<LibValT> userAttrs)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -750,12 +750,12 @@ public:
     }
 
     template <typename OtherLibObjT>
-    CommonTrace(const CommonTrace<OtherLibObjT>& trace) noexcept : _ThisBorrowedObj {trace}
+    CommonTrace(const CommonTrace<OtherLibObjT> trace) noexcept : _ThisBorrowedObj {trace}
     {
     }
 
     template <typename OtherLibObjT>
-    _ThisCommonTrace& operator=(const CommonTrace<OtherLibObjT>& trace) noexcept
+    _ThisCommonTrace& operator=(const CommonTrace<OtherLibObjT> trace) noexcept
     {
         _ThisBorrowedObj::operator=(trace);
         return *this;
@@ -919,7 +919,7 @@ public:
     }
 
     template <typename LibValT>
-    void userAttributes(const CommonMapValue<LibValT>& userAttrs)
+    void userAttributes(const CommonMapValue<LibValT> userAttrs)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -1097,13 +1097,13 @@ public:
     }
 
     template <typename OtherLibObjT>
-    CommonEventClass(const CommonEventClass<OtherLibObjT>& eventClass) noexcept :
+    CommonEventClass(const CommonEventClass<OtherLibObjT> eventClass) noexcept :
         _ThisBorrowedObj {eventClass}
     {
     }
 
     template <typename OtherLibObjT>
-    _ThisCommonEventClass& operator=(const CommonEventClass<OtherLibObjT>& eventClass) noexcept
+    _ThisCommonEventClass& operator=(const CommonEventClass<OtherLibObjT> eventClass) noexcept
     {
         _ThisBorrowedObj::operator=(eventClass);
         return *this;
@@ -1218,7 +1218,7 @@ public:
         return nonstd::nullopt;
     }
 
-    void payloadFieldClass(const StructureFieldClass& fc)
+    void payloadFieldClass(const StructureFieldClass fc)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -1252,7 +1252,7 @@ public:
         return nonstd::nullopt;
     }
 
-    void specificContextFieldClass(const StructureFieldClass& fc)
+    void specificContextFieldClass(const StructureFieldClass fc)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -1287,7 +1287,7 @@ public:
     }
 
     template <typename LibValT>
-    void userAttributes(const CommonMapValue<LibValT>& userAttrs)
+    void userAttributes(const CommonMapValue<LibValT> userAttrs)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -1488,19 +1488,19 @@ public:
     }
 
     template <typename OtherLibObjT>
-    CommonStreamClass(const CommonStreamClass<OtherLibObjT>& streamClass) noexcept :
+    CommonStreamClass(const CommonStreamClass<OtherLibObjT> streamClass) noexcept :
         _ThisBorrowedObj {streamClass}
     {
     }
 
     template <typename OtherLibObjT>
-    _ThisCommonStreamClass& operator=(const CommonStreamClass<OtherLibObjT>& streamClass) noexcept
+    _ThisCommonStreamClass& operator=(const CommonStreamClass<OtherLibObjT> streamClass) noexcept
     {
         _ThisBorrowedObj::operator=(streamClass);
         return *this;
     }
 
-    Stream::Shared instantiate(const Trace& trace)
+    Stream::Shared instantiate(const Trace trace)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -1510,7 +1510,7 @@ public:
         return Stream::Shared::createWithoutRef(libObjPtr);
     }
 
-    Stream::Shared instantiate(const Trace& trace, const std::uint64_t id)
+    Stream::Shared instantiate(const Trace trace, const std::uint64_t id)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -1699,7 +1699,7 @@ public:
             bt_stream_class_discarded_packets_have_default_clock_snapshots(this->libObjPtr()));
     }
 
-    void defaultClockClass(const ClockClass& clkCls)
+    void defaultClockClass(const ClockClass clkCls)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -1768,7 +1768,7 @@ public:
         return nonstd::nullopt;
     }
 
-    void packetContextFieldClass(const StructureFieldClass& fc)
+    void packetContextFieldClass(const StructureFieldClass fc)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -1802,7 +1802,7 @@ public:
         return nonstd::nullopt;
     }
 
-    void eventCommonContextFieldClass(const StructureFieldClass& fc)
+    void eventCommonContextFieldClass(const StructureFieldClass fc)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -1837,7 +1837,7 @@ public:
     }
 
     template <typename LibValT>
-    void userAttributes(const CommonMapValue<LibValT>& userAttrs)
+    void userAttributes(const CommonMapValue<LibValT> userAttrs)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -1997,19 +1997,19 @@ public:
     }
 
     template <typename OtherLibObjT>
-    CommonTraceClass(const CommonTraceClass<OtherLibObjT>& traceClass) noexcept :
+    CommonTraceClass(const CommonTraceClass<OtherLibObjT> traceClass) noexcept :
         _ThisBorrowedObj {traceClass}
     {
     }
 
     template <typename OtherLibObjT>
-    _ThisCommonTraceClass& operator=(const CommonTraceClass<OtherLibObjT>& traceClass) noexcept
+    _ThisCommonTraceClass& operator=(const CommonTraceClass<OtherLibObjT> traceClass) noexcept
     {
         _ThisBorrowedObj::operator=(traceClass);
         return *this;
     }
 
-    Trace::Shared instantiate(const Trace& trace)
+    Trace::Shared instantiate(const Trace trace)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2157,7 +2157,7 @@ public:
         return FieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
-    StaticArrayFieldClass::Shared createStaticArrayFieldClass(const FieldClass& elementFieldClass,
+    StaticArrayFieldClass::Shared createStaticArrayFieldClass(const FieldClass elementFieldClass,
                                                               const std::uint64_t length)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
@@ -2169,7 +2169,7 @@ public:
         return StaticArrayFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
-    ArrayFieldClass::Shared createDynamicArrayFieldClass(const FieldClass& elementFieldClass)
+    ArrayFieldClass::Shared createDynamicArrayFieldClass(const FieldClass elementFieldClass)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2181,8 +2181,8 @@ public:
     }
 
     DynamicArrayWithLengthFieldClass::Shared
-    createDynamicArrayFieldClass(const FieldClass& elementFieldClass,
-                                 const IntegerFieldClass& lengthFieldClass)
+    createDynamicArrayFieldClass(const FieldClass elementFieldClass,
+                                 const IntegerFieldClass lengthFieldClass)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2194,7 +2194,7 @@ public:
     }
 
     ArrayFieldClass::Shared
-    createDynamicArrayWithoutLengthFieldLocationFieldClass(const FieldClass& elementFieldClass)
+    createDynamicArrayWithoutLengthFieldLocationFieldClass(const FieldClass elementFieldClass)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2206,7 +2206,7 @@ public:
     }
 
     DynamicArrayWithLengthFieldClass::Shared createDynamicArrayWithLengthFieldLocationFieldClass(
-        const FieldClass& elementFieldClass, const ConstFieldLocation& lengthFieldLocation)
+        const FieldClass elementFieldClass, const ConstFieldLocation lengthFieldLocation)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2238,8 +2238,8 @@ public:
         return BlobFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
-    DynamicBlobWithLengthFieldClass::Shared createDynamicBlobWithLengthFieldLocationFieldClass(
-        const ConstFieldLocation& lengthFieldLocation)
+    DynamicBlobWithLengthFieldClass::Shared
+    createDynamicBlobWithLengthFieldLocationFieldClass(const ConstFieldLocation lengthFieldLocation)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2260,7 +2260,7 @@ public:
         return StructureFieldClass::Shared::createWithoutRef(libObjPtr);
     }
 
-    OptionFieldClass::Shared createOptionFieldClass(const FieldClass& optionalFieldClass)
+    OptionFieldClass::Shared createOptionFieldClass(const FieldClass optionalFieldClass)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2272,7 +2272,7 @@ public:
     }
 
     OptionFieldClass::Shared
-    createOptionWithoutSelectorFieldLocationFieldClass(const FieldClass& optionalFieldClass)
+    createOptionWithoutSelectorFieldLocationFieldClass(const FieldClass optionalFieldClass)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2284,8 +2284,8 @@ public:
     }
 
     OptionWithBoolSelectorFieldClass::Shared
-    createOptionWithBoolSelectorFieldClass(const FieldClass& optionalFieldClass,
-                                           const FieldClass& selectorFieldClass)
+    createOptionWithBoolSelectorFieldClass(const FieldClass optionalFieldClass,
+                                           const FieldClass selectorFieldClass)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2297,7 +2297,7 @@ public:
     }
 
     OptionWithBoolSelectorFieldClass::Shared createOptionWithBoolSelectorFieldLocationFieldClass(
-        const FieldClass& optionalFieldClass, const ConstFieldLocation& selectorFieldLocation)
+        const FieldClass optionalFieldClass, const ConstFieldLocation selectorFieldLocation)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2309,9 +2309,9 @@ public:
     }
 
     OptionWithUnsignedIntegerSelectorFieldClass::Shared
-    createOptionWithUnsignedIntegerSelectorFieldClass(const FieldClass& optionalFieldClass,
-                                                      const IntegerFieldClass& selectorFieldClass,
-                                                      const ConstUnsignedIntegerRangeSet& ranges)
+    createOptionWithUnsignedIntegerSelectorFieldClass(const FieldClass optionalFieldClass,
+                                                      const IntegerFieldClass selectorFieldClass,
+                                                      const ConstUnsignedIntegerRangeSet ranges)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2325,8 +2325,8 @@ public:
 
     OptionWithUnsignedIntegerSelectorFieldClass::Shared
     createOptionWithUnsignedIntegerSelectorFieldLocationFieldClass(
-        const FieldClass& optionalFieldClass, const ConstFieldLocation& selectorFieldLocation,
-        const ConstUnsignedIntegerRangeSet& ranges)
+        const FieldClass optionalFieldClass, const ConstFieldLocation selectorFieldLocation,
+        const ConstUnsignedIntegerRangeSet ranges)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2340,9 +2340,9 @@ public:
     }
 
     OptionWithSignedIntegerSelectorFieldClass::Shared
-    createOptionWithSignedIntegerSelectorFieldClass(const FieldClass& optionalFieldClass,
-                                                    const IntegerFieldClass& selectorFieldClass,
-                                                    const ConstSignedIntegerRangeSet& ranges)
+    createOptionWithSignedIntegerSelectorFieldClass(const FieldClass optionalFieldClass,
+                                                    const IntegerFieldClass selectorFieldClass,
+                                                    const ConstSignedIntegerRangeSet ranges)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2356,8 +2356,8 @@ public:
 
     OptionWithSignedIntegerSelectorFieldClass::Shared
     createOptionWithSignedIntegerSelectorFieldLocationFieldClass(
-        const FieldClass& optionalFieldClass, const ConstFieldLocation& selectorFieldLocation,
-        const ConstSignedIntegerRangeSet& ranges)
+        const FieldClass optionalFieldClass, const ConstFieldLocation selectorFieldLocation,
+        const ConstSignedIntegerRangeSet ranges)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2392,7 +2392,7 @@ public:
     }
 
     VariantWithUnsignedIntegerSelectorFieldClass::Shared
-    createVariantWithUnsignedIntegerSelectorFieldClass(const IntegerFieldClass& selectorFieldClass)
+    createVariantWithUnsignedIntegerSelectorFieldClass(const IntegerFieldClass selectorFieldClass)
     {
         return VariantWithUnsignedIntegerSelectorFieldClass {
             this->_createVariantWithIntegerSelectorFieldClass(selectorFieldClass)}
@@ -2401,7 +2401,7 @@ public:
 
     VariantWithUnsignedIntegerSelectorFieldClass::Shared
     createVariantWithUnsignedIntegerSelectorFieldLocationFieldClass(
-        const ConstFieldLocation& selectorFieldLocation)
+        const ConstFieldLocation selectorFieldLocation)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2414,7 +2414,7 @@ public:
     }
 
     VariantWithSignedIntegerSelectorFieldClass::Shared
-    createVariantWithSignedIntegerSelectorFieldClass(const IntegerFieldClass& selectorFieldClass)
+    createVariantWithSignedIntegerSelectorFieldClass(const IntegerFieldClass selectorFieldClass)
     {
         return VariantWithSignedIntegerSelectorFieldClass {
             this->_createVariantWithIntegerSelectorFieldClass(selectorFieldClass)}
@@ -2423,7 +2423,7 @@ public:
 
     VariantWithSignedIntegerSelectorFieldClass::Shared
     createVariantWithSignedIntegerSelectorFieldLocationFieldClass(
-        const ConstFieldLocation& selectorFieldLocation)
+        const ConstFieldLocation selectorFieldLocation)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2487,7 +2487,7 @@ public:
     }
 
     template <typename LibValT>
-    void userAttributes(const CommonMapValue<LibValT>& userAttrs)
+    void userAttributes(const CommonMapValue<LibValT> userAttrs)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
@@ -2511,7 +2511,7 @@ public:
 
 private:
     bt_field_class *
-    _createVariantWithIntegerSelectorFieldClass(const IntegerFieldClass& selectorFieldClass)
+    _createVariantWithIntegerSelectorFieldClass(const IntegerFieldClass selectorFieldClass)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
