@@ -2394,9 +2394,8 @@ public:
     VariantWithUnsignedIntegerSelectorFieldClass::Shared
     createVariantWithUnsignedIntegerSelectorFieldClass(const IntegerFieldClass selectorFieldClass)
     {
-        return VariantWithUnsignedIntegerSelectorFieldClass {
-            this->_createVariantWithIntegerSelectorFieldClass(selectorFieldClass)}
-            .shared();
+        return this->_createVariantWithIntegerSelectorFieldClass<
+            VariantWithUnsignedIntegerSelectorFieldClass>(selectorFieldClass);
     }
 
     VariantWithUnsignedIntegerSelectorFieldClass::Shared
@@ -2416,9 +2415,8 @@ public:
     VariantWithSignedIntegerSelectorFieldClass::Shared
     createVariantWithSignedIntegerSelectorFieldClass(const IntegerFieldClass selectorFieldClass)
     {
-        return VariantWithSignedIntegerSelectorFieldClass {
-            this->_createVariantWithIntegerSelectorFieldClass(selectorFieldClass)}
-            .shared();
+        return this->_createVariantWithIntegerSelectorFieldClass<
+            VariantWithSignedIntegerSelectorFieldClass>(selectorFieldClass);
     }
 
     VariantWithSignedIntegerSelectorFieldClass::Shared
@@ -2510,7 +2508,8 @@ public:
     }
 
 private:
-    bt_field_class *
+    template <typename ObjT>
+    typename ObjT::Shared
     _createVariantWithIntegerSelectorFieldClass(const IntegerFieldClass selectorFieldClass)
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
@@ -2519,7 +2518,7 @@ private:
             bt_field_class_variant_create(this->libObjPtr(), selectorFieldClass.libObjPtr());
 
         internal::validateCreatedObjPtr(libObjPtr);
-        return libObjPtr;
+        return ObjT::Shared::createWithoutRef(libObjPtr);
     }
 };
 
