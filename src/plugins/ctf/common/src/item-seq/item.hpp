@@ -3602,6 +3602,120 @@ inline const VariantFieldWithUIntSelEndItem& Item::asVariantFieldWithUIntSelEndI
     return static_cast<const VariantFieldWithUIntSelEndItem&>(*this);
 }
 
+static inline const char *ItemTypeStr(Item::Type type)
+{
+    switch (type) {
+    case Item::Type::PKT_BEGIN:
+        return "PKT_BEGIN";
+    case Item::Type::PKT_END:
+        return "PKT_END";
+    case Item::Type::SCOPE_BEGIN:
+        return "SCOPE_BEGIN";
+    case Item::Type::SCOPE_END:
+        return "SCOPE_END";
+    case Item::Type::PKT_CONTENT_BEGIN:
+        return "PKT_CONTENT_BEGIN";
+    case Item::Type::PKT_CONTENT_END:
+        return "PKT_CONTENT_END";
+    case Item::Type::EVENT_RECORD_BEGIN:
+        return "EVENT_RECORD_BEGIN";
+    case Item::Type::EVENT_RECORD_END:
+        return "EVENT_RECORD_END";
+    case Item::Type::PKT_MAGIC_NUMBER:
+        return "PKT_MAGIC_NUMBER";
+    case Item::Type::METADATA_STREAM_UUID:
+        return "METADATA_STREAM_UUID";
+    case Item::Type::DATA_STREAM_INFO:
+        return "DATA_STREAM_INFO";
+    case Item::Type::DEF_CLK_VALUE:
+        return "DEF_CLK_VALUE";
+    case Item::Type::PKT_INFO:
+        return "PKT_INFO";
+    case Item::Type::EVENT_RECORD_INFO:
+        return "EVENT_RECORD_INFO";
+    case Item::Type::FIXED_LEN_BIT_ARRAY_FIELD:
+        return "FIXED_LEN_BIT_ARRAY_FIELD";
+    case Item::Type::FIXED_LEN_BOOL_FIELD:
+        return "FIXED_LEN_BOOL_FIELD";
+    case Item::Type::FIXED_LEN_SINT_FIELD:
+        return "FIXED_LEN_SINT_FIELD";
+    case Item::Type::FIXED_LEN_UINT_FIELD:
+        return "FIXED_LEN_UINT_FIELD";
+    case Item::Type::FIXED_LEN_FLOAT_FIELD:
+        return "FIXED_LEN_FLOAT_FIELD";
+    case Item::Type::FIXED_LEN_SENUM_FIELD:
+        return "FIXED_LEN_SENUM_FIELD";
+    case Item::Type::FIXED_LEN_UENUM_FIELD:
+        return "FIXED_LEN_UENUM_FIELD";
+    case Item::Type::VAR_LEN_SINT_FIELD:
+        return "VAR_LEN_SINT_FIELD";
+    case Item::Type::VAR_LEN_UINT_FIELD:
+        return "VAR_LEN_UINT_FIELD";
+    case Item::Type::VAR_LEN_SENUM_FIELD:
+        return "VAR_LEN_SENUM_FIELD";
+    case Item::Type::VAR_LEN_UENUM_FIELD:
+        return "VAR_LEN_UENUM_FIELD";
+    case Item::Type::NULL_TERMINATED_STR_FIELD_BEGIN:
+        return "NULL_TERMINATED_STR_FIELD_BEGIN";
+    case Item::Type::NULL_TERMINATED_STR_FIELD_END:
+        return "NULL_TERMINATED_STR_FIELD_END";
+    case Item::Type::STR_FIELD_SUBSTR:
+        return "STR_FIELD_SUBSTR";
+    case Item::Type::BLOB_FIELD_SECTION:
+        return "BLOB_FIELD_SECTION";
+    case Item::Type::STRUCT_FIELD_BEGIN:
+        return "STRUCT_FIELD_BEGIN";
+    case Item::Type::STRUCT_FIELD_END:
+        return "STRUCT_FIELD_END";
+    case Item::Type::STATIC_LEN_ARRAY_FIELD_BEGIN:
+        return "STATIC_LEN_ARRAY_FIELD_BEGIN";
+    case Item::Type::STATIC_LEN_ARRAY_FIELD_END:
+        return "STATIC_LEN_ARRAY_FIELD_END";
+    case Item::Type::DYN_LEN_ARRAY_FIELD_BEGIN:
+        return "DYN_LEN_ARRAY_FIELD_BEGIN";
+    case Item::Type::DYN_LEN_ARRAY_FIELD_END:
+        return "DYN_LEN_ARRAY_FIELD_END";
+    case Item::Type::STATIC_LEN_BLOB_FIELD_BEGIN:
+        return "STATIC_LEN_BLOB_FIELD_BEGIN";
+    case Item::Type::STATIC_LEN_BLOB_FIELD_END:
+        return "STATIC_LEN_BLOB_FIELD_END";
+    case Item::Type::DYN_LEN_BLOB_FIELD_BEGIN:
+        return "DYN_LEN_BLOB_FIELD_BEGIN";
+    case Item::Type::DYN_LEN_BLOB_FIELD_END:
+        return "DYN_LEN_BLOB_FIELD_END";
+    case Item::Type::STATIC_LEN_STR_FIELD_BEGIN:
+        return "STATIC_LEN_STR_FIELD_BEGIN";
+    case Item::Type::STATIC_LEN_STR_FIELD_END:
+        return "STATIC_LEN_STR_FIELD_END";
+    case Item::Type::DYN_LEN_STR_FIELD_BEGIN:
+        return "DYN_LEN_STR_FIELD_BEGIN";
+    case Item::Type::DYN_LEN_STR_FIELD_END:
+        return "DYN_LEN_STR_FIELD_END";
+    case Item::Type::VARIANT_FIELD_WITH_SINT_SEL_BEGIN:
+        return "VARIANT_FIELD_WITH_SINT_SEL_BEGIN";
+    case Item::Type::VARIANT_FIELD_WITH_SINT_SEL_END:
+        return "VARIANT_FIELD_WITH_SINT_SEL_END";
+    case Item::Type::VARIANT_FIELD_WITH_UINT_SEL_BEGIN:
+        return "VARIANT_FIELD_WITH_UINT_SEL_BEGIN";
+    case Item::Type::VARIANT_FIELD_WITH_UINT_SEL_END:
+        return "VARIANT_FIELD_WITH_UINT_SEL_END";
+    case Item::Type::OPTIONAL_FIELD_WITH_BOOL_SEL_BEGIN:
+        return "OPTIONAL_FIELD_WITH_BOOL_SEL_BEGIN";
+    case Item::Type::OPTIONAL_FIELD_WITH_BOOL_SEL_END:
+        return "OPTIONAL_FIELD_WITH_BOOL_SEL_END";
+    case Item::Type::OPTIONAL_FIELD_WITH_SINT_SEL_BEGIN:
+        return "OPTIONAL_FIELD_WITH_SINT_SEL_BEGIN";
+    case Item::Type::OPTIONAL_FIELD_WITH_SINT_SEL_END:
+        return "OPTIONAL_FIELD_WITH_SINT_SEL_END";
+    case Item::Type::OPTIONAL_FIELD_WITH_UINT_SEL_BEGIN:
+        return "OPTIONAL_FIELD_WITH_UINT_SEL_BEGIN";
+    case Item::Type::OPTIONAL_FIELD_WITH_UINT_SEL_END:
+        return "OPTIONAL_FIELD_WITH_UINT_SEL_END";
+    }
+
+    bt_common_abort();
+}
+
 } /* namespace src */
 } /* namespace ctf */
 

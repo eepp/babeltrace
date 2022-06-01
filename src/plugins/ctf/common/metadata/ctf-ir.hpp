@@ -1155,6 +1155,34 @@ enum class UIntFieldRole
 };
 /* clang-format on */
 
+static inline const char *UIntFieldRoleStr(UIntFieldRole role)
+{
+    switch (role) {
+    case UIntFieldRole::PKT_MAGIC_NUMBER:
+        return "PKT_MAGIC_NUMBER";
+    case UIntFieldRole::DATA_STREAM_CLS_ID:
+        return "DATA_STREAM_CLS_ID";
+    case UIntFieldRole::DATA_STREAM_ID:
+        return "DATA_STREAM_ID";
+    case UIntFieldRole::PKT_TOTAL_LEN:
+        return "PKT_TOTAL_LEN";
+    case UIntFieldRole::PKT_CONTENT_LEN:
+        return "PKT_CONTENT_LEN";
+    case UIntFieldRole::DEF_CLK_TS:
+        return "DEF_CLK_TS";
+    case UIntFieldRole::PKT_END_DEF_CLK_TS:
+        return "PKT_END_DEF_CLK_TS";
+    case UIntFieldRole::DISC_EVENT_RECORD_COUNTER_SNAP:
+        return "DISC_EVENT_RECORD_COUNTER_SNAP";
+    case UIntFieldRole::PKT_SEQ_NUM:
+        return "PKT_SEQ_NUM";
+    case UIntFieldRole::EVENT_RECORD_CLS_ID:
+        return "EVENT_RECORD_CLS_ID";
+    }
+
+    bt_common_abort();
+}
+
 /*
  * Set of unsigned integer field roles.
  */
@@ -1665,6 +1693,26 @@ enum class FieldLocScope
     /* Event record payload */
     EVENT_RECORD_PAYLOAD,
 };
+
+static inline const char *FieldLocScopeStr(FieldLocScope scope)
+{
+    switch (scope) {
+    case FieldLocScope::PKT_HEADER:
+        return "PKT_HEADER";
+    case FieldLocScope::PKT_CTX:
+        return "PKT_CTX";
+    case FieldLocScope::EVENT_RECORD_HEADER:
+        return "EVENT_RECORD_HEADER";
+    case FieldLocScope::EVENT_RECORD_COMMON_CTX:
+        return "EVENT_RECORD_COMMON_CTX";
+    case FieldLocScope::EVENT_RECORD_SPEC_CTX:
+        return "EVENT_RECORD_SPEC_CTX";
+    case FieldLocScope::EVENT_RECORD_PAYLOAD:
+        return "EVENT_RECORD_PAYLOAD";
+    }
+
+    bt_common_abort();
+}
 
 /*
  * Field location.
