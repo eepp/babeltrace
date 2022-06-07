@@ -12,19 +12,13 @@
 #include <glib.h>
 #include "common/macros.h"
 #include "cpp-common/log-cfg.hpp"
+#include "../common/src/clk-cls-cfg.hpp"
 #include <babeltrace2/babeltrace.h>
 
 #define CTF_FS_METADATA_FILENAME "metadata"
 
 struct ctf_fs_trace;
 struct ctf_fs_metadata;
-
-struct ctf_fs_metadata_config
-{
-    bool force_clock_class_origin_unix_epoch = false;
-    int64_t clock_class_offset_s = 0;
-    int64_t clock_class_offset_ns = 0;
-};
 
 BT_HIDDEN
 int ctf_fs_metadata_init(struct ctf_fs_metadata *metadata);
@@ -34,8 +28,8 @@ void ctf_fs_metadata_fini(struct ctf_fs_metadata *metadata);
 
 BT_HIDDEN
 int ctf_fs_metadata_set_trace_class(struct ctf_fs_trace *ctf_fs_trace,
-                                    struct ctf_fs_metadata_config *config,
-                                    bt_self_component *selfComp, const bt2_common::LogCfg& logCfg);
+                                    ctf::src::ClkClsCfg clkClsCfg, bt_self_component *selfComp,
+                                    const bt2_common::LogCfg& logCfg);
 
 BT_HIDDEN
 FILE *ctf_fs_metadata_open_file(const char *trace_path);
