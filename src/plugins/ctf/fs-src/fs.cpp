@@ -372,10 +372,9 @@ bt2_common::GCharUP ctf_fs_make_port_name(struct ctf_fs_ds_file_group *ds_file_g
     if (ds_file_group->stream_id != UINT64_C(-1)) {
         g_string_append_printf(name, " | %" PRIu64, ds_file_group->stream_id);
     } else {
-        BT_ASSERT(ds_file_group->ds_file_infos->len == 1);
-        struct ctf_fs_ds_file_info *ds_file_info =
-            (struct ctf_fs_ds_file_info *) g_ptr_array_index(ds_file_group->ds_file_infos, 0);
-        g_string_append_printf(name, " | %s", ds_file_info->path.c_str());
+        BT_ASSERT(ds_file_group->ds_file_infos.size() == 1);
+        const ctf_fs_ds_file_info& ds_file_info = *ds_file_group->ds_file_infos[0];
+        g_string_append_printf(name, " | %s", ds_file_info.path.c_str());
     }
 
     return bt2_common::GCharUP {g_string_free(name, FALSE)};
@@ -461,21 +460,20 @@ static void array_insert(GPtrArray *array, gpointer element, size_t pos)
  */
 
 static void ds_file_group_insert_ds_file_info_sorted(struct ctf_fs_ds_file_group *ds_file_group,
-                                                     struct ctf_fs_ds_file_info *ds_file_info)
+                                                     ctf_fs_ds_file_info::UP ds_file_info)
 {
-    guint i;
-
     /* Find the spot where to insert this ds_file_info. */
-    for (i = 0; i < ds_file_group->ds_file_infos->len; i++) {
-        struct ctf_fs_ds_file_info *other_ds_file_info =
-            (struct ctf_fs_ds_file_info *) g_ptr_array_index(ds_file_group->ds_file_infos, i);
+    auto it = ds_file_group->ds_file_infos.begin();
 
-        if (ds_file_info->begin_ns < other_ds_file_info->begin_ns) {
+    for (; it != ds_file_group->ds_file_infos.end(); ++it) {
+        const ctf_fs_ds_file_info& other_ds_file_info = **it;
+
+        if (ds_file_info->begin_ns < other_ds_file_info.begin_ns) {
             break;
         }
     }
 
-    array_insert(ds_file_group->ds_file_infos, ds_file_info, i);
+    ds_file_group->ds_file_infos.insert(it, std::move(ds_file_info));
 }
 
 static bool ds_index_entries_equal(const struct ctf_fs_ds_index_entry *left,
@@ -563,7 +561,7 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
     ctf_fs_ds_file_group::UP new_ds_file_group;
     int ret;
     struct ctf_fs_ds_file *ds_file = NULL;
-    struct ctf_fs_ds_file_info *ds_file_info = NULL;
+    ctf_fs_ds_file_info::UP ds_file_info;
     struct ctf_fs_ds_index *index = NULL;
     struct ctf_msg_iter *msg_iter = NULL;
     struct ctf_stream_class *sc = NULL;
@@ -614,12 +612,12 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
         }
     }
 
-    ds_file_info = ctf_fs_ds_file_info_create(path, begin_ns).release();
+    ds_file_info = ctf_fs_ds_file_info_create(path, begin_ns);
     if (!ds_file_info) {
         goto error;
     }
 
-    index = ctf_fs_ds_file_build_index(ds_file, ds_file_info, msg_iter);
+    index = ctf_fs_ds_file_build_index(ds_file, ds_file_info.get(), msg_iter);
     if (!index) {
         BT_CLOGE_APPEND_CAUSE("Failed to index CTF stream file \'%s\'", ds_file->file->path->str);
         goto error;
@@ -650,8 +648,7 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
             goto error;
         }
 
-        ds_file_group_insert_ds_file_info_sorted(new_ds_file_group.get(),
-                                                 BT_MOVE_REF(ds_file_info));
+        ds_file_group_insert_ds_file_info_sorted(new_ds_file_group.get(), std::move(ds_file_info));
         ctf_fs_trace->ds_file_groups.emplace_back(std::move(new_ds_file_group));
         goto end;
     }
@@ -682,7 +679,7 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
         merge_ctf_fs_ds_indexes(ds_file_group->index, index);
     }
 
-    ds_file_group_insert_ds_file_info_sorted(ds_file_group, BT_MOVE_REF(ds_file_info));
+    ds_file_group_insert_ds_file_info_sorted(ds_file_group, std::move(ds_file_info));
 
     goto end;
 
@@ -691,7 +688,6 @@ error:
 
 end:
     ctf_fs_ds_file_destroy(ds_file);
-    ctf_fs_ds_file_info_destroy(ds_file_info);
 
     if (msg_iter) {
         ctf_msg_iter_destroy(msg_iter);
@@ -1006,16 +1002,8 @@ static unsigned int metadata_count_stream_and_event_classes(struct ctf_fs_trace 
 static void merge_ctf_fs_ds_file_groups(struct ctf_fs_ds_file_group *dest,
                                         ctf_fs_ds_file_group::UP src)
 {
-    guint i;
-
-    for (i = 0; i < src->ds_file_infos->len; i++) {
-        struct ctf_fs_ds_file_info *ds_file_info =
-            (struct ctf_fs_ds_file_info *) g_ptr_array_index(src->ds_file_infos, i);
-
-        /* Ownership of the ds_file_info is transferred to dest. */
-        g_ptr_array_index(src->ds_file_infos, i) = NULL;
-
-        ds_file_group_insert_ds_file_info_sorted(dest, ds_file_info);
+    for (ctf_fs_ds_file_info::UP& ds_file_info : src->ds_file_infos) {
+        ds_file_group_insert_ds_file_info_sorted(dest, std::move(ds_file_info));
     }
 
     /* Merge both indexes. */
@@ -1711,15 +1699,13 @@ end:
 static bool compare_ds_file_groups_by_first_path(const ctf_fs_ds_file_group::UP& ds_file_group_a,
                                                  const ctf_fs_ds_file_group::UP& ds_file_group_b)
 {
-    BT_ASSERT(ds_file_group_a->ds_file_infos->len > 0);
-    BT_ASSERT(ds_file_group_b->ds_file_infos->len > 0);
+    BT_ASSERT(!ds_file_group_a->ds_file_infos.empty());
+    BT_ASSERT(!ds_file_group_b->ds_file_infos.empty());
 
-    const ctf_fs_ds_file_info *first_ds_file_info_a =
-        (const ctf_fs_ds_file_info *) ds_file_group_a->ds_file_infos->pdata[0];
-    const ctf_fs_ds_file_info *first_ds_file_info_b =
-        (const ctf_fs_ds_file_info *) ds_file_group_b->ds_file_infos->pdata[0];
+    const ctf_fs_ds_file_info& first_ds_file_info_a = *ds_file_group_a->ds_file_infos[0];
+    const ctf_fs_ds_file_info& first_ds_file_info_b = *ds_file_group_b->ds_file_infos[0];
 
-    return first_ds_file_info_a->path < first_ds_file_info_b->path;
+    return first_ds_file_info_a.path < first_ds_file_info_b.path;
 }
 
 static gint compare_strings(gconstpointer p_a, gconstpointer p_b)
@@ -1875,8 +1861,8 @@ static GString *get_stream_instance_unique_name(struct ctf_fs_ds_file_group *ds_
      * group, the first (earliest) stream file's path is used as
      * the stream's unique name.
      */
-    BT_ASSERT(ds_file_group->ds_file_infos->len > 0);
-    ds_file_info = (ctf_fs_ds_file_info *) g_ptr_array_index(ds_file_group->ds_file_infos, 0);
+    BT_ASSERT(!ds_file_group->ds_file_infos.empty());
+    ds_file_info = ds_file_group->ds_file_infos[0].get();
     g_string_assign(name, ds_file_info->path.c_str());
 
 end:
