@@ -310,13 +310,16 @@ static void ctf_fs_trace_destroy(struct ctf_fs_trace *ctf_fs_trace)
     delete ctf_fs_trace;
 }
 
+void ctf_fs_trace_deleter::operator()(ctf_fs_trace *trace)
+{
+    ctf_fs_trace_destroy(trace);
+}
+
 void ctf_fs_destroy(struct ctf_fs_component *ctf_fs)
 {
     if (!ctf_fs) {
         return;
     }
-
-    ctf_fs_trace_destroy(ctf_fs->trace);
 
     if (ctf_fs->port_data) {
         g_ptr_array_free(ctf_fs->port_data, TRUE);
@@ -1814,7 +1817,7 @@ static int fix_packet_index_tracer_bugs(struct ctf_fs_component *ctf_fs)
     struct tracer_info current_tracer_info;
     const bt2_common::LogCfg& logCfg = ctf_fs->logCfg;
 
-    ret = extract_tracer_info(ctf_fs->trace, &current_tracer_info);
+    ret = extract_tracer_info(ctf_fs->trace.get(), &current_tracer_info);
     if (ret) {
         /*
          * A trace may not have all the necessary environment
@@ -1832,7 +1835,7 @@ static int fix_packet_index_tracer_bugs(struct ctf_fs_component *ctf_fs)
     /* Check if the trace may be affected by old tracer bugs. */
     if (is_tracer_affected_by_lttng_event_after_packet_bug(&current_tracer_info)) {
         BT_LOGI_STR("Trace may be affected by LTTng tracer packet timestamp bug. Fixing up.");
-        ret = fix_index_lttng_event_after_packet_bug(ctf_fs->trace);
+        ret = fix_index_lttng_event_after_packet_bug(ctf_fs->trace.get());
         if (ret) {
             BT_CLOGE_APPEND_CAUSE("Failed to fix LTTng event-after-packet bug.");
             goto end;
@@ -1842,7 +1845,7 @@ static int fix_packet_index_tracer_bugs(struct ctf_fs_component *ctf_fs)
 
     if (is_tracer_affected_by_barectf_event_before_packet_bug(&current_tracer_info)) {
         BT_LOGI_STR("Trace may be affected by barectf tracer packet timestamp bug. Fixing up.");
-        ret = fix_index_barectf_event_before_packet_bug(ctf_fs->trace);
+        ret = fix_index_barectf_event_before_packet_bug(ctf_fs->trace.get());
         if (ret) {
             BT_CLOGE_APPEND_CAUSE("Failed to fix barectf event-before-packet bug.");
             goto end;
@@ -1851,7 +1854,7 @@ static int fix_packet_index_tracer_bugs(struct ctf_fs_component *ctf_fs)
     }
 
     if (is_tracer_affected_by_lttng_crash_quirk(&current_tracer_info)) {
-        ret = fix_index_lttng_crash_quirk(ctf_fs->trace);
+        ret = fix_index_lttng_crash_quirk(ctf_fs->trace.get());
         if (ret) {
             BT_CLOGE_APPEND_CAUSE("Failed to fix lttng-crash timestamp quirks.");
             goto end;
@@ -1989,10 +1992,10 @@ int ctf_fs_component_create_ctf_fs_trace(struct ctf_fs_component *ctf_fs,
             goto error;
         }
 
-        ctf_fs->trace = trace;
+        ctf_fs->trace.reset(trace);
     } else {
         /* Just one trace, it may or may not have a UUID, both are fine. */
-        ctf_fs->trace = (ctf_fs_trace *) traces->pdata[0];
+        ctf_fs->trace.reset((ctf_fs_trace *) traces->pdata[0]);
         traces->pdata[0] = NULL;
     }
 
@@ -2204,11 +2207,11 @@ static ctf_fs_component::UP ctf_fs_create(const bt_value *params,
         return nullptr;
     }
 
-    if (create_streams_for_trace(ctf_fs->trace)) {
+    if (create_streams_for_trace(ctf_fs->trace.get())) {
         return nullptr;
     }
 
-    if (create_ports_for_trace(ctf_fs.get(), ctf_fs->trace, self_comp_src)) {
+    if (create_ports_for_trace(ctf_fs.get(), ctf_fs->trace.get(), self_comp_src)) {
         return nullptr;
     }
 
