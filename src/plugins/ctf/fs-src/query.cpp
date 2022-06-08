@@ -193,7 +193,7 @@ bt2::Value::Shared trace_infos_query(bt2::ConstMapValue params, const bt2_common
 
     bt2::ArrayValue::Shared result = bt2::ArrayValue::create();
     bt2::MapValue traceInfo = result->appendEmptyMap();
-    populate_trace_info(ctf_fs->trace, traceInfo, logCfg);
+    populate_trace_info(ctf_fs->trace.get(), traceInfo, logCfg);
 
     return result;
 }
