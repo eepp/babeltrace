@@ -21,6 +21,18 @@
         throw;                                                                                     \
     } while (0)
 
+#define BT_MSG_ITER_LOGE_APPEND_CAUSE_AND_THROW(_exc_cls, _self_msg_iter, _fmt, ...)               \
+    do {                                                                                           \
+        BT_MSG_ITER_LOGE_APPEND_CAUSE((_self_msg_iter), _fmt, ##__VA_ARGS__);                      \
+        throw _exc_cls {};                                                                         \
+    } while (0)
+
+#define BT_MSG_ITER_LOGE_APPEND_CAUSE_AND_RETHROW(_self_msg_iter, _fmt, ...)                       \
+    do {                                                                                           \
+        BT_MSG_ITER_LOGE_APPEND_CAUSE((_self_msg_iter), _fmt, ##__VA_ARGS__);                      \
+        throw;                                                                                     \
+    } while (0)
+
 #define BT_COMP_CLASS_LOGE_APPEND_CAUSE_AND_THROW(_exc_cls, _self_comp_class, _fmt, ...)           \
     do {                                                                                           \
         BT_COMP_CLASS_LOGE_APPEND_CAUSE((_self_comp_class), _fmt, ##__VA_ARGS__);                  \
