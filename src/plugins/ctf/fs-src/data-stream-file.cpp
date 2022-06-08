@@ -451,10 +451,11 @@ static void ctf_fs_ds_index_entry_destroy(ctf_fs_ds_index_entry *entry)
     delete entry;
 }
 
-static struct ctf_fs_ds_index_entry *
-ctf_fs_ds_index_entry_create(const bt2_common::DataLen offset, const bt2_common::DataLen packetSize)
+static ctf_fs_ds_index_entry::UP ctf_fs_ds_index_entry_create(const bt2_common::DataLen offset,
+                                                              const bt2_common::DataLen packetSize)
 {
-    ctf_fs_ds_index_entry *entry = new ctf_fs_ds_index_entry {offset, packetSize};
+    ctf_fs_ds_index_entry::UP entry =
+        bt2_common::makeUnique<ctf_fs_ds_index_entry>(offset, packetSize);
 
     entry->packet_seq_num = UINT64_MAX;
 
@@ -482,7 +483,8 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
     const char *mmap_begin = NULL, *file_pos = NULL;
     const struct ctf_packet_index_file_hdr *header = NULL;
     ctf_fs_ds_index::UP index;
-    struct ctf_fs_ds_index_entry *index_entry = NULL, *prev_index_entry = NULL;
+    ctf_fs_ds_index_entry::UP index_entry;
+    ctf_fs_ds_index_entry *prev_index_entry = NULL;
     bt2_common::DataLen totalPacketsSize = bt2_common::DataLen::fromBytes(0);
     size_t file_index_entry_size;
     size_t file_entry_count;
@@ -647,11 +649,10 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
         totalPacketsSize += packetSize;
         file_pos += file_index_entry_size;
 
-        prev_index_entry = index_entry;
+        prev_index_entry = index_entry.get();
 
         /* Give ownership of `index_entry` to `index->entries`. */
-        g_ptr_array_add(index->entries, index_entry);
-        index_entry = NULL;
+        g_ptr_array_add(index->entries, index_entry.release());
     }
 
     /* Validate that the index addresses the complete stream. */
@@ -674,7 +675,6 @@ end:
     return index;
 error:
     index.reset();
-    ctf_fs_ds_index_entry_destroy(index_entry);
     goto end;
 }
 
@@ -740,7 +740,7 @@ static ctf_fs_ds_index::UP build_index_from_stream_file(struct ctf_fs_ds_file *d
     }
 
     while (true) {
-        struct ctf_fs_ds_index_entry *index_entry;
+        ctf_fs_ds_index_entry::UP index_entry;
         struct ctf_msg_iter_packet_properties props;
 
         if (currentPacketOffset.bytes() > ds_file->file->size) {
@@ -789,13 +789,12 @@ static ctf_fs_ds_index::UP build_index_from_stream_file(struct ctf_fs_ds_file *d
         /* Set path to stream file. */
         index_entry->path = file_info->path.c_str();
 
-        ret = init_index_entry(index_entry, ds_file, &props);
+        ret = init_index_entry(index_entry.get(), ds_file, &props);
         if (ret) {
-            ctf_fs_ds_index_entry_destroy(index_entry);
             goto error;
         }
 
-        g_ptr_array_add(index->entries, index_entry);
+        g_ptr_array_add(index->entries, index_entry.release());
 
         currentPacketOffset += currentPacketSize;
         BT_CLOGD("Seeking to next packet: current-packet-offset-bytes=%llu, "
