@@ -78,6 +78,8 @@ struct ctf_fs_ds_file
 
 struct ctf_fs_ds_index_entry
 {
+    using UP = std::unique_ptr<ctf_fs_ds_index_entry>;
+
     ctf_fs_ds_index_entry(bt2_common::DataLen offsetParam, bt2_common::DataLen packetSizeParam) :
         offset(offsetParam), packetSize(packetSizeParam)
     {
