@@ -976,14 +976,14 @@ end:
     return ret;
 }
 
-static struct ctf_fs_trace *ctf_fs_trace_create(const char *path, const char *name,
-                                                ctf::src::ClkClsCfg clkClsCfg,
-                                                bt_self_component *selfComp,
-                                                const bt2_common::LogCfg& logCfg)
+static ctf_fs_trace::UP ctf_fs_trace_create(const char *path, const char *name,
+                                            ctf::src::ClkClsCfg clkClsCfg,
+                                            bt_self_component *selfComp,
+                                            const bt2_common::LogCfg& logCfg)
 {
     int ret;
 
-    ctf_fs_trace *ctf_fs_trace = new struct ctf_fs_trace(logCfg);
+    ctf_fs_trace::UP ctf_fs_trace {new struct ctf_fs_trace(logCfg)};
     ctf_fs_trace->path = g_string_new(path);
     if (!ctf_fs_trace->path) {
         goto error;
@@ -997,7 +997,7 @@ static struct ctf_fs_trace *ctf_fs_trace_create(const char *path, const char *na
         goto error;
     }
 
-    ret = ctf_fs_metadata_set_trace_class(ctf_fs_trace, clkClsCfg, selfComp, logCfg);
+    ret = ctf_fs_metadata_set_trace_class(ctf_fs_trace.get(), clkClsCfg, selfComp, logCfg);
     if (ret) {
         goto error;
     }
@@ -1021,7 +1021,7 @@ static struct ctf_fs_trace *ctf_fs_trace_create(const char *path, const char *na
         }
     }
 
-    ret = create_ds_file_groups(ctf_fs_trace);
+    ret = create_ds_file_groups(ctf_fs_trace.get());
     if (ret) {
         goto error;
     }
@@ -1029,8 +1029,7 @@ static struct ctf_fs_trace *ctf_fs_trace_create(const char *path, const char *na
     goto end;
 
 error:
-    ctf_fs_trace_destroy(ctf_fs_trace);
-    ctf_fs_trace = NULL;
+    ctf_fs_trace.reset();
 
 end:
     return ctf_fs_trace;
@@ -1065,7 +1064,7 @@ static int ctf_fs_component_create_ctf_fs_trace_one_path(struct ctf_fs_component
                                                          const char *trace_name, GPtrArray *traces,
                                                          bt_self_component *selfComp)
 {
-    struct ctf_fs_trace *ctf_fs_trace;
+    ctf_fs_trace::UP ctf_fs_trace;
     int ret;
     GString *norm_path;
     const bt2_common::LogCfg& logCfg = ctf_fs->logCfg;
@@ -1100,8 +1099,7 @@ static int ctf_fs_component_create_ctf_fs_trace_one_path(struct ctf_fs_component
         goto error;
     }
 
-    g_ptr_array_add(traces, ctf_fs_trace);
-    ctf_fs_trace = NULL;
+    g_ptr_array_add(traces, ctf_fs_trace.release());
 
     ret = 0;
     goto end;
