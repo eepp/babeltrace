@@ -179,8 +179,6 @@ BT_HIDDEN ctf_fs_ds_file_group::UP ctf_fs_ds_file_group_create(struct ctf_fs_tra
                                                                uint64_t stream_instance_id,
                                                                struct ctf_fs_ds_index *index);
 
-BT_HIDDEN void ctf_fs_ds_file_group_destroy(struct ctf_fs_ds_file_group *ds_file_group);
-
 /*
  * Medium operations to iterate on a single ctf_fs_ds_file.
  *
