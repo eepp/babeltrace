@@ -283,10 +283,6 @@ static void ctf_fs_trace_destroy(struct ctf_fs_trace *ctf_fs_trace)
         return;
     }
 
-    if (ctf_fs_trace->metadata) {
-        delete ctf_fs_trace->metadata;
-    }
-
     delete ctf_fs_trace;
 }
 
@@ -765,7 +761,7 @@ static ctf_fs_trace::UP ctf_fs_trace_create(const char *path, const char *name,
     ctf_fs_trace::UP ctf_fs_trace {new struct ctf_fs_trace(logCfg)};
 
     ctf_fs_trace->path = path;
-    ctf_fs_trace->metadata = new ctf_fs_metadata;
+    ctf_fs_trace->metadata = bt2_common::makeUnique<ctf_fs_metadata>();
 
     ret = ctf_fs_metadata_set_trace_class(ctf_fs_trace.get(), clkClsCfg, selfComp, logCfg);
     if (ret) {
