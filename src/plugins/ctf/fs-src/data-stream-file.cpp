@@ -28,6 +28,7 @@
 #include "data-stream-file.hpp"
 #include <string.h>
 #include "cpp-common/make-unique.hpp"
+#include "fs.hpp"
 
 static inline size_t remaining_mmap_bytes(struct ctf_fs_ds_file *ds_file)
 {
