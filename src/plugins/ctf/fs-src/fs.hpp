@@ -101,6 +101,8 @@ struct ctf_fs_component
 
 struct ctf_fs_msg_iter_data
 {
+    using UP = std::unique_ptr<ctf_fs_msg_iter_data>;
+
     explicit ctf_fs_msg_iter_data(const bt2_common::LogCfg& logCfgParam) noexcept :
         logCfg {logCfgParam}
     {
