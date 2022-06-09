@@ -598,7 +598,7 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
     if (!index) {
         BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfComp(), logCfg.selfCompCls(),
                                                 "Failed to index CTF stream file \'%s\'",
-                                                ds_file->file->path->str);
+                                                ds_file->file->path.c_str());
         goto error;
     }
 
@@ -714,10 +714,12 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
         }
 
         /* Create full path string. */
-        g_string_append_printf(file->path, "%s" G_DIR_SEPARATOR_S "%s", ctf_fs_trace->path->str,
-                               basename);
-        if (!g_file_test(file->path->str, G_FILE_TEST_IS_REGULAR)) {
-            BT_COMP_LOGI("Ignoring non-regular file `%s`", file->path->str);
+        file->path = ctf_fs_trace->path->str;
+        file->path += G_DIR_SEPARATOR;
+        file->path += basename;
+
+        if (!g_file_test(file->path.c_str(), G_FILE_TEST_IS_REGULAR)) {
+            BT_COMP_LOGI("Ignoring non-regular file `%s`", file->path.c_str());
             continue;
         }
 
@@ -725,21 +727,21 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
         if (ret) {
             BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfComp(), logCfg.selfCompCls(),
                                                     "Cannot open stream file `%s`",
-                                                    file->path->str);
+                                                    file->path.c_str());
             goto error;
         }
 
         if (file->size == 0) {
             /* Skip empty stream. */
-            BT_COMP_LOGI("Ignoring empty file `%s`", file->path->str);
+            BT_COMP_LOGI("Ignoring empty file `%s`", file->path.c_str());
             continue;
         }
 
-        ret = add_ds_file_to_ds_file_group(ctf_fs_trace, file->path->str);
+        ret = add_ds_file_to_ds_file_group(ctf_fs_trace, file->path.c_str());
         if (ret) {
             BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE(
                 logCfg.selfComp(), logCfg.selfCompCls(),
-                "Cannot add stream file `%s` to stream file group", file->path->str);
+                "Cannot add stream file `%s` to stream file group", file->path.c_str());
             goto error;
         }
     }

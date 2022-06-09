@@ -23,10 +23,6 @@ void ctf_fs_file_destroy(struct ctf_fs_file *file)
         return;
     }
 
-    if (file->path) {
-        g_string_free(file->path, TRUE);
-    }
-
     delete file;
 }
 
@@ -38,20 +34,7 @@ void ctf_fs_file_deleter::operator()(struct ctf_fs_file *file)
 BT_HIDDEN
 ctf_fs_file::UP ctf_fs_file_create(const bt2_common::LogCfg& logCfg)
 {
-    ctf_fs_file::UP file {new ctf_fs_file {logCfg}};
-
-    file->path = g_string_new(NULL);
-    if (!file->path) {
-        goto error;
-    }
-
-    goto end;
-
-error:
-    file.reset();
-
-end:
-    return file;
+    return ctf_fs_file::UP {new ctf_fs_file {logCfg}};
 }
 
 BT_HIDDEN
@@ -60,11 +43,11 @@ int ctf_fs_file_open(struct ctf_fs_file *file, const char *mode)
     int ret = 0;
     struct stat stat;
 
-    BT_COMP_LOGI("Opening file \"%s\" with mode \"%s\"", file->path->str, mode);
-    file->fp.reset(fopen(file->path->str, mode));
+    BT_COMP_LOGI("Opening file \"%s\" with mode \"%s\"", file->path.c_str(), mode);
+    file->fp.reset(fopen(file->path.c_str(), mode));
     if (!file->fp) {
         BT_COMP_LOGE_APPEND_CAUSE_ERRNO(file->logCfg.selfComp(), "Cannot open file",
-                                        ": path=%s, mode=%s", file->path->str, mode);
+                                        ": path=%s, mode=%s", file->path.c_str(), mode);
         goto error;
     }
 
@@ -72,7 +55,7 @@ int ctf_fs_file_open(struct ctf_fs_file *file, const char *mode)
 
     if (fstat(fileno(file->fp.get()), &stat)) {
         BT_COMP_LOGE_APPEND_CAUSE_ERRNO(file->logCfg.selfComp(), "Cannot get file information",
-                                        ": path=%s", file->path->str);
+                                        ": path=%s", file->path.c_str());
         goto error;
     }
 
