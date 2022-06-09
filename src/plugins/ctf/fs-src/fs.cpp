@@ -507,7 +507,7 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
     int ret;
     ctf_fs_ds_file_info::UP ds_file_info;
     ctf_fs_ds_index::UP index;
-    struct ctf_msg_iter *msg_iter = NULL;
+    ctf_msg_iter_up msg_iter;
     struct ctf_stream_class *sc = NULL;
     struct ctf_msg_iter_packet_properties props;
     const bt2_common::LogCfg& logCfg = ctf_fs_trace->logCfg;
@@ -524,16 +524,15 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
     /* Create a temporary iterator to read the ds_file. */
     msg_iter = ctf_msg_iter_create(ctf_fs_trace->metadata->tc,
                                    bt_common_get_page_size(logCfg.logLevel()) * 8,
-                                   ctf_fs_ds_file_medops, ds_file.get(), nullptr, logCfg)
-                   .release();
+                                   ctf_fs_ds_file_medops, ds_file.get(), nullptr, logCfg);
     if (!msg_iter) {
         BT_CLOGE_STR("Cannot create a CTF message iterator.");
         goto error;
     }
 
-    ctf_msg_iter_set_dry_run(msg_iter, true);
+    ctf_msg_iter_set_dry_run(msg_iter.get(), true);
 
-    ret = ctf_msg_iter_get_packet_properties(msg_iter, &props);
+    ret = ctf_msg_iter_get_packet_properties(msg_iter.get(), &props);
     if (ret) {
         BT_CLOGE_APPEND_CAUSE(
             "Cannot get stream file's first packet's header and context fields (`%s`).", path);
@@ -562,7 +561,7 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
         goto error;
     }
 
-    index = ctf_fs_ds_file_build_index(ds_file.get(), ds_file_info.get(), msg_iter);
+    index = ctf_fs_ds_file_build_index(ds_file.get(), ds_file_info.get(), msg_iter.get());
     if (!index) {
         BT_CLOGE_APPEND_CAUSE("Failed to index CTF stream file \'%s\'",
                               ds_file->file->path.c_str());
@@ -630,10 +629,6 @@ error:
     ret = -1;
 
 end:
-    if (msg_iter) {
-        ctf_msg_iter_destroy(msg_iter);
-    }
-
     return ret;
 }
 
