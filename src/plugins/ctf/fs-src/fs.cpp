@@ -610,18 +610,17 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
     int ret = 0;
     const char *basename;
     GError *error = NULL;
-    GDir *dir = NULL;
     const bt2_common::LogCfg& logCfg = ctf_fs_trace->logCfg;
 
     /* Check each file in the path directory, except specific ones */
-    dir = g_dir_open(ctf_fs_trace->path.c_str(), 0, &error);
+    bt2_common::GDirUP dir {g_dir_open(ctf_fs_trace->path.c_str(), 0, &error)};
     if (!dir) {
         BT_CLOGE_APPEND_CAUSE("Cannot open directory `%s`: %s (code %d)",
                               ctf_fs_trace->path.c_str(), error->message, error->code);
         goto error;
     }
 
-    while ((basename = g_dir_read_name(dir))) {
+    while ((basename = g_dir_read_name(dir.get()))) {
         if (strcmp(basename, CTF_FS_METADATA_FILENAME) == 0) {
             /* Ignore the metadata stream. */
             BT_CLOGI("Ignoring metadata file `%s" G_DIR_SEPARATOR_S "%s`",
@@ -680,11 +679,6 @@ error:
     ret = -1;
 
 end:
-    if (dir) {
-        g_dir_close(dir);
-        dir = NULL;
-    }
-
     if (error) {
         g_error_free(error);
     }
