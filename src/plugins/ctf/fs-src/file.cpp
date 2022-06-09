@@ -17,21 +17,6 @@
 #include "file.hpp"
 
 BT_HIDDEN
-void ctf_fs_file_destroy(struct ctf_fs_file *file)
-{
-    if (!file) {
-        return;
-    }
-
-    delete file;
-}
-
-void ctf_fs_file_deleter::operator()(struct ctf_fs_file *file)
-{
-    ctf_fs_file_destroy(file);
-}
-
-BT_HIDDEN
 ctf_fs_file::UP ctf_fs_file_create(const bt2_common::LogCfg& logCfg)
 {
     return ctf_fs_file::UP {new ctf_fs_file {logCfg}};
