@@ -23,23 +23,6 @@
 
 extern bool ctf_fs_debug;
 
-struct ctf_fs_file
-{
-    explicit ctf_fs_file(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
-    {
-    }
-
-    const bt2_common::LogCfg logCfg;
-
-    /* Owned by this */
-    GString *path = nullptr;
-
-    /* Owned by this */
-    FILE *fp = nullptr;
-
-    off_t size = 0;
-};
-
 struct ctf_fs_metadata
 {
     /* Owned by this */
