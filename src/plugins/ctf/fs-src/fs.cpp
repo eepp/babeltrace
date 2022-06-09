@@ -48,10 +48,6 @@ static void ctf_fs_msg_iter_data_destroy(struct ctf_fs_msg_iter_data *msg_iter_d
         return;
     }
 
-    if (msg_iter_data->msg_iter) {
-        ctf_msg_iter_destroy(msg_iter_data->msg_iter);
-    }
-
     delete msg_iter_data;
 }
 
@@ -62,7 +58,7 @@ ctf_fs_iterator_next_one(struct ctf_fs_msg_iter_data *msg_iter_data, const bt_me
     enum ctf_msg_iter_status msg_iter_status;
     const bt2_common::LogCfg& logCfg = msg_iter_data->logCfg;
 
-    msg_iter_status = ctf_msg_iter_get_next_message(msg_iter_data->msg_iter, out_msg);
+    msg_iter_status = ctf_msg_iter_get_next_message(msg_iter_data->msg_iter.get(), out_msg);
 
     switch (msg_iter_status) {
     case CTF_MSG_ITER_STATUS_OK:
@@ -182,7 +178,7 @@ ctf_fs_iterator_seek_beginning(bt_self_message_iterator *it)
     const bt2_common::LogCfg& logCfg = msg_iter_data->logCfg;
 
     try {
-        ctf_msg_iter_reset(msg_iter_data->msg_iter);
+        ctf_msg_iter_reset(msg_iter_data->msg_iter.get());
         ctf_fs_ds_group_medops_data_reset(msg_iter_data->msg_iter_medops_data.get());
 
         return BT_MESSAGE_ITERATOR_CLASS_SEEK_BEGINNING_METHOD_STATUS_OK;
@@ -253,12 +249,10 @@ ctf_fs_iterator_init(bt_self_message_iterator *self_msg_iter,
             goto error;
         }
 
-        msg_iter_data->msg_iter =
-            ctf_msg_iter_create(msg_iter_data->ds_file_group->ctf_fs_trace->metadata->tc,
-                                bt_common_get_page_size(logCfg.logLevel()) * 8,
-                                ctf_fs_ds_group_medops, msg_iter_data->msg_iter_medops_data.get(),
-                                self_msg_iter, logCfg)
-                .release();
+        msg_iter_data->msg_iter = ctf_msg_iter_create(
+            msg_iter_data->ds_file_group->ctf_fs_trace->metadata->tc,
+            bt_common_get_page_size(logCfg.logLevel()) * 8, ctf_fs_ds_group_medops,
+            msg_iter_data->msg_iter_medops_data.get(), self_msg_iter, logCfg);
         if (!msg_iter_data->msg_iter) {
             BT_CLOGE_APPEND_CAUSE("Cannot create a CTF message iterator.");
             status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
