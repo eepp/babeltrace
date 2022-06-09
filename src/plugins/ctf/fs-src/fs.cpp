@@ -780,23 +780,18 @@ end:
 
 static int path_is_ctf_trace(const char *path)
 {
-    GString *metadata_path = g_string_new(NULL);
     int ret = 0;
 
-    if (!metadata_path) {
-        ret = -1;
-        goto end;
-    }
+    std::string metadata_path = path;
+    metadata_path += G_DIR_SEPARATOR;
+    metadata_path += CTF_FS_METADATA_FILENAME;
 
-    g_string_printf(metadata_path, "%s" G_DIR_SEPARATOR_S "%s", path, CTF_FS_METADATA_FILENAME);
-
-    if (g_file_test(metadata_path->str, G_FILE_TEST_IS_REGULAR)) {
+    if (g_file_test(metadata_path.c_str(), G_FILE_TEST_IS_REGULAR)) {
         ret = 1;
         goto end;
     }
 
 end:
-    g_string_free(metadata_path, TRUE);
     return ret;
 }
 
