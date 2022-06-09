@@ -867,7 +867,7 @@ end:
 BT_HIDDEN
 ctf_fs_ds_index::UP ctf_fs_ds_index_create(const bt2_common::LogCfg& logCfg)
 {
-    return ctf_fs_ds_index::UP {new ctf_fs_ds_index};
+    return bt2_common::makeUnique<ctf_fs_ds_index>();
 }
 
 BT_HIDDEN
@@ -885,21 +885,6 @@ void ctf_fs_ds_file_destroy(struct ctf_fs_ds_file *ds_file)
     }
 
     delete ds_file;
-}
-
-BT_HIDDEN
-void ctf_fs_ds_index_destroy(struct ctf_fs_ds_index *index)
-{
-    if (!index) {
-        return;
-    }
-
-    delete index;
-}
-
-void ctf_fs_ds_index_deleter::operator()(struct ctf_fs_ds_index *index)
-{
-    ctf_fs_ds_index_destroy(index);
 }
 
 BT_HIDDEN ctf_fs_ds_file_info::UP ctf_fs_ds_file_info_create(const char *path, int64_t begin_ns)
