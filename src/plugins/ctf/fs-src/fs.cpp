@@ -40,15 +40,6 @@ struct tracer_info
     int64_t patch;
 };
 
-static void ctf_fs_msg_iter_data_destroy(struct ctf_fs_msg_iter_data *msg_iter_data)
-{
-    if (!msg_iter_data) {
-        return;
-    }
-
-    delete msg_iter_data;
-}
-
 static bt_message_iterator_class_next_method_status
 ctf_fs_iterator_next_one(struct ctf_fs_msg_iter_data *msg_iter_data, const bt_message **out_msg)
 {
@@ -186,8 +177,8 @@ ctf_fs_iterator_seek_beginning(bt_self_message_iterator *it)
 
 void ctf_fs_iterator_finalize(bt_self_message_iterator *it)
 {
-    ctf_fs_msg_iter_data_destroy(
-        (struct ctf_fs_msg_iter_data *) bt_self_message_iterator_get_data(it));
+    ctf_fs_msg_iter_data::UP {
+        ((struct ctf_fs_msg_iter_data *) bt_self_message_iterator_get_data(it))};
 }
 
 static bt_message_iterator_class_initialize_method_status
@@ -224,7 +215,8 @@ ctf_fs_iterator_init(bt_self_message_iterator *self_msg_iter,
         bt_message_iterator_class_initialize_method_status status;
         enum ctf_msg_iter_medium_status medium_status;
 
-        ctf_fs_msg_iter_data *msg_iter_data = new ctf_fs_msg_iter_data {logCfg};
+        ctf_fs_msg_iter_data::UP msg_iter_data =
+            bt2_common::makeUnique<ctf_fs_msg_iter_data>(logCfg);
 
         msg_iter_data->self_msg_iter = self_msg_iter;
         msg_iter_data->ds_file_group = port_data->ds_file_group;
@@ -259,8 +251,7 @@ ctf_fs_iterator_init(bt_self_message_iterator *self_msg_iter,
             bt_self_message_iterator_configuration_set_can_seek_forward(config, true);
         }
 
-        bt_self_message_iterator_set_data(self_msg_iter, msg_iter_data);
-        msg_iter_data = NULL;
+        bt_self_message_iterator_set_data(self_msg_iter, msg_iter_data.release());
 
         status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_OK;
         goto end;
@@ -269,7 +260,6 @@ error:
         bt_self_message_iterator_set_data(self_msg_iter, NULL);
 
 end:
-        ctf_fs_msg_iter_data_destroy(msg_iter_data);
         return status;
     } catch (const std::bad_alloc&) {
         return BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
