@@ -358,7 +358,8 @@ end:
 }
 
 BT_HIDDEN
-bt_trace_class *ctf_metadata_decoder_get_ir_trace_class(struct ctf_metadata_decoder *mdec)
+nonstd::optional<bt2::TraceClass::Shared>
+ctf_metadata_decoder_get_ir_trace_class(struct ctf_metadata_decoder *mdec)
 {
     BT_ASSERT_DBG(mdec);
     BT_ASSERT_DBG(mdec->config.create_trace_class);
