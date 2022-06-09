@@ -335,7 +335,7 @@ static enum ctf_msg_iter_medium_status ctf_fs_ds_group_medops_set_file(
     /* Check if that file is already the one mapped. */
     if (!data->file || strcmp(index_entry->path, data->file->file->path.c_str()) != 0) {
         /* Destroy the previously used file. */
-        ctf_fs_ds_file_destroy(data->file);
+        delete data->file;
 
         /* Create the new file. */
         data->file = ctf_fs_ds_file_create(data->ds_file_group->ctf_fs_trace,
@@ -399,7 +399,7 @@ void ctf_fs_ds_group_medops_data_destroy(struct ctf_fs_ds_group_medops_data *dat
         goto end;
     }
 
-    ctf_fs_ds_file_destroy(data->file);
+    delete data->file;
 
     delete data;
 
@@ -838,7 +838,7 @@ struct ctf_fs_ds_file *ctf_fs_ds_file_create(struct ctf_fs_trace *ctf_fs_trace,
 
 error:
     /* Do not touch "borrowed" file. */
-    ctf_fs_ds_file_destroy(ds_file);
+    delete ds_file;
     ds_file = NULL;
 
 end:
@@ -871,16 +871,9 @@ ctf_fs_ds_index::UP ctf_fs_ds_index_create(const bt2_common::LogCfg& logCfg)
     return bt2_common::makeUnique<ctf_fs_ds_index>();
 }
 
-BT_HIDDEN
-void ctf_fs_ds_file_destroy(struct ctf_fs_ds_file *ds_file)
+ctf_fs_ds_file::~ctf_fs_ds_file()
 {
-    if (!ds_file) {
-        return;
-    }
-
-    (void) ds_file_munmap(ds_file);
-
-    delete ds_file;
+    (void) ds_file_munmap(this);
 }
 
 BT_HIDDEN ctf_fs_ds_file_info::UP ctf_fs_ds_file_info_create(const char *path, int64_t begin_ns)
