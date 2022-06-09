@@ -136,13 +136,8 @@ static void populate_stream_info(struct ctf_fs_ds_file_group *group, bt2::MapVal
 
     add_range(groupInfo, stream_range, "range-ns");
 
-    bt2_common::GCharUP portName = ctf_fs_make_port_name(group);
-    if (!portName) {
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE_AND_THROW(bt2_common::Error, logCfg.selfCompCls(),
-                                                  "Failed to make port name");
-    }
-
-    groupInfo.insert("port-name", portName.get());
+    std::string portName = ctf_fs_make_port_name(group);
+    groupInfo.insert("port-name", portName.c_str());
 }
 
 static void populate_trace_info(const struct ctf_fs_trace *trace, bt2::MapValue traceInfo,

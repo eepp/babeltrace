@@ -202,6 +202,6 @@ bool read_src_fs_parameters(const bt_value *params, const bt_value **paths,
  */
 
 BT_HIDDEN
-bt2_common::GCharUP ctf_fs_make_port_name(struct ctf_fs_ds_file_group *ds_file_group);
+std::string ctf_fs_make_port_name(struct ctf_fs_ds_file_group *ds_file_group);
 
 #endif /* BABELTRACE_PLUGIN_CTF_FS_H */
