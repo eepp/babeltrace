@@ -30,6 +30,7 @@
 #include "cpp-common/cfg-logging.hpp"
 #include "cpp-common/cfg-logging-error-reporting.hpp"
 #include "cpp-common/make-unique.hpp"
+#include "fs.hpp"
 
 static inline size_t remaining_mmap_bytes(struct ctf_fs_ds_file *ds_file)
 {
