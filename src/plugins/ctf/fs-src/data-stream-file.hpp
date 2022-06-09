@@ -46,6 +46,8 @@ struct ctf_fs_ds_file
     {
     }
 
+    ~ctf_fs_ds_file();
+
     const bt2_common::LogCfg logCfg;
 
     /* Weak */
@@ -152,9 +154,6 @@ BT_HIDDEN
 struct ctf_fs_ds_file *ctf_fs_ds_file_create(struct ctf_fs_trace *ctf_fs_trace,
                                              nonstd::optional<bt2::Stream::Shared> stream,
                                              const char *path, const bt2_common::LogCfg& logCfg);
-
-BT_HIDDEN
-void ctf_fs_ds_file_destroy(struct ctf_fs_ds_file *stream);
 
 BT_HIDDEN
 ctf_fs_ds_index::UP ctf_fs_ds_file_build_index(struct ctf_fs_ds_file *ds_file,
