@@ -652,7 +652,7 @@ error:
     ret = -1;
 
 end:
-    ctf_fs_ds_file_destroy(ds_file);
+    delete ds_file;
 
     if (msg_iter) {
         ctf_msg_iter_destroy(msg_iter);
@@ -1200,9 +1200,8 @@ static int decode_clock_snapshot_after_event(struct ctf_fs_trace *ctf_fs_trace,
     }
 
 end:
-    if (ds_file) {
-        ctf_fs_ds_file_destroy(ds_file);
-    }
+    delete ds_file;
+
     if (msg_iter) {
         ctf_msg_iter_destroy(msg_iter);
     }
