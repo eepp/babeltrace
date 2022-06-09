@@ -42,9 +42,9 @@ end:
     return fp;
 }
 
-static struct ctf_fs_file *get_file(const char *trace_path, const bt2_common::LogCfg& logCfg)
+static ctf_fs_file::UP get_file(const char *trace_path, const bt2_common::LogCfg& logCfg)
 {
-    struct ctf_fs_file *file = ctf_fs_file_create(logCfg).release();
+    ctf_fs_file::UP file = ctf_fs_file_create(logCfg);
 
     if (!file) {
         goto error;
@@ -53,17 +53,14 @@ static struct ctf_fs_file *get_file(const char *trace_path, const bt2_common::Lo
     g_string_append(file->path, trace_path);
     g_string_append(file->path, G_DIR_SEPARATOR_S CTF_FS_METADATA_FILENAME);
 
-    if (ctf_fs_file_open(file, "rb")) {
+    if (ctf_fs_file_open(file.get(), "rb")) {
         goto error;
     }
 
     goto end;
 
 error:
-    if (file) {
-        ctf_fs_file_destroy(file);
-        file = NULL;
-    }
+    file.reset();
 
 end:
     return file;
@@ -75,14 +72,13 @@ int ctf_fs_metadata_set_trace_class(struct ctf_fs_trace *ctf_fs_trace,
                                     const bt2_common::LogCfg& logCfg)
 {
     int ret = 0;
-    struct ctf_fs_file *file = NULL;
 
     ctf_metadata_decoder_config decoder_config(logCfg);
     decoder_config.clkClsCfg = clkClsCfg;
     decoder_config.create_trace_class = true;
     decoder_config.self_comp = selfComp;
 
-    file = get_file(ctf_fs_trace->path->str, logCfg);
+    ctf_fs_file::UP file = get_file(ctf_fs_trace->path->str, logCfg);
     if (!file) {
         BT_COMP_LOGE("Cannot create metadata file object.");
         ret = -1;
@@ -109,7 +105,6 @@ int ctf_fs_metadata_set_trace_class(struct ctf_fs_trace *ctf_fs_trace,
     BT_ASSERT(ctf_fs_trace->metadata->tc);
 
 end:
-    ctf_fs_file_destroy(file);
     return ret;
 }
 
