@@ -206,7 +206,4 @@ enum ctf_msg_iter_medium_status ctf_fs_ds_group_medops_data_create(
 BT_HIDDEN
 void ctf_fs_ds_group_medops_data_reset(struct ctf_fs_ds_group_medops_data *data);
 
-BT_HIDDEN
-void ctf_fs_ds_group_medops_data_destroy(struct ctf_fs_ds_group_medops_data *data);
-
 #endif /* CTF_FS_DS_FILE_H */

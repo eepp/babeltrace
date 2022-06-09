@@ -390,22 +390,9 @@ end:
     return status;
 }
 
-BT_HIDDEN
-void ctf_fs_ds_group_medops_data_destroy(struct ctf_fs_ds_group_medops_data *data)
-{
-    if (!data) {
-        goto end;
-    }
-
-    delete data;
-
-end:
-    return;
-}
-
 void ctf_fs_ds_group_medops_data_deleter::operator()(ctf_fs_ds_group_medops_data *data)
 {
-    ctf_fs_ds_group_medops_data_destroy(data);
+    delete data;
 }
 
 enum ctf_msg_iter_medium_status ctf_fs_ds_group_medops_data_create(
