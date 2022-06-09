@@ -536,7 +536,6 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
     struct ctf_fs_ds_file_group *ds_file_group = NULL;
     ctf_fs_ds_file_group::UP new_ds_file_group;
     int ret;
-    struct ctf_fs_ds_file *ds_file = NULL;
     ctf_fs_ds_file_info::UP ds_file_info;
     ctf_fs_ds_index::UP index;
     struct ctf_msg_iter *msg_iter = NULL;
@@ -548,7 +547,7 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
      * Create a temporary ds_file to read some properties about the data
      * stream file.
      */
-    ds_file = ctf_fs_ds_file_create(ctf_fs_trace, nonstd::nullopt, path, logCfg).release();
+    ctf_fs_ds_file::UP ds_file = ctf_fs_ds_file_create(ctf_fs_trace, nonstd::nullopt, path, logCfg);
     if (!ds_file) {
         goto error;
     }
@@ -556,7 +555,7 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
     /* Create a temporary iterator to read the ds_file. */
     msg_iter = ctf_msg_iter_create(ctf_fs_trace->metadata->tc,
                                    bt_common_get_page_size(logCfg.logLevel()) * 8,
-                                   ctf_fs_ds_file_medops, ds_file, nullptr, logCfg);
+                                   ctf_fs_ds_file_medops, ds_file.get(), nullptr, logCfg);
     if (!msg_iter) {
         BT_CLOGE_STR("Cannot create a CTF message iterator.");
         goto error;
@@ -593,7 +592,7 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
         goto error;
     }
 
-    index = ctf_fs_ds_file_build_index(ds_file, ds_file_info.get(), msg_iter);
+    index = ctf_fs_ds_file_build_index(ds_file.get(), ds_file_info.get(), msg_iter);
     if (!index) {
         BT_CLOGE_APPEND_CAUSE("Failed to index CTF stream file \'%s\'",
                               ds_file->file->path.c_str());
@@ -661,8 +660,6 @@ error:
     ret = -1;
 
 end:
-    delete ds_file;
-
     if (msg_iter) {
         ctf_msg_iter_destroy(msg_iter);
     }
