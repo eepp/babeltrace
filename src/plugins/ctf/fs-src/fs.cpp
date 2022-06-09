@@ -1107,7 +1107,7 @@ static int decode_clock_snapshot_after_event(struct ctf_fs_trace *ctf_fs_trace,
                                              int64_t *ts_ns)
 {
     enum ctf_msg_iter_status iter_status = CTF_MSG_ITER_STATUS_OK;
-    struct ctf_msg_iter *msg_iter = NULL;
+    ctf_msg_iter_up msg_iter;
     const bt2_common::LogCfg& logCfg = ctf_fs_trace->logCfg;
     int ret = 0;
 
@@ -1129,8 +1129,7 @@ static int decode_clock_snapshot_after_event(struct ctf_fs_trace *ctf_fs_trace,
     msg_iter = ctf_msg_iter_create(ctf_fs_trace->metadata->tc,
                                    bt_common_get_page_size(logCfg.logLevel()) * 8,
 
-                                   ctf_fs_ds_file_medops, ds_file.get(), NULL, logCfg)
-                   .release();
+                                   ctf_fs_ds_file_medops, ds_file.get(), NULL, logCfg);
     if (!msg_iter) {
         /* ctf_msg_iter_create() logs errors. */
         ret = -1;
@@ -1141,10 +1140,10 @@ static int decode_clock_snapshot_after_event(struct ctf_fs_trace *ctf_fs_trace,
      * Turn on dry run mode to prevent the creation and usage of Babeltrace
      * library objects (bt_field, bt_message_*, etc.).
      */
-    ctf_msg_iter_set_dry_run(msg_iter, true);
+    ctf_msg_iter_set_dry_run(msg_iter.get(), true);
 
     /* Seek to the beginning of the target packet. */
-    iter_status = ctf_msg_iter_seek(msg_iter, index_entry->offset.bytes());
+    iter_status = ctf_msg_iter_seek(msg_iter.get(), index_entry->offset.bytes());
     if (iter_status) {
         /* ctf_msg_iter_seek() logs errors. */
         ret = -1;
@@ -1158,11 +1157,11 @@ static int decode_clock_snapshot_after_event(struct ctf_fs_trace *ctf_fs_trace,
          * the first event. To extract the first event's clock
          * snapshot.
          */
-        iter_status = ctf_msg_iter_curr_packet_first_event_clock_snapshot(msg_iter, cs);
+        iter_status = ctf_msg_iter_curr_packet_first_event_clock_snapshot(msg_iter.get(), cs);
         break;
     case LAST_EVENT:
         /* Decode the packet to extract the last event's clock snapshot. */
-        iter_status = ctf_msg_iter_curr_packet_last_event_clock_snapshot(msg_iter, cs);
+        iter_status = ctf_msg_iter_curr_packet_last_event_clock_snapshot(msg_iter.get(), cs);
         break;
     default:
         bt_common_abort();
@@ -1181,10 +1180,6 @@ static int decode_clock_snapshot_after_event(struct ctf_fs_trace *ctf_fs_trace,
     }
 
 end:
-    if (msg_iter) {
-        ctf_msg_iter_destroy(msg_iter);
-    }
-
     return ret;
 }
 
