@@ -25,6 +25,8 @@ extern bool ctf_fs_debug;
 
 struct ctf_fs_metadata
 {
+    using UP = std::unique_ptr<ctf_fs_metadata>;
+
     /* Owned by this */
     ctf_metadata_decoder_up decoder;
 
@@ -52,8 +54,7 @@ struct ctf_fs_trace
 
     const bt2_common::LogCfg logCfg;
 
-    /* Owned by this */
-    struct ctf_fs_metadata *metadata = nullptr;
+    ctf_fs_metadata::UP metadata;
 
     nonstd::optional<bt2::Trace::Shared> trace;
 
