@@ -462,7 +462,7 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
     bt2_common::GCharUP basename;
     std::string index_basename;
     bt2_common::GCharUP index_file_path;
-    GMappedFile *mapped_file = NULL;
+    bt2_common::GMappedFileUP mapped_file;
     gsize filesize;
     const char *mmap_begin = NULL, *file_pos = NULL;
     const struct ctf_packet_index_file_hdr *header = NULL;
@@ -509,7 +509,7 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
     index_basename += ".idx";
 
     index_file_path.reset(g_build_filename(directory.get(), "index", index_basename.c_str(), NULL));
-    mapped_file = g_mapped_file_new(index_file_path.get(), FALSE, NULL);
+    mapped_file.reset(g_mapped_file_new(index_file_path.get(), FALSE, NULL));
     if (!mapped_file) {
         BT_CLOGD("Cannot create new mapped file %s", index_file_path.get());
         goto error;
@@ -520,7 +520,7 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
      * Traces with such large indexes have never been seen in the wild,
      * but this would need to be adjusted to support them.
      */
-    filesize = g_mapped_file_get_length(mapped_file);
+    filesize = g_mapped_file_get_length(mapped_file.get());
     if (filesize < sizeof(*header)) {
         BT_CLOGW("Invalid LTTng trace index file: "
                  "file size (%zu bytes) < header size (%zu bytes)",
@@ -528,10 +528,10 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
         goto error;
     }
 
-    mmap_begin = g_mapped_file_get_contents(mapped_file);
+    mmap_begin = g_mapped_file_get_contents(mapped_file.get());
     header = (struct ctf_packet_index_file_hdr *) mmap_begin;
 
-    file_pos = g_mapped_file_get_contents(mapped_file) + sizeof(*header);
+    file_pos = g_mapped_file_get_contents(mapped_file.get()) + sizeof(*header);
     if (be32toh(header->magic) != CTF_INDEX_MAGIC) {
         BT_CLOGW_STR("Invalid LTTng trace index: \"magic\" field validation failed");
         goto error;
@@ -639,9 +639,6 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
         goto error;
     }
 end:
-    if (mapped_file) {
-        g_mapped_file_unref(mapped_file);
-    }
     return index;
 error:
     index.reset();
