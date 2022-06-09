@@ -459,7 +459,7 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
     int ret;
     bt2_common::GCharUP directory;
     bt2_common::GCharUP basename;
-    GString *index_basename = NULL;
+    std::string index_basename;
     bt2_common::GCharUP index_file_path;
     GMappedFile *mapped_file = NULL;
     gsize filesize;
@@ -504,14 +504,10 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
         goto error;
     }
 
-    index_basename = g_string_new(basename.get());
-    if (!index_basename) {
-        BT_COMP_LOGE_STR("Cannot allocate index file basename string");
-        goto error;
-    }
+    index_basename = basename.get();
+    index_basename += ".idx";
 
-    g_string_append(index_basename, ".idx");
-    index_file_path.reset(g_build_filename(directory.get(), "index", index_basename->str, NULL));
+    index_file_path.reset(g_build_filename(directory.get(), "index", index_basename.c_str(), NULL));
     mapped_file = g_mapped_file_new(index_file_path.get(), FALSE, NULL);
     if (!mapped_file) {
         BT_COMP_LOGD("Cannot create new mapped file %s", index_file_path.get());
@@ -644,9 +640,6 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
         goto error;
     }
 end:
-    if (index_basename) {
-        g_string_free(index_basename, TRUE);
-    }
     if (mapped_file) {
         g_mapped_file_unref(mapped_file);
     }
