@@ -92,7 +92,8 @@ int ctf_fs_metadata_set_trace_class(struct ctf_fs_trace *ctf_fs_trace,
         goto end;
     }
 
-    ret = ctf_metadata_decoder_append_content(ctf_fs_trace->metadata->decoder.get(), file->fp);
+    ret =
+        ctf_metadata_decoder_append_content(ctf_fs_trace->metadata->decoder.get(), file->fp.get());
     if (ret) {
         BT_COMP_LOGE("Cannot update metadata decoder's content.");
         goto end;

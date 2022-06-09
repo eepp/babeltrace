@@ -62,7 +62,7 @@ static enum ctf_msg_iter_medium_status ds_file_munmap(struct ctf_fs_ds_file *ds_
         BT_COMP_LOGE_ERRNO("Cannot memory-unmap file",
                            ": address=%p, size=%zu, file_path=\"%s\", file=%p", ds_file->mmap_addr,
                            ds_file->mmap_len, ds_file->file ? ds_file->file->path->str : "NULL",
-                           ds_file->file ? ds_file->file->fp : NULL);
+                           ds_file->file ? ds_file->file->fp.get() : NULL);
         status = CTF_MSG_ITER_MEDIUM_STATUS_ERROR;
         goto end;
     }
@@ -125,11 +125,11 @@ static enum ctf_msg_iter_medium_status ds_file_mmap(struct ctf_fs_ds_file *ds_fi
     BT_ASSERT(ds_file->mmap_len > 0);
 
     ds_file->mmap_addr =
-        bt_mmap((void *) 0, ds_file->mmap_len, PROT_READ, MAP_PRIVATE, fileno(ds_file->file->fp),
-                ds_file->mmap_offset_in_file, logCfg.logLevel());
+        bt_mmap((void *) 0, ds_file->mmap_len, PROT_READ, MAP_PRIVATE,
+                fileno(ds_file->file->fp.get()), ds_file->mmap_offset_in_file, logCfg.logLevel());
     if (ds_file->mmap_addr == MAP_FAILED) {
         BT_COMP_LOGE("Cannot memory-map address (size %zu) of file \"%s\" (%p) at offset %jd: %s",
-                     ds_file->mmap_len, ds_file->file->path->str, ds_file->file->fp,
+                     ds_file->mmap_len, ds_file->file->path->str, ds_file->file->fp.get(),
                      (intmax_t) ds_file->mmap_offset_in_file, strerror(errno));
         status = CTF_MSG_ITER_MEDIUM_STATUS_ERROR;
         goto end;
@@ -194,7 +194,7 @@ static enum ctf_msg_iter_medium_status medop_request_bytes(size_t request_sz, ui
         /* Are we at the end of the file? */
         if (ds_file->mmap_offset_in_file >= ds_file->file->size) {
             BT_COMP_LOGD("Reached end of file \"%s\" (%p)", ds_file->file->path->str,
-                         ds_file->file->fp);
+                         ds_file->file->fp.get());
             status = CTF_MSG_ITER_MEDIUM_STATUS_EOF;
             goto end;
         }
@@ -207,7 +207,7 @@ static enum ctf_msg_iter_medium_status medop_request_bytes(size_t request_sz, ui
             goto end;
         default:
             BT_COMP_LOGE("Cannot memory-map next region of file \"%s\" (%p)",
-                         ds_file->file->path->str, ds_file->file->fp);
+                         ds_file->file->path->str, ds_file->file->fp.get());
             goto error;
         }
     }
