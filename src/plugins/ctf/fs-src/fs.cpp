@@ -704,14 +704,7 @@ static int set_trace_name(bt_trace *trace, const char *name_suffix,
 {
     int ret = 0;
     const bt_value *val;
-    GString *name;
-
-    name = g_string_new(NULL);
-    if (!name) {
-        BT_COMP_LOGE_STR("Failed to allocate a GString.");
-        ret = -1;
-        goto end;
-    }
+    std::string name;
 
     /*
      * Check if we have a trace environment string value named `hostname`.
@@ -719,18 +712,18 @@ static int set_trace_name(bt_trace *trace, const char *name_suffix,
      */
     val = bt_trace_borrow_environment_entry_value_by_name_const(trace, "hostname");
     if (val && bt_value_is_string(val)) {
-        g_string_append(name, bt_value_string_get(val));
+        name += bt_value_string_get(val);
 
         if (name_suffix) {
-            g_string_append_c(name, G_DIR_SEPARATOR);
+            name += G_DIR_SEPARATOR;
         }
     }
 
     if (name_suffix) {
-        g_string_append(name, name_suffix);
+        name += name_suffix;
     }
 
-    ret = bt_trace_set_name(trace, name->str);
+    ret = bt_trace_set_name(trace, name.c_str());
     if (ret) {
         goto end;
     }
@@ -738,10 +731,6 @@ static int set_trace_name(bt_trace *trace, const char *name_suffix,
     goto end;
 
 end:
-    if (name) {
-        g_string_free(name, TRUE);
-    }
-
     return ret;
 }
 
