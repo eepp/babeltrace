@@ -15,14 +15,9 @@
 #include "cpp-common/log-cfg.hpp"
 #include "cpp-common/libc-up.hpp"
 
-struct ctf_fs_file_deleter
-{
-    void operator()(struct ctf_fs_file *file);
-};
-
 struct ctf_fs_file
 {
-    using UP = std::unique_ptr<ctf_fs_file, ctf_fs_file_deleter>;
+    using UP = std::unique_ptr<ctf_fs_file>;
 
     explicit ctf_fs_file(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
     {
@@ -36,8 +31,6 @@ struct ctf_fs_file
 
     off_t size = 0;
 };
-
-void ctf_fs_file_destroy(struct ctf_fs_file *file);
 
 ctf_fs_file::UP ctf_fs_file_create(const bt2_common::LogCfg& logCfg);
 
