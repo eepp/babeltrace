@@ -112,14 +112,9 @@ struct ctf_fs_ds_index_entry
     uint64_t packet_seq_num = 0;
 };
 
-struct ctf_fs_ds_index_deleter
-{
-    void operator()(struct ctf_fs_ds_index *index);
-};
-
 struct ctf_fs_ds_index
 {
-    using UP = std::unique_ptr<ctf_fs_ds_index, ctf_fs_ds_index_deleter>;
+    using UP = std::unique_ptr<ctf_fs_ds_index>;
 
     std::vector<ctf_fs_ds_index_entry::UP> entries;
 };
@@ -167,8 +162,6 @@ ctf_fs_ds_index::UP ctf_fs_ds_file_build_index(struct ctf_fs_ds_file *ds_file,
                                                struct ctf_msg_iter *msg_iter);
 
 ctf_fs_ds_index::UP ctf_fs_ds_index_create(const bt2_common::LogCfg& logCfg);
-
-void ctf_fs_ds_index_destroy(struct ctf_fs_ds_index *index);
 
 ctf_fs_ds_file_info::UP ctf_fs_ds_file_info_create(const char *path, int64_t begin_ns);
 

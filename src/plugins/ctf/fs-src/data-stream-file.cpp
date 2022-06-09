@@ -862,7 +862,7 @@ end:
 
 ctf_fs_ds_index::UP ctf_fs_ds_index_create(const bt2_common::LogCfg& logCfg)
 {
-    return ctf_fs_ds_index::UP {new ctf_fs_ds_index};
+    return bt2_common::makeUnique<ctf_fs_ds_index>();
 }
 
 void ctf_fs_ds_file_destroy(struct ctf_fs_ds_file *ds_file)
@@ -881,21 +881,7 @@ void ctf_fs_ds_file_destroy(struct ctf_fs_ds_file *ds_file)
     delete ds_file;
 }
 
-void ctf_fs_ds_index_destroy(struct ctf_fs_ds_index *index)
-{
-    if (!index) {
-        return;
-    }
-
-    delete index;
-}
-
-void ctf_fs_ds_index_deleter::operator()(struct ctf_fs_ds_index *index)
-{
-    ctf_fs_ds_index_destroy(index);
-}
-
-BT_HIDDEN ctf_fs_ds_file_info::UP ctf_fs_ds_file_info_create(const char *path, int64_t begin_ns)
+ctf_fs_ds_file_info::UP ctf_fs_ds_file_info_create(const char *path, int64_t begin_ns)
 {
     ctf_fs_ds_file_info::UP ds_file_info = bt2_common::makeUnique<ctf_fs_ds_file_info>();
 
@@ -920,10 +906,10 @@ void ctf_fs_ds_file_group_deleter::operator()(ctf_fs_ds_file_group *group)
     ctf_fs_ds_file_group_destroy(group);
 }
 
-BT_HIDDEN ctf_fs_ds_file_group::UP ctf_fs_ds_file_group_create(struct ctf_fs_trace *ctf_fs_trace,
-                                                               struct ctf_stream_class *sc,
-                                                               uint64_t stream_instance_id,
-                                                               ctf_fs_ds_index::UP index)
+ctf_fs_ds_file_group::UP ctf_fs_ds_file_group_create(struct ctf_fs_trace *ctf_fs_trace,
+                                                     struct ctf_stream_class *sc,
+                                                     uint64_t stream_instance_id,
+                                                     ctf_fs_ds_index::UP index)
 {
     ctf_fs_ds_file_group::UP ds_file_group {new ctf_fs_ds_file_group};
 
