@@ -539,7 +539,7 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
      * Create a temporary ds_file to read some properties about the data
      * stream file.
      */
-    ds_file = ctf_fs_ds_file_create(ctf_fs_trace, nonstd::nullopt, path, logCfg);
+    ds_file = ctf_fs_ds_file_create(ctf_fs_trace, nonstd::nullopt, path, logCfg).release();
     if (!ds_file) {
         goto error;
     }
@@ -1137,7 +1137,8 @@ static int decode_clock_snapshot_after_event(struct ctf_fs_trace *ctf_fs_trace,
     BT_ASSERT(index_entry);
     BT_ASSERT(index_entry->path);
 
-    ds_file = ctf_fs_ds_file_create(ctf_fs_trace, nonstd::nullopt, index_entry->path, logCfg);
+    ds_file =
+        ctf_fs_ds_file_create(ctf_fs_trace, nonstd::nullopt, index_entry->path, logCfg).release();
     if (!ds_file) {
         BT_CLOGE_APPEND_CAUSE("Failed to create a ctf_fs_ds_file");
         ret = -1;

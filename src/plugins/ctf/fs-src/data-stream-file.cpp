@@ -337,7 +337,8 @@ ctf_fs_ds_group_medops_set_file(struct ctf_fs_ds_group_medops_data *data,
         /* Create the new file. */
         data->file =
             ctf_fs_ds_file_create(data->ds_file_group->ctf_fs_trace, data->ds_file_group->stream,
-                                  index_entry->path, data->logCfg);
+                                  index_entry->path, data->logCfg)
+                .release();
         if (!data->file) {
             const bt2_common::LogCfg& logCfg = data->logCfg;
             BT_CLOGE_APPEND_CAUSE("failed to create ctf_fs_ds_file.");
@@ -804,17 +805,13 @@ error:
     goto end;
 }
 
-struct ctf_fs_ds_file *ctf_fs_ds_file_create(struct ctf_fs_trace *ctf_fs_trace,
-                                             nonstd::optional<bt2::Stream::Shared> stream,
-                                             const char *path, const bt2_common::LogCfg& logCfg)
+ctf_fs_ds_file::UP ctf_fs_ds_file_create(struct ctf_fs_trace *ctf_fs_trace,
+                                         nonstd::optional<bt2::Stream::Shared> stream,
+                                         const char *path, const bt2_common::LogCfg& logCfg)
 {
     int ret;
     const size_t offset_align = bt_mmap_get_offset_align_size(logCfg.logLevel());
-    ctf_fs_ds_file *ds_file = new ctf_fs_ds_file {logCfg};
-
-    if (!ds_file) {
-        goto error;
-    }
+    ctf_fs_ds_file::UP ds_file = bt2_common::makeUnique<ctf_fs_ds_file>(logCfg);
 
     ds_file->file = ctf_fs_file_create(logCfg);
     if (!ds_file->file) {
@@ -835,8 +832,7 @@ struct ctf_fs_ds_file *ctf_fs_ds_file_create(struct ctf_fs_trace *ctf_fs_trace,
 
 error:
     /* Do not touch "borrowed" file. */
-    delete ds_file;
-    ds_file = NULL;
+    ds_file.reset();
 
 end:
     return ds_file;
