@@ -40,14 +40,9 @@ struct ctf_fs_metadata
     int bo = 0;
 };
 
-struct ctf_fs_trace_deleter
-{
-    void operator()(ctf_fs_trace *);
-};
-
 struct ctf_fs_trace
 {
-    using UP = std::unique_ptr<ctf_fs_trace, ctf_fs_trace_deleter>;
+    using UP = std::unique_ptr<ctf_fs_trace>;
 
     explicit ctf_fs_trace(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
     {
