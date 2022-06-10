@@ -816,7 +816,7 @@ struct ctf_fs_ds_file *ctf_fs_ds_file_create(struct ctf_fs_trace *ctf_fs_trace,
         goto error;
     }
 
-    ds_file->file = ctf_fs_file_create(logCfg);
+    ds_file->file = ctf_fs_file_create(logCfg).release();
     if (!ds_file->file) {
         goto error;
     }

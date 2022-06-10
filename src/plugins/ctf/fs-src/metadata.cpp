@@ -42,7 +42,7 @@ end:
 
 static struct ctf_fs_file *get_file(const char *trace_path, const bt2_common::LogCfg& logCfg)
 {
-    struct ctf_fs_file *file = ctf_fs_file_create(logCfg);
+    struct ctf_fs_file *file = ctf_fs_file_create(logCfg).release();
 
     if (!file) {
         goto error;

@@ -693,7 +693,7 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
         }
 
         /* Create the file. */
-        file = ctf_fs_file_create(logCfg);
+        file = ctf_fs_file_create(logCfg).release();
         if (!file) {
             BT_CLOGE_APPEND_CAUSE("Cannot create stream file object for file `%s" G_DIR_SEPARATOR_S
                                   "%s`",
