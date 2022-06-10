@@ -7,6 +7,7 @@
 #ifndef _CTF_AST_H
 #define _CTF_AST_H
 
+#include <memory>
 #include <stdint.h>
 #include <stdio.h>
 #include <glib.h>
@@ -351,8 +352,15 @@ struct ctf_ast
 
 const char *node_type(struct ctf_node *node);
 
+struct ctf_visitor_generate_ir_deleter
+{
+    void operator()(struct ctf_visitor_generate_ir *visitor);
+};
+
 struct ctf_visitor_generate_ir
 {
+    using UP = std::unique_ptr<ctf_visitor_generate_ir, ctf_visitor_generate_ir_deleter>;
+
     explicit ctf_visitor_generate_ir(const ctf_metadata_decoder_config& decoderConfig) noexcept :
         decoder_config {decoderConfig}
     {
@@ -378,10 +386,8 @@ struct ctf_visitor_generate_ir
 };
 
 BT_HIDDEN
-struct ctf_visitor_generate_ir *
+ctf_visitor_generate_ir::UP
 ctf_visitor_generate_ir_create(const struct ctf_metadata_decoder_config *config);
-
-void ctf_visitor_generate_ir_destroy(struct ctf_visitor_generate_ir *visitor);
 
 BT_HIDDEN
 bt_trace_class *ctf_visitor_generate_ir_get_ir_trace_class(struct ctf_visitor_generate_ir *visitor);
