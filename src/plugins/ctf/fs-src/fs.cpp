@@ -663,7 +663,8 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
          * there's no timestamp to order the file within its
          * group.
          */
-        ds_file_group = ctf_fs_ds_file_group_create(ctf_fs_trace, sc, UINT64_C(-1), index);
+        ds_file_group =
+            ctf_fs_ds_file_group_create(ctf_fs_trace, sc, UINT64_C(-1), index).release();
         /* Ownership of index is transferred. */
         index = NULL;
 
@@ -693,7 +694,8 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
     }
 
     if (!ds_file_group) {
-        ds_file_group = ctf_fs_ds_file_group_create(ctf_fs_trace, sc, stream_instance_id, index);
+        ds_file_group =
+            ctf_fs_ds_file_group_create(ctf_fs_trace, sc, stream_instance_id, index).release();
         /* Ownership of index is transferred. */
         index = NULL;
         if (!ds_file_group) {
@@ -1138,7 +1140,8 @@ static int merge_matching_ctf_fs_ds_file_groups(struct ctf_fs_trace *dest_trace,
                 goto end;
             }
 
-            dest_group = ctf_fs_ds_file_group_create(dest_trace, sc, src_group->stream_id, index);
+            dest_group =
+                ctf_fs_ds_file_group_create(dest_trace, sc, src_group->stream_id, index).release();
             /* Ownership of index is transferred. */
             index = NULL;
             if (!dest_group) {
