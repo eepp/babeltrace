@@ -351,8 +351,6 @@ struct ctf_ast
 
 const char *node_type(struct ctf_node *node);
 
-struct meta_log_config;
-
 BT_HIDDEN
 struct ctf_visitor_generate_ir *
 ctf_visitor_generate_ir_create(const struct ctf_metadata_decoder_config *config);
@@ -371,10 +369,10 @@ int ctf_visitor_generate_ir_visit_node(struct ctf_visitor_generate_ir *visitor,
                                        struct ctf_node *node);
 
 BT_HIDDEN
-int ctf_visitor_semantic_check(int depth, struct ctf_node *node, struct meta_log_config *log_cfg);
+int ctf_visitor_semantic_check(int depth, struct ctf_node *node, const bt2_common::LogCfg& logCfg);
 
 BT_HIDDEN
-int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_config *log_cfg);
+int ctf_visitor_parent_links(int depth, struct ctf_node *node, const bt2_common::LogCfg& logcfg);
 
 static inline char *ctf_ast_concatenate_unary_strings(struct bt_list_head *head)
 {
@@ -420,8 +418,8 @@ error:
     return g_string_free(str, TRUE);
 }
 
-static inline int ctf_ast_get_unary_uuid(struct bt_list_head *head, bt_uuid_t uuid, int log_level,
-                                         bt_self_component *self_comp)
+static inline int ctf_ast_get_unary_uuid(struct bt_list_head *head, bt_uuid_t uuid,
+                                         const bt2_common::LogCfg& logCfg)
 {
     int i = 0;
     int ret = 0;
@@ -442,7 +440,7 @@ static inline int ctf_ast_get_unary_uuid(struct bt_list_head *head, bt_uuid_t uu
         ret = bt_uuid_from_str(src_string, uuid);
         if (ret) {
 #ifdef BT_COMP_LOG_CUR_LVL
-            BT_COMP_LOG_CUR_LVL(BT_LOG_ERROR, log_level, self_comp,
+            BT_COMP_LOG_CUR_LVL(BT_LOG_ERROR, logCfg.logLevel(), logCfg.selfComp(),
                                 "Cannot parse UUID: uuid=\"%s\"", src_string);
 #endif
             goto end;

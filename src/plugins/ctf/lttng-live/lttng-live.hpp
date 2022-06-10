@@ -50,8 +50,12 @@ enum lttng_live_stream_state
 /* Iterator over a live stream. */
 struct lttng_live_stream_iterator
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
-    bt_self_component *self_comp = nullptr;
+    explicit lttng_live_stream_iterator(const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam}
+    {
+    }
+
+    const bt2_common::LogCfg logCfg;
 
     /* Owned by this. */
     bt_stream *stream = nullptr;
@@ -119,8 +123,12 @@ struct lttng_live_stream_iterator
 
 struct lttng_live_metadata
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
-    bt_self_component *self_comp = nullptr;
+    explicit lttng_live_metadata(const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam}
+    {
+    }
+
+    const bt2_common::LogCfg logCfg;
 
     uint64_t stream_id = 0;
     /* Weak reference. */
@@ -151,8 +159,11 @@ enum lttng_live_metadata_stream_state
 
 struct lttng_live_trace
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
-    bt_self_component *self_comp = nullptr;
+    explicit lttng_live_trace(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
+    {
+    }
+
+    const bt2_common::LogCfg logCfg;
 
     /* Back reference to session. */
     struct lttng_live_session *session = nullptr;
@@ -180,7 +191,13 @@ struct lttng_live_trace
 
 struct lttng_live_session
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
+    explicit lttng_live_session(const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam}
+    {
+    }
+
+    const bt2_common::LogCfg logCfg;
+
     bt_self_component *self_comp = nullptr;
 
     /* Weak reference. */
@@ -215,7 +232,12 @@ enum session_not_found_action
  */
 struct lttng_live_component
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
+    explicit lttng_live_component(const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam}
+    {
+    }
+
+    const bt2_common::LogCfg logCfg;
 
     /* Weak reference. */
     bt_self_component *self_comp = nullptr;
@@ -237,7 +259,13 @@ struct lttng_live_component
 
 struct lttng_live_msg_iter
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
+    explicit lttng_live_msg_iter(const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam}
+    {
+    }
+
+    const bt2_common::LogCfg logCfg;
+
     bt_self_component *self_comp = nullptr;
 
     /* Weak reference. */

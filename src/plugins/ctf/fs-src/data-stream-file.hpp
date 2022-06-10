@@ -15,6 +15,7 @@
 
 #include "../common/src/msg-iter/msg-iter.hpp"
 #include "lttng-index.hpp"
+#include "cpp-common/log-cfg.hpp"
 
 struct ctf_fs_component;
 struct ctf_fs_file;
@@ -36,10 +37,11 @@ struct ctf_fs_metadata;
 
 struct ctf_fs_ds_file
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
+    explicit ctf_fs_ds_file(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
+    {
+    }
 
-    /* Weak */
-    bt_self_component *self_comp = nullptr;
+    const bt2_common::LogCfg logCfg;
 
     /* Weak */
     struct ctf_fs_metadata *metadata = nullptr;
@@ -73,7 +75,7 @@ struct ctf_fs_ds_file
 
 BT_HIDDEN
 struct ctf_fs_ds_file *ctf_fs_ds_file_create(struct ctf_fs_trace *ctf_fs_trace, bt_stream *stream,
-                                             const char *path, bt_logging_level log_level);
+                                             const char *path, const bt2_common::LogCfg& logCfg);
 
 BT_HIDDEN
 void ctf_fs_ds_file_destroy(struct ctf_fs_ds_file *stream);
@@ -84,8 +86,7 @@ struct ctf_fs_ds_index *ctf_fs_ds_file_build_index(struct ctf_fs_ds_file *ds_fil
                                                    struct ctf_msg_iter *msg_iter);
 
 BT_HIDDEN
-struct ctf_fs_ds_index *ctf_fs_ds_index_create(bt_logging_level log_level,
-                                               bt_self_component *self_comp);
+struct ctf_fs_ds_index *ctf_fs_ds_index_create(const bt2_common::LogCfg& logCfg);
 
 BT_HIDDEN
 void ctf_fs_ds_index_destroy(struct ctf_fs_ds_index *index);
@@ -111,7 +112,7 @@ extern struct ctf_msg_iter_medium_ops ctf_fs_ds_group_medops;
 BT_HIDDEN
 enum ctf_msg_iter_medium_status ctf_fs_ds_group_medops_data_create(
     struct ctf_fs_ds_file_group *ds_file_group, bt_self_message_iterator *self_msg_iter,
-    bt_logging_level log_level, struct ctf_fs_ds_group_medops_data **out);
+    const bt2_common::LogCfg& logCfg, struct ctf_fs_ds_group_medops_data **out);
 
 BT_HIDDEN
 void ctf_fs_ds_group_medops_data_reset(struct ctf_fs_ds_group_medops_data *data);

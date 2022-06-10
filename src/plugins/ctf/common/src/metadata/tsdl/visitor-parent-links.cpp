@@ -6,9 +6,9 @@
  * Common Trace Format Metadata Parent Link Creator.
  */
 
-#define BT_COMP_LOG_SELF_COMP (log_cfg->self_comp)
-#define BT_LOG_OUTPUT_LEVEL   (log_cfg->log_level)
-#define BT_LOG_TAG            "PLUGIN/CTF/META/PARENT-LINKS-VISITOR"
+#define BT_CLOG_CFG         (logCfg)
+#define BT_LOG_OUTPUT_LEVEL (logCfg.logLevel())
+#define BT_LOG_TAG          "PLUGIN/CTF/META/PARENT-LINKS-VISITOR"
 #include "logging/comp-logging.h"
 
 #include <stdio.h>
@@ -26,7 +26,7 @@
 #include "logging.hpp"
 
 static int ctf_visitor_unary_expression(int depth, struct ctf_node *node,
-                                        struct meta_log_config *log_cfg)
+                                        const bt2_common::LogCfg& logCfg)
 {
     int ret = 0;
 
@@ -37,8 +37,8 @@ static int ctf_visitor_unary_expression(int depth, struct ctf_node *node,
     case UNARY_DOTDOTDOT:
         break;
     default:
-        _BT_COMP_LOGE_APPEND_CAUSE_LINENO(node->lineno, "Unknown expression link type: type=%d\n",
-                                          node->u.unary_expression.link);
+        _BT_CLOGE_APPEND_CAUSE_LINENO(node->lineno, "Unknown expression link type: type=%d\n",
+                                      node->u.unary_expression.link);
         return -EINVAL;
     }
 
@@ -49,23 +49,22 @@ static int ctf_visitor_unary_expression(int depth, struct ctf_node *node,
         break;
     case UNARY_SBRAC:
         node->u.unary_expression.u.sbrac_exp->parent = node;
-        ret =
-            ctf_visitor_unary_expression(depth + 1, node->u.unary_expression.u.sbrac_exp, log_cfg);
+        ret = ctf_visitor_unary_expression(depth + 1, node->u.unary_expression.u.sbrac_exp, logCfg);
         if (ret)
             return ret;
         break;
 
     case UNARY_UNKNOWN:
     default:
-        _BT_COMP_LOGE_APPEND_CAUSE_LINENO(node->lineno, "Unknown expression link type: type=%d\n",
-                                          node->u.unary_expression.link);
+        _BT_CLOGE_APPEND_CAUSE_LINENO(node->lineno, "Unknown expression link type: type=%d\n",
+                                      node->u.unary_expression.link);
         return -EINVAL;
     }
     return 0;
 }
 
 static int ctf_visitor_type_specifier(int depth, struct ctf_node *node,
-                                      struct meta_log_config *log_cfg)
+                                      const bt2_common::LogCfg& logCfg)
 {
     int ret;
 
@@ -92,22 +91,22 @@ static int ctf_visitor_type_specifier(int depth, struct ctf_node *node,
     case TYPESPEC_VARIANT:
     case TYPESPEC_ENUM:
         node->u.field_class_specifier.node->parent = node;
-        ret = ctf_visitor_parent_links(depth + 1, node->u.field_class_specifier.node, log_cfg);
+        ret = ctf_visitor_parent_links(depth + 1, node->u.field_class_specifier.node, logCfg);
         if (ret)
             return ret;
         break;
 
     case TYPESPEC_UNKNOWN:
     default:
-        _BT_COMP_LOGE_APPEND_CAUSE_LINENO(node->lineno, "Unknown type specifier: type=%d\n",
-                                          node->u.field_class_specifier.type);
+        _BT_CLOGE_APPEND_CAUSE_LINENO(node->lineno, "Unknown type specifier: type=%d\n",
+                                      node->u.field_class_specifier.type);
         return -EINVAL;
     }
     return 0;
 }
 
 static int ctf_visitor_field_class_declarator(int depth, struct ctf_node *node,
-                                              struct meta_log_config *log_cfg)
+                                              const bt2_common::LogCfg& logCfg)
 {
     int ret = 0;
     struct ctf_node *iter;
@@ -116,7 +115,7 @@ static int ctf_visitor_field_class_declarator(int depth, struct ctf_node *node,
 
     bt_list_for_each_entry (iter, &node->u.field_class_declarator.pointers, siblings) {
         iter->parent = node;
-        ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+        ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
         if (ret)
             return ret;
     }
@@ -128,7 +127,7 @@ static int ctf_visitor_field_class_declarator(int depth, struct ctf_node *node,
         if (node->u.field_class_declarator.u.nested.field_class_declarator) {
             node->u.field_class_declarator.u.nested.field_class_declarator->parent = node;
             ret = ctf_visitor_parent_links(
-                depth + 1, node->u.field_class_declarator.u.nested.field_class_declarator, log_cfg);
+                depth + 1, node->u.field_class_declarator.u.nested.field_class_declarator, logCfg);
             if (ret)
                 return ret;
         }
@@ -136,7 +135,7 @@ static int ctf_visitor_field_class_declarator(int depth, struct ctf_node *node,
             bt_list_for_each_entry (iter, &node->u.field_class_declarator.u.nested.length,
                                     siblings) {
                 iter->parent = node;
-                ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+                ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
                 if (ret)
                     return ret;
             }
@@ -144,22 +143,22 @@ static int ctf_visitor_field_class_declarator(int depth, struct ctf_node *node,
         if (node->u.field_class_declarator.bitfield_len) {
             node->u.field_class_declarator.bitfield_len = node;
             ret = ctf_visitor_parent_links(depth + 1, node->u.field_class_declarator.bitfield_len,
-                                           log_cfg);
+                                           logCfg);
             if (ret)
                 return ret;
         }
         break;
     case TYPEDEC_UNKNOWN:
     default:
-        _BT_COMP_LOGE_APPEND_CAUSE_LINENO(node->lineno, "Unknown type declarator: type=%d\n",
-                                          node->u.field_class_declarator.type);
+        _BT_CLOGE_APPEND_CAUSE_LINENO(node->lineno, "Unknown type declarator: type=%d\n",
+                                      node->u.field_class_declarator.type);
         return -EINVAL;
     }
     depth--;
     return 0;
 }
 
-int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_config *log_cfg)
+int ctf_visitor_parent_links(int depth, struct ctf_node *node, const bt2_common::LogCfg& logCfg)
 {
     int ret = 0;
     struct ctf_node *iter;
@@ -171,37 +170,37 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_ROOT:
         bt_list_for_each_entry (iter, &node->u.root.declaration_list, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
         bt_list_for_each_entry (iter, &node->u.root.trace, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
         bt_list_for_each_entry (iter, &node->u.root.stream, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
         bt_list_for_each_entry (iter, &node->u.root.event, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
         bt_list_for_each_entry (iter, &node->u.root.clock, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
         bt_list_for_each_entry (iter, &node->u.root.callsite, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -210,7 +209,7 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_EVENT:
         bt_list_for_each_entry (iter, &node->u.event.declaration_list, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -218,7 +217,7 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_STREAM:
         bt_list_for_each_entry (iter, &node->u.stream.declaration_list, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -226,7 +225,7 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_ENV:
         bt_list_for_each_entry (iter, &node->u.env.declaration_list, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -234,7 +233,7 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_TRACE:
         bt_list_for_each_entry (iter, &node->u.trace.declaration_list, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -242,7 +241,7 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_CLOCK:
         bt_list_for_each_entry (iter, &node->u.clock.declaration_list, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -250,7 +249,7 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_CALLSITE:
         bt_list_for_each_entry (iter, &node->u.callsite.declaration_list, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -260,31 +259,31 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
         depth++;
         bt_list_for_each_entry (iter, &node->u.ctf_expression.left, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
         bt_list_for_each_entry (iter, &node->u.ctf_expression.right, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
         depth--;
         break;
     case NODE_UNARY_EXPRESSION:
-        return ctf_visitor_unary_expression(depth, node, log_cfg);
+        return ctf_visitor_unary_expression(depth, node, logCfg);
 
     case NODE_TYPEDEF:
         depth++;
         node->u.field_class_def.field_class_specifier_list->parent = node;
         ret = ctf_visitor_parent_links(depth + 1,
-                                       node->u.field_class_def.field_class_specifier_list, log_cfg);
+                                       node->u.field_class_def.field_class_specifier_list, logCfg);
         if (ret)
             return ret;
         bt_list_for_each_entry (iter, &node->u.field_class_def.field_class_declarators, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -294,13 +293,13 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
         depth++;
         node->u.field_class_alias_target.field_class_specifier_list->parent = node;
         ret = ctf_visitor_parent_links(
-            depth + 1, node->u.field_class_alias_target.field_class_specifier_list, log_cfg);
+            depth + 1, node->u.field_class_alias_target.field_class_specifier_list, logCfg);
         if (ret)
             return ret;
         bt_list_for_each_entry (iter, &node->u.field_class_alias_target.field_class_declarators,
                                 siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -310,13 +309,13 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
         depth++;
         node->u.field_class_alias_name.field_class_specifier_list->parent = node;
         ret = ctf_visitor_parent_links(
-            depth + 1, node->u.field_class_alias_name.field_class_specifier_list, log_cfg);
+            depth + 1, node->u.field_class_alias_name.field_class_specifier_list, logCfg);
         if (ret)
             return ret;
         bt_list_for_each_entry (iter, &node->u.field_class_alias_name.field_class_declarators,
                                 siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -324,11 +323,11 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
         break;
     case NODE_TYPEALIAS:
         node->u.field_class_alias.target->parent = node;
-        ret = ctf_visitor_parent_links(depth + 1, node->u.field_class_alias.target, log_cfg);
+        ret = ctf_visitor_parent_links(depth + 1, node->u.field_class_alias.target, logCfg);
         if (ret)
             return ret;
         node->u.field_class_alias.alias->parent = node;
-        ret = ctf_visitor_parent_links(depth + 1, node->u.field_class_alias.alias, log_cfg);
+        ret = ctf_visitor_parent_links(depth + 1, node->u.field_class_alias.alias, logCfg);
         if (ret)
             return ret;
         break;
@@ -336,21 +335,21 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_TYPE_SPECIFIER_LIST:
         bt_list_for_each_entry (iter, &node->u.field_class_specifier_list.head, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
         break;
 
     case NODE_TYPE_SPECIFIER:
-        ret = ctf_visitor_type_specifier(depth, node, log_cfg);
+        ret = ctf_visitor_type_specifier(depth, node, logCfg);
         if (ret)
             return ret;
         break;
     case NODE_POINTER:
         break;
     case NODE_TYPE_DECLARATOR:
-        ret = ctf_visitor_field_class_declarator(depth, node, log_cfg);
+        ret = ctf_visitor_field_class_declarator(depth, node, logCfg);
         if (ret)
             return ret;
         break;
@@ -358,7 +357,7 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_FLOATING_POINT:
         bt_list_for_each_entry (iter, &node->u.floating_point.expressions, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -366,7 +365,7 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_INTEGER:
         bt_list_for_each_entry (iter, &node->u.integer.expressions, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -374,7 +373,7 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_STRING:
         bt_list_for_each_entry (iter, &node->u.string.expressions, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -382,7 +381,7 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_ENUMERATOR:
         bt_list_for_each_entry (iter, &node->u.enumerator.values, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -390,14 +389,14 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_ENUM:
         depth++;
         if (node->u._enum.container_field_class) {
-            ret = ctf_visitor_parent_links(depth + 1, node->u._enum.container_field_class, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, node->u._enum.container_field_class, logCfg);
             if (ret)
                 return ret;
         }
 
         bt_list_for_each_entry (iter, &node->u._enum.enumerator_list, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -406,13 +405,13 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_STRUCT_OR_VARIANT_DECLARATION:
         node->u.struct_or_variant_declaration.field_class_specifier_list->parent = node;
         ret = ctf_visitor_parent_links(
-            depth + 1, node->u.struct_or_variant_declaration.field_class_specifier_list, log_cfg);
+            depth + 1, node->u.struct_or_variant_declaration.field_class_specifier_list, logCfg);
         if (ret)
             return ret;
         bt_list_for_each_entry (
             iter, &node->u.struct_or_variant_declaration.field_class_declarators, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -420,7 +419,7 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_VARIANT:
         bt_list_for_each_entry (iter, &node->u.variant.declaration_list, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -428,13 +427,13 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
     case NODE_STRUCT:
         bt_list_for_each_entry (iter, &node->u._struct.declaration_list, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
         bt_list_for_each_entry (iter, &node->u._struct.min_align, siblings) {
             iter->parent = node;
-            ret = ctf_visitor_parent_links(depth + 1, iter, log_cfg);
+            ret = ctf_visitor_parent_links(depth + 1, iter, logCfg);
             if (ret)
                 return ret;
         }
@@ -442,7 +441,7 @@ int ctf_visitor_parent_links(int depth, struct ctf_node *node, struct meta_log_c
 
     case NODE_UNKNOWN:
     default:
-        _BT_COMP_LOGE_APPEND_CAUSE_LINENO(node->lineno, "Unknown node type: type=%d\n", node->type);
+        _BT_CLOGE_APPEND_CAUSE_LINENO(node->lineno, "Unknown node type: type=%d\n", node->type);
         return -EINVAL;
     }
     return ret;

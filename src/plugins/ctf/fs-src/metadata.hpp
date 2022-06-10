@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <glib.h>
 #include "common/macros.h"
+#include "cpp-common/log-cfg.hpp"
 #include <babeltrace2/babeltrace.h>
 
 #define CTF_FS_METADATA_FILENAME "metadata"
@@ -32,8 +33,9 @@ BT_HIDDEN
 void ctf_fs_metadata_fini(struct ctf_fs_metadata *metadata);
 
 BT_HIDDEN
-int ctf_fs_metadata_set_trace_class(bt_self_component *self_comp, struct ctf_fs_trace *ctf_fs_trace,
-                                    struct ctf_fs_metadata_config *config);
+int ctf_fs_metadata_set_trace_class(struct ctf_fs_trace *ctf_fs_trace,
+                                    struct ctf_fs_metadata_config *config,
+                                    bt_self_component *selfComp, const bt2_common::LogCfg& logCfg);
 
 BT_HIDDEN
 FILE *ctf_fs_metadata_open_file(const char *trace_path);

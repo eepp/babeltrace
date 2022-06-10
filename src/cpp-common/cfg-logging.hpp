@@ -144,19 +144,19 @@
 #define BT_CLOGT_MEM_EX(_log_cfg, _data, _data_sz, _fmt, ...)                                      \
     BT_CLOG_MEM_EX(BT_LOG_TRACE, (_log_cfg), (_data), (_data_sz), ##__VA_ARGS__)
 
-#define BT_CLOG_MEM(_data, _data_sz, _fmt, ...)                                                    \
-    BT_CLOG_MEM_EX(BT_LOG_TRACE, (BT_CLOG_CFG), (_data), (_data_sz), ##__VA_ARGS__)
+#define BT_CLOG_MEM(_lvl, _data, _data_sz, _fmt, ...)                                              \
+    BT_CLOG_MEM_EX(_lvl, (BT_CLOG_CFG), (_data), (_data_sz), _fmt, ##__VA_ARGS__)
 #define BT_CLOGF_MEM(_data, _data_sz, _fmt, ...)                                                   \
-    BT_CLOG_MEM(BT_LOG_FATAL, (_data), (_data_sz), ##__VA_ARGS__)
+    BT_CLOG_MEM(BT_LOG_FATAL, (_data), (_data_sz), _fmt, ##__VA_ARGS__)
 #define BT_CLOGE_MEM(_data, _data_sz, _fmt, ...)                                                   \
-    BT_CLOG_MEM(BT_LOG_ERROR, (_data), (_data_sz), ##__VA_ARGS__)
+    BT_CLOG_MEM(BT_LOG_ERROR, (_data), (_data_sz), _fmt, ##__VA_ARGS__)
 #define BT_CLOGW_MEM(_data, _data_sz, _fmt, ...)                                                   \
-    BT_CLOG_MEM(BT_LOG_WARNING, (_data), (_data_sz), ##__VA_ARGS__)
+    BT_CLOG_MEM(BT_LOG_WARNING, (_data), (_data_sz), _fmt, ##__VA_ARGS__)
 #define BT_CLOGI_MEM(_data, _data_sz, _fmt, ...)                                                   \
-    BT_CLOG_MEM(BT_LOG_INFO, (_data), (_data_sz), ##__VA_ARGS__)
+    BT_CLOG_MEM(BT_LOG_INFO, (_data), (_data_sz), _fmt, ##__VA_ARGS__)
 #define BT_CLOGD_MEM(_data, _data_sz, _fmt, ...)                                                   \
-    BT_CLOG_MEM(BT_LOG_DEBUG, (_data), (_data_sz), ##__VA_ARGS__)
+    BT_CLOG_MEM(BT_LOG_DEBUG, (_data), (_data_sz), _fmt, ##__VA_ARGS__)
 #define BT_CLOGT_MEM(_data, _data_sz, _fmt, ...)                                                   \
-    BT_CLOG_MEM(BT_LOG_TRACE, (_data), (_data_sz), ##__VA_ARGS__)
+    BT_CLOG_MEM(BT_LOG_TRACE, (_data), (_data_sz), _fmt, ##__VA_ARGS__)
 
 #endif /* BABELTRACE_CPP_COMMON_CFG_LOGGING_HPP */

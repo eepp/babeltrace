@@ -11,12 +11,13 @@
 #include <glib.h>
 #include "common/macros.h"
 #include "fs.hpp"
+#include "cpp-common/log-cfg.hpp"
 
 BT_HIDDEN
 void ctf_fs_file_destroy(struct ctf_fs_file *file);
 
 BT_HIDDEN
-struct ctf_fs_file *ctf_fs_file_create(bt_logging_level log_level, bt_self_component *self_comp);
+struct ctf_fs_file *ctf_fs_file_create(const bt2_common::LogCfg& logCfg);
 
 BT_HIDDEN
 int ctf_fs_file_open(struct ctf_fs_file *file, const char *mode);

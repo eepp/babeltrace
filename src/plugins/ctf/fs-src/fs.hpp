@@ -22,10 +22,11 @@ extern bool ctf_fs_debug;
 
 struct ctf_fs_file
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
+    explicit ctf_fs_file(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
+    {
+    }
 
-    /* Weak */
-    bt_self_component *self_comp = nullptr;
+    const bt2_common::LogCfg logCfg;
 
     /* Owned by this */
     GString *path = nullptr;
@@ -55,7 +56,11 @@ struct ctf_fs_metadata
 
 struct ctf_fs_component
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
+    explicit ctf_fs_component(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
+    {
+    }
+
+    const bt2_common::LogCfg logCfg;
 
     /* Array of struct ctf_fs_port_data *, owned by this */
     GPtrArray *port_data = nullptr;
@@ -68,15 +73,11 @@ struct ctf_fs_component
 
 struct ctf_fs_trace
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
+    explicit ctf_fs_trace(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
+    {
+    }
 
-    /*
-     * Weak. These are mostly used to generate log messages or to append
-     * error causes. They are mutually exclusive, only one of them must be
-     * set.
-     */
-    bt_self_component *self_comp = nullptr;
-    bt_self_component_class *self_comp_class = nullptr;
+    const bt2_common::LogCfg logCfg;
 
     /* Owned by this */
     struct ctf_fs_metadata *metadata = nullptr;
@@ -171,10 +172,12 @@ struct ctf_fs_port_data
 
 struct ctf_fs_msg_iter_data
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
+    explicit ctf_fs_msg_iter_data(const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam}
+    {
+    }
 
-    /* Weak */
-    bt_self_component *self_comp = nullptr;
+    const bt2_common::LogCfg logCfg;
 
     /* Weak */
     bt_self_message_iterator *self_msg_iter = nullptr;
@@ -232,8 +235,7 @@ ctf_fs_iterator_seek_beginning(bt_self_message_iterator *message_iterator);
 /* Create and initialize a new, empty ctf_fs_component. */
 
 BT_HIDDEN
-struct ctf_fs_component *ctf_fs_component_create(bt_logging_level log_level,
-                                                 bt_self_component *self_comp);
+struct ctf_fs_component *ctf_fs_component_create(const bt2_common::LogCfg& logCfg);
 
 /*
  * Create one `struct ctf_fs_trace` from one trace, or multiple traces sharing
@@ -251,13 +253,11 @@ BT_HIDDEN
 int ctf_fs_component_create_ctf_fs_trace(struct ctf_fs_component *ctf_fs,
                                          const bt_value *paths_value,
                                          const bt_value *trace_name_value,
-                                         bt_self_component *self_comp,
-                                         bt_self_component_class *self_comp_class);
+                                         bt_self_component *selfComp);
 
 /* Free `ctf_fs` and everything it owns. */
 
-BT_HIDDEN
-void ctf_fs_destroy(struct ctf_fs_component *ctf_fs);
+BT_HIDDEN void ctf_fs_destroy(struct ctf_fs_component *ctf_fs);
 
 /*
  * Read and validate parameters taken by the src.ctf.fs plugin.
@@ -276,8 +276,7 @@ void ctf_fs_destroy(struct ctf_fs_component *ctf_fs);
 
 BT_HIDDEN
 bool read_src_fs_parameters(const bt_value *params, const bt_value **paths,
-                            const bt_value **trace_name, struct ctf_fs_component *ctf_fs,
-                            bt_self_component *self_comp, bt_self_component_class *self_comp_class);
+                            const bt_value **trace_name, struct ctf_fs_component *ctf_fs);
 
 /*
  * Generate the port name to be used for a given data stream file group.

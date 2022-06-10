@@ -17,6 +17,7 @@
 #include "common/macros.h"
 
 #include "../metadata/tsdl/ctf-meta.hpp"
+#include "cpp-common/log-cfg.hpp"
 
 /**
  * @file bfcr.h
@@ -258,8 +259,8 @@ struct bt_bfcr_cbs
  * @returns		New binary class reader on success, or \c NULL on error
  */
 BT_HIDDEN
-struct bt_bfcr *bt_bfcr_create(struct bt_bfcr_cbs cbs, void *data, bt_logging_level log_level,
-                               bt_self_component *self_comp);
+struct bt_bfcr *bt_bfcr_create(struct bt_bfcr_cbs cbs, void *data,
+                               const bt2_common::LogCfg& logCfg);
 
 /**
  * Destroys a CTF binary class reader, freeing all internal resources.
