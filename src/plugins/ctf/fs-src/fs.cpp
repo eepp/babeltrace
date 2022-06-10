@@ -706,7 +706,7 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
         }
 
         /* Create the file. */
-        file = ctf_fs_file_create(logCfg);
+        file = ctf_fs_file_create(logCfg).release();
         if (!file) {
             BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE(
                 logCfg.selfComp(), logCfg.selfCompCls(),

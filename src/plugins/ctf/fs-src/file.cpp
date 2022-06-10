@@ -39,10 +39,16 @@ void ctf_fs_file_destroy(struct ctf_fs_file *file)
     delete file;
 }
 
-BT_HIDDEN
-struct ctf_fs_file *ctf_fs_file_create(const bt2_common::LogCfg& logCfg)
+void ctf_fs_file_deleter::operator()(struct ctf_fs_file *file)
 {
-    ctf_fs_file *file = new ctf_fs_file {logCfg};
+    ctf_fs_file_destroy(file);
+}
+
+BT_HIDDEN
+ctf_fs_file::UP ctf_fs_file_create(const bt2_common::LogCfg& logCfg)
+{
+    ctf_fs_file::UP file {new ctf_fs_file {logCfg}};
+
     file->path = g_string_new(NULL);
     if (!file->path) {
         goto error;
@@ -51,8 +57,7 @@ struct ctf_fs_file *ctf_fs_file_create(const bt2_common::LogCfg& logCfg)
     goto end;
 
 error:
-    ctf_fs_file_destroy(file);
-    file = NULL;
+    file.reset();
 
 end:
     return file;
