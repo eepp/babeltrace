@@ -938,12 +938,7 @@ static int merge_matching_ctf_fs_ds_file_groups(struct ctf_fs_trace *dest_trace,
                                                            src_group->sc->id);
             BT_ASSERT(sc);
 
-            ctf_fs_ds_index::UP index = ctf_fs_ds_index_create(dest_trace->logCfg);
-            if (!index) {
-                ret = -1;
-                goto end;
-            }
-
+            ctf_fs_ds_index::UP index = bt2_common::makeUnique<ctf_fs_ds_index>();
             ctf_fs_ds_file_group::UP new_dest_group =
                 ctf_fs_ds_file_group_create(dest_trace, sc, src_group->stream_id, std::move(index));
             /* Ownership of index is transferred. */
