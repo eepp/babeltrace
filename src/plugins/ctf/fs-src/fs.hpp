@@ -11,6 +11,7 @@
 #define BABELTRACE_PLUGIN_CTF_FS_H
 
 #include <stdbool.h>
+#include <memory>
 #include "common/macros.h"
 #include <babeltrace2/babeltrace.h>
 #include "data-stream-file.hpp"
@@ -53,8 +54,15 @@ struct ctf_fs_metadata
     int bo = 0;
 };
 
+struct ctf_fs_component_deleter
+{
+    void operator()(ctf_fs_component *);
+};
+
 struct ctf_fs_component
 {
+    using UP = std::unique_ptr<ctf_fs_component, ctf_fs_component_deleter>;
+
     explicit ctf_fs_component(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
     {
     }
@@ -226,7 +234,7 @@ ctf_fs_iterator_seek_beginning(bt_self_message_iterator *message_iterator);
 
 /* Create and initialize a new, empty ctf_fs_component. */
 
-struct ctf_fs_component *ctf_fs_component_create(const bt2_common::LogCfg& logCfg);
+ctf_fs_component::UP ctf_fs_component_create(const bt2_common::LogCfg& logCfg);
 
 /*
  * Create one `struct ctf_fs_trace` from one trace, or multiple traces sharing
