@@ -28,7 +28,8 @@
 #include "../common/src/msg-iter/msg-iter.hpp"
 #include "query.hpp"
 #include "plugins/common/param-validation/param-validation.h"
-#include "cpp-common/comp-exc.hpp"
+#include "cpp-common/exc.hpp"
+#include "cpp-common/make-unique.hpp"
 
 struct tracer_info
 {
@@ -332,6 +333,11 @@ void ctf_fs_destroy(struct ctf_fs_component *ctf_fs)
     delete ctf_fs;
 }
 
+void ctf_fs_component_deleter::operator()(ctf_fs_component *comp)
+{
+    ctf_fs_destroy(comp);
+}
+
 static void port_data_destroy(struct ctf_fs_port_data *port_data)
 {
     if (!port_data) {
@@ -352,9 +358,9 @@ static void ctf_fs_trace_destroy_notifier(void *data)
     ctf_fs_trace_destroy(trace);
 }
 
-struct ctf_fs_component *ctf_fs_component_create(const bt2_common::LogCfg& logCfg)
+ctf_fs_component::UP ctf_fs_component_create(const bt2_common::LogCfg& logCfg)
 {
-    ctf_fs_component *ctf_fs = new ctf_fs_component {logCfg};
+    ctf_fs_component::UP ctf_fs {new ctf_fs_component {logCfg}};
     ctf_fs->port_data = g_ptr_array_new_with_free_func(port_data_destroy_notifier);
     if (!ctf_fs->port_data) {
         goto error;
@@ -363,8 +369,7 @@ struct ctf_fs_component *ctf_fs_component_create(const bt2_common::LogCfg& logCf
     goto end;
 
 error:
-    ctf_fs_destroy(ctf_fs);
-    ctf_fs = NULL;
+    ctf_fs.reset();
 
 end:
     return ctf_fs;
@@ -2226,46 +2231,36 @@ end:
     return ret;
 }
 
-static struct ctf_fs_component *ctf_fs_create(const bt_value *params,
-                                              bt_self_component_source *self_comp_src,
-                                              const bt2_common::LogCfg& logCfg)
+static ctf_fs_component::UP ctf_fs_create(const bt_value *params,
+                                          bt_self_component_source *self_comp_src,
+                                          const bt2_common::LogCfg& logCfg)
 {
-    struct ctf_fs_component *ctf_fs = NULL;
     const bt_value *inputs_value;
     const bt_value *trace_name_value;
     bt_self_component *self_comp = bt_self_component_source_as_self_component(self_comp_src);
 
-    ctf_fs = ctf_fs_component_create(logCfg);
+    ctf_fs_component::UP ctf_fs = ctf_fs_component_create(logCfg);
     if (!ctf_fs) {
-        goto error;
+        return nullptr;
     }
 
-    if (!read_src_fs_parameters(params, &inputs_value, &trace_name_value, ctf_fs)) {
-        goto error;
+    if (!read_src_fs_parameters(params, &inputs_value, &trace_name_value, ctf_fs.get())) {
+        return nullptr;
     }
 
-    bt_self_component_set_data(self_comp, ctf_fs);
-
-    if (ctf_fs_component_create_ctf_fs_trace(ctf_fs, inputs_value, trace_name_value, self_comp)) {
-        goto error;
+    if (ctf_fs_component_create_ctf_fs_trace(ctf_fs.get(), inputs_value, trace_name_value,
+                                             self_comp)) {
+        return nullptr;
     }
 
     if (create_streams_for_trace(ctf_fs->trace)) {
-        goto error;
+        return nullptr;
     }
 
-    if (create_ports_for_trace(ctf_fs, ctf_fs->trace, self_comp_src)) {
-        goto error;
+    if (create_ports_for_trace(ctf_fs.get(), ctf_fs->trace, self_comp_src)) {
+        return nullptr;
     }
 
-    goto end;
-
-error:
-    ctf_fs_destroy(ctf_fs);
-    ctf_fs = NULL;
-    bt_self_component_set_data(self_comp, NULL);
-
-end:
     return ctf_fs;
 }
 
@@ -2280,10 +2275,12 @@ ctf_fs_init(bt_self_component_source *self_comp_src, bt_self_component_source_co
     bt2_common::LogCfg logCfg(logLevel, selfComp);
 
     try {
-        ctf_fs_component *ctf_fs = ctf_fs_create(params, self_comp_src, logCfg);
+        ctf_fs_component::UP ctf_fs = ctf_fs_create(params, self_comp_src, logCfg);
         if (!ctf_fs) {
             return BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
         }
+
+        bt_self_component_set_data(selfComp, ctf_fs.release());
 
         return BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_OK;
     } catch (const std::bad_alloc&) {
