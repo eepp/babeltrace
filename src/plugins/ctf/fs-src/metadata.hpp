@@ -21,12 +21,6 @@ struct ctf_fs_trace;
 struct ctf_fs_metadata;
 
 BT_HIDDEN
-int ctf_fs_metadata_init(struct ctf_fs_metadata *metadata);
-
-BT_HIDDEN
-void ctf_fs_metadata_fini(struct ctf_fs_metadata *metadata);
-
-BT_HIDDEN
 int ctf_fs_metadata_set_trace_class(struct ctf_fs_trace *ctf_fs_trace,
                                     ctf::src::ClkClsCfg clkClsCfg, bt_self_component *selfComp,
                                     const bt2_common::LogCfg& logCfg);

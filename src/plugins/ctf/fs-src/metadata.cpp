@@ -108,16 +108,3 @@ int ctf_fs_metadata_set_trace_class(struct ctf_fs_trace *ctf_fs_trace,
 end:
     return ret;
 }
-
-BT_HIDDEN
-int ctf_fs_metadata_init(struct ctf_fs_metadata *metadata)
-{
-    /* Nothing to initialize for the moment. */
-    return 0;
-}
-
-BT_HIDDEN
-void ctf_fs_metadata_fini(struct ctf_fs_metadata *metadata)
-{
-    metadata->decoder.reset();
-}
