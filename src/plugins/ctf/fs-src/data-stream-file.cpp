@@ -613,7 +613,7 @@ static struct ctf_fs_ds_index *build_index_from_idx_file(struct ctf_fs_ds_file *
         }
 
         /* Set path to stream file. */
-        index_entry->path = file_info->path->str;
+        index_entry->path = file_info->path.c_str();
 
         index_entry->timestamp_begin = be64toh(file_index->timestamp_begin);
         index_entry->timestamp_end = be64toh(file_index->timestamp_end);
@@ -789,7 +789,7 @@ static struct ctf_fs_ds_index *build_index_from_stream_file(struct ctf_fs_ds_fil
         }
 
         /* Set path to stream file. */
-        index_entry->path = file_info->path->str;
+        index_entry->path = file_info->path.c_str();
 
         ret = init_index_entry(index_entry, ds_file, &props);
         if (ret) {
@@ -929,26 +929,16 @@ BT_HIDDEN void ctf_fs_ds_file_info_destroy(struct ctf_fs_ds_file_info *ds_file_i
         return;
     }
 
-    if (ds_file_info->path) {
-        g_string_free(ds_file_info->path, TRUE);
-    }
-
     delete ds_file_info;
 }
 
 BT_HIDDEN struct ctf_fs_ds_file_info *ctf_fs_ds_file_info_create(const char *path, int64_t begin_ns)
 {
     ctf_fs_ds_file_info *ds_file_info = new ctf_fs_ds_file_info;
-    ds_file_info->path = g_string_new(path);
-    if (!ds_file_info->path) {
-        ctf_fs_ds_file_info_destroy(ds_file_info);
-        ds_file_info = NULL;
-        goto end;
-    }
 
+    ds_file_info->path = path;
     ds_file_info->begin_ns = begin_ns;
 
-end:
     return ds_file_info;
 }
 
