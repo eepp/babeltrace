@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <glib.h>
 #include <memory>
+#include <string>
 #include "common/macros.h"
 #include <babeltrace2/babeltrace.h>
 
@@ -26,8 +27,7 @@ struct ctf_fs_ds_group_medops_data;
 
 struct ctf_fs_ds_file_info
 {
-    /* Owned by this. */
-    GString *path = nullptr;
+    std::string path;
 
     /* Guaranteed to be set, as opposed to the index. */
     int64_t begin_ns = 0;
