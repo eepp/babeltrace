@@ -17,12 +17,6 @@
 #include "file.hpp"
 
 BT_HIDDEN
-ctf_fs_file::UP ctf_fs_file_create(const bt2_common::LogCfg& logCfg)
-{
-    return ctf_fs_file::UP {new ctf_fs_file {logCfg}};
-}
-
-BT_HIDDEN
 int ctf_fs_file_open(struct ctf_fs_file *file, const char *mode)
 {
     int ret = 0;

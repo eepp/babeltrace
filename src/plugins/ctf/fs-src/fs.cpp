@@ -635,14 +635,7 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
         }
 
         /* Create the file. */
-        ctf_fs_file::UP file = ctf_fs_file_create(logCfg);
-        if (!file) {
-            BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE(
-                logCfg.selfComp(), logCfg.selfCompCls(),
-                "Cannot create stream file object for file `%s" G_DIR_SEPARATOR_S "%s`",
-                ctf_fs_trace->path.c_str(), basename);
-            goto error;
-        }
+        ctf_fs_file::UP file = bt2_common::makeUnique<ctf_fs_file>(logCfg);
 
         /* Create full path string. */
         file->path = ctf_fs_trace->path;
