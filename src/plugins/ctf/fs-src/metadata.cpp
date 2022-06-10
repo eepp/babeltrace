@@ -78,7 +78,7 @@ int ctf_fs_metadata_set_trace_class(struct ctf_fs_trace *ctf_fs_trace,
     decoder_config.create_trace_class = true;
     decoder_config.self_comp = selfComp;
 
-    ctf_fs_file::UP file = get_file(ctf_fs_trace->path->str, logCfg);
+    ctf_fs_file::UP file = get_file(ctf_fs_trace->path.c_str(), logCfg);
     if (!file) {
         BT_COMP_LOGE("Cannot create metadata file object.");
         ret = -1;
