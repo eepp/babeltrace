@@ -4,9 +4,9 @@
  * Copyright 2016-2017 Philippe Proulx <pproulx@efficios.com>
  */
 
-#define BT_COMP_LOG_SELF_COMP       (mdec->config.self_comp)
-#define BT_COMP_LOG_SELF_COMP_CLASS (mdec->config.self_comp_class)
-#define BT_LOG_OUTPUT_LEVEL         (mdec->config.log_level)
+#define BT_COMP_LOG_SELF_COMP       (mdec->config.logCfg.selfComp())
+#define BT_COMP_LOG_SELF_COMP_CLASS (mdec->config.logCfg.selfCompCls())
+#define BT_LOG_OUTPUT_LEVEL         (mdec->config.logCfg.logLevel())
 #define BT_LOG_TAG                  "PLUGIN/CTF/META/DECODER"
 #include "logging/comp-logging.h"
 
@@ -33,6 +33,10 @@
 
 struct ctf_metadata_decoder
 {
+    explicit ctf_metadata_decoder(const bt2_common::LogCfg& logCfg) noexcept : config {logCfg}
+    {
+    }
+
     struct ctf_scanner *scanner = nullptr;
     GString *text = nullptr;
     struct ctf_visitor_generate_ir *visitor = nullptr;
@@ -40,7 +44,6 @@ struct ctf_metadata_decoder
     bool is_uuid_set = false;
     int bo = 0;
     struct ctf_metadata_decoder_config config;
-    struct meta_log_config log_cfg;
     bool has_checked_plaintext_signature = false;
 };
 
@@ -60,7 +63,7 @@ struct packet_header
 
 BT_HIDDEN
 int ctf_metadata_decoder_is_packetized(FILE *fp, bool *is_packetized, int *byte_order,
-                                       bt_logging_level log_level, bt_self_component *self_comp)
+                                       const bt2_common::LogCfg& logCfg)
 {
     uint32_t magic;
     size_t len;
@@ -70,7 +73,7 @@ int ctf_metadata_decoder_is_packetized(FILE *fp, bool *is_packetized, int *byte_
     len = fread(&magic, sizeof(magic), 1, fp);
     if (len != 1) {
         BT_COMP_LOG_CUR_LVL(
-            BT_LOG_INFO, log_level, self_comp,
+            BT_LOG_INFO, logCfg.logLevel(), logCfg.selfComp(),
             "Cannot read first metadata packet header: assuming the stream is not packetized.");
         ret = -1;
         goto end;
@@ -97,16 +100,13 @@ struct ctf_metadata_decoder *
 ctf_metadata_decoder_create(const struct ctf_metadata_decoder_config *config)
 {
     BT_ASSERT(config);
-    BT_COMP_LOG_CUR_LVL(BT_LOG_DEBUG, config->log_level, config->self_comp,
+    BT_COMP_LOG_CUR_LVL(BT_LOG_DEBUG, config->logCfg.logLevel(), config->logCfg.selfComp(),
                         "Creating CTF metadata decoder: "
                         "clock-class-offset-s=%" PRId64 ", "
                         "clock-class-offset-ns=%" PRId64,
                         config->clock_class_offset_s, config->clock_class_offset_ns);
 
-    ctf_metadata_decoder *mdec = new ctf_metadata_decoder;
-    mdec->log_cfg.log_level = config->log_level;
-    mdec->log_cfg.self_comp = config->self_comp;
-    mdec->log_cfg.self_comp_class = config->self_comp_class;
+    ctf_metadata_decoder *mdec = new ctf_metadata_decoder {config->logCfg};
     mdec->scanner = ctf_scanner_alloc();
     if (!mdec->scanner) {
         _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Cannot allocate a metadata lexical scanner: "
@@ -179,8 +179,7 @@ ctf_metadata_decoder_append_content(struct ctf_metadata_decoder *mdec, FILE *fp)
     bool is_packetized;
 
     BT_ASSERT(mdec);
-    ret = ctf_metadata_decoder_is_packetized(fp, &is_packetized, &mdec->bo, mdec->config.log_level,
-                                             mdec->config.self_comp);
+    ret = ctf_metadata_decoder_is_packetized(fp, &is_packetized, &mdec->bo, mdec->config.logCfg);
     if (ret) {
         status = CTF_METADATA_DECODER_STATUS_ERROR;
         goto end;
@@ -189,8 +188,7 @@ ctf_metadata_decoder_append_content(struct ctf_metadata_decoder *mdec, FILE *fp)
     if (is_packetized) {
         BT_COMP_LOGI("Metadata stream is packetized: mdec-addr=%p", mdec);
         ret = ctf_metadata_decoder_packetized_file_stream_to_buf(
-            fp, &buf, mdec->bo, &mdec->is_uuid_set, mdec->uuid, mdec->config.log_level,
-            mdec->config.self_comp, mdec->config.self_comp_class);
+            fp, &buf, mdec->bo, &mdec->is_uuid_set, mdec->uuid, mdec->config.logCfg);
         if (ret) {
             _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE(
                 "Cannot decode packetized metadata packets to metadata text: "
@@ -306,7 +304,7 @@ ctf_metadata_decoder_append_content(struct ctf_metadata_decoder *mdec, FILE *fp)
         }
     }
 
-    ret = ctf_visitor_semantic_check(0, &mdec->scanner->ast->root, &mdec->log_cfg);
+    ret = ctf_visitor_semantic_check(0, &mdec->scanner->ast->root, mdec->config.logCfg);
     if (ret) {
         _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Validation of the metadata semantics failed: "
                                                  "mdec-addr=%p",
@@ -427,7 +425,7 @@ static enum ctf_metadata_decoder_status find_uuid_in_trace_decl(struct ctf_metad
 
             if (strcmp(left, "uuid") == 0) {
                 ret = ctf_ast_get_unary_uuid(&entry_node->u.ctf_expression.right, uuid,
-                                             mdec->config.log_level, mdec->config.self_comp);
+                                             mdec->config.logCfg);
                 if (ret) {
                     _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Invalid trace's `uuid` attribute.");
                     status = CTF_METADATA_DECODER_STATUS_ERROR;

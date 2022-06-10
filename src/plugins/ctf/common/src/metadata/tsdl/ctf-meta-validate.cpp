@@ -4,9 +4,9 @@
  * Copyright 2018 Philippe Proulx <pproulx@efficios.com>
  */
 
-#define BT_COMP_LOG_SELF_COMP       (log_cfg->self_comp)
-#define BT_COMP_LOG_SELF_COMP_CLASS (log_cfg->self_comp_class)
-#define BT_LOG_OUTPUT_LEVEL         (log_cfg->log_level)
+#define BT_COMP_LOG_SELF_COMP       (logCfg.selfComp())
+#define BT_COMP_LOG_SELF_COMP_CLASS (logCfg.selfCompCls())
+#define BT_LOG_OUTPUT_LEVEL         (logCfg.logLevel())
 #define BT_LOG_TAG                  "PLUGIN/CTF/META/VALIDATE"
 #include "logging/comp-logging.h"
 
@@ -21,7 +21,7 @@
 #include "ctf-meta-visitors.hpp"
 #include "logging.hpp"
 
-static int validate_stream_class(struct ctf_stream_class *sc, struct meta_log_config *log_cfg)
+static int validate_stream_class(struct ctf_stream_class *sc, const bt2_common::LogCfg& logCfg)
 {
     int ret = 0;
     struct ctf_field_class_int *int_fc;
@@ -180,7 +180,7 @@ end:
 }
 
 BT_HIDDEN
-int ctf_trace_class_validate(struct ctf_trace_class *ctf_tc, struct meta_log_config *log_cfg)
+int ctf_trace_class_validate(struct ctf_trace_class *ctf_tc, const bt2_common::LogCfg& logCfg)
 {
     int ret = 0;
     struct ctf_field_class_int *int_fc;
@@ -323,7 +323,7 @@ int ctf_trace_class_validate(struct ctf_trace_class *ctf_tc, struct meta_log_con
     for (i = 0; i < ctf_tc->stream_classes->len; i++) {
         struct ctf_stream_class *sc = (ctf_stream_class *) ctf_tc->stream_classes->pdata[i];
 
-        ret = validate_stream_class(sc, log_cfg);
+        ret = validate_stream_class(sc, logCfg);
         if (ret) {
             _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Invalid stream class: sc-id=%" PRIu64,
                                                      sc->id);

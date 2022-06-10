@@ -4,9 +4,9 @@
  * Copyright 2016-2017 Philippe Proulx <pproulx@efficios.com>
  */
 
-#define BT_COMP_LOG_SELF_COMP       self_comp
-#define BT_COMP_LOG_SELF_COMP_CLASS self_comp_class
-#define BT_LOG_OUTPUT_LEVEL         log_level
+#define BT_COMP_LOG_SELF_COMP       logCfg.selfComp()
+#define BT_COMP_LOG_SELF_COMP_CLASS logCfg.selfCompCls()
+#define BT_LOG_OUTPUT_LEVEL         logCfg.logLevel()
 #define BT_LOG_TAG                  "PLUGIN/CTF/META/DECODER-DECODE-PACKET"
 #include "logging/comp-logging.h"
 
@@ -46,8 +46,7 @@ struct packet_header
 } __attribute__((__packed__));
 
 static int decode_packet(FILE *in_fp, FILE *out_fp, int byte_order, bool *is_uuid_set,
-                         uint8_t *uuid, bt_logging_level log_level, bt_self_component *self_comp,
-                         bt_self_component_class *self_comp_class)
+                         uint8_t *uuid, const bt2_common::LogCfg& logCfg)
 {
     struct packet_header header;
     size_t readlen, writelen, toread;
@@ -189,9 +188,7 @@ end:
 BT_HIDDEN
 int ctf_metadata_decoder_packetized_file_stream_to_buf(FILE *fp, char **buf, int byte_order,
                                                        bool *is_uuid_set, uint8_t *uuid,
-                                                       bt_logging_level log_level,
-                                                       bt_self_component *self_comp,
-                                                       bt_self_component_class *self_comp_class)
+                                                       const bt2_common::LogCfg& logCfg)
 {
     FILE *out_fp;
     size_t size;
@@ -210,8 +207,7 @@ int ctf_metadata_decoder_packetized_file_stream_to_buf(FILE *fp, char **buf, int
             break;
         }
 
-        tret = decode_packet(fp, out_fp, byte_order, is_uuid_set, uuid, log_level, self_comp,
-                             self_comp_class);
+        tret = decode_packet(fp, out_fp, byte_order, is_uuid_set, uuid, logCfg);
         if (tret) {
             _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Cannot decode packet: index=%zu",
                                                      packet_index);

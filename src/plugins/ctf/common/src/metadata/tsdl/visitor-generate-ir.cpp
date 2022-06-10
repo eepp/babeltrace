@@ -7,9 +7,9 @@
  * Common Trace Format metadata visitor (generates CTF IR objects).
  */
 
-#define BT_COMP_LOG_SELF_COMP       (ctx->log_cfg.self_comp)
-#define BT_COMP_LOG_SELF_COMP_CLASS (ctx->log_cfg.self_comp_class)
-#define BT_LOG_OUTPUT_LEVEL         (ctx->log_cfg.log_level)
+#define BT_COMP_LOG_SELF_COMP       (ctx->decoder_config.logCfg.selfComp())
+#define BT_COMP_LOG_SELF_COMP_CLASS (ctx->decoder_config.logCfg.selfCompCls())
+#define BT_LOG_OUTPUT_LEVEL         (ctx->decoder_config.logCfg.logLevel())
 #define BT_LOG_TAG                  "PLUGIN/CTF/META/IR-VISITOR"
 #include "logging/comp-logging.h"
 
@@ -184,7 +184,10 @@ struct ctx_decl_scope
  */
 struct ctf_visitor_generate_ir
 {
-    struct meta_log_config log_cfg;
+    explicit ctf_visitor_generate_ir(const ctf_metadata_decoder_config& decoderConfig) noexcept :
+        decoder_config {decoderConfig}
+    {
+    }
 
     /* Trace IR trace class being filled (owned by this) */
     bt_trace_class *trace_class = nullptr;
@@ -557,10 +560,7 @@ ctx_create(const struct ctf_metadata_decoder_config *decoder_config)
 {
     BT_ASSERT(decoder_config);
 
-    ctf_visitor_generate_ir *ctx = new ctf_visitor_generate_ir;
-    ctx->log_cfg.log_level = decoder_config->log_level;
-    ctx->log_cfg.self_comp = decoder_config->self_comp;
-    ctx->log_cfg.self_comp_class = decoder_config->self_comp_class;
+    ctf_visitor_generate_ir *ctx = new ctf_visitor_generate_ir {*decoder_config};
 
     if (decoder_config->self_comp) {
         ctx->trace_class = bt_trace_class_create(decoder_config->self_comp);
@@ -825,7 +825,7 @@ end:
 static int get_unary_uuid(struct ctf_visitor_generate_ir *ctx, struct bt_list_head *head,
                           bt_uuid_t uuid)
 {
-    return ctf_ast_get_unary_uuid(head, uuid, ctx->log_cfg.log_level, ctx->log_cfg.self_comp);
+    return ctf_ast_get_unary_uuid(head, uuid, ctx->decoder_config.logCfg);
 }
 
 static int get_boolean(struct ctf_visitor_generate_ir *ctx, struct ctf_node *unary_expr)
@@ -4500,8 +4500,8 @@ ctf_visitor_generate_ir_create(const struct ctf_metadata_decoder_config *decoder
     /* Create visitor's context */
     ctx = ctx_create(decoder_config);
     if (!ctx) {
-        BT_COMP_LOG_CUR_LVL(BT_LOG_ERROR, decoder_config->log_level, decoder_config->self_comp,
-                            "Cannot create visitor's context.");
+        BT_COMP_LOG_CUR_LVL(BT_LOG_ERROR, decoder_config->logCfg.logLevel(),
+                            decoder_config->logCfg.selfComp(), "Cannot create visitor's context.");
         goto error;
     }
 
@@ -4686,7 +4686,7 @@ int ctf_visitor_generate_ir_visit_node(struct ctf_visitor_generate_ir *ctx, stru
     }
 
     /* Update default clock classes */
-    ret = ctf_trace_class_update_default_clock_classes(ctx->ctf_tc, &ctx->log_cfg);
+    ret = ctf_trace_class_update_default_clock_classes(ctx->ctf_tc, ctx->decoder_config.logCfg);
     if (ret) {
         ret = -EINVAL;
         goto end;
@@ -4721,7 +4721,7 @@ int ctf_visitor_generate_ir_visit_node(struct ctf_visitor_generate_ir *ctx, stru
     }
 
     /* Resolve sequence lengths and variant tags */
-    ret = ctf_trace_class_resolve_field_classes(ctx->ctf_tc, &ctx->log_cfg);
+    ret = ctf_trace_class_resolve_field_classes(ctx->ctf_tc, ctx->decoder_config.logCfg);
     if (ret) {
         ret = -EINVAL;
         goto end;
@@ -4750,7 +4750,7 @@ int ctf_visitor_generate_ir_visit_node(struct ctf_visitor_generate_ir *ctx, stru
     }
 
     /* Validate what we have so far */
-    ret = ctf_trace_class_validate(ctx->ctf_tc, &ctx->log_cfg);
+    ret = ctf_trace_class_validate(ctx->ctf_tc, ctx->decoder_config.logCfg);
     if (ret) {
         ret = -EINVAL;
         goto end;
@@ -4761,11 +4761,12 @@ int ctf_visitor_generate_ir_visit_node(struct ctf_visitor_generate_ir *ctx, stru
      * itself in the packet header and in event header field
      * classes, warn about it because they are never translated.
      */
-    ctf_trace_class_warn_meaningless_header_fields(ctx->ctf_tc, &ctx->log_cfg);
+    ctf_trace_class_warn_meaningless_header_fields(ctx->ctf_tc, ctx->decoder_config.logCfg);
 
     if (ctx->trace_class) {
         /* Copy new CTF metadata -> new IR metadata */
-        ret = ctf_trace_class_translate(ctx->log_cfg.self_comp, ctx->trace_class, ctx->ctf_tc);
+        ret =
+            ctf_trace_class_translate(ctx->decoder_config.self_comp, ctx->trace_class, ctx->ctf_tc);
         if (ret) {
             ret = -EINVAL;
             goto end;

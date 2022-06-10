@@ -16,19 +16,6 @@
  */
 BT_LOG_LEVEL_EXTERN_SYMBOL(ctf_plugin_metadata_log_level);
 
-/*
- * To be used by functions without a context structure to pass all the
- * logging configuration at once.
- */
-struct meta_log_config
-{
-    bt_logging_level log_level;
-
-    /* Weak, exactly one of these must be set */
-    bt_self_component *self_comp;
-    bt_self_component_class *self_comp_class;
-};
-
 #define _BT_LOGT_LINENO(_lineno, _msg, args...)                                                    \
     BT_LOGT("At line %u in metadata stream: " _msg, _lineno, ##args)
 

@@ -17,6 +17,7 @@
 
 #include "common/macros.h"
 #include "compat/socket.h"
+#include "cpp-common/log-cfg.hpp"
 
 #define LTTNG_DEFAULT_NETWORK_VIEWER_PORT 5344
 
@@ -52,9 +53,12 @@ struct lttng_live_component;
 
 struct live_viewer_connection
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
-    bt_self_component *self_comp = nullptr;
-    bt_self_component_class *self_comp_class = nullptr;
+    explicit live_viewer_connection(const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam}
+    {
+    }
+
+    const bt2_common::LogCfg logCfg;
 
     GString *url = nullptr;
 
@@ -94,12 +98,9 @@ struct packet_index
     uint64_t packet_seq_num;     /* packet sequence number */
 };
 
-enum lttng_live_viewer_status
-live_viewer_connection_create(bt_self_component *self_comp,
-                              bt_self_component_class *self_comp_class, bt_logging_level log_level,
-                              const char *url, bool in_query,
-                              struct lttng_live_msg_iter *lttng_live_msg_iter,
-                              struct live_viewer_connection **viewer_connection);
+enum lttng_live_viewer_status live_viewer_connection_create(
+    const char *url, bool in_query, struct lttng_live_msg_iter *lttng_live_msg_iter,
+    const bt2_common::LogCfg& logCfg, struct live_viewer_connection **viewer);
 
 void live_viewer_connection_destroy(struct live_viewer_connection *conn);
 

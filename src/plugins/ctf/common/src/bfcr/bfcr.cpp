@@ -7,8 +7,8 @@
  * Babeltrace - CTF binary field class reader (BFCR)
  */
 
-#define BT_COMP_LOG_SELF_COMP (bfcr->self_comp)
-#define BT_LOG_OUTPUT_LEVEL   (bfcr->log_level)
+#define BT_COMP_LOG_SELF_COMP (bfcr->logCfg.selfComp())
+#define BT_LOG_OUTPUT_LEVEL   (bfcr->logCfg.logLevel())
 #define BT_LOG_TAG            "PLUGIN/CTF/BFCR"
 #include "logging/comp-logging.h"
 
@@ -28,6 +28,7 @@
 
 #include "bfcr.hpp"
 #include "../metadata/tsdl/ctf-meta.hpp"
+#include "cpp-common/log-cfg.hpp"
 
 #define DIV8(_x)                ((_x) >> 3)
 #define BYTES_TO_BITS(_x)       ((_x) *8)
@@ -83,10 +84,11 @@ enum bfcr_state
 /* Binary class reader */
 struct bt_bfcr
 {
-    bt_logging_level log_level;
+    explicit bt_bfcr(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
+    {
+    }
 
-    /* Weak */
-    bt_self_component *self_comp;
+    const bt2_common::LogCfg logCfg;
 
     /* BFCR stack */
     struct stack *stack;
@@ -1104,15 +1106,12 @@ static inline enum bt_bfcr_status handle_state(struct bt_bfcr *bfcr)
 }
 
 BT_HIDDEN
-struct bt_bfcr *bt_bfcr_create(struct bt_bfcr_cbs cbs, void *data, bt_logging_level log_level,
-                               bt_self_component *self_comp)
+struct bt_bfcr *bt_bfcr_create(struct bt_bfcr_cbs cbs, void *data, const bt2_common::LogCfg& logCfg)
 {
-    BT_COMP_LOG_CUR_LVL(BT_LOG_DEBUG, log_level, self_comp,
+    BT_COMP_LOG_CUR_LVL(BT_LOG_DEBUG, logCfg.logLevel(), logCfg.selfComp(),
                         "Creating binary field class reader (BFCR).");
 
-    bt_bfcr *bfcr = new bt_bfcr;
-    bfcr->log_level = log_level;
-    bfcr->self_comp = self_comp;
+    bt_bfcr *bfcr = new bt_bfcr {logCfg};
     bfcr->stack = stack_new(bfcr);
     if (!bfcr->stack) {
         BT_COMP_LOGE_STR("Cannot create BFCR's stack.");

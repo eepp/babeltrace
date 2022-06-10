@@ -8,8 +8,8 @@
  * Babeltrace CTF LTTng-live Client Component
  */
 
-#define BT_COMP_LOG_SELF_COMP self_comp
-#define BT_LOG_OUTPUT_LEVEL   log_level
+#define BT_COMP_LOG_SELF_COMP logCfg.selfComp()
+#define BT_LOG_OUTPUT_LEVEL   logCfg.logLevel()
 #define BT_LOG_TAG            "PLUGIN/SRC.CTF.LTTNG-LIVE"
 #include "logging/comp-logging.h"
 
@@ -86,8 +86,7 @@ static const char *lttng_live_stream_state_string(enum lttng_live_stream_state s
 void lttng_live_stream_iterator_set_state(struct lttng_live_stream_iterator *stream_iter,
                                           enum lttng_live_stream_state new_state)
 {
-    bt_self_component *self_comp = stream_iter->self_comp;
-    bt_logging_level log_level = stream_iter->log_level;
+    const bt2_common::LogCfg& logCfg = stream_iter->logCfg;
 
     BT_COMP_LOGD("Setting live stream iterator state: viewer-stream-id=%" PRIu64
                  ", old-state=%s, new-state=%s",
@@ -145,8 +144,7 @@ end:
 
 static void lttng_live_destroy_trace(struct lttng_live_trace *trace)
 {
-    bt_logging_level log_level = trace->log_level;
-    bt_self_component *self_comp = trace->self_comp;
+    const bt2_common::LogCfg& logCfg = trace->logCfg;
 
     BT_COMP_LOGD("Destroying live trace: trace-id=%" PRIu64, trace->id);
 
@@ -163,16 +161,13 @@ static void lttng_live_destroy_trace(struct lttng_live_trace *trace)
 static struct lttng_live_trace *lttng_live_create_trace(struct lttng_live_session *session,
                                                         uint64_t trace_id)
 {
-    bt_logging_level log_level = session->log_level;
-    bt_self_component *self_comp = session->self_comp;
+    const bt2_common::LogCfg& logCfg = session->logCfg;
 
     BT_COMP_LOGD("Creating live trace: "
                  "session-id=%" PRIu64 ", trace-id=%" PRIu64,
                  session->id, trace_id);
 
-    lttng_live_trace *trace = new lttng_live_trace;
-    trace->log_level = session->log_level;
-    trace->self_comp = session->self_comp;
+    lttng_live_trace *trace = new lttng_live_trace {logCfg};
     trace->session = session;
     trace->id = trace_id;
     trace->trace_class = NULL;
@@ -209,15 +204,13 @@ BT_HIDDEN
 int lttng_live_add_session(struct lttng_live_msg_iter *lttng_live_msg_iter, uint64_t session_id,
                            const char *hostname, const char *session_name)
 {
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
 
     BT_COMP_LOGD("Adding live session: "
                  "session-id=%" PRIu64 ", hostname=\"%s\" session-name=\"%s\"",
                  session_id, hostname, session_name);
 
-    lttng_live_session *session = new lttng_live_session;
-    session->log_level = lttng_live_msg_iter->log_level;
+    lttng_live_session *session = new lttng_live_session {logCfg};
     session->self_comp = lttng_live_msg_iter->self_comp;
     session->id = session_id;
     session->traces = g_ptr_array_new_with_free_func((GDestroyNotify) lttng_live_destroy_trace);
@@ -237,15 +230,12 @@ int lttng_live_add_session(struct lttng_live_msg_iter *lttng_live_msg_iter, uint
 
 static void lttng_live_destroy_session(struct lttng_live_session *session)
 {
-    bt_logging_level log_level;
-    bt_self_component *self_comp;
+    const bt2_common::LogCfg& logCfg = session->logCfg;
 
     if (!session) {
         goto end;
     }
 
-    log_level = session->log_level;
-    self_comp = session->self_comp;
     BT_COMP_LOGD("Destroying live session: "
                  "session-id=%" PRIu64 ", session-name=\"%s\"",
                  session->id, session->session_name->str);
@@ -319,8 +309,7 @@ void lttng_live_msg_iter_finalize(bt_self_message_iterator *self_msg_iter)
 static enum lttng_live_iterator_status
 lttng_live_iterator_next_check_stream_state(struct lttng_live_stream_iterator *lttng_live_stream)
 {
-    bt_logging_level log_level = lttng_live_stream->log_level;
-    bt_self_component *self_comp = lttng_live_stream->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live_stream->logCfg;
 
     switch (lttng_live_stream->state) {
     case LTTNG_LIVE_STREAM_QUIESCENT:
@@ -352,8 +341,7 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_no_da
     struct lttng_live_msg_iter *lttng_live_msg_iter,
     struct lttng_live_stream_iterator *lttng_live_stream)
 {
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     enum lttng_live_iterator_status ret = LTTNG_LIVE_ITERATOR_STATUS_OK;
     enum lttng_live_stream_state orig_state = lttng_live_stream->state;
     struct packet_index index;
@@ -436,8 +424,7 @@ static enum lttng_live_iterator_status
 lttng_live_get_session(struct lttng_live_msg_iter *lttng_live_msg_iter,
                        struct lttng_live_session *session)
 {
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     enum lttng_live_iterator_status status;
     uint64_t trace_idx;
 
@@ -457,7 +444,8 @@ lttng_live_get_session(struct lttng_live_msg_iter *lttng_live_msg_iter,
                 status = LTTNG_LIVE_ITERATOR_STATUS_AGAIN;
             } else {
                 status = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-                BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Error attaching to LTTng live session");
+                BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
+                                          "Error attaching to LTTng live session");
             }
             goto end;
         }
@@ -514,7 +502,7 @@ lttng_live_get_session(struct lttng_live_msg_iter *lttng_live_msg_iter,
         case LTTNG_LIVE_ITERATOR_STATUS_AGAIN:
             goto end;
         default:
-            BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+            BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                       "Error updating trace metadata: "
                                       "stream-iter-status=%s, trace-id=%" PRIu64,
                                       lttng_live_iterator_status_string(status), trace->id);
@@ -536,8 +524,7 @@ static void
 lttng_live_force_new_streams_and_metadata(struct lttng_live_msg_iter *lttng_live_msg_iter)
 {
     uint64_t session_idx, trace_idx;
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
 
     for (session_idx = 0; session_idx < lttng_live_msg_iter->sessions->len; session_idx++) {
         struct lttng_live_session *session =
@@ -565,8 +552,7 @@ lttng_live_iterator_handle_new_streams_and_metadata(struct lttng_live_msg_iter *
 {
     enum lttng_live_iterator_status status;
     enum lttng_live_viewer_status viewer_status;
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     uint64_t session_idx = 0, nr_sessions_opened = 0;
     struct lttng_live_session *session;
     enum session_not_found_action sess_not_found_act =
@@ -598,7 +584,7 @@ lttng_live_iterator_handle_new_streams_and_metadata(struct lttng_live_msg_iter *
             if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
                 if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
                     status = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-                    BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+                    BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                               "Error creating LTTng live viewer session");
                 } else if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
                     status = LTTNG_LIVE_ITERATOR_STATUS_AGAIN;
@@ -647,8 +633,7 @@ emit_inactivity_message(struct lttng_live_msg_iter *lttng_live_msg_iter,
                         uint64_t timestamp)
 {
     enum lttng_live_iterator_status ret = LTTNG_LIVE_ITERATOR_STATUS_OK;
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     bt_message *msg = NULL;
 
     BT_ASSERT(stream_iter->trace->clock_class);
@@ -660,7 +645,8 @@ emit_inactivity_message(struct lttng_live_msg_iter *lttng_live_msg_iter,
     msg = bt_message_message_iterator_inactivity_create(lttng_live_msg_iter->self_msg_iter,
                                                         stream_iter->trace->clock_class, timestamp);
     if (!msg) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Error emitting message iterator inactivity message");
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
+                                  "Error emitting message iterator inactivity message");
         goto error;
     }
 
@@ -712,8 +698,7 @@ static int live_get_msg_ts_ns(struct lttng_live_stream_iterator *stream_iter,
 {
     const bt_clock_snapshot *clock_snapshot = NULL;
     int ret = 0;
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
 
     BT_ASSERT_DBG(msg);
     BT_ASSERT_DBG(ts_ns);
@@ -752,7 +737,7 @@ static int live_get_msg_ts_ns(struct lttng_live_stream_iterator *stream_iter,
 
     ret = bt_clock_snapshot_get_ns_from_origin(clock_snapshot, ts_ns);
     if (ret) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                   "Cannot get nanoseconds from Epoch of clock snapshot: "
                                   "clock-snapshot-addr=%p",
                                   clock_snapshot);
@@ -780,8 +765,7 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_activ
     struct lttng_live_stream_iterator *lttng_live_stream, const bt_message **message)
 {
     enum lttng_live_iterator_status ret = LTTNG_LIVE_ITERATOR_STATUS_OK;
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     enum ctf_msg_iter_status status;
     uint64_t session_idx, trace_idx;
 
@@ -811,7 +795,7 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_activ
 
     if (lttng_live_stream->state != LTTNG_LIVE_STREAM_ACTIVE_DATA) {
         ret = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                   "Invalid state of live stream iterator"
                                   "stream-iter-status=%s",
                                   lttng_live_stream_state_string(lttng_live_stream->state));
@@ -837,7 +821,7 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_activ
     case CTF_MSG_ITER_STATUS_ERROR:
     default:
         ret = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                   "CTF message iterator failed to get next message: "
                                   "msg-iter=%p, msg-iter-status=%s",
                                   lttng_live_stream->msg_iter, ctf_msg_iter_status_string(status));
@@ -854,8 +838,7 @@ lttng_live_iterator_close_stream(struct lttng_live_msg_iter *lttng_live_msg_iter
                                  const bt_message **curr_msg)
 {
     enum lttng_live_iterator_status live_status = LTTNG_LIVE_ITERATOR_STATUS_OK;
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
 
     BT_COMP_LOGD("Closing live stream iterator: stream-name=\"%s\", "
                  "viewer-stream-id=%" PRIu64,
@@ -870,7 +853,7 @@ lttng_live_iterator_close_stream(struct lttng_live_msg_iter *lttng_live_msg_iter
         ctf_msg_iter_get_next_message(stream_iter->msg_iter, curr_msg);
 
     if (status == CTF_MSG_ITER_STATUS_ERROR) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                   "Error getting the next message from CTF message iterator");
         live_status = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
         goto end;
@@ -939,8 +922,7 @@ lttng_live_iterator_next_msg_on_stream(struct lttng_live_msg_iter *lttng_live_ms
                                        struct lttng_live_stream_iterator *stream_iter,
                                        const bt_message **curr_msg)
 {
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     enum lttng_live_iterator_status live_status;
 
     BT_COMP_LOGD("Advancing live stream iterator until next message if possible: "
@@ -1084,8 +1066,7 @@ handle_late_message(struct lttng_live_msg_iter *lttng_live_msg_iter,
                     struct lttng_live_stream_iterator *stream_iter, int64_t late_msg_ts_ns,
                     const bt_message *late_msg)
 {
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     const bt_clock_class *clock_class;
     const bt_stream_class *stream_class;
     enum bt_clock_class_cycles_to_ns_from_origin_status ts_ns_status;
@@ -1128,15 +1109,16 @@ handle_late_message(struct lttng_live_msg_iter *lttng_live_msg_iter,
                  stream_iter->name->str, stream_iter->viewer_stream_id);
 
     if (!stream_iter->last_inactivity_ts.is_set) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Invalid live stream state: "
-                                             "have a late message when no inactivity message "
-                                             "was ever sent for that stream.");
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
+                                  "Invalid live stream state: "
+                                  "have a late message when no inactivity message "
+                                  "was ever sent for that stream.");
         stream_iter_status = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
         goto end;
     }
 
     if (!is_discarded_packet_or_event_message(late_msg)) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                   "Invalid live stream state: "
                                   "have a late message that is not a packet discarded or "
                                   "event discarded message: late-msg-type=%s",
@@ -1151,14 +1133,14 @@ handle_late_message(struct lttng_live_msg_iter *lttng_live_msg_iter,
     ts_ns_status = bt_clock_class_cycles_to_ns_from_origin(
         clock_class, stream_iter->last_inactivity_ts.value, &last_inactivity_ts_ns);
     if (ts_ns_status != BT_CLOCK_CLASS_CYCLES_TO_NS_FROM_ORIGIN_STATUS_OK) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Error converting last "
-                                             "inactivity message timestamp to nanoseconds");
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Error converting last "
+                                                     "inactivity message timestamp to nanoseconds");
         stream_iter_status = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
         goto end;
     }
 
     if (last_inactivity_ts_ns <= late_msg_ts_ns) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                   "Invalid live stream state: "
                                   "have a late message that is none included in a stream "
                                   "inactivity timespan: last-inactivity-ts-ns=%" PRIu64
@@ -1211,8 +1193,7 @@ next_stream_iterator_for_trace(struct lttng_live_msg_iter *lttng_live_msg_iter,
                                struct lttng_live_stream_iterator **youngest_trace_stream_iter)
 {
     struct lttng_live_stream_iterator *youngest_candidate_stream_iter = NULL;
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     enum lttng_live_iterator_status stream_iter_status;
     ;
     int64_t youngest_candidate_msg_ts = INT64_MAX;
@@ -1288,7 +1269,7 @@ next_stream_iterator_for_trace(struct lttng_live_msg_iter *lttng_live_msg_iter,
                 stream_iter_status =
                     handle_late_message(lttng_live_msg_iter, stream_iter, curr_msg_ts_ns, msg);
                 if (stream_iter_status != LTTNG_LIVE_ITERATOR_STATUS_OK) {
-                    BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+                    BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                               "Late message could not be handled correctly: "
                                               "lttng-live-msg-iter-addr=%p, "
                                               "stream-name=\"%s\", "
@@ -1378,8 +1359,7 @@ next_stream_iterator_for_session(struct lttng_live_msg_iter *lttng_live_msg_iter
                                  struct lttng_live_session *session,
                                  struct lttng_live_stream_iterator **youngest_session_stream_iter)
 {
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     enum lttng_live_iterator_status stream_iter_status;
     uint64_t trace_idx = 0;
     int64_t youngest_candidate_msg_ts = INT64_MAX;
@@ -1499,8 +1479,7 @@ lttng_live_msg_iter_next(bt_self_message_iterator *self_msg_it, bt_message_array
     struct lttng_live_msg_iter *lttng_live_msg_iter =
         (struct lttng_live_msg_iter *) bt_self_message_iterator_get_data(self_msg_it);
     struct lttng_live_component *lttng_live = lttng_live_msg_iter->lttng_live_comp;
-    bt_self_component *self_comp = lttng_live_msg_iter->self_comp;
-    bt_logging_level log_level = lttng_live_msg_iter->log_level;
+    const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     enum lttng_live_iterator_status stream_iter_status;
     uint64_t session_idx;
 
@@ -1519,7 +1498,7 @@ lttng_live_msg_iter_next(bt_self_message_iterator *self_msg_it, bt_message_array
          */
         status = BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_ERROR;
         BT_COMP_LOGE_APPEND_CAUSE(
-            self_comp,
+            logCfg.selfComp(),
             "Message iterator was interrupted during a previous call to the `next()` and currently does not support continuing after such event.");
         goto end;
     }
@@ -1549,7 +1528,7 @@ lttng_live_msg_iter_next(bt_self_message_iterator *self_msg_it, bt_message_array
             if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
                 if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
                     status = BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_ERROR;
-                    BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+                    BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                               "Error creating LTTng live viewer session");
                 } else if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
                     status = BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_AGAIN;
@@ -1710,7 +1689,7 @@ return_status:
         status = BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_END;
         break;
     case LTTNG_LIVE_ITERATOR_STATUS_NOMEM:
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                   "Memory error preparing the next batch of messages: "
                                   "live-iter-status=%s",
                                   lttng_live_iterator_status_string(stream_iter_status));
@@ -1719,7 +1698,7 @@ return_status:
     case LTTNG_LIVE_ITERATOR_STATUS_ERROR:
     case LTTNG_LIVE_ITERATOR_STATUS_INVAL:
     case LTTNG_LIVE_ITERATOR_STATUS_UNSUPPORTED:
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                   "Error preparing the next batch of messages: "
                                   "live-iter-status=%s",
                                   lttng_live_iterator_status_string(stream_iter_status));
@@ -1740,8 +1719,8 @@ static struct lttng_live_msg_iter *
 lttng_live_msg_iter_create(struct lttng_live_component *lttng_live_comp,
                            bt_self_message_iterator *self_msg_it)
 {
-    lttng_live_msg_iter *lttng_live_msg_iter = new struct lttng_live_msg_iter;
-    lttng_live_msg_iter->log_level = lttng_live_comp->log_level;
+    lttng_live_msg_iter *lttng_live_msg_iter =
+        new struct lttng_live_msg_iter(lttng_live_comp->logCfg);
     lttng_live_msg_iter->self_comp = lttng_live_comp->self_comp;
     lttng_live_msg_iter->lttng_live_comp = lttng_live_comp;
     lttng_live_msg_iter->self_msg_iter = self_msg_it;
@@ -1767,12 +1746,10 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
     struct lttng_live_component *lttng_live;
     struct lttng_live_msg_iter *lttng_live_msg_iter;
     enum lttng_live_viewer_status viewer_status;
-    bt_logging_level log_level;
     bt_self_component *self_comp = bt_self_message_iterator_borrow_component(self_msg_it);
 
     lttng_live = (lttng_live_component *) bt_self_component_get_data(self_comp);
-    log_level = lttng_live->log_level;
-    self_comp = lttng_live->self_comp;
+    const bt2_common::LogCfg& logCfg = lttng_live->logCfg;
 
     /* There can be only one downstream iterator at the same time. */
     BT_ASSERT(!lttng_live->has_msg_iter);
@@ -1780,23 +1757,24 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
 
     lttng_live_msg_iter = lttng_live_msg_iter_create(lttng_live, self_msg_it);
     if (!lttng_live_msg_iter) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Failed to create lttng_live_msg_iter");
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to create lttng_live_msg_iter");
         status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
         goto error;
     }
 
-    viewer_status = live_viewer_connection_create(
-        self_comp, NULL, log_level, lttng_live->params.url->str, false, lttng_live_msg_iter,
-        &lttng_live_msg_iter->viewer_connection);
+    viewer_status =
+        live_viewer_connection_create(lttng_live->params.url->str, false, lttng_live_msg_iter,
+                                      logCfg, &lttng_live_msg_iter->viewer_connection);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
-            BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Failed to create viewer connection");
+            BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to create viewer connection");
         } else if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
             /*
              * Interruption in the _iter_init() method is not
              * supported. Return an error.
              */
-            BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Interrupted while creating viewer connection");
+            BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
+                                      "Interrupted while creating viewer connection");
         }
 
         status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
@@ -1806,13 +1784,14 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
     viewer_status = lttng_live_create_viewer_session(lttng_live_msg_iter);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
-            BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Failed to create viewer session");
+            BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to create viewer session");
         } else if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
             /*
              * Interruption in the _iter_init() method is not
              * supported. Return an error.
              */
-            BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Interrupted when creating viewer session");
+            BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
+                                      "Interrupted when creating viewer session");
         }
 
         status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
@@ -1867,7 +1846,7 @@ static struct bt_param_validation_map_value_entry_descr list_sessions_params[] =
 
 static bt_component_class_query_method_status
 lttng_live_query_list_sessions(const bt_value *params, const bt_value **result,
-                               bt_self_component_class *self_comp_class, bt_logging_level log_level)
+                               const bt2_common::LogCfg& logCfg)
 {
     bt_component_class_query_method_status status;
     const bt_value *url_value = NULL;
@@ -1883,18 +1862,18 @@ lttng_live_query_list_sessions(const bt_value *params, const bt_value **result,
         goto error;
     } else if (validation_status == BT_PARAM_VALIDATION_STATUS_VALIDATION_ERROR) {
         status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE(self_comp_class, "%s", validate_error);
+        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(), "%s", validate_error);
         goto error;
     }
 
     url_value = bt_value_map_borrow_entry_value_const(params, URL_PARAM);
     url = bt_value_string_get(url_value);
 
-    viewer_status = live_viewer_connection_create(NULL, self_comp_class, log_level, url, true, NULL,
-                                                  &viewer_connection);
+    viewer_status = live_viewer_connection_create(url, true, NULL, logCfg, &viewer_connection);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
-            BT_COMP_CLASS_LOGE_APPEND_CAUSE(self_comp_class, "Failed to create viewer connection");
+            BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
+                                            "Failed to create viewer connection");
             status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
         } else if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
             status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_AGAIN;
@@ -1906,7 +1885,7 @@ lttng_live_query_list_sessions(const bt_value *params, const bt_value **result,
 
     status = live_viewer_connection_list_sessions(viewer_connection, result);
     if (status != BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK) {
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE(self_comp_class, "Failed to list viewer sessions");
+        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(), "Failed to list viewer sessions");
         goto error;
     }
 
@@ -1931,7 +1910,7 @@ end:
 
 static bt_component_class_query_method_status
 lttng_live_query_support_info(const bt_value *params, const bt_value **result,
-                              bt_self_component_class *self_comp_class, bt_logging_level log_level)
+                              const bt2_common::LogCfg& logCfg)
 {
     bt_component_class_query_method_status status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
     const bt_value *input_type_value;
@@ -1945,12 +1924,13 @@ lttng_live_query_support_info(const bt_value *params, const bt_value **result,
     *result = NULL;
     input_type_value = bt_value_map_borrow_entry_value_const(params, "type");
     if (!input_type_value) {
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE(self_comp_class, "Missing expected `type` parameter.");
+        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(), "Missing expected `type` parameter.");
         goto error;
     }
 
     if (!bt_value_is_string(input_type_value)) {
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE(self_comp_class, "`type` parameter is not a string value.");
+        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
+                                        "`type` parameter is not a string value.");
         goto error;
     }
 
@@ -1961,12 +1941,13 @@ lttng_live_query_support_info(const bt_value *params, const bt_value **result,
 
     input_value = bt_value_map_borrow_entry_value_const(params, "input");
     if (!input_value) {
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE(self_comp_class, "Missing expected `input` parameter.");
+        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
+                                        "Missing expected `input` parameter.");
         goto error;
     }
 
     if (!bt_value_is_string(input_value)) {
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE(self_comp_class,
+        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
                                         "`input` parameter is not a string value.");
         goto error;
     }
@@ -2009,16 +1990,16 @@ bt_component_class_query_method_status lttng_live_query(bt_self_component_class_
                                                         const bt_value **result)
 {
     bt_component_class_query_method_status status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
-    bt_self_component *self_comp = NULL;
     bt_self_component_class *self_comp_class =
         bt_self_component_class_source_as_self_component_class(comp_class);
     bt_logging_level log_level = bt_query_executor_get_logging_level(
         bt_private_query_executor_as_query_executor_const(priv_query_exec));
+    bt2_common::LogCfg logCfg(log_level, self_comp_class);
 
     if (strcmp(object, "sessions") == 0) {
-        status = lttng_live_query_list_sessions(params, result, self_comp_class, log_level);
+        status = lttng_live_query_list_sessions(params, result, logCfg);
     } else if (strcmp(object, "babeltrace.support-info") == 0) {
-        status = lttng_live_query_support_info(params, result, self_comp_class, log_level);
+        status = lttng_live_query_support_info(params, result, logCfg);
     } else {
         BT_COMP_LOGI("Unknown query object `%s`", object);
         status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_UNKNOWN_OBJECT;
@@ -2089,8 +2070,9 @@ static struct bt_param_validation_map_value_entry_descr params_descr[] = {
     BT_PARAM_VALIDATION_MAP_VALUE_ENTRY_END};
 
 static bt_component_class_initialize_method_status
-lttng_live_component_create(const bt_value *params, bt_logging_level log_level,
-                            bt_self_component *self_comp, struct lttng_live_component **component)
+lttng_live_component_create(const bt_value *params, bt_self_component *self_comp,
+                            const bt2_common::LogCfg& logCfg,
+                            struct lttng_live_component **component)
 {
     struct lttng_live_component *lttng_live = NULL;
     const bt_value *inputs_value;
@@ -2106,13 +2088,12 @@ lttng_live_component_create(const bt_value *params, bt_logging_level log_level,
         status = BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
         goto error;
     } else if (validation_status == BT_PARAM_VALIDATION_STATUS_VALIDATION_ERROR) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp, "%s", validation_error);
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "%s", validation_error);
         status = BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
         goto error;
     }
 
-    lttng_live = new lttng_live_component;
-    lttng_live->log_level = log_level;
+    lttng_live = new lttng_live_component {logCfg};
     lttng_live->self_comp = self_comp;
     lttng_live->max_query_size = MAX_QUERY_SIZE;
     lttng_live->has_msg_iter = false;
@@ -2162,8 +2143,9 @@ lttng_live_component_init(bt_self_component_source *self_comp_src,
     bt_logging_level log_level =
         bt_component_get_logging_level(bt_self_component_as_component(self_comp));
     bt_self_component_add_port_status add_port_status;
+    bt2_common::LogCfg logCfg(log_level, self_comp);
 
-    ret = lttng_live_component_create(params, log_level, self_comp, &lttng_live);
+    ret = lttng_live_component_create(params, self_comp, logCfg, &lttng_live);
     if (ret != BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_OK) {
         goto error;
     }

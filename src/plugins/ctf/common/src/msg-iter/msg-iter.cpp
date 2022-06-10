@@ -7,8 +7,8 @@
  * Babeltrace - CTF message iterator
  */
 
-#define BT_COMP_LOG_SELF_COMP (msg_it->self_comp)
-#define BT_LOG_OUTPUT_LEVEL   (msg_it->log_level)
+#define BT_COMP_LOG_SELF_COMP (msg_it->logCfg.selfComp())
+#define BT_LOG_OUTPUT_LEVEL   (msg_it->logCfg.logLevel())
 #define BT_LOG_TAG            "PLUGIN/CTF/MSG-ITER"
 #include "logging/comp-logging.h"
 
@@ -26,6 +26,7 @@
 
 #include "msg-iter.hpp"
 #include "../bfcr/bfcr.hpp"
+#include "cpp-common/log-cfg.hpp"
 
 struct ctf_msg_iter;
 
@@ -111,6 +112,10 @@ struct end_of_packet_snapshots
 /* CTF message iterator */
 struct ctf_msg_iter
 {
+    explicit ctf_msg_iter(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
+    {
+    }
+
     /* Visit stack */
     struct stack *stack = nullptr;
 
@@ -255,11 +260,7 @@ struct ctf_msg_iter
     /* Stored values (for sequence lengths, variant tags) */
     GArray *stored_values = nullptr;
 
-    /* Iterator's current log level */
-    bt_logging_level log_level = (bt_logging_level) 0;
-
-    /* Iterator's owning self component, or `NULL` if none (query) */
-    bt_self_component *self_comp = nullptr;
+    const bt2_common::LogCfg logCfg;
 };
 
 static inline const char *state_string(enum state state)
@@ -336,19 +337,19 @@ static inline const char *state_string(enum state state)
 
 static struct stack *stack_new(struct ctf_msg_iter *msg_it)
 {
-    bt_self_component *self_comp = msg_it->self_comp;
+    const bt2_common::LogCfg& logCfg = msg_it->logCfg;
     struct stack *stack = NULL;
 
     stack = g_new0(struct stack, 1);
     if (!stack) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Failed to allocate one stack.");
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to allocate one stack.");
         goto error;
     }
 
     stack->msg_it = msg_it;
     stack->entries = g_array_new(FALSE, TRUE, sizeof(struct stack_entry));
     if (!stack->entries) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Failed to allocate a GArray.");
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to allocate a GArray.");
         goto error;
     }
 
@@ -468,7 +469,6 @@ static inline void buf_consume_bits(struct ctf_msg_iter *msg_it, size_t incr)
 
 static enum ctf_msg_iter_status request_medium_bytes(struct ctf_msg_iter *msg_it)
 {
-    bt_self_component *self_comp = msg_it->self_comp;
     uint8_t *buffer_addr = NULL;
     size_t buffer_sz = 0;
     enum ctf_msg_iter_medium_status m_status;
@@ -522,7 +522,7 @@ static enum ctf_msg_iter_status request_medium_bytes(struct ctf_msg_iter *msg_it
 
         /* All other states are invalid */
         BT_COMP_LOGE_APPEND_CAUSE(
-            self_comp,
+            msg_it->logCfg.selfComp(),
             "User function returned %s, but message iterator is in an unexpected state: "
             "state=%s, cur-packet-size=%" PRId64 ", cur=%zu, "
             "packet-cur=%zu, last-eh-at=%zu",
@@ -531,7 +531,7 @@ static enum ctf_msg_iter_status request_medium_bytes(struct ctf_msg_iter *msg_it
             msg_it->buf.last_eh_at);
         m_status = CTF_MSG_ITER_MEDIUM_STATUS_ERROR;
     } else if (m_status < 0) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "User function failed: "
                                   "status=%s",
                                   ctf_msg_iter_medium_status_string(m_status));
@@ -561,7 +561,6 @@ read_dscope_begin_state(struct ctf_msg_iter *msg_it, struct ctf_field_class *dsc
                         enum state done_state, enum state continue_state, bt_field *dscope_field)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
     enum bt_bfcr_status bfcr_status;
     size_t consumed_bits;
 
@@ -583,7 +582,7 @@ read_dscope_begin_state(struct ctf_msg_iter *msg_it, struct ctf_field_class *dsc
         msg_it->state = continue_state;
         break;
     default:
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "BFCR failed to start: msg-it-addr=%p, bfcr-addr=%p, "
                                   "status=%s",
                                   msg_it, msg_it->bfcr, bt_bfcr_status_string(bfcr_status));
@@ -602,7 +601,6 @@ static enum ctf_msg_iter_status read_dscope_continue_state(struct ctf_msg_iter *
                                                            enum state done_state)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
     enum bt_bfcr_status bfcr_status;
     size_t consumed_bits;
 
@@ -611,7 +609,7 @@ static enum ctf_msg_iter_status read_dscope_continue_state(struct ctf_msg_iter *
     status = buf_ensure_available_bits(msg_it);
     if (status != CTF_MSG_ITER_STATUS_OK) {
         if (status < 0) {
-            BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+            BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                       "Cannot ensure that buffer has at least one byte: "
                                       "msg-addr=%p, status=%s",
                                       msg_it, ctf_msg_iter_status_string(status));
@@ -638,7 +636,7 @@ static enum ctf_msg_iter_status read_dscope_continue_state(struct ctf_msg_iter *
         BT_COMP_LOGT_STR("BFCR needs more data to decode field completely.");
         break;
     default:
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "BFCR failed to continue: msg-it-addr=%p, bfcr-addr=%p, "
                                   "status=%s",
                                   msg_it, msg_it->bfcr, bt_bfcr_status_string(bfcr_status));
@@ -669,7 +667,6 @@ static void release_all_dscopes(struct ctf_msg_iter *msg_it)
 static enum ctf_msg_iter_status switch_packet_state(struct ctf_msg_iter *msg_it)
 {
     enum ctf_msg_iter_status status;
-    bt_self_component *self_comp = msg_it->self_comp;
 
     /*
      * We don't put the stream class here because we need to make
@@ -726,7 +723,7 @@ static enum ctf_msg_iter_status switch_packet_state(struct ctf_msg_iter *msg_it)
         /* Packets are assumed to start on a byte frontier. */
         if (msg_it->buf.at % CHAR_BIT) {
             BT_COMP_LOGE_APPEND_CAUSE(
-                self_comp,
+                msg_it->logCfg.selfComp(),
                 "Cannot switch packet: current position is not a multiple of 8: "
                 "msg-it-addr=%p, cur=%zu",
                 msg_it, msg_it->buf.at);
@@ -761,7 +758,6 @@ end:
 static enum ctf_msg_iter_status read_packet_header_begin_state(struct ctf_msg_iter *msg_it)
 {
     struct ctf_field_class *packet_header_fc = NULL;
-    bt_self_component *self_comp = msg_it->self_comp;
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
 
     /*
@@ -797,7 +793,7 @@ static enum ctf_msg_iter_status read_packet_header_begin_state(struct ctf_msg_it
     status = read_dscope_begin_state(msg_it, packet_header_fc, STATE_AFTER_TRACE_PACKET_HEADER,
                                      STATE_DSCOPE_TRACE_PACKET_HEADER_CONTINUE, NULL);
     if (status < 0) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot decode packet header field: "
                                   "msg-it-addr=%p, trace-class-addr=%p, "
                                   "fc-addr=%p",
@@ -816,7 +812,6 @@ static enum ctf_msg_iter_status read_packet_header_continue_state(struct ctf_msg
 static inline enum ctf_msg_iter_status set_current_stream_class(struct ctf_msg_iter *msg_it)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
     struct ctf_stream_class *new_stream_class = NULL;
 
     if (msg_it->cur_stream_class_id == -1) {
@@ -825,7 +820,7 @@ static inline enum ctf_msg_iter_status set_current_stream_class(struct ctf_msg_i
          * stream class.
          */
         if (msg_it->meta.tc->stream_classes->len != 1) {
-            BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+            BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                       "Need exactly one stream class since there's "
                                       "no stream class ID field: "
                                       "msg-it-addr=%p",
@@ -842,7 +837,7 @@ static inline enum ctf_msg_iter_status set_current_stream_class(struct ctf_msg_i
         ctf_trace_class_borrow_stream_class_by_id(msg_it->meta.tc, msg_it->cur_stream_class_id);
     if (!new_stream_class) {
         BT_COMP_LOGE_APPEND_CAUSE(
-            self_comp,
+            msg_it->logCfg.selfComp(),
             "No stream class with ID of stream class ID to use in trace class: "
             "msg-it-addr=%p, stream-class-id=%" PRIu64 ", "
             "trace-class-addr=%p",
@@ -854,7 +849,7 @@ static inline enum ctf_msg_iter_status set_current_stream_class(struct ctf_msg_i
     if (msg_it->meta.sc) {
         if (new_stream_class != msg_it->meta.sc) {
             BT_COMP_LOGE_APPEND_CAUSE(
-                self_comp,
+                msg_it->logCfg.selfComp(),
                 "Two packets refer to two different stream classes within the same packet sequence: "
                 "msg-it-addr=%p, prev-stream-class-addr=%p, "
                 "prev-stream-class-id=%" PRId64 ", "
@@ -882,7 +877,6 @@ end:
 static inline enum ctf_msg_iter_status set_current_stream(struct ctf_msg_iter *msg_it)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
     bt_stream *stream = NULL;
 
     BT_COMP_LOGD("Calling user function (get stream): msg-it-addr=%p, "
@@ -894,7 +888,7 @@ static inline enum ctf_msg_iter_status set_current_stream(struct ctf_msg_iter *m
     BT_COMP_LOGD("User function returned: stream-addr=%p", stream);
     if (!stream) {
         BT_COMP_LOGE_APPEND_CAUSE(
-            self_comp,
+            msg_it->logCfg.selfComp(),
             "User function failed to return a stream object for the given stream class.");
         status = CTF_MSG_ITER_STATUS_ERROR;
         goto end;
@@ -902,7 +896,7 @@ static inline enum ctf_msg_iter_status set_current_stream(struct ctf_msg_iter *m
 
     if (msg_it->stream && stream != msg_it->stream) {
         BT_COMP_LOGE_APPEND_CAUSE(
-            self_comp,
+            msg_it->logCfg.selfComp(),
             "User function returned a different stream than the previous one for the same sequence of packets.");
         status = CTF_MSG_ITER_STATUS_ERROR;
         goto end;
@@ -918,7 +912,6 @@ end:
 static inline enum ctf_msg_iter_status set_current_packet(struct ctf_msg_iter *msg_it)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
     bt_packet *packet = NULL;
 
     BT_COMP_LOGD("Creating packet from stream: "
@@ -931,7 +924,7 @@ static inline enum ctf_msg_iter_status set_current_packet(struct ctf_msg_iter *m
     BT_ASSERT(msg_it->stream);
     packet = bt_packet_create(msg_it->stream);
     if (!packet) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot create packet from stream: "
                                   "msg-it-addr=%p, stream-addr=%p, "
                                   "stream-class-addr=%p, "
@@ -983,7 +976,6 @@ end:
 static enum ctf_msg_iter_status read_packet_context_begin_state(struct ctf_msg_iter *msg_it)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
     struct ctf_field_class *packet_context_fc;
 
     BT_ASSERT(msg_it->meta.sc);
@@ -1012,7 +1004,7 @@ static enum ctf_msg_iter_status read_packet_context_begin_state(struct ctf_msg_i
                                      STATE_DSCOPE_STREAM_PACKET_CONTEXT_CONTINUE,
                                      msg_it->dscopes.stream_packet_context);
     if (status < 0) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot decode packet context field: "
                                   "msg-it-addr=%p, stream-class-addr=%p, "
                                   "stream-class-id=%" PRId64 ", fc-addr=%p",
@@ -1031,7 +1023,6 @@ static enum ctf_msg_iter_status read_packet_context_continue_state(struct ctf_ms
 static enum ctf_msg_iter_status set_current_packet_content_sizes(struct ctf_msg_iter *msg_it)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
 
     if (msg_it->cur_exp_packet_total_size == -1) {
         if (msg_it->cur_exp_packet_content_size != -1) {
@@ -1048,7 +1039,7 @@ static enum ctf_msg_iter_status set_current_packet_content_sizes(struct ctf_msg_
         (msg_it->cur_exp_packet_total_size < 0 && msg_it->cur_exp_packet_content_size < 0));
 
     if (msg_it->cur_exp_packet_content_size > msg_it->cur_exp_packet_total_size) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Invalid packet or content size: "
                                   "content size is greater than packet size: "
                                   "msg-it-addr=%p, packet-context-field-addr=%p, "
@@ -1090,7 +1081,6 @@ end:
 static enum ctf_msg_iter_status read_event_header_begin_state(struct ctf_msg_iter *msg_it)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
     struct ctf_field_class *event_header_fc = NULL;
 
     /* Reset the position of the last event header */
@@ -1150,7 +1140,7 @@ static enum ctf_msg_iter_status read_event_header_begin_state(struct ctf_msg_ite
     status = read_dscope_begin_state(msg_it, event_header_fc, STATE_AFTER_EVENT_HEADER,
                                      STATE_DSCOPE_EVENT_HEADER_CONTINUE, NULL);
     if (status < 0) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot decode event header field: "
                                   "msg-it-addr=%p, stream-class-addr=%p, "
                                   "stream-class-id=%" PRId64 ", fc-addr=%p",
@@ -1169,7 +1159,6 @@ static enum ctf_msg_iter_status read_event_header_continue_state(struct ctf_msg_
 static inline enum ctf_msg_iter_status set_current_event_class(struct ctf_msg_iter *msg_it)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
 
     struct ctf_event_class *new_event_class = NULL;
 
@@ -1180,7 +1169,7 @@ static inline enum ctf_msg_iter_status set_current_event_class(struct ctf_msg_it
          */
         if (msg_it->meta.sc->event_classes->len != 1) {
             BT_COMP_LOGE_APPEND_CAUSE(
-                self_comp,
+                msg_it->logCfg.selfComp(),
                 "Need exactly one event class since there's no event class ID field: "
                 "msg-it-addr=%p",
                 msg_it);
@@ -1196,7 +1185,7 @@ static inline enum ctf_msg_iter_status set_current_event_class(struct ctf_msg_it
         ctf_stream_class_borrow_event_class_by_id(msg_it->meta.sc, msg_it->cur_event_class_id);
     if (!new_event_class) {
         BT_COMP_LOGE_APPEND_CAUSE(
-            self_comp,
+            msg_it->logCfg.selfComp(),
             "No event class with ID of event class ID to use in stream class: "
             "msg-it-addr=%p, stream-class-id=%" PRIu64 ", "
             "event-class-id=%" PRIu64 ", "
@@ -1220,7 +1209,6 @@ end:
 static inline enum ctf_msg_iter_status set_current_event_message(struct ctf_msg_iter *msg_it)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
     bt_message *msg = NULL;
 
     BT_ASSERT_DBG(msg_it->meta.ec);
@@ -1241,7 +1229,7 @@ static inline enum ctf_msg_iter_status set_current_event_message(struct ctf_msg_
     }
 
     if (!msg) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot create event message: "
                                   "msg-it-addr=%p, ec-addr=%p, ec-name=\"%s\", "
                                   "packet-addr=%p",
@@ -1292,7 +1280,6 @@ end:
 static enum ctf_msg_iter_status read_event_common_context_begin_state(struct ctf_msg_iter *msg_it)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
     struct ctf_field_class *event_common_context_fc;
 
     event_common_context_fc = msg_it->meta.sc->event_common_context_fc;
@@ -1316,7 +1303,7 @@ static enum ctf_msg_iter_status read_event_common_context_begin_state(struct ctf
         msg_it, event_common_context_fc, STATE_DSCOPE_EVENT_SPEC_CONTEXT_BEGIN,
         STATE_DSCOPE_EVENT_COMMON_CONTEXT_CONTINUE, msg_it->dscopes.event_common_context);
     if (status < 0) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot decode event common context field: "
                                   "msg-it-addr=%p, stream-class-addr=%p, "
                                   "stream-class-id=%" PRId64 ", fc-addr=%p",
@@ -1337,7 +1324,6 @@ read_event_common_context_continue_state(struct ctf_msg_iter *msg_it)
 static enum ctf_msg_iter_status read_event_spec_context_begin_state(struct ctf_msg_iter *msg_it)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
     struct ctf_field_class *event_spec_context_fc;
 
     event_spec_context_fc = msg_it->meta.ec->spec_context_fc;
@@ -1362,7 +1348,7 @@ static enum ctf_msg_iter_status read_event_spec_context_begin_state(struct ctf_m
         msg_it, event_spec_context_fc, STATE_DSCOPE_EVENT_PAYLOAD_BEGIN,
         STATE_DSCOPE_EVENT_SPEC_CONTEXT_CONTINUE, msg_it->dscopes.event_spec_context);
     if (status < 0) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot decode event specific context field: "
                                   "msg-it-addr=%p, event-class-addr=%p, "
                                   "event-class-name=\"%s\", "
@@ -1383,7 +1369,6 @@ static enum ctf_msg_iter_status read_event_spec_context_continue_state(struct ct
 static enum ctf_msg_iter_status read_event_payload_begin_state(struct ctf_msg_iter *msg_it)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
     struct ctf_field_class *event_payload_fc;
 
     event_payload_fc = msg_it->meta.ec->payload_fc;
@@ -1408,7 +1393,7 @@ static enum ctf_msg_iter_status read_event_payload_begin_state(struct ctf_msg_it
         read_dscope_begin_state(msg_it, event_payload_fc, STATE_EMIT_MSG_EVENT,
                                 STATE_DSCOPE_EVENT_PAYLOAD_CONTINUE, msg_it->dscopes.event_payload);
     if (status < 0) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot decode event payload field: "
                                   "msg-it-addr=%p, event-class-addr=%p, "
                                   "event-class-name=\"%s\", "
@@ -1799,7 +1784,6 @@ static enum bt_bfcr_status bfcr_unsigned_int_cb(uint64_t value, struct ctf_field
                                                 void *data)
 {
     ctf_msg_iter *msg_it = (ctf_msg_iter *) data;
-    bt_self_component *self_comp = msg_it->self_comp;
     enum bt_bfcr_status status = BT_BFCR_STATUS_OK;
 
     bt_field *field = NULL;
@@ -1832,7 +1816,7 @@ static enum bt_bfcr_status bfcr_unsigned_int_cb(uint64_t value, struct ctf_field
         break;
     case CTF_FIELD_CLASS_MEANING_MAGIC:
         if (value != 0xc1fc1fc1) {
-            BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+            BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                       "Invalid CTF magic number: msg-it-addr=%p, "
                                       "magic=%" PRIx64,
                                       msg_it, value);
@@ -1887,7 +1871,6 @@ static enum bt_bfcr_status bfcr_unsigned_int_char_cb(uint64_t value, struct ctf_
 {
     int ret;
     ctf_msg_iter *msg_it = (ctf_msg_iter *) data;
-    bt_self_component *self_comp = msg_it->self_comp;
     enum bt_bfcr_status status = BT_BFCR_STATUS_OK;
     bt_field *string_field = NULL;
     ctf_field_class_int *int_fc = ctf_field_class_as_int(fc);
@@ -1921,7 +1904,7 @@ static enum bt_bfcr_status bfcr_unsigned_int_char_cb(uint64_t value, struct ctf_
     str[0] = (char) value;
     ret = bt_field_string_append_with_length(string_field, str, 1);
     if (ret) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot append character to string field's value: "
                                   "msg-it-addr=%p, field-addr=%p, ret=%d",
                                   msg_it, string_field, ret);
@@ -2038,7 +2021,6 @@ static enum bt_bfcr_status bfcr_string_cb(const char *value, size_t len, struct 
     enum bt_bfcr_status status = BT_BFCR_STATUS_OK;
     bt_field *field = NULL;
     ctf_msg_iter *msg_it = (ctf_msg_iter *) data;
-    bt_self_component *self_comp = msg_it->self_comp;
     int ret;
 
     BT_COMP_LOGT("String (substring) function called from BFCR: "
@@ -2056,7 +2038,7 @@ static enum bt_bfcr_status bfcr_string_cb(const char *value, size_t len, struct 
     /* Append current substring */
     ret = bt_field_string_append_with_length(field, value, len);
     if (ret) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot append substring to string field's value: "
                                   "msg-it-addr=%p, field-addr=%p, string-length=%zu, "
                                   "ret=%d",
@@ -2185,7 +2167,6 @@ static int64_t bfcr_get_sequence_length_cb(struct ctf_field_class *fc, void *dat
 {
     bt_field *seq_field;
     ctf_msg_iter *msg_it = (ctf_msg_iter *) data;
-    bt_self_component *self_comp = msg_it->self_comp;
     struct ctf_field_class_sequence *seq_fc = ctf_field_class_as_sequence(fc);
     int64_t length;
     int ret;
@@ -2210,7 +2191,7 @@ static int64_t bfcr_get_sequence_length_cb(struct ctf_field_class *fc, void *dat
                                              BT_FIELD_CLASS_TYPE_DYNAMIC_ARRAY));
         ret = bt_field_array_dynamic_set_length(seq_field, (uint64_t) length);
         if (ret) {
-            BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+            BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                       "Cannot set dynamic array field's length field: "
                                       "msg-it-addr=%p, field-addr=%p, "
                                       "length=%" PRIu64,
@@ -2232,7 +2213,6 @@ bfcr_borrow_variant_selected_field_class_cb(struct ctf_field_class *fc, void *da
     ctf_msg_iter *msg_it = (ctf_msg_iter *) data;
     ctf_field_class_variant *var_fc = ctf_field_class_as_variant(fc);
     struct ctf_named_field_class *selected_option = NULL;
-    bt_self_component *self_comp = msg_it->self_comp;
     struct ctf_field_class *ret_fc = NULL;
     union
     {
@@ -2269,7 +2249,7 @@ bfcr_borrow_variant_selected_field_class_cb(struct ctf_field_class *fc, void *da
     }
 
     if (option_index < 0) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot find variant field class's option: "
                                   "msg-it-addr=%p, var-fc-addr=%p, u-tag=%" PRIu64 ", "
                                   "i-tag=%" PRId64,
@@ -2286,7 +2266,7 @@ bfcr_borrow_variant_selected_field_class_cb(struct ctf_field_class *fc, void *da
 
         ret = bt_field_variant_select_option_by_index(var_field, option_index);
         if (ret) {
-            BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+            BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                       "Cannot select variant field's option field: "
                                       "msg-it-addr=%p, var-field-addr=%p, "
                                       "opt-index=%" PRId64,
@@ -2304,14 +2284,13 @@ end:
 
 static bt_message *create_msg_stream_beginning(struct ctf_msg_iter *msg_it)
 {
-    bt_self_component *self_comp = msg_it->self_comp;
     bt_message *msg;
 
     BT_ASSERT(msg_it->stream);
     BT_ASSERT(msg_it->self_msg_iter);
     msg = bt_message_stream_beginning_create(msg_it->self_msg_iter, msg_it->stream);
     if (!msg) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot create stream beginning message: "
                                   "msg-it-addr=%p, stream-addr=%p",
                                   msg_it, msg_it->stream);
@@ -2322,11 +2301,10 @@ static bt_message *create_msg_stream_beginning(struct ctf_msg_iter *msg_it)
 
 static bt_message *create_msg_stream_end(struct ctf_msg_iter *msg_it)
 {
-    bt_self_component *self_comp = msg_it->self_comp;
     bt_message *msg;
 
     if (!msg_it->stream) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot create stream end message because stream is NULL: "
                                   "msg-it-addr=%p",
                                   msg_it);
@@ -2337,7 +2315,7 @@ static bt_message *create_msg_stream_end(struct ctf_msg_iter *msg_it)
     BT_ASSERT(msg_it->self_msg_iter);
     msg = bt_message_stream_end_create(msg_it->self_msg_iter, msg_it->stream);
     if (!msg) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot create stream end message: "
                                   "msg-it-addr=%p, stream-addr=%p",
                                   msg_it, msg_it->stream);
@@ -2349,7 +2327,6 @@ end:
 
 static bt_message *create_msg_packet_beginning(struct ctf_msg_iter *msg_it, bool use_default_cs)
 {
-    bt_self_component *self_comp = msg_it->self_comp;
     bt_message *msg;
     const bt_stream_class *sc = msg_it->meta.sc->ir_sc;
 
@@ -2378,7 +2355,7 @@ static bt_message *create_msg_packet_beginning(struct ctf_msg_iter *msg_it, bool
     }
 
     if (!msg) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot create packet beginning message: "
                                   "msg-it-addr=%p, packet-addr=%p",
                                   msg_it, msg_it->packet);
@@ -2411,7 +2388,6 @@ static bt_message *create_msg_packet_end(struct ctf_msg_iter *msg_it)
 {
     bt_message *msg;
     bool update_default_cs = true;
-    bt_self_component *self_comp = msg_it->self_comp;
 
     if (!msg_it->packet) {
         msg = NULL;
@@ -2477,7 +2453,7 @@ static bt_message *create_msg_packet_end(struct ctf_msg_iter *msg_it)
     }
 
     if (!msg) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot create packet end message: "
                                   "msg-it-addr=%p, packet-addr=%p",
                                   msg_it, msg_it->packet);
@@ -2493,7 +2469,6 @@ end:
 static bt_message *create_msg_discarded_events(struct ctf_msg_iter *msg_it)
 {
     bt_message *msg;
-    bt_self_component *self_comp = msg_it->self_comp;
     uint64_t beginning_raw_value = UINT64_C(-1);
     uint64_t end_raw_value = UINT64_C(-1);
 
@@ -2524,7 +2499,7 @@ static bt_message *create_msg_discarded_events(struct ctf_msg_iter *msg_it)
     }
 
     if (!msg) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot create discarded events message: "
                                   "msg-it-addr=%p, stream-addr=%p",
                                   msg_it, msg_it->stream);
@@ -2544,7 +2519,6 @@ end:
 static bt_message *create_msg_discarded_packets(struct ctf_msg_iter *msg_it)
 {
     bt_message *msg;
-    bt_self_component *self_comp = msg_it->self_comp;
 
     BT_ASSERT(msg_it->self_msg_iter);
     BT_ASSERT(msg_it->stream);
@@ -2562,7 +2536,7 @@ static bt_message *create_msg_discarded_packets(struct ctf_msg_iter *msg_it)
     }
 
     if (!msg) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp,
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
                                   "Cannot create discarded packets message: "
                                   "msg-it-addr=%p, stream-addr=%p",
                                   msg_it, msg_it->stream);
@@ -2579,8 +2553,8 @@ end:
 BT_HIDDEN
 struct ctf_msg_iter *ctf_msg_iter_create(struct ctf_trace_class *tc, size_t max_request_sz,
                                          struct ctf_msg_iter_medium_ops medops, void *data,
-                                         bt_logging_level log_level, bt_self_component *self_comp,
-                                         bt_self_message_iterator *self_msg_iter)
+                                         bt_self_message_iterator *self_msg_iter,
+                                         const bt2_common::LogCfg& logCfg)
 {
     struct bt_bfcr_cbs cbs = {
         .classes =
@@ -2606,16 +2580,15 @@ struct ctf_msg_iter *ctf_msg_iter_create(struct ctf_trace_class *tc, size_t max_
     BT_ASSERT(medops.borrow_stream);
     BT_ASSERT(max_request_sz > 0);
 
-    BT_COMP_LOG_CUR_LVL(BT_LOG_DEBUG, log_level, self_comp,
+    BT_COMP_LOG_CUR_LVL(BT_LOG_DEBUG, logCfg.logLevel(), logCfg.selfComp(),
                         "Creating CTF plugin message iterator: "
                         "trace-addr=%p, max-request-size=%zu, "
                         "data=%p, log-level=%s",
-                        tc, max_request_sz, data, bt_common_logging_level_string(log_level));
+                        tc, max_request_sz, data,
+                        bt_common_logging_level_string(logCfg.logLevel()));
 
-    ctf_msg_iter *msg_it = new ctf_msg_iter;
-    msg_it->self_comp = self_comp;
+    ctf_msg_iter *msg_it = new ctf_msg_iter {logCfg};
     msg_it->self_msg_iter = self_msg_iter;
-    msg_it->log_level = log_level;
     msg_it->meta.tc = tc;
     msg_it->medium.medops = medops;
     msg_it->medium.max_request_sz = max_request_sz;
@@ -2625,13 +2598,14 @@ struct ctf_msg_iter *ctf_msg_iter_create(struct ctf_trace_class *tc, size_t max_
     g_array_set_size(msg_it->stored_values, tc->stored_value_count);
 
     if (!msg_it->stack) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Failed to create field stack.");
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(), "Failed to create field stack.");
         goto error;
     }
 
-    msg_it->bfcr = bt_bfcr_create(cbs, msg_it, log_level, NULL);
+    msg_it->bfcr = bt_bfcr_create(cbs, msg_it, msg_it->logCfg);
     if (!msg_it->bfcr) {
-        BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Failed to create binary class reader (BFCR).");
+        BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
+                                  "Failed to create binary class reader (BFCR).");
         goto error;
     }
 
@@ -2639,7 +2613,8 @@ struct ctf_msg_iter *ctf_msg_iter_create(struct ctf_trace_class *tc, size_t max_
     BT_COMP_LOGD("Created CTF plugin message iterator: "
                  "trace-addr=%p, max-request-size=%zu, "
                  "data=%p, msg-it-addr=%p, log-level=%s",
-                 tc, max_request_sz, data, msg_it, bt_common_logging_level_string(log_level));
+                 tc, max_request_sz, data, msg_it,
+                 bt_common_logging_level_string(logCfg.logLevel()));
     msg_it->cur_packet_offset = 0;
 
 end:
@@ -2680,7 +2655,6 @@ enum ctf_msg_iter_status ctf_msg_iter_get_next_message(struct ctf_msg_iter *msg_
                                                        const bt_message **message)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
 
     BT_ASSERT_DBG(msg_it);
     BT_ASSERT_DBG(message);
@@ -2692,8 +2666,9 @@ enum ctf_msg_iter_status ctf_msg_iter_get_next_message(struct ctf_msg_iter *msg_
             BT_COMP_LOGD_STR("Medium returned CTF_MSG_ITER_STATUS_AGAIN.");
             goto end;
         } else if (G_UNLIKELY(status != CTF_MSG_ITER_STATUS_OK)) {
-            BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Cannot handle state: msg-it-addr=%p, state=%s",
-                                      msg_it, state_string(msg_it->state));
+            BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
+                                      "Cannot handle state: msg-it-addr=%p, state=%s", msg_it,
+                                      state_string(msg_it->state));
             goto end;
         }
 
@@ -2808,7 +2783,6 @@ static enum ctf_msg_iter_status decode_until_state(struct ctf_msg_iter *msg_it,
                                                    enum state target_state_2)
 {
     enum ctf_msg_iter_status status = CTF_MSG_ITER_STATUS_OK;
-    bt_self_component *self_comp = msg_it->self_comp;
 
     BT_ASSERT_DBG(msg_it);
 
@@ -2826,8 +2800,9 @@ static enum ctf_msg_iter_status decode_until_state(struct ctf_msg_iter *msg_it,
             BT_COMP_LOGD_STR("Medium returned CTF_MSG_ITER_STATUS_AGAIN.");
             goto end;
         } else if (G_UNLIKELY(status != CTF_MSG_ITER_STATUS_OK)) {
-            BT_COMP_LOGE_APPEND_CAUSE(self_comp, "Cannot handle state: msg-it-addr=%p, state=%s",
-                                      msg_it, state_string(msg_it->state));
+            BT_COMP_LOGE_APPEND_CAUSE(msg_it->logCfg.selfComp(),
+                                      "Cannot handle state: msg-it-addr=%p, state=%s", msg_it,
+                                      state_string(msg_it->state));
             goto end;
         }
 

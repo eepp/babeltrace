@@ -5,9 +5,9 @@
  * Copyright 2015 Jérémie Galarneau <jeremie.galarneau@efficios.com>
  */
 
-#define BT_COMP_LOG_SELF_COMP       (ctx->self_comp)
-#define BT_COMP_LOG_SELF_COMP_CLASS (ctx->self_comp_class)
-#define BT_LOG_OUTPUT_LEVEL         (ctx->log_level)
+#define BT_COMP_LOG_SELF_COMP       (ctx->logCfg.selfComp())
+#define BT_COMP_LOG_SELF_COMP_CLASS (ctx->logCfg.selfCompCls())
+#define BT_LOG_OUTPUT_LEVEL         (ctx->logCfg.logLevel())
 #define BT_LOG_TAG                  "PLUGIN/CTF/META/RESOLVE"
 #include "logging/comp-logging.h"
 
@@ -26,6 +26,7 @@
 
 #include "ctf-meta-visitors.hpp"
 #include "logging.hpp"
+#include "cpp-common/log-cfg.hpp"
 
 using field_class_stack_t = GPtrArray;
 
@@ -49,11 +50,11 @@ struct field_class_stack_frame
  */
 struct resolve_context
 {
-    bt_logging_level log_level = (bt_logging_level) 0;
+    explicit resolve_context(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
+    {
+    }
 
-    /* Weak, exactly one of these must be set */
-    bt_self_component *self_comp = nullptr;
-    bt_self_component_class *self_comp_class = nullptr;
+    const bt2_common::LogCfg logCfg;
 
     struct ctf_trace_class *tc = nullptr;
     struct ctf_stream_class *sc = nullptr;
@@ -1209,15 +1210,12 @@ end:
 
 BT_HIDDEN
 int ctf_trace_class_resolve_field_classes(struct ctf_trace_class *tc,
-                                          struct meta_log_config *log_cfg)
+                                          const bt2_common::LogCfg& logCfg)
 {
     int ret = 0;
     uint64_t i;
 
-    resolve_context local_ctx {};
-    local_ctx.log_level = log_cfg->log_level;
-    local_ctx.self_comp = log_cfg->self_comp;
-    local_ctx.self_comp_class = log_cfg->self_comp_class;
+    resolve_context local_ctx(logCfg);
     local_ctx.tc = tc;
     local_ctx.scopes.packet_header = tc->packet_header_fc;
     local_ctx.root_scope = CTF_SCOPE_PACKET_HEADER;

@@ -6,8 +6,8 @@
  * Copyright 2010-2011 EfficiOS Inc. and Linux Foundation
  */
 
-#define BT_COMP_LOG_SELF_COMP (self_comp)
-#define BT_LOG_OUTPUT_LEVEL   (log_level)
+#define BT_COMP_LOG_SELF_COMP (logCfg.selfComp())
+#define BT_LOG_OUTPUT_LEVEL   (logCfg.logLevel())
 #define BT_LOG_TAG            "PLUGIN/SRC.CTF.FS/DS"
 #include "logging/comp-logging.h"
 
@@ -47,8 +47,7 @@ static bool offset_ist_mapped(struct ctf_fs_ds_file *ds_file, off_t offset_in_fi
 static enum ctf_msg_iter_medium_status ds_file_munmap(struct ctf_fs_ds_file *ds_file)
 {
     enum ctf_msg_iter_medium_status status;
-    bt_self_component *self_comp = ds_file->self_comp;
-    bt_logging_level log_level = ds_file->log_level;
+    const bt2_common::LogCfg& logCfg = ds_file->logCfg;
 
     BT_ASSERT(ds_file);
 
@@ -88,8 +87,7 @@ static enum ctf_msg_iter_medium_status ds_file_mmap(struct ctf_fs_ds_file *ds_fi
                                                     off_t requested_offset_in_file)
 {
     enum ctf_msg_iter_medium_status status;
-    bt_self_component *self_comp = ds_file->self_comp;
-    bt_logging_level log_level = ds_file->log_level;
+    const bt2_common::LogCfg& logCfg = ds_file->logCfg;
 
     /* Ensure the requested offset is in the file range. */
     BT_ASSERT(requested_offset_in_file >= 0);
@@ -117,7 +115,7 @@ static enum ctf_msg_iter_medium_status ds_file_mmap(struct ctf_fs_ds_file *ds_fi
      * contains `requested_offset_in_file`.
      */
     ds_file->request_offset_in_mapping =
-        requested_offset_in_file % bt_mmap_get_offset_align_size(ds_file->log_level);
+        requested_offset_in_file % bt_mmap_get_offset_align_size(logCfg.logLevel());
     ds_file->mmap_offset_in_file = requested_offset_in_file - ds_file->request_offset_in_mapping;
     ds_file->mmap_len =
         MIN(ds_file->file->size - ds_file->mmap_offset_in_file, ds_file->mmap_max_len);
@@ -126,7 +124,7 @@ static enum ctf_msg_iter_medium_status ds_file_mmap(struct ctf_fs_ds_file *ds_fi
 
     ds_file->mmap_addr =
         bt_mmap((void *) 0, ds_file->mmap_len, PROT_READ, MAP_PRIVATE, fileno(ds_file->file->fp),
-                ds_file->mmap_offset_in_file, ds_file->log_level);
+                ds_file->mmap_offset_in_file, logCfg.logLevel());
     if (ds_file->mmap_addr == MAP_FAILED) {
         BT_COMP_LOGE("Cannot memory-map address (size %zu) of file \"%s\" (%p) at offset %jd: %s",
                      ds_file->mmap_len, ds_file->file->path->str, ds_file->file->fp,
@@ -182,8 +180,7 @@ static enum ctf_msg_iter_medium_status medop_request_bytes(size_t request_sz, ui
 {
     enum ctf_msg_iter_medium_status status = CTF_MSG_ITER_MEDIUM_STATUS_OK;
     struct ctf_fs_ds_file *ds_file = (struct ctf_fs_ds_file *) data;
-    bt_self_component *self_comp = ds_file->self_comp;
-    bt_logging_level log_level = ds_file->log_level;
+    const bt2_common::LogCfg& logCfg = ds_file->logCfg;
 
     BT_ASSERT(request_sz > 0);
 
@@ -271,6 +268,11 @@ struct ctf_msg_iter_medium_ops ctf_fs_ds_file_medops = {
 
 struct ctf_fs_ds_group_medops_data
 {
+    explicit ctf_fs_ds_group_medops_data(const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam}
+    {
+    }
+
     /* Weak, set once at creation time. */
     struct ctf_fs_ds_file_group *ds_file_group = nullptr;
 
@@ -291,7 +293,7 @@ struct ctf_fs_ds_group_medops_data
 
     /* Weak, for context / logging / appending causes. */
     bt_self_message_iterator *self_msg_iter = nullptr;
-    bt_logging_level log_level = (bt_logging_level) 0;
+    const bt2_common::LogCfg logCfg;
 };
 
 static enum ctf_msg_iter_medium_status medop_group_request_bytes(size_t request_sz,
@@ -317,10 +319,9 @@ static bt_stream *medop_group_borrow_stream(bt_stream_class *stream_class, int64
  * by `index_entry`.
  */
 
-static enum ctf_msg_iter_medium_status
-ctf_fs_ds_group_medops_set_file(struct ctf_fs_ds_group_medops_data *data,
-                                struct ctf_fs_ds_index_entry *index_entry,
-                                bt_self_message_iterator *self_msg_iter, bt_logging_level log_level)
+static enum ctf_msg_iter_medium_status ctf_fs_ds_group_medops_set_file(
+    struct ctf_fs_ds_group_medops_data *data, struct ctf_fs_ds_index_entry *index_entry,
+    bt_self_message_iterator *self_msg_iter, const bt2_common::LogCfg& logCfg)
 {
     enum ctf_msg_iter_medium_status status;
 
@@ -333,9 +334,8 @@ ctf_fs_ds_group_medops_set_file(struct ctf_fs_ds_group_medops_data *data,
         ctf_fs_ds_file_destroy(data->file);
 
         /* Create the new file. */
-        data->file =
-            ctf_fs_ds_file_create(data->ds_file_group->ctf_fs_trace, data->ds_file_group->stream,
-                                  index_entry->path, log_level);
+        data->file = ctf_fs_ds_file_create(data->ds_file_group->ctf_fs_trace,
+                                           data->ds_file_group->stream, index_entry->path, logCfg);
         if (!data->file) {
             BT_MSG_ITER_LOGE_APPEND_CAUSE(self_msg_iter, "failed to create ctf_fs_ds_file.");
             status = CTF_MSG_ITER_MEDIUM_STATUS_ERROR;
@@ -377,8 +377,7 @@ static enum ctf_msg_iter_medium_status medop_group_switch_packet(void *void_data
     index_entry = (struct ctf_fs_ds_index_entry *) g_ptr_array_index(
         data->ds_file_group->index->entries, data->next_index_entry_index);
 
-    status =
-        ctf_fs_ds_group_medops_set_file(data, index_entry, data->self_msg_iter, data->log_level);
+    status = ctf_fs_ds_group_medops_set_file(data, index_entry, data->self_msg_iter, data->logCfg);
     if (status != CTF_MSG_ITER_MEDIUM_STATUS_OK) {
         goto end;
     }
@@ -407,17 +406,16 @@ end:
 
 enum ctf_msg_iter_medium_status ctf_fs_ds_group_medops_data_create(
     struct ctf_fs_ds_file_group *ds_file_group, bt_self_message_iterator *self_msg_iter,
-    bt_logging_level log_level, struct ctf_fs_ds_group_medops_data **out)
+    const bt2_common::LogCfg& logCfg, struct ctf_fs_ds_group_medops_data **out)
 {
     BT_ASSERT(self_msg_iter);
     BT_ASSERT(ds_file_group);
     BT_ASSERT(ds_file_group->index);
     BT_ASSERT(ds_file_group->index->entries->len > 0);
 
-    ctf_fs_ds_group_medops_data *data = new ctf_fs_ds_group_medops_data;
+    ctf_fs_ds_group_medops_data *data = new ctf_fs_ds_group_medops_data {logCfg};
     data->ds_file_group = ds_file_group;
     data->self_msg_iter = self_msg_iter;
-    data->log_level = log_level;
 
     /*
      * No need to prepare the first file.  ctf_msg_iter will call
@@ -452,8 +450,7 @@ static void ctf_fs_ds_index_entry_destroy(ctf_fs_ds_index_entry *entry)
     delete entry;
 }
 
-static struct ctf_fs_ds_index_entry *ctf_fs_ds_index_entry_create(bt_self_component *self_comp,
-                                                                  bt_logging_level log_level)
+static struct ctf_fs_ds_index_entry *ctf_fs_ds_index_entry_create()
 {
     ctf_fs_ds_index_entry *entry = new ctf_fs_ds_index_entry;
     entry->packet_seq_num = UINT64_MAX;
@@ -490,8 +487,7 @@ static struct ctf_fs_ds_index *build_index_from_idx_file(struct ctf_fs_ds_file *
     struct ctf_stream_class *sc;
     struct ctf_msg_iter_packet_properties props;
     uint32_t version_major, version_minor;
-    bt_self_component *self_comp = ds_file->self_comp;
-    bt_logging_level log_level = ds_file->log_level;
+    const bt2_common::LogCfg& logCfg = ds_file->logCfg;
 
     BT_COMP_LOGI("Building index from .idx file of stream file %s", ds_file->file->path->str);
     ret = ctf_msg_iter_get_packet_properties(msg_iter, &props);
@@ -583,7 +579,7 @@ static struct ctf_fs_ds_index *build_index_from_idx_file(struct ctf_fs_ds_file *
         goto error;
     }
 
-    index = ctf_fs_ds_index_create(ds_file->log_level, ds_file->self_comp);
+    index = ctf_fs_ds_index_create(ds_file->logCfg);
     if (!index) {
         goto error;
     }
@@ -597,9 +593,9 @@ static struct ctf_fs_ds_index *build_index_from_idx_file(struct ctf_fs_ds_file *
             goto error;
         }
 
-        index_entry = ctf_fs_ds_index_entry_create(ds_file->self_comp, ds_file->log_level);
+        index_entry = ctf_fs_ds_index_entry_create();
         if (!index_entry) {
-            BT_COMP_LOGE_APPEND_CAUSE(ds_file->self_comp,
+            BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                       "Failed to create a ctf_fs_ds_index_entry.");
             goto error;
         }
@@ -691,8 +687,6 @@ static int init_index_entry(struct ctf_fs_ds_index_entry *entry, struct ctf_fs_d
 {
     int ret = 0;
     struct ctf_stream_class *sc;
-    bt_self_component *self_comp = ds_file->self_comp;
-    bt_logging_level log_level = ds_file->log_level;
 
     sc = ctf_trace_class_borrow_stream_class_by_id(ds_file->metadata->tc, props->stream_class_id);
     BT_ASSERT(sc);
@@ -700,6 +694,7 @@ static int init_index_entry(struct ctf_fs_ds_index_entry *entry, struct ctf_fs_d
     entry->offset = packet_offset;
     BT_ASSERT(packet_size >= 0);
     entry->packet_size = packet_size;
+    const bt2_common::LogCfg& logCfg = ds_file->logCfg;
 
     if (props->snapshots.beginning_clock != UINT64_C(-1)) {
         entry->timestamp_begin = props->snapshots.beginning_clock;
@@ -743,12 +738,11 @@ static struct ctf_fs_ds_index *build_index_from_stream_file(struct ctf_fs_ds_fil
     struct ctf_fs_ds_index *index = NULL;
     enum ctf_msg_iter_status iter_status = CTF_MSG_ITER_STATUS_OK;
     off_t current_packet_offset_bytes = 0;
-    bt_self_component *self_comp = ds_file->self_comp;
-    bt_logging_level log_level = ds_file->log_level;
+    const bt2_common::LogCfg& logCfg = ds_file->logCfg;
 
     BT_COMP_LOGI("Indexing stream file %s", ds_file->file->path->str);
 
-    index = ctf_fs_ds_index_create(ds_file->log_level, ds_file->self_comp);
+    index = ctf_fs_ds_index_create(logCfg);
     if (!index) {
         goto error;
     }
@@ -794,9 +788,9 @@ static struct ctf_fs_ds_index *build_index_from_stream_file(struct ctf_fs_ds_fil
             goto error;
         }
 
-        index_entry = ctf_fs_ds_index_entry_create(ds_file->self_comp, ds_file->log_level);
+        index_entry = ctf_fs_ds_index_entry_create();
         if (!index_entry) {
-            BT_COMP_LOGE_APPEND_CAUSE(ds_file->self_comp,
+            BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                       "Failed to create a ctf_fs_ds_index_entry.");
             goto error;
         }
@@ -831,19 +825,17 @@ error:
 
 BT_HIDDEN
 struct ctf_fs_ds_file *ctf_fs_ds_file_create(struct ctf_fs_trace *ctf_fs_trace, bt_stream *stream,
-                                             const char *path, bt_logging_level log_level)
+                                             const char *path, const bt2_common::LogCfg& logCfg)
 {
     int ret;
-    const size_t offset_align = bt_mmap_get_offset_align_size(log_level);
-    ctf_fs_ds_file *ds_file = new ctf_fs_ds_file;
+    const size_t offset_align = bt_mmap_get_offset_align_size(logCfg.logLevel());
+    ctf_fs_ds_file *ds_file = new ctf_fs_ds_file {logCfg};
 
     if (!ds_file) {
         goto error;
     }
 
-    ds_file->log_level = log_level;
-    ds_file->self_comp = ctf_fs_trace->self_comp;
-    ds_file->file = ctf_fs_file_create(log_level, ds_file->self_comp);
+    ds_file->file = ctf_fs_file_create(logCfg);
     if (!ds_file->file) {
         goto error;
     }
@@ -876,8 +868,7 @@ struct ctf_fs_ds_index *ctf_fs_ds_file_build_index(struct ctf_fs_ds_file *ds_fil
                                                    struct ctf_msg_iter *msg_iter)
 {
     struct ctf_fs_ds_index *index;
-    bt_self_component *self_comp = ds_file->self_comp;
-    bt_logging_level log_level = ds_file->log_level;
+    const bt2_common::LogCfg& logCfg = ds_file->logCfg;
 
     index = build_index_from_idx_file(ds_file, file_info, msg_iter);
     if (index) {
@@ -892,13 +883,12 @@ end:
 }
 
 BT_HIDDEN
-struct ctf_fs_ds_index *ctf_fs_ds_index_create(bt_logging_level log_level,
-                                               bt_self_component *self_comp)
+struct ctf_fs_ds_index *ctf_fs_ds_index_create(const bt2_common::LogCfg& logCfg)
 {
     ctf_fs_ds_index *index = new ctf_fs_ds_index;
     index->entries = g_ptr_array_new_with_free_func((GDestroyNotify) ctf_fs_ds_index_entry_destroy);
     if (!index->entries) {
-        BT_COMP_LOG_CUR_LVL(BT_LOG_ERROR, log_level, self_comp,
+        BT_COMP_LOG_CUR_LVL(BT_LOG_ERROR, logCfg.logLevel(), logCfg.selfComp(),
                             "Failed to allocate index entries.");
         goto error;
     }
