@@ -347,7 +347,7 @@ static enum ctf_msg_iter_medium_status ctf_fs_ds_group_medops_set_file(
      * Ensure the right portion of the file will be returned on the next
      * request_bytes call.
      */
-    status = ds_file_mmap(data->file, index_entry->offset);
+    status = ds_file_mmap(data->file, index_entry->offset.bytes());
     if (status != CTF_MSG_ITER_MEDIUM_STATUS_OK) {
         goto end;
     }
@@ -450,9 +450,11 @@ static void ctf_fs_ds_index_entry_destroy(ctf_fs_ds_index_entry *entry)
     delete entry;
 }
 
-static struct ctf_fs_ds_index_entry *ctf_fs_ds_index_entry_create()
+static struct ctf_fs_ds_index_entry *
+ctf_fs_ds_index_entry_create(const bt2_common::DataLen offset, const bt2_common::DataLen packetSize)
 {
-    ctf_fs_ds_index_entry *entry = new ctf_fs_ds_index_entry;
+    ctf_fs_ds_index_entry *entry = new ctf_fs_ds_index_entry {offset, packetSize};
+
     entry->packet_seq_num = UINT64_MAX;
 
     return entry;
@@ -480,7 +482,7 @@ static struct ctf_fs_ds_index *build_index_from_idx_file(struct ctf_fs_ds_file *
     const struct ctf_packet_index_file_hdr *header = NULL;
     struct ctf_fs_ds_index *index = NULL;
     struct ctf_fs_ds_index_entry *index_entry = NULL, *prev_index_entry = NULL;
-    uint64_t total_packets_size = 0;
+    bt2_common::DataLen totalPacketsSize = bt2_common::DataLen::fromBytes(0);
     size_t file_index_entry_size;
     size_t file_entry_count;
     size_t i;
@@ -586,14 +588,24 @@ static struct ctf_fs_ds_index *build_index_from_idx_file(struct ctf_fs_ds_file *
 
     for (i = 0; i < file_entry_count; i++) {
         struct ctf_packet_index *file_index = (struct ctf_packet_index *) file_pos;
-        uint64_t packet_size = be64toh(file_index->packet_size);
+        bt2_common::DataLen packetSize =
+            bt2_common::DataLen::fromBits(be64toh(file_index->packet_size));
 
-        if (packet_size % CHAR_BIT) {
+        if (packetSize.hasExtraBits()) {
             BT_COMP_LOGW("Invalid packet size encountered in LTTng trace index file");
             goto error;
         }
 
-        index_entry = ctf_fs_ds_index_entry_create();
+        bt2_common::DataLen offset = bt2_common::DataLen::fromBytes(be64toh(file_index->offset));
+        if (i != 0 && offset < prev_index_entry->offset) {
+            BT_COMP_LOGW(
+                "Invalid, non-monotonic, packet offset encountered in LTTng trace index file: "
+                "previous offset=%llu bytes, current offset=%llu bytes",
+                prev_index_entry->offset.bytes(), offset.bytes());
+            goto error;
+        }
+
+        index_entry = ctf_fs_ds_index_entry_create(offset, packetSize);
         if (!index_entry) {
             BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                       "Failed to create a ctf_fs_ds_index_entry.");
@@ -602,19 +614,6 @@ static struct ctf_fs_ds_index *build_index_from_idx_file(struct ctf_fs_ds_file *
 
         /* Set path to stream file. */
         index_entry->path = file_info->path->str;
-
-        /* Convert size in bits to bytes. */
-        packet_size /= CHAR_BIT;
-        index_entry->packet_size = packet_size;
-
-        index_entry->offset = be64toh(file_index->offset);
-        if (i != 0 && index_entry->offset < prev_index_entry->offset) {
-            BT_COMP_LOGW(
-                "Invalid, non-monotonic, packet offset encountered in LTTng trace index file: "
-                "previous offset=%" PRIu64 ", current offset=%" PRIu64,
-                prev_index_entry->offset, index_entry->offset);
-            goto error;
-        }
 
         index_entry->timestamp_begin = be64toh(file_index->timestamp_begin);
         index_entry->timestamp_end = be64toh(file_index->timestamp_end);
@@ -646,7 +645,7 @@ static struct ctf_fs_ds_index *build_index_from_idx_file(struct ctf_fs_ds_file *
             index_entry->packet_seq_num = be64toh(file_index->packet_seq_num);
         }
 
-        total_packets_size += packet_size;
+        totalPacketsSize += packetSize;
         file_pos += file_index_entry_size;
 
         prev_index_entry = index_entry;
@@ -657,10 +656,10 @@ static struct ctf_fs_ds_index *build_index_from_idx_file(struct ctf_fs_ds_file *
     }
 
     /* Validate that the index addresses the complete stream. */
-    if (ds_file->file->size != total_packets_size) {
+    if (ds_file->file->size != totalPacketsSize.bytes()) {
         BT_COMP_LOGW("Invalid LTTng trace index file; indexed size != stream file size: "
-                     "file-size=%" PRIu64 ", total-packets-size=%" PRIu64,
-                     ds_file->file->size, total_packets_size);
+                     "file-size=%" PRIu64 " bytes, total-packets-size=%llu bytes",
+                     ds_file->file->size, totalPacketsSize.bytes());
         goto error;
     }
 end:
@@ -682,18 +681,13 @@ error:
 }
 
 static int init_index_entry(struct ctf_fs_ds_index_entry *entry, struct ctf_fs_ds_file *ds_file,
-                            struct ctf_msg_iter_packet_properties *props, off_t packet_size,
-                            off_t packet_offset)
+                            struct ctf_msg_iter_packet_properties *props)
 {
     int ret = 0;
     struct ctf_stream_class *sc;
 
     sc = ctf_trace_class_borrow_stream_class_by_id(ds_file->metadata->tc, props->stream_class_id);
     BT_ASSERT(sc);
-    BT_ASSERT(packet_offset >= 0);
-    entry->offset = packet_offset;
-    BT_ASSERT(packet_size >= 0);
-    entry->packet_size = packet_size;
     const bt2_common::LogCfg& logCfg = ds_file->logCfg;
 
     if (props->snapshots.beginning_clock != UINT64_C(-1)) {
@@ -737,7 +731,7 @@ static struct ctf_fs_ds_index *build_index_from_stream_file(struct ctf_fs_ds_fil
     int ret;
     struct ctf_fs_ds_index *index = NULL;
     enum ctf_msg_iter_status iter_status = CTF_MSG_ITER_STATUS_OK;
-    off_t current_packet_offset_bytes = 0;
+    bt2_common::DataLen currentPacketOffset = bt2_common::DataLen::fromBytes(0);
     const bt2_common::LogCfg& logCfg = ds_file->logCfg;
 
     BT_COMP_LOGI("Indexing stream file %s", ds_file->file->path->str);
@@ -748,22 +742,18 @@ static struct ctf_fs_ds_index *build_index_from_stream_file(struct ctf_fs_ds_fil
     }
 
     while (true) {
-        off_t current_packet_size_bytes;
         struct ctf_fs_ds_index_entry *index_entry;
         struct ctf_msg_iter_packet_properties props;
 
-        if (current_packet_offset_bytes < 0) {
-            BT_COMP_LOGE_STR("Cannot get the current packet's offset.");
-            goto error;
-        } else if (current_packet_offset_bytes > ds_file->file->size) {
+        if (currentPacketOffset.bytes() > ds_file->file->size) {
             BT_COMP_LOGE_STR("Unexpected current packet's offset (larger than file).");
             goto error;
-        } else if (current_packet_offset_bytes == ds_file->file->size) {
+        } else if (currentPacketOffset.bytes() == ds_file->file->size) {
             /* No more data */
             break;
         }
 
-        iter_status = ctf_msg_iter_seek(msg_iter, current_packet_offset_bytes);
+        iter_status = ctf_msg_iter_seek(msg_iter, currentPacketOffset.bytes());
         if (iter_status != CTF_MSG_ITER_STATUS_OK) {
             goto error;
         }
@@ -773,22 +763,26 @@ static struct ctf_fs_ds_index *build_index_from_stream_file(struct ctf_fs_ds_fil
             goto error;
         }
 
-        if (props.exp_packet_total_size >= 0) {
-            current_packet_size_bytes = (uint64_t) props.exp_packet_total_size / 8;
-        } else {
-            current_packet_size_bytes = ds_file->file->size;
-        }
+        /*
+         * Get the current packet size from the packet header, if set.  Else,
+         * assume there is a single packet in the file, so take the file size
+         * as the packet size.
+         */
+        bt2_common::DataLen currentPacketSize =
+            props.exp_packet_total_size >= 0 ?
+                bt2_common::DataLen::fromBits(props.exp_packet_total_size) :
+                bt2_common::DataLen::fromBytes(ds_file->file->size);
 
-        if (current_packet_offset_bytes + current_packet_size_bytes > ds_file->file->size) {
+        if ((currentPacketOffset + currentPacketSize).bytes() > ds_file->file->size) {
             BT_COMP_LOGW("Invalid packet size reported in file: stream=\"%s\", "
-                         "packet-offset=%jd, packet-size-bytes=%jd, "
-                         "file-size=%jd",
-                         ds_file->file->path->str, (intmax_t) current_packet_offset_bytes,
-                         (intmax_t) current_packet_size_bytes, (intmax_t) ds_file->file->size);
+                         "packet-offset-bytes=%llu, packet-size-bytes=%llu, "
+                         "file-size-bytes=%jd",
+                         ds_file->file->path->str, currentPacketOffset.bytes(),
+                         currentPacketSize.bytes(), (intmax_t) ds_file->file->size);
             goto error;
         }
 
-        index_entry = ctf_fs_ds_index_entry_create();
+        index_entry = ctf_fs_ds_index_entry_create(currentPacketOffset, currentPacketSize);
         if (!index_entry) {
             BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                       "Failed to create a ctf_fs_ds_index_entry.");
@@ -798,8 +792,7 @@ static struct ctf_fs_ds_index *build_index_from_stream_file(struct ctf_fs_ds_fil
         /* Set path to stream file. */
         index_entry->path = file_info->path->str;
 
-        ret = init_index_entry(index_entry, ds_file, &props, current_packet_size_bytes,
-                               current_packet_offset_bytes);
+        ret = init_index_entry(index_entry, ds_file, &props);
         if (ret) {
             ctf_fs_ds_index_entry_destroy(index_entry);
             goto error;
@@ -807,11 +800,11 @@ static struct ctf_fs_ds_index *build_index_from_stream_file(struct ctf_fs_ds_fil
 
         g_ptr_array_add(index->entries, index_entry);
 
-        current_packet_offset_bytes += current_packet_size_bytes;
-        BT_COMP_LOGD("Seeking to next packet: current-packet-offset=%jd, "
-                     "next-packet-offset=%jd",
-                     (intmax_t) (current_packet_offset_bytes - current_packet_size_bytes),
-                     (intmax_t) current_packet_offset_bytes);
+        currentPacketOffset += currentPacketSize;
+        BT_COMP_LOGD("Seeking to next packet: current-packet-offset-bytes=%llu, "
+                     "next-packet-offset-bytes=%llu",
+                     (currentPacketOffset - currentPacketSize).bytes(),
+                     currentPacketOffset.bytes());
     }
 
 end:
