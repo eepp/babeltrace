@@ -28,6 +28,7 @@
 #include "../common/src/msg-iter/msg-iter.hpp"
 #include "query.hpp"
 #include "plugins/common/param-validation/param-validation.h"
+#include "cpp-common/comp-exc.hpp"
 
 struct tracer_info
 {
@@ -105,59 +106,69 @@ bt_message_iterator_class_next_method_status
 ctf_fs_iterator_next(bt_self_message_iterator *iterator, bt_message_array_const msgs,
                      uint64_t capacity, uint64_t *count)
 {
-    bt_message_iterator_class_next_method_status status;
     struct ctf_fs_msg_iter_data *msg_iter_data =
         (struct ctf_fs_msg_iter_data *) bt_self_message_iterator_get_data(iterator);
-    uint64_t i = 0;
+    const bt2_common::LogCfg& logCfg = msg_iter_data->logCfg;
 
-    if (G_UNLIKELY(msg_iter_data->next_saved_error)) {
-        /*
+    try {
+        bt_message_iterator_class_next_method_status status;
+        uint64_t i = 0;
+
+        if (G_UNLIKELY(msg_iter_data->next_saved_error)) {
+            /*
          * Last time we were called, we hit an error but had some
          * messages to deliver, so we stashed the error here.  Return
          * it now.
          */
-        BT_CURRENT_THREAD_MOVE_ERROR_AND_RESET(msg_iter_data->next_saved_error);
-        status = msg_iter_data->next_saved_status;
-        goto end;
-    }
-
-    do {
-        status = ctf_fs_iterator_next_one(msg_iter_data, &msgs[i]);
-        if (status == BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_OK) {
-            i++;
+            BT_CURRENT_THREAD_MOVE_ERROR_AND_RESET(msg_iter_data->next_saved_error);
+            status = msg_iter_data->next_saved_status;
+            goto end;
         }
-    } while (i < capacity && status == BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_OK);
 
-    if (i > 0) {
-        /*
-         * Even if ctf_fs_iterator_next_one() returned something
-         * else than BT_MESSAGE_ITERATOR_NEXT_METHOD_STATUS_OK, we
-         * accumulated message objects in the output
-         * message array, so we need to return
-         * BT_MESSAGE_ITERATOR_NEXT_METHOD_STATUS_OK so that they are
-         * transfered to downstream. This other status occurs
-         * again the next time muxer_msg_iter_do_next() is
-         * called, possibly without any accumulated
-         * message, in which case we'll return it.
-         */
-        if (status < 0) {
+        do {
+            status = ctf_fs_iterator_next_one(msg_iter_data, &msgs[i]);
+            if (status == BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_OK) {
+                i++;
+            }
+        } while (i < capacity && status == BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_OK);
+
+        if (i > 0) {
             /*
-             * Save this error for the next _next call.  Assume that
-             * this component always appends error causes when
-             * returning an error status code, which will cause the
-             * current thread error to be non-NULL.
+             * Even if ctf_fs_iterator_next_one() returned something
+             * else than BT_MESSAGE_ITERATOR_NEXT_METHOD_STATUS_OK, we
+             * accumulated message objects in the output
+             * message array, so we need to return
+             * BT_MESSAGE_ITERATOR_NEXT_METHOD_STATUS_OK so that they are
+             * transfered to downstream. This other status occurs
+             * again the next time muxer_msg_iter_do_next() is
+             * called, possibly without any accumulated
+             * message, in which case we'll return it.
              */
-            msg_iter_data->next_saved_error = bt_current_thread_take_error();
-            BT_ASSERT(msg_iter_data->next_saved_error);
-            msg_iter_data->next_saved_status = status;
-        }
+            if (status < 0) {
+                /*
+                 * Save this error for the next _next call.  Assume that
+                 * this component always appends error causes when
+                 * returning an error status code, which will cause the
+                 * current thread error to be non-NULL.
+                 */
+                msg_iter_data->next_saved_error = bt_current_thread_take_error();
+                BT_ASSERT(msg_iter_data->next_saved_error);
+                msg_iter_data->next_saved_status = status;
+            }
 
-        *count = i;
-        status = BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_OK;
-    }
+            *count = i;
+            status = BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_OK;
+        }
 
 end:
-    return status;
+        return status;
+    } catch (const std::bad_alloc&) {
+        return BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_MEMORY_ERROR;
+    } catch (const bt2_common::Error&) {
+        BT_COMP_LOGE_APPEND_CAUSE(msg_iter_data->logCfg.selfComp(),
+                                  "Failed to fetch next messages");
+        return BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_ERROR;
+    }
 }
 
 BT_HIDDEN
@@ -169,10 +180,19 @@ ctf_fs_iterator_seek_beginning(bt_self_message_iterator *it)
 
     BT_ASSERT(msg_iter_data);
 
-    ctf_msg_iter_reset(msg_iter_data->msg_iter);
-    ctf_fs_ds_group_medops_data_reset(msg_iter_data->msg_iter_medops_data);
+    const bt2_common::LogCfg& logCfg = msg_iter_data->logCfg;
 
-    return BT_MESSAGE_ITERATOR_CLASS_SEEK_BEGINNING_METHOD_STATUS_OK;
+    try {
+        ctf_msg_iter_reset(msg_iter_data->msg_iter);
+        ctf_fs_ds_group_medops_data_reset(msg_iter_data->msg_iter_medops_data);
+
+        return BT_MESSAGE_ITERATOR_CLASS_SEEK_BEGINNING_METHOD_STATUS_OK;
+    } catch (const std::bad_alloc&) {
+        return BT_MESSAGE_ITERATOR_CLASS_SEEK_BEGINNING_METHOD_STATUS_MEMORY_ERROR;
+    } catch (const bt2_common::Error&) {
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to seek beginning");
+        return BT_MESSAGE_ITERATOR_CLASS_SEEK_BEGINNING_METHOD_STATUS_ERROR;
+    }
 }
 
 BT_HIDDEN
@@ -205,61 +225,71 @@ ctf_fs_iterator_init(bt_self_message_iterator *self_msg_iter,
                      bt_self_message_iterator_configuration *config,
                      bt_self_component_port_output *self_port)
 {
-    struct ctf_fs_port_data *port_data;
-    bt_message_iterator_class_initialize_method_status status;
-    enum ctf_msg_iter_medium_status medium_status;
-
-    port_data = (struct ctf_fs_port_data *) bt_self_component_port_get_data(
-        bt_self_component_port_output_as_self_component_port(self_port));
+    bt_self_component_port *self_comp_port =
+        bt_self_component_port_output_as_self_component_port(self_port);
+    ctf_fs_port_data *port_data =
+        (ctf_fs_port_data *) bt_self_component_port_get_data(self_comp_port);
     BT_ASSERT(port_data);
 
     const bt2_common::LogCfg& logCfg = port_data->ctf_fs->logCfg;
 
-    ctf_fs_msg_iter_data *msg_iter_data = new ctf_fs_msg_iter_data {logCfg};
-    msg_iter_data->self_msg_iter = self_msg_iter;
-    msg_iter_data->ds_file_group = port_data->ds_file_group;
+    try {
+        bt_message_iterator_class_initialize_method_status status;
+        enum ctf_msg_iter_medium_status medium_status;
 
-    medium_status = ctf_fs_ds_group_medops_data_create(
-        msg_iter_data->ds_file_group, self_msg_iter, logCfg, &msg_iter_data->msg_iter_medops_data);
-    BT_ASSERT(medium_status == CTF_MSG_ITER_MEDIUM_STATUS_OK ||
-              medium_status == CTF_MSG_ITER_MEDIUM_STATUS_ERROR ||
-              medium_status == CTF_MSG_ITER_MEDIUM_STATUS_MEMORY_ERROR);
-    if (medium_status != CTF_MSG_ITER_MEDIUM_STATUS_OK) {
-        BT_MSG_ITER_LOGE_APPEND_CAUSE(self_msg_iter, "Failed to create ctf_fs_ds_group_medops");
-        status = ctf_msg_iter_medium_status_to_msg_iter_initialize_status(medium_status);
-        goto error;
-    }
+        ctf_fs_msg_iter_data *msg_iter_data = new ctf_fs_msg_iter_data {logCfg};
 
-    msg_iter_data->msg_iter =
-        ctf_msg_iter_create(msg_iter_data->ds_file_group->ctf_fs_trace->metadata->tc,
-                            bt_common_get_page_size(logCfg.logLevel()) * 8, ctf_fs_ds_group_medops,
-                            msg_iter_data->msg_iter_medops_data, self_msg_iter, logCfg);
-    if (!msg_iter_data->msg_iter) {
-        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Cannot create a CTF message iterator.");
-        status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
-        goto error;
-    }
+        msg_iter_data->self_msg_iter = self_msg_iter;
+        msg_iter_data->ds_file_group = port_data->ds_file_group;
 
-    /*
-     * This iterator can seek forward if its stream class has a default
-     * clock class.
-     */
-    if (msg_iter_data->ds_file_group->sc->default_clock_class) {
-        bt_self_message_iterator_configuration_set_can_seek_forward(config, true);
-    }
+        medium_status =
+            ctf_fs_ds_group_medops_data_create(msg_iter_data->ds_file_group, self_msg_iter, logCfg,
+                                               &msg_iter_data->msg_iter_medops_data);
+        BT_ASSERT(medium_status == CTF_MSG_ITER_MEDIUM_STATUS_OK ||
+                  medium_status == CTF_MSG_ITER_MEDIUM_STATUS_ERROR ||
+                  medium_status == CTF_MSG_ITER_MEDIUM_STATUS_MEMORY_ERROR);
+        if (medium_status != CTF_MSG_ITER_MEDIUM_STATUS_OK) {
+            BT_MSG_ITER_LOGE_APPEND_CAUSE(self_msg_iter, "Failed to create ctf_fs_ds_group_medops");
+            status = ctf_msg_iter_medium_status_to_msg_iter_initialize_status(medium_status);
+            goto error;
+        }
 
-    bt_self_message_iterator_set_data(self_msg_iter, msg_iter_data);
-    msg_iter_data = NULL;
+        msg_iter_data->msg_iter = ctf_msg_iter_create(
+            msg_iter_data->ds_file_group->ctf_fs_trace->metadata->tc,
+            bt_common_get_page_size(logCfg.logLevel()) * 8, ctf_fs_ds_group_medops,
+            msg_iter_data->msg_iter_medops_data, self_msg_iter, logCfg);
+        if (!msg_iter_data->msg_iter) {
+            BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Cannot create a CTF message iterator.");
+            status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
+            goto error;
+        }
 
-    status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_OK;
-    goto end;
+        /*
+         * This iterator can seek forward if its stream class has a default
+         * clock class.
+         */
+        if (msg_iter_data->ds_file_group->sc->default_clock_class) {
+            bt_self_message_iterator_configuration_set_can_seek_forward(config, true);
+        }
+
+        bt_self_message_iterator_set_data(self_msg_iter, msg_iter_data);
+        msg_iter_data = NULL;
+
+        status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_OK;
+        goto end;
 
 error:
-    bt_self_message_iterator_set_data(self_msg_iter, NULL);
+        bt_self_message_iterator_set_data(self_msg_iter, NULL);
 
 end:
-    ctf_fs_msg_iter_data_destroy(msg_iter_data);
-    return status;
+        ctf_fs_msg_iter_data_destroy(msg_iter_data);
+        return status;
+    } catch (const std::bad_alloc&) {
+        return BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
+    } catch (const bt2_common::Error&) {
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to initialize iterator");
+        return BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
+    }
 }
 
 static void ctf_fs_trace_destroy(struct ctf_fs_trace *ctf_fs_trace)
@@ -2244,20 +2274,24 @@ bt_component_class_initialize_method_status
 ctf_fs_init(bt_self_component_source *self_comp_src, bt_self_component_source_configuration *config,
             const bt_value *params, __attribute__((unused)) void *init_method_data)
 {
-    struct ctf_fs_component *ctf_fs;
-    bt_component_class_initialize_method_status ret =
-        BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_OK;
     bt_self_component *selfComp = bt_self_component_source_as_self_component(self_comp_src);
     const bt_component *comp = bt_self_component_as_component(selfComp);
     bt_logging_level logLevel = bt_component_get_logging_level(comp);
     bt2_common::LogCfg logCfg(logLevel, selfComp);
 
-    ctf_fs = ctf_fs_create(params, self_comp_src, logCfg);
-    if (!ctf_fs) {
-        ret = BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
-    }
+    try {
+        ctf_fs_component *ctf_fs = ctf_fs_create(params, self_comp_src, logCfg);
+        if (!ctf_fs) {
+            return BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
+        }
 
-    return ret;
+        return BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_OK;
+    } catch (const std::bad_alloc&) {
+        return BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
+    } catch (const bt2_common::Error&) {
+        BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to initialize component");
+        return BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
+    }
 }
 
 BT_HIDDEN
@@ -2267,7 +2301,6 @@ bt_component_class_query_method_status ctf_fs_query(bt_self_component_class_sour
                                                     __attribute__((unused)) void *method_data,
                                                     const bt_value **result)
 {
-    bt_component_class_query_method_status status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
     const bt_query_executor *query_exec =
         bt_private_query_executor_as_query_executor_const(priv_query_exec);
     bt_logging_level log_level = bt_query_executor_get_logging_level(query_exec);
@@ -2275,17 +2308,27 @@ bt_component_class_query_method_status ctf_fs_query(bt_self_component_class_sour
         bt_self_component_class_source_as_self_component_class(comp_class_src);
     bt2_common::LogCfg logCfg(log_level, comp_class);
 
-    if (strcmp(object, "metadata-info") == 0) {
-        status = metadata_info_query(params, logCfg, result);
-    } else if (strcmp(object, "babeltrace.trace-infos") == 0) {
-        status = trace_infos_query(params, logCfg, result);
-    } else if (!strcmp(object, "babeltrace.support-info")) {
-        status = support_info_query(params, logCfg, result);
-    } else {
-        BT_LOGE("Unknown query object `%s`", object);
-        status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_UNKNOWN_OBJECT;
-        goto end;
-    }
+    try {
+        bt_component_class_query_method_status status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
+
+        if (strcmp(object, "metadata-info") == 0) {
+            status = metadata_info_query(params, logCfg, result);
+        } else if (strcmp(object, "babeltrace.trace-infos") == 0) {
+            status = trace_infos_query(params, logCfg, result);
+        } else if (!strcmp(object, "babeltrace.support-info")) {
+            status = support_info_query(params, logCfg, result);
+        } else {
+            BT_LOGE("Unknown query object `%s`", object);
+            status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_UNKNOWN_OBJECT;
+            goto end;
+        }
 end:
-    return status;
+        return status;
+    } catch (const std::bad_alloc&) {
+        return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_MEMORY_ERROR;
+    } catch (const bt2_common::Error&) {
+        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(), "Failed to exectute query: object=%s",
+                                        object);
+        return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
+    }
 }
