@@ -190,10 +190,18 @@ extern struct ctf_msg_iter_medium_ops ctf_fs_ds_file_medops;
 BT_HIDDEN
 extern struct ctf_msg_iter_medium_ops ctf_fs_ds_group_medops;
 
+struct ctf_fs_ds_group_medops_data_deleter
+{
+    void operator()(ctf_fs_ds_group_medops_data *data);
+};
+
+using ctf_fs_ds_group_medops_data_up =
+    std::unique_ptr<ctf_fs_ds_group_medops_data, ctf_fs_ds_group_medops_data_deleter>;
+
 BT_HIDDEN
 enum ctf_msg_iter_medium_status ctf_fs_ds_group_medops_data_create(
     struct ctf_fs_ds_file_group *ds_file_group, bt_self_message_iterator *self_msg_iter,
-    const bt2_common::LogCfg& logCfg, struct ctf_fs_ds_group_medops_data **out);
+    const bt2_common::LogCfg& logCfg, ctf_fs_ds_group_medops_data_up& out);
 
 BT_HIDDEN
 void ctf_fs_ds_group_medops_data_reset(struct ctf_fs_ds_group_medops_data *data);
