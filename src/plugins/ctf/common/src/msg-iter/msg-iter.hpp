@@ -16,6 +16,7 @@
 #include <stddef.h>
 #include <babeltrace2/babeltrace.h>
 #include "common/macros.h"
+#include <memory>
 
 #include "../metadata/tsdl/ctf-meta.hpp"
 #include "cpp-common/log-cfg.hpp"
@@ -211,6 +212,13 @@ struct ctf_msg_iter_medium_ops
 /** CTF message iterator. */
 struct ctf_msg_iter;
 
+struct ctf_msg_iter_deleter
+{
+    void operator()(ctf_msg_iter *iter);
+};
+
+using ctf_msg_iter_up = std::unique_ptr<ctf_msg_iter, ctf_msg_iter_deleter>;
+
 /**
  * Creates a CTF message iterator.
  *
@@ -228,10 +236,10 @@ struct ctf_msg_iter;
  *				success, or \c NULL on error
  */
 BT_HIDDEN
-struct ctf_msg_iter *ctf_msg_iter_create(struct ctf_trace_class *tc, size_t max_request_sz,
-                                         struct ctf_msg_iter_medium_ops medops, void *medops_data,
-                                         bt_self_message_iterator *self_msg_iter,
-                                         const bt2_common::LogCfg& logCfg);
+ctf_msg_iter_up ctf_msg_iter_create(struct ctf_trace_class *tc, size_t max_request_sz,
+                                    struct ctf_msg_iter_medium_ops medops, void *medops_data,
+                                    bt_self_message_iterator *self_msg_iter,
+                                    const bt2_common::LogCfg& logCfg);
 
 /**
  * Destroys a CTF message iterator, freeing all internal resources.
