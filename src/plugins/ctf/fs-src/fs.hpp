@@ -12,6 +12,7 @@
 
 #include <stdbool.h>
 #include <memory>
+#include <vector>
 #include "common/macros.h"
 #include <babeltrace2/babeltrace.h>
 #include "cpp-common/data-len.hpp"
@@ -90,6 +91,8 @@ struct ctf_fs_trace
 
 struct ctf_fs_port_data
 {
+    using UP = std::unique_ptr<ctf_fs_port_data>;
+
     /* Weak, belongs to ctf_fs_trace */
     struct ctf_fs_ds_file_group *ds_file_group = nullptr;
 
@@ -112,82 +115,11 @@ struct ctf_fs_component
 
     const bt2_common::LogCfg logCfg;
 
-    /* Array of struct ctf_fs_port_data *, owned by this */
-    GPtrArray *port_data = nullptr;
+    std::vector<ctf_fs_port_data::UP> port_data;
 
     ctf_fs_trace::UP trace;
 
     ctf::src::ClkClsCfg clkClsCfg;
-};
-struct ctf_fs_ds_index_entry
-{
-    ctf_fs_ds_index_entry(bt2_common::DataLen offsetParam, bt2_common::DataLen packetSizeParam) :
-        offset(offsetParam), packetSize(packetSizeParam)
-    {
-    }
-
-    /* Weak, belongs to ctf_fs_ds_file_info. */
-    const char *path = nullptr;
-
-    /* Position of the packet from the beginning of the file. */
-    const bt2_common::DataLen offset;
-
-    /* Size of the packet. */
-    const bt2_common::DataLen packetSize;
-
-    /*
-     * Extracted from the packet context, relative to the respective fields'
-     * mapped clock classes (in cycles).
-     */
-    uint64_t timestamp_begin, timestamp_end = 0;
-
-    /*
-     * Converted from the packet context, relative to the trace's EPOCH
-     * (in ns since EPOCH).
-     */
-    int64_t timestamp_begin_ns, timestamp_end_ns = 0;
-
-    /*
-     * Packet sequence number, or UINT64_MAX if not present in the index.
-     */
-    uint64_t packet_seq_num = 0;
-};
-
-struct ctf_fs_ds_index
-{
-    /* Array of pointer to struct ctf_fs_ds_index_entry. */
-    GPtrArray *entries = nullptr;
-};
-
-struct ctf_fs_ds_file_group
-{
-    /*
-     * Array of struct ctf_fs_ds_file_info, owned by this.
-     *
-     * This is an _ordered_ array of data stream file infos which
-     * belong to this group (a single stream instance).
-     *
-     * You can call ctf_fs_ds_file_create() with one of those paths
-     * and the trace IR stream below.
-     */
-    GPtrArray *ds_file_infos = nullptr;
-
-    /* Owned by this */
-    struct ctf_stream_class *sc = nullptr;
-
-    /* Owned by this */
-    bt_stream *stream = nullptr;
-
-    /* Stream (instance) ID; -1ULL means none */
-    uint64_t stream_id = 0;
-
-    /* Weak, belongs to component */
-    struct ctf_fs_trace *ctf_fs_trace = nullptr;
-
-    /*
-     * Owned by this.
-     */
-    struct ctf_fs_ds_index *index = nullptr;
 };
 
 struct ctf_fs_msg_iter_data
