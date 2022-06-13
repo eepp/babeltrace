@@ -392,15 +392,6 @@ struct ctf_msg_iter_medium_ops ctf_fs_ds_group_medops = {
     .borrow_stream = medop_group_borrow_stream,
 };
 
-static ctf_fs_ds_index_entry::UP ctf_fs_ds_index_entry_create(const bt2_common::DataLen offset,
-                                                              const bt2_common::DataLen packetSize)
-{
-    ctf_fs_ds_index_entry::UP entry =
-        bt2_common::makeUnique<ctf_fs_ds_index_entry>(offset, packetSize);
-
-    return entry;
-}
-
 static int convert_cycles_to_ns(struct ctf_clock_class *clock_class, uint64_t cycles, int64_t *ns)
 {
     return bt_util_clock_cycles_to_ns_from_origin(cycles, clock_class->frequency,
@@ -539,7 +530,7 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
             return nullptr;
         }
 
-        index_entry = ctf_fs_ds_index_entry_create(offset, packetSize);
+        index_entry = bt2_common::makeUnique<ctf_fs_ds_index_entry>(offset, packetSize);
         if (!index_entry) {
             BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                       "Failed to create a ctf_fs_ds_index_entry.");
@@ -694,7 +685,8 @@ static ctf_fs_ds_index::UP build_index_from_stream_file(struct ctf_fs_ds_file *d
             return nullptr;
         }
 
-        index_entry = ctf_fs_ds_index_entry_create(currentPacketOffset, currentPacketSize);
+        index_entry =
+            bt2_common::makeUnique<ctf_fs_ds_index_entry>(currentPacketOffset, currentPacketSize);
         if (!index_entry) {
             BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
                                       "Failed to create a ctf_fs_ds_index_entry.");
