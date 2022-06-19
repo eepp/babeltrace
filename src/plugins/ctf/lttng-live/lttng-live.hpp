@@ -173,7 +173,7 @@ struct lttng_live_trace
     uint64_t id = 0;
 
     /* Owned by this. */
-    bt_trace *trace = nullptr;
+    nonstd::optional<bt2::Trace::Shared> trace;
 
     nonstd::optional<bt2::TraceClass::Shared> trace_class;
 

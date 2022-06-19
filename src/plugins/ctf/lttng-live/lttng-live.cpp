@@ -152,8 +152,6 @@ static void lttng_live_destroy_trace(struct lttng_live_trace *trace)
     BT_ASSERT(trace->stream_iterators);
     g_ptr_array_free(trace->stream_iterators, TRUE);
 
-    BT_TRACE_PUT_REF_AND_RESET(trace->trace);
-
     lttng_live_metadata_fini(trace);
     delete trace;
 }
@@ -170,7 +168,6 @@ static struct lttng_live_trace *lttng_live_create_trace(struct lttng_live_sessio
     lttng_live_trace *trace = new lttng_live_trace {logCfg};
     trace->session = session;
     trace->id = trace_id;
-    trace->trace = NULL;
     trace->stream_iterators =
         g_ptr_array_new_with_free_func((GDestroyNotify) lttng_live_stream_iterator_destroy);
     BT_ASSERT(trace->stream_iterators);

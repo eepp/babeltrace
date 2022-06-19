@@ -84,10 +84,12 @@ static bt_stream *medop_borrow_stream(bt_stream_class *stream_class, int64_t str
              * is unique for a live viewer session.
              */
             lttng_live_stream->stream = bt_stream_create_with_id(
-                stream_class, lttng_live_stream->trace->trace, lttng_live_stream->viewer_stream_id);
+                stream_class, (*lttng_live_stream->trace->trace)->libObjPtr(),
+                lttng_live_stream->viewer_stream_id);
         } else {
             lttng_live_stream->stream = bt_stream_create_with_id(
-                stream_class, lttng_live_stream->trace->trace, (uint64_t) stream_id);
+                stream_class, (*lttng_live_stream->trace->trace)->libObjPtr(),
+                (uint64_t) stream_id);
         }
 
         if (!lttng_live_stream->stream) {
