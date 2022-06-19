@@ -1011,18 +1011,17 @@ static int fix_index_lttng_event_after_packet_bug(struct ctf_fs_trace *trace)
 
     for (ctf_fs_ds_file_group::UP& ds_file_group : trace->ds_file_groups) {
         BT_ASSERT(ds_file_group);
-        ctf_fs_ds_index *index = &ds_file_group->index;
+        ctf_fs_ds_index& index = ds_file_group->index;
 
-        BT_ASSERT(index);
-        BT_ASSERT(!index->entries.empty());
+        BT_ASSERT(!index.entries.empty());
 
         /*
          * Iterate over all entries but the last one. The last one is
          * fixed differently after.
          */
-        for (size_t entry_i = 0; entry_i < index->entries.size() - 1; ++entry_i) {
-            ctf_fs_ds_index_entry& curr_entry = index->entries[entry_i];
-            const ctf_fs_ds_index_entry& next_entry = index->entries[entry_i + 1];
+        for (size_t entry_i = 0; entry_i < index.entries.size() - 1; ++entry_i) {
+            ctf_fs_ds_index_entry& curr_entry = index.entries[entry_i];
+            const ctf_fs_ds_index_entry& next_entry = index.entries[entry_i + 1];
 
             /*
              * 1. Set the current index entry `end` timestamp to
@@ -1036,7 +1035,7 @@ static int fix_index_lttng_event_after_packet_bug(struct ctf_fs_trace *trace)
          * 2. Fix the last entry by decoding the last event of the last
          * packet.
          */
-        ctf_fs_ds_index_entry& last_entry = index->entries.back();
+        ctf_fs_ds_index_entry& last_entry = index.entries.back();
 
         BT_ASSERT(ds_file_group->sc->default_clock_class);
         ctf_clock_class *default_cc = ds_file_group->sc->default_clock_class;
@@ -1076,10 +1075,9 @@ static int fix_index_barectf_event_before_packet_bug(struct ctf_fs_trace *trace)
     const bt2_common::LogCfg& logCfg = trace->logCfg;
 
     for (ctf_fs_ds_file_group::UP& ds_file_group : trace->ds_file_groups) {
-        ctf_fs_ds_index *index = &ds_file_group->index;
+        ctf_fs_ds_index& index = ds_file_group->index;
 
-        BT_ASSERT(index);
-        BT_ASSERT(!index->entries.empty());
+        BT_ASSERT(!index.entries.empty());
 
         BT_ASSERT(ds_file_group->sc->default_clock_class);
         ctf_clock_class *default_cc = ds_file_group->sc->default_clock_class;
@@ -1088,9 +1086,9 @@ static int fix_index_barectf_event_before_packet_bug(struct ctf_fs_trace *trace)
          * 1. Iterate over the index, starting from the second entry
          * (index = 1).
          */
-        for (size_t entry_i = 1; entry_i < index->entries.size(); ++entry_i) {
-            ctf_fs_ds_index_entry& prev_entry = index->entries[entry_i - 1];
-            ctf_fs_ds_index_entry& curr_entry = index->entries[entry_i];
+        for (size_t entry_i = 1; entry_i < index.entries.size(); ++entry_i) {
+            ctf_fs_ds_index_entry& prev_entry = index.entries[entry_i - 1];
+            ctf_fs_ds_index_entry& curr_entry = index.entries[entry_i];
             /*
              * 2. Set the current entry `begin` timestamp to the
              * timestamp of the first event of the current packet.
@@ -1140,15 +1138,14 @@ static int fix_index_lttng_crash_quirk(struct ctf_fs_trace *trace)
         struct ctf_clock_class *default_cc;
 
         BT_ASSERT(ds_file_group);
-        ctf_fs_ds_index *index = &ds_file_group->index;
+        ctf_fs_ds_index& index = ds_file_group->index;
 
         BT_ASSERT(ds_file_group->sc->default_clock_class);
         default_cc = ds_file_group->sc->default_clock_class;
 
-        BT_ASSERT(index);
-        BT_ASSERT(!index->entries.empty());
+        BT_ASSERT(!index.entries.empty());
 
-        ctf_fs_ds_index_entry& last_entry = index->entries.back();
+        ctf_fs_ds_index_entry& last_entry = index.entries.back();
 
         /* 1. Fix the last entry first. */
         if (last_entry.timestamp_end == 0 && last_entry.timestamp_begin != 0) {
@@ -1166,9 +1163,9 @@ static int fix_index_lttng_crash_quirk(struct ctf_fs_trace *trace)
         }
 
         /* Iterate over all entries but the last one. */
-        for (size_t entry_idx = 0; entry_idx < index->entries.size() - 1; ++entry_idx) {
-            ctf_fs_ds_index_entry& curr_entry = index->entries[entry_idx];
-            const ctf_fs_ds_index_entry& next_entry = index->entries[entry_idx + 1];
+        for (size_t entry_idx = 0; entry_idx < index.entries.size() - 1; ++entry_idx) {
+            ctf_fs_ds_index_entry& curr_entry = index.entries[entry_idx];
+            const ctf_fs_ds_index_entry& next_entry = index.entries[entry_idx + 1];
 
             if (curr_entry.timestamp_end == 0 && curr_entry.timestamp_begin != 0) {
                 /*
