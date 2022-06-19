@@ -175,8 +175,7 @@ struct lttng_live_trace
     /* Owned by this. */
     bt_trace *trace = nullptr;
 
-    /* Weak reference. */
-    bt_trace_class *trace_class = nullptr;
+    nonstd::optional<bt2::TraceClass::Shared> trace_class;
 
     struct lttng_live_metadata *metadata = nullptr;
 
