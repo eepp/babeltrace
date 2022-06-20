@@ -93,20 +93,20 @@ bt2::Value::Shared metadata_info_query(bt2::ConstMapValue params, const bt2_comm
     }
 }
 
-static void add_range(bt2::MapValue info, struct range *range, const char *range_name)
+static void add_range(bt2::MapValue info, const range& range, const char *range_name)
 {
-    if (!range->set) {
+    if (!range.set) {
         /* Not an error. */
         return;
     }
 
     bt2::MapValue rangeMap = info.insertEmptyMap(range_name);
-    rangeMap.insert("begin", range->begin_ns);
-    rangeMap.insert("end", range->end_ns);
+    rangeMap.insert("begin", range.begin_ns);
+    rangeMap.insert("end", range.end_ns);
 }
 
 static void populate_stream_info(struct ctf_fs_ds_file_group *group, bt2::MapValue groupInfo,
-                                 struct range *stream_range, const bt2_common::LogCfg& logCfg)
+                                 const bt2_common::LogCfg& logCfg)
 {
     /*
      * Since each `struct ctf_fs_ds_file_group` has a sorted array of
@@ -122,16 +122,16 @@ static void populate_stream_info(struct ctf_fs_ds_file_group *group, bt2::MapVal
     /* Last entry. */
     const ctf_fs_ds_index_entry& last_ds_index_entry = group->index.entries.back();
 
-    stream_range->begin_ns = first_ds_index_entry.timestamp_begin_ns;
-    stream_range->end_ns = last_ds_index_entry.timestamp_end_ns;
+    range stream_range;
+    stream_range.begin_ns = first_ds_index_entry.timestamp_begin_ns;
+    stream_range.end_ns = last_ds_index_entry.timestamp_end_ns;
 
     /*
      * If any of the begin and end timestamps is not set it means that
      * packets don't include `timestamp_begin` _and_ `timestamp_end` fields
      * in their packet context so we can't set the range.
      */
-    stream_range->set =
-        stream_range->begin_ns != UINT64_C(-1) && stream_range->end_ns != UINT64_C(-1);
+    stream_range.set = stream_range.begin_ns != UINT64_C(-1) && stream_range.end_ns != UINT64_C(-1);
 
     add_range(groupInfo, stream_range, "range-ns");
 
@@ -153,9 +153,8 @@ static void populate_trace_info(const struct ctf_fs_trace *trace, bt2::MapValue 
 
     /* Find range of all stream groups, and of the trace. */
     for (const ctf_fs_ds_file_group::UP& group : trace->ds_file_groups) {
-        range group_range;
         bt2::MapValue groupInfo = fileGroups.appendEmptyMap();
-        populate_stream_info(group.get(), groupInfo, &group_range, logCfg);
+        populate_stream_info(group.get(), groupInfo, logCfg);
     }
 }
 
