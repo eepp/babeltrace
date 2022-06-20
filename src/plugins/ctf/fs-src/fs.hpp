@@ -76,7 +76,10 @@ struct ctf_fs_component
 {
     using UP = std::unique_ptr<ctf_fs_component>;
 
-    explicit ctf_fs_component(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
+    explicit ctf_fs_component(const ctf::src::ClkClsCfg& clkClsCfgParam,
+                              const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam},
+        clkClsCfg(clkClsCfgParam)
     {
     }
 
