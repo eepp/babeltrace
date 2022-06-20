@@ -162,10 +162,9 @@ static void populate_trace_info(const struct ctf_fs_trace *trace, bt2::MapValue 
 BT_HIDDEN
 bt2::Value::Shared trace_infos_query(bt2::ConstMapValue params, const bt2_common::LogCfg& logCfg)
 {
-    ctf_fs_component::UP ctf_fs = bt2_common::makeUnique<ctf_fs_component>(logCfg);
-
     ctf::src::fs::Parameters parameters = read_src_fs_parameters(params, logCfg);
-    ctf_fs->clkClsCfg = parameters.clkClsCfg;
+    ctf_fs_component::UP ctf_fs =
+        bt2_common::makeUnique<ctf_fs_component>(parameters.clkClsCfg, logCfg);
 
     if (ctf_fs_component_create_ctf_fs_trace(ctf_fs.get(), parameters.inputs, parameters.traceName,
                                              nullptr)) {
