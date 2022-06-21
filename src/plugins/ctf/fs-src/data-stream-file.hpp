@@ -83,13 +83,15 @@ struct ctf_fs_ds_file
 
 struct ctf_fs_ds_index_entry
 {
-    ctf_fs_ds_index_entry(bt2_common::DataLen offsetParam, bt2_common::DataLen packetSizeParam) :
-        offset(offsetParam), packetSize(packetSizeParam)
+    ctf_fs_ds_index_entry(const char *pathParam, bt2_common::DataLen offsetParam,
+                          bt2_common::DataLen packetSizeParam) :
+        path {pathParam},
+        offset {offsetParam}, packetSize {packetSizeParam}
     {
     }
 
     /* Weak, belongs to ctf_fs_ds_file_info. */
-    const char *path = nullptr;
+    const char *path;
 
     /* Position of the packet from the beginning of the file. */
     bt2_common::DataLen offset;
