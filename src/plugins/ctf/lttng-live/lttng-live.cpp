@@ -348,7 +348,7 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_no_da
         BT_COMP_LOGD(
             "Need to get an update for the metadata stream before proceeding further with this stream: "
             "stream-name=\"%s\"",
-            lttng_live_stream->name->str);
+            lttng_live_stream->name.c_str());
         ret = LTTNG_LIVE_ITERATOR_STATUS_CONTINUE;
         goto end;
     }
@@ -357,7 +357,7 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_no_da
         BT_COMP_LOGD(
             "Need to get an update of all streams before proceeding further with this stream: "
             "stream-name=\"%s\"",
-            lttng_live_stream->name->str);
+            lttng_live_stream->name.c_str());
         ret = LTTNG_LIVE_ITERATOR_STATUS_CONTINUE;
         goto end;
     }
@@ -400,7 +400,7 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_no_da
     BT_COMP_LOGD("Setting live stream reading info: stream-name=\"%s\", "
                  "viewer-stream-id=%" PRIu64 ", stream-base-offset=%" PRIu64
                  ", stream-offset=%" PRIu64 ", stream-len=%" PRIu64,
-                 lttng_live_stream->name->str, lttng_live_stream->viewer_stream_id,
+                 lttng_live_stream->name.c_str(), lttng_live_stream->viewer_stream_id,
                  lttng_live_stream->base_offset, lttng_live_stream->offset, lttng_live_stream->len);
 
 end:
@@ -840,7 +840,7 @@ lttng_live_iterator_close_stream(struct lttng_live_msg_iter *lttng_live_msg_iter
 
     BT_COMP_LOGD("Closing live stream iterator: stream-name=\"%s\", "
                  "viewer-stream-id=%" PRIu64,
-                 stream_iter->name->str, stream_iter->viewer_stream_id);
+                 stream_iter->name.c_str(), stream_iter->viewer_stream_id);
 
     /*
      * The viewer has hung up on us so we are closing the stream. The
@@ -925,7 +925,7 @@ lttng_live_iterator_next_msg_on_stream(struct lttng_live_msg_iter *lttng_live_ms
 
     BT_COMP_LOGD("Advancing live stream iterator until next message if possible: "
                  "stream-name=\"%s\", viewer-stream-id=%" PRIu64,
-                 stream_iter->name->str, stream_iter->viewer_stream_id);
+                 stream_iter->name.c_str(), stream_iter->viewer_stream_id);
 
     if (stream_iter->has_stream_hung_up) {
         /*
@@ -987,7 +987,7 @@ end:
 
     BT_COMP_LOGD("Returning from advancing live stream iterator: status=%s, "
                  "stream-name=\"%s\", viewer-stream-id=%" PRIu64,
-                 lttng_live_iterator_status_string(live_status), stream_iter->name->str,
+                 lttng_live_iterator_status_string(live_status), stream_iter->name.c_str(),
                  stream_iter->viewer_stream_id);
 
     return live_status;
@@ -1104,7 +1104,7 @@ handle_late_message(struct lttng_live_msg_iter *lttng_live_msg_iter,
 
     BT_COMP_LOGD("Handling late message on live stream iterator: "
                  "stream-name=\"%s\", viewer-stream-id=%" PRIu64,
-                 stream_iter->name->str, stream_iter->viewer_stream_id);
+                 stream_iter->name.c_str(), stream_iter->viewer_stream_id);
 
     if (!stream_iter->last_inactivity_ts.is_set) {
         BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(),
@@ -1241,7 +1241,7 @@ next_stream_iterator_for_trace(struct lttng_live_msg_iter *lttng_live_msg_iter,
             BT_COMP_LOGD("Live stream iterator returned message: msg-type=%s, "
                          "stream-name=\"%s\", viewer-stream-id=%" PRIu64,
                          bt_common_message_type_string(bt_message_get_type(msg)),
-                         stream_iter->name->str, stream_iter->viewer_stream_id);
+                         stream_iter->name.c_str(), stream_iter->viewer_stream_id);
 
             /*
              * Get the timestamp in nanoseconds from origin of this
@@ -1272,7 +1272,7 @@ next_stream_iterator_for_trace(struct lttng_live_msg_iter *lttng_live_msg_iter,
                                               "lttng-live-msg-iter-addr=%p, "
                                               "stream-name=\"%s\", "
                                               "curr-msg-ts=%" PRId64 ", last-msg-ts=%" PRId64,
-                                              lttng_live_msg_iter, stream_iter->name->str,
+                                              lttng_live_msg_iter, stream_iter->name.c_str(),
                                               curr_msg_ts_ns, lttng_live_msg_iter->last_msg_ts_ns);
                     stream_iter_status = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
                     goto end;
