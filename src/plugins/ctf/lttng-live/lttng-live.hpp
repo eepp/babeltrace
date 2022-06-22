@@ -58,7 +58,7 @@ struct lttng_live_stream_iterator
     const bt2_common::LogCfg logCfg;
 
     /* Owned by this. */
-    bt_stream *stream = nullptr;
+    nonstd::optional<bt2::Stream::Shared> stream;
 
     /* Weak reference. */
     struct lttng_live_trace *trace = nullptr;
