@@ -99,7 +99,7 @@ BT_HIDDEN
 enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_trace *trace)
 {
     struct lttng_live_session *session = trace->session;
-    struct lttng_live_metadata *metadata = trace->metadata;
+    struct lttng_live_metadata *metadata = trace->metadata.get();
     std::vector<char> metadataBuf;
     bool keep_receiving;
     bt2_common::FileUP fp;
@@ -264,35 +264,19 @@ int lttng_live_metadata_create_stream(struct lttng_live_session *session, uint64
     cfg.self_comp = session->self_comp;
     cfg.create_trace_class = true;
 
-    lttng_live_metadata *metadata = new lttng_live_metadata {logCfg};
+    lttng_live_metadata::UP metadata = bt2_common::makeUnique<lttng_live_metadata>(logCfg);
     metadata->stream_id = stream_id;
 
     metadata->decoder = ctf_metadata_decoder_create(&cfg);
     if (!metadata->decoder) {
         BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to create CTF metadata decoder");
-        goto error;
+        return -1;
     }
     trace = lttng_live_session_borrow_or_create_trace_by_id(session, ctf_trace_id);
     if (!trace) {
         BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to borrow trace");
-        goto error;
+        return -1;
     }
-    trace->metadata = metadata;
+    trace->metadata = std::move(metadata);
     return 0;
-
-error:
-    delete metadata;
-    return -1;
-}
-
-BT_HIDDEN
-void lttng_live_metadata_fini(struct lttng_live_trace *trace)
-{
-    struct lttng_live_metadata *metadata = trace->metadata;
-
-    if (!metadata) {
-        return;
-    }
-    trace->metadata = NULL;
-    delete metadata;
 }
