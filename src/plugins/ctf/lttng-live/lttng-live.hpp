@@ -51,6 +51,8 @@ enum lttng_live_stream_state
 /* Iterator over a live stream. */
 struct lttng_live_stream_iterator
 {
+    using UP = std::unique_ptr<lttng_live_stream_iterator>;
+
     explicit lttng_live_stream_iterator(const bt2_common::LogCfg& logCfgParam) noexcept :
         logCfg {logCfgParam}
     {
