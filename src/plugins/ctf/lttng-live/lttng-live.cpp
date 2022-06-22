@@ -1754,9 +1754,9 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
             goto error;
         }
 
-        viewer_status =
-            live_viewer_connection_create(lttng_live->params.url->str, false, lttng_live_msg_iter,
-                                          logCfg, &lttng_live_msg_iter->viewer_connection);
+        viewer_status = live_viewer_connection_create(lttng_live->params.url.c_str(), false,
+                                                      lttng_live_msg_iter, logCfg,
+                                                      &lttng_live_msg_iter->viewer_connection);
         if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
             if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
                 BT_CLOGE_APPEND_CAUSE("Failed to create viewer connection");
@@ -1795,14 +1795,14 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
                     "Unable to connect to the requested live viewer session. Keep trying to connect because of "
                     "%s=\"%s\" component parameter: url=\"%s\"",
                     SESS_NOT_FOUND_ACTION_PARAM, SESS_NOT_FOUND_ACTION_CONTINUE_STR,
-                    lttng_live->params.url->str);
+                    lttng_live->params.url.c_str());
                 break;
             case SESSION_NOT_FOUND_ACTION_FAIL:
                 BT_CLOGE_APPEND_CAUSE(
                     "Unable to connect to the requested live viewer session. Fail the message iterator initialization because of %s=\"%s\" "
                     "component parameter: url =\"%s\"",
                     SESS_NOT_FOUND_ACTION_PARAM, SESS_NOT_FOUND_ACTION_FAIL_STR,
-                    lttng_live->params.url->str);
+                    lttng_live->params.url.c_str());
                 status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
                 goto error;
             case SESSION_NOT_FOUND_ACTION_END:
@@ -1811,7 +1811,7 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
                     "call because of %s=\"%s\" component parameter: "
                     "url=\"%s\"",
                     SESS_NOT_FOUND_ACTION_PARAM, SESS_NOT_FOUND_ACTION_END_STR,
-                    lttng_live->params.url->str);
+                    lttng_live->params.url.c_str());
                 break;
             default:
                 bt_common_abort();
@@ -2011,14 +2011,6 @@ end:
 
 static void lttng_live_component_destroy_data(struct lttng_live_component *lttng_live)
 {
-    if (!lttng_live) {
-        return;
-    }
-
-    if (lttng_live->params.url) {
-        g_string_free(lttng_live->params.url, TRUE);
-    }
-
     delete lttng_live;
 }
 
@@ -2101,11 +2093,7 @@ lttng_live_component_create(const bt_value *params, bt_self_component *self_comp
     url_value = bt_value_array_borrow_element_by_index_const(inputs_value, 0);
     url = bt_value_string_get(url_value);
 
-    lttng_live->params.url = g_string_new(url);
-    if (!lttng_live->params.url) {
-        status = BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
-        goto error;
-    }
+    lttng_live->params.url = url;
 
     value = bt_value_map_borrow_entry_value_const(params, SESS_NOT_FOUND_ACTION_PARAM);
     if (value) {
