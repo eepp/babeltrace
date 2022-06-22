@@ -26,6 +26,7 @@
 #include "cpp-common/make-unique.hpp"
 #include "common/assert.h"
 #include "compat/mman.h"
+#include "cpp-common/make-unique.hpp"
 #include "data-stream.hpp"
 #include "cpp-common/cfg-logging-error-reporting.hpp"
 
@@ -125,7 +126,7 @@ enum lttng_live_iterator_status lttng_live_lazy_msg_init(struct lttng_live_sessi
                                                          bt_self_message_iterator *self_msg_iter)
 {
     struct lttng_live_component *lttng_live = session->lttng_live_msg_iter->lttng_live_comp;
-    uint64_t trace_idx, stream_iter_idx;
+    uint64_t trace_idx;
     const bt2_common::LogCfg& logCfg = session->logCfg;
 
     if (!session->lazy_stream_msg_init) {
@@ -140,23 +141,20 @@ enum lttng_live_iterator_status lttng_live_lazy_msg_init(struct lttng_live_sessi
         struct lttng_live_trace *trace =
             (lttng_live_trace *) g_ptr_array_index(session->traces, trace_idx);
 
-        for (stream_iter_idx = 0; stream_iter_idx < trace->stream_iterators->len;
-             stream_iter_idx++) {
+        for (lttng_live_stream_iterator::UP& stream_iter : trace->stream_iterators) {
             struct ctf_trace_class *ctf_tc;
-            struct lttng_live_stream_iterator *stream_iter =
-                (lttng_live_stream_iterator *) g_ptr_array_index(trace->stream_iterators,
-                                                                 stream_iter_idx);
 
             if (stream_iter->msg_iter) {
                 continue;
             }
+
             ctf_tc = ctf_metadata_decoder_borrow_ctf_trace_class(trace->metadata->decoder.get());
             BT_CLOGD("Creating CTF message iterator: "
                      "session-id=%" PRIu64 ", ctf-tc-addr=%p, "
                      "stream-iter-name=%s, self-msg-iter-addr=%p",
                      session->id, ctf_tc, stream_iter->name.c_str(), self_msg_iter);
             stream_iter->msg_iter = ctf_msg_iter_create(ctf_tc, lttng_live->max_query_size, medops,
-                                                        stream_iter, self_msg_iter, logCfg);
+                                                        stream_iter.get(), self_msg_iter, logCfg);
             if (!stream_iter->msg_iter) {
                 BT_CLOGE_APPEND_CAUSE("Failed to create CTF message iterator");
                 goto error;
@@ -224,7 +222,7 @@ lttng_live_stream_iterator_create(struct lttng_live_session *session, uint64_t c
     stream_iter->name = nameSs.str();
 
     lttng_live_stream_iterator *ret = stream_iter.get();
-    g_ptr_array_add(trace->stream_iterators, stream_iter.release());
+    trace->stream_iterators.emplace_back(std::move(stream_iter));
 
     /* Track the number of active stream iterator. */
     session->lttng_live_msg_iter->active_stream_iter++;
@@ -236,10 +234,4 @@ lttng_live_stream_iterator::~lttng_live_stream_iterator()
 {
     /* Track the number of active stream iterator. */
     this->trace->session->lttng_live_msg_iter->active_stream_iter--;
-}
-
-BT_HIDDEN
-void lttng_live_stream_iterator_destroy(struct lttng_live_stream_iterator *stream_iter)
-{
-    delete stream_iter;
 }
