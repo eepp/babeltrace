@@ -10,8 +10,6 @@ libbabeltrace2_plugin_ctf_fs_src_la_SOURCES = \
 	fs.cpp \
 	fs.hpp \
 	lttng-index.hpp \
-	metadata.cpp \
-	metadata.hpp \
 	query.hpp \
 	query.cpp
 

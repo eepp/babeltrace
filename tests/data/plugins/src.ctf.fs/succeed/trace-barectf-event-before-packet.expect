@@ -14,6 +14,9 @@ Trace class:
       Offset (cycles): 0
       Origin is Unix epoch: No
     Event class `simple_uint32` (ID 0):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: critical
       Log level: Critical
       Payload field class: Structure (1 member):
         value: Unsigned integer (32-bit, Base 10)

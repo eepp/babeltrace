@@ -17,40 +17,37 @@
 #include <babeltrace2/babeltrace.h>
 #include "cpp-common/data-len.hpp"
 #include "data-stream-file.hpp"
-#include "metadata.hpp"
-#include "../common/src/metadata/tsdl/decoder.hpp"
+#include "../common/src/metadata/tsdl/ctf-1-metadata-stream-parser.hpp"
+#include "../common/src/msg-iter.hpp"
 #include "cpp-common/glib-up.hpp"
+
+#define CTF_FS_METADATA_FILENAME "metadata"
 
 BT_HIDDEN
 extern bool ctf_fs_debug;
-
-struct ctf_fs_metadata
-{
-    using UP = std::unique_ptr<ctf_fs_metadata>;
-
-    /* Owned by this */
-    ctf_metadata_decoder_up decoder;
-
-    /* Owned by this */
-    nonstd::optional<bt2::TraceClass::Shared> trace_class;
-
-    /* Weak (owned by `decoder` above) */
-    struct ctf_trace_class *tc = nullptr;
-
-    int bo = 0;
-};
 
 struct ctf_fs_trace
 {
     using UP = std::unique_ptr<ctf_fs_trace>;
 
-    explicit ctf_fs_trace(const bt2_common::LogCfg& logCfgParam) noexcept : logCfg {logCfgParam}
+    explicit ctf_fs_trace(const ctf::src::ClkClsCfg clkClsCfg, bt_self_component *selfComp,
+                          const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam},
+        _mMetadataStreamParser {clkClsCfg, selfComp, logCfgParam}
     {
     }
 
-    const bt2_common::LogCfg logCfg;
+    const ctf::src::TraceCls *cls()
+    {
+        return _mMetadataStreamParser.traceCls();
+    }
 
-    ctf_fs_metadata::UP metadata;
+    void parseSection(const uint8_t *begin, const uint8_t *end)
+    {
+        _mMetadataStreamParser.parseSection(begin, end);
+    }
+
+    const bt2_common::LogCfg logCfg;
 
     nonstd::optional<bt2::Trace::Shared> trace;
 
@@ -60,6 +57,9 @@ struct ctf_fs_trace
 
     /* Next automatic stream ID when not provided by packet header */
     uint64_t next_stream_id = 0;
+
+private:
+    ctf::src::Ctf1MetadataStreamParser _mMetadataStreamParser;
 };
 
 struct ctf_fs_port_data
@@ -91,6 +91,7 @@ struct ctf_fs_component
     ctf_fs_trace::UP trace;
 
     ctf::src::ClkClsCfg clkClsCfg;
+    ctf::src::Quirks quirks;
 };
 
 struct ctf_fs_msg_iter_data
@@ -107,10 +108,10 @@ struct ctf_fs_msg_iter_data
     /* Weak */
     bt_self_message_iterator *self_msg_iter = nullptr;
 
-    /* Weak, belongs to ctf_fs_trace */
-    struct ctf_fs_ds_file_group *ds_file_group = nullptr;
+    /* Weak, belongs to ctf_fs_component */
+    ctf_fs_port_data *port_data = nullptr;
 
-    ctf_msg_iter_up msg_iter;
+    nonstd::optional<ctf::src::MsgIter> msgIter;
 
     /*
      * Saved error.  If we hit an error in the _next method, but have some
@@ -120,8 +121,6 @@ struct ctf_fs_msg_iter_data
     bt_message_iterator_class_next_method_status next_saved_status =
         BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_OK;
     const struct bt_error *next_saved_error = nullptr;
-
-    ctf_fs_ds_group_medops_data_up msg_iter_medops_data;
 };
 
 BT_HIDDEN
