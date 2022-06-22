@@ -23,7 +23,8 @@
 #include <babeltrace2/babeltrace.h>
 #include "compat/compiler.h"
 #include <babeltrace2/types.h>
-#include "cpp-common/comp-exc.hpp"
+#include "cpp-common/exc.hpp"
+#include "cpp-common/glib-up.hpp"
 
 #include "plugins/common/muxing/muxing.h"
 #include "plugins/common/param-validation/param-validation.h"
@@ -2094,6 +2095,7 @@ lttng_live_component_create(const bt_value *params, bt_self_component *self_comp
         status = BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
         goto error;
     } else if (validation_status == BT_PARAM_VALIDATION_STATUS_VALIDATION_ERROR) {
+        bt2_common::GCharUP errorFreer {validation_error};
         BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "%s", validation_error);
         status = BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
         goto error;
@@ -2127,8 +2129,6 @@ error:
     delete lttng_live;
     lttng_live = NULL;
 end:
-    g_free(validation_error);
-
     *component = lttng_live;
     return status;
 }
