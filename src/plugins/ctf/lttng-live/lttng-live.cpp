@@ -164,13 +164,15 @@ static struct lttng_live_trace *lttng_live_create_trace(struct lttng_live_sessio
                  "session-id=%" PRIu64 ", trace-id=%" PRIu64,
                  session->id, trace_id);
 
-    lttng_live_trace *trace = new lttng_live_trace {logCfg};
+    lttng_live_trace::UP trace = bt2_common::makeUnique<lttng_live_trace>(logCfg);
     trace->session = session;
     trace->id = trace_id;
     trace->metadata_stream_state = LTTNG_LIVE_METADATA_STREAM_STATE_NEEDED;
-    g_ptr_array_add(session->traces, trace);
 
-    return trace;
+    lttng_live_trace *ret = trace.get();
+    g_ptr_array_add(session->traces, trace.release());
+
+    return ret;
 }
 
 BT_HIDDEN
