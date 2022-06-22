@@ -25,6 +25,7 @@
 #include "cpp-common/make-unique.hpp"
 #include "common/assert.h"
 #include "compat/mman.h"
+#include "cpp-common/make-unique.hpp"
 #include "data-stream.hpp"
 
 #define STREAM_NAME_PREFIX "stream-"
@@ -139,12 +140,11 @@ enum lttng_live_iterator_status lttng_live_lazy_msg_init(struct lttng_live_sessi
         struct lttng_live_trace *trace =
             (lttng_live_trace *) g_ptr_array_index(session->traces, trace_idx);
 
-        for (stream_iter_idx = 0; stream_iter_idx < trace->stream_iterators->len;
+        for (stream_iter_idx = 0; stream_iter_idx < trace->stream_iterators.size();
              stream_iter_idx++) {
             struct ctf_trace_class *ctf_tc;
-            struct lttng_live_stream_iterator *stream_iter =
-                (lttng_live_stream_iterator *) g_ptr_array_index(trace->stream_iterators,
-                                                                 stream_iter_idx);
+            lttng_live_stream_iterator *stream_iter =
+                trace->stream_iterators[stream_iter_idx].get();
 
             if (stream_iter->msg_iter) {
                 continue;
@@ -224,7 +224,7 @@ lttng_live_stream_iterator_create(struct lttng_live_session *session, uint64_t c
     stream_iter->name = nameSs.str();
 
     lttng_live_stream_iterator *ret = stream_iter.get();
-    g_ptr_array_add(trace->stream_iterators, stream_iter.release());
+    trace->stream_iterators.emplace_back(std::move(stream_iter));
 
     /* Track the number of active stream iterator. */
     session->lttng_live_msg_iter->active_stream_iter++;
@@ -236,10 +236,4 @@ lttng_live_stream_iterator::~lttng_live_stream_iterator()
 {
     /* Track the number of active stream iterator. */
     this->trace->session->lttng_live_msg_iter->active_stream_iter--;
-}
-
-BT_HIDDEN
-void lttng_live_stream_iterator_destroy(struct lttng_live_stream_iterator *stream_iter)
-{
-    delete stream_iter;
 }
