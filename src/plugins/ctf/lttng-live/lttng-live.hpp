@@ -56,6 +56,8 @@ struct lttng_live_stream_iterator
     {
     }
 
+    ~lttng_live_stream_iterator();
+
     const bt2_common::LogCfg logCfg;
 
     /* Owned by this. */
