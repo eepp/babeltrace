@@ -271,6 +271,8 @@ struct lttng_live_msg_iter
     {
     }
 
+    ~lttng_live_msg_iter();
+
     const bt2_common::LogCfg logCfg;
 
     bt_self_component *self_comp = nullptr;
