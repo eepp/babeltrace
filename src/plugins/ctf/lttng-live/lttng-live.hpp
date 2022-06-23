@@ -195,6 +195,8 @@ struct lttng_live_trace
 
 struct lttng_live_session
 {
+    using UP = std::unique_ptr<lttng_live_session>;
+
     explicit lttng_live_session(const bt2_common::LogCfg& logCfgParam) noexcept :
         logCfg {logCfgParam}
     {
