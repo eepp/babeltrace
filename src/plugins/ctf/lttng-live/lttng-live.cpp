@@ -1762,7 +1762,8 @@ static struct bt_param_validation_map_value_entry_descr list_sessions_params[] =
     BT_PARAM_VALIDATION_MAP_VALUE_ENTRY_END};
 
 static bt_component_class_query_method_status
-lttng_live_query_list_sessions(bt2::ConstMapValue params, const bt_value **result,
+lttng_live_query_list_sessions(bt2::ConstMapValue params,
+                               nonstd::optional<bt2::Value::Shared>& result,
                                const bt2_common::LogCfg& logCfg)
 {
     bt_component_class_query_method_status status;
@@ -1808,8 +1809,6 @@ lttng_live_query_list_sessions(bt2::ConstMapValue params, const bt_value **resul
     goto end;
 
 error:
-    BT_VALUE_PUT_REF_AND_RESET(*result);
-
     if (status >= 0) {
         status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
     }
@@ -1821,7 +1820,8 @@ end:
 }
 
 static bt_component_class_query_method_status
-lttng_live_query_support_info(bt2::ConstMapValue params, const bt_value **result,
+lttng_live_query_support_info(bt2::ConstMapValue params,
+                              nonstd::optional<bt2::Value::Shared>& result,
                               const bt2_common::LogCfg& logCfg)
 {
     bt_component_class_query_method_status status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
@@ -1833,7 +1833,6 @@ lttng_live_query_support_info(bt2::ConstMapValue params, const bt_value **result
     /* Used by the logging macros */
     __attribute__((unused)) bt_self_component *self_comp = NULL;
 
-    *result = NULL;
     nonstd::optional<bt2::ConstValue> typeValue = params["type"];
     if (!typeValue) {
         BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(), "Missing expected `type` parameter.");
@@ -1874,12 +1873,7 @@ lttng_live_query_support_info(bt2::ConstMapValue params, const bt_value **result
     }
 
 create_result:
-    *result = bt_value_real_create_init(weight);
-    if (!*result) {
-        status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_MEMORY_ERROR;
-        goto error;
-    }
-
+    result = bt2::RealValue::create(weight);
     goto end;
 
 error:
@@ -1887,7 +1881,7 @@ error:
         status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
     }
 
-    BT_ASSERT(!*result);
+    BT_ASSERT(!result);
 
 end:
     return status;
@@ -1909,18 +1903,21 @@ bt_component_class_query_method_status lttng_live_query(bt_self_component_class_
     try {
         bt_component_class_query_method_status status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
         bt2::ConstMapValue paramsObj(params);
+        nonstd::optional<bt2::Value::Shared> resultObj;
 
         if (strcmp(object, "sessions") == 0) {
-            status = lttng_live_query_list_sessions(paramsObj, result, logCfg);
+            status = lttng_live_query_list_sessions(paramsObj, resultObj, logCfg);
         } else if (strcmp(object, "babeltrace.support-info") == 0) {
-            status = lttng_live_query_support_info(paramsObj, result, logCfg);
+            status = lttng_live_query_support_info(paramsObj, resultObj, logCfg);
         } else {
             BT_COMP_LOGI("Unknown query object `%s`", object);
-            status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_UNKNOWN_OBJECT;
-            goto end;
+            return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_UNKNOWN_OBJECT;
         }
 
-end:
+        if (status == BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK) {
+            *result = resultObj->release().libObjPtr();
+        }
+
         return status;
     } catch (const std::bad_alloc&) {
         return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_MEMORY_ERROR;
