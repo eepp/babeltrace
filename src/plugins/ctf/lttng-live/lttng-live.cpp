@@ -224,7 +224,7 @@ static void lttng_live_msg_iter_destroy(struct lttng_live_msg_iter *lttng_live_m
     }
 
     if (lttng_live_msg_iter->viewer_connection) {
-        live_viewer_connection_destroy(lttng_live_msg_iter->viewer_connection);
+        delete lttng_live_msg_iter->viewer_connection;
     }
     BT_ASSERT(lttng_live_msg_iter->lttng_live_comp);
     BT_ASSERT(lttng_live_msg_iter->lttng_live_comp->has_msg_iter);
@@ -1845,9 +1845,7 @@ error:
     }
 
 end:
-    if (viewer_connection) {
-        live_viewer_connection_destroy(viewer_connection);
-    }
+    delete viewer_connection;
 
     g_free(validate_error);
 
