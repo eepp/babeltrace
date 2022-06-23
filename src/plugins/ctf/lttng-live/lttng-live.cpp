@@ -223,9 +223,6 @@ static void lttng_live_msg_iter_destroy(struct lttng_live_msg_iter *lttng_live_m
         goto end;
     }
 
-    if (lttng_live_msg_iter->viewer_connection) {
-        delete lttng_live_msg_iter->viewer_connection;
-    }
     BT_ASSERT(lttng_live_msg_iter->lttng_live_comp);
     BT_ASSERT(lttng_live_msg_iter->lttng_live_comp->has_msg_iter);
 
@@ -1704,7 +1701,7 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
 
         viewer_status = live_viewer_connection_create(lttng_live->params.url.c_str(), false,
                                                       lttng_live_msg_iter, logCfg,
-                                                      &lttng_live_msg_iter->viewer_connection);
+                                                      lttng_live_msg_iter->viewer_connection);
         if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
             if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
                 BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to create viewer connection");
@@ -1797,7 +1794,7 @@ lttng_live_query_list_sessions(const bt_value *params, const bt_value **result,
     bt_component_class_query_method_status status;
     const bt_value *url_value = NULL;
     const char *url;
-    struct live_viewer_connection *viewer_connection = NULL;
+    live_viewer_connection::UP viewer_connection;
     enum lttng_live_viewer_status viewer_status;
     enum bt_param_validation_status validation_status;
     gchar *validate_error = NULL;
@@ -1815,7 +1812,7 @@ lttng_live_query_list_sessions(const bt_value *params, const bt_value **result,
     url_value = bt_value_map_borrow_entry_value_const(params, URL_PARAM);
     url = bt_value_string_get(url_value);
 
-    viewer_status = live_viewer_connection_create(url, true, NULL, logCfg, &viewer_connection);
+    viewer_status = live_viewer_connection_create(url, true, NULL, logCfg, viewer_connection);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
             BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
@@ -1829,7 +1826,7 @@ lttng_live_query_list_sessions(const bt_value *params, const bt_value **result,
         goto error;
     }
 
-    status = live_viewer_connection_list_sessions(viewer_connection, result);
+    status = live_viewer_connection_list_sessions(viewer_connection.get(), result);
     if (status != BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK) {
         BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(), "Failed to list viewer sessions");
         goto error;
@@ -1845,8 +1842,6 @@ error:
     }
 
 end:
-    delete viewer_connection;
-
     g_free(validate_error);
 
     return status;

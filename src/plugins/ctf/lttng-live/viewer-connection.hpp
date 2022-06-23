@@ -55,6 +55,8 @@ struct lttng_live_component;
 
 struct live_viewer_connection
 {
+    using UP = std::unique_ptr<live_viewer_connection>;
+
     explicit live_viewer_connection(const bt2_common::LogCfg& logCfgParam) noexcept :
         logCfg {logCfgParam}
     {
@@ -102,9 +104,10 @@ struct packet_index
     uint64_t packet_seq_num;     /* packet sequence number */
 };
 
-enum lttng_live_viewer_status live_viewer_connection_create(
-    const char *url, bool in_query, struct lttng_live_msg_iter *lttng_live_msg_iter,
-    const bt2_common::LogCfg& logCfg, struct live_viewer_connection **viewer);
+enum lttng_live_viewer_status
+live_viewer_connection_create(const char *url, bool in_query,
+                              struct lttng_live_msg_iter *lttng_live_msg_iter,
+                              const bt2_common::LogCfg& logCfg, live_viewer_connection::UP& viewer);
 
 enum lttng_live_viewer_status
 lttng_live_create_viewer_session(struct lttng_live_msg_iter *lttng_live_msg_iter);
