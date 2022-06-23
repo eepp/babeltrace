@@ -230,14 +230,8 @@ lttng_live_msg_iter::~lttng_live_msg_iter()
 BT_HIDDEN
 void lttng_live_msg_iter_finalize(bt_self_message_iterator *self_msg_iter)
 {
-    struct lttng_live_msg_iter *lttng_live_msg_iter;
-
-    BT_ASSERT(self_msg_iter);
-
-    lttng_live_msg_iter =
-        (struct lttng_live_msg_iter *) bt_self_message_iterator_get_data(self_msg_iter);
-    BT_ASSERT(lttng_live_msg_iter);
-    delete lttng_live_msg_iter;
+    lttng_live_msg_iter::UP {
+        (struct lttng_live_msg_iter *) bt_self_message_iterator_get_data(self_msg_iter)};
 }
 
 static enum lttng_live_iterator_status
@@ -1646,12 +1640,12 @@ end:
     }
 }
 
-static struct lttng_live_msg_iter *
+static lttng_live_msg_iter::UP
 lttng_live_msg_iter_create(struct lttng_live_component *lttng_live_comp,
                            bt_self_message_iterator *self_msg_it)
 {
-    lttng_live_msg_iter *lttng_live_msg_iter =
-        new struct lttng_live_msg_iter(lttng_live_comp->logCfg);
+    lttng_live_msg_iter::UP lttng_live_msg_iter =
+        bt2_common::makeUnique<struct lttng_live_msg_iter>(lttng_live_comp->logCfg);
     lttng_live_msg_iter->self_comp = lttng_live_comp->self_comp;
     lttng_live_msg_iter->lttng_live_comp = lttng_live_comp;
     lttng_live_msg_iter->self_msg_iter = self_msg_it;
@@ -1675,23 +1669,21 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
     const bt2_common::LogCfg& logCfg = lttng_live->logCfg;
 
     try {
-        bt_message_iterator_class_initialize_method_status status;
-        struct lttng_live_msg_iter *lttng_live_msg_iter;
         enum lttng_live_viewer_status viewer_status;
 
         /* There can be only one downstream iterator at the same time. */
         BT_ASSERT(!lttng_live->has_msg_iter);
         lttng_live->has_msg_iter = true;
 
-        lttng_live_msg_iter = lttng_live_msg_iter_create(lttng_live, self_msg_it);
+        lttng_live_msg_iter::UP lttng_live_msg_iter =
+            lttng_live_msg_iter_create(lttng_live, self_msg_it);
         if (!lttng_live_msg_iter) {
             BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to create lttng_live_msg_iter");
-            status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
-            goto error;
+            return BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
         }
 
         viewer_status = live_viewer_connection_create(lttng_live->params.url.c_str(), false,
-                                                      lttng_live_msg_iter, logCfg,
+                                                      lttng_live_msg_iter.get(), logCfg,
                                                       lttng_live_msg_iter->viewer_connection);
         if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
             if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
@@ -1705,11 +1697,10 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
                                           "Interrupted while creating viewer connection");
             }
 
-            status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
-            goto error;
+            return BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
         }
 
-        viewer_status = lttng_live_create_viewer_session(lttng_live_msg_iter);
+        viewer_status = lttng_live_create_viewer_session(lttng_live_msg_iter.get());
         if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
             if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
                 BT_COMP_LOGE_APPEND_CAUSE(logCfg.selfComp(), "Failed to create viewer session");
@@ -1722,8 +1713,7 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
                                           "Interrupted when creating viewer session");
             }
 
-            status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
-            goto error;
+            return BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
         }
 
         if (lttng_live_msg_iter->sessions.empty()) {
@@ -1742,8 +1732,7 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
                     "component parameter: url =\"%s\"",
                     SESS_NOT_FOUND_ACTION_PARAM, SESS_NOT_FOUND_ACTION_FAIL_STR,
                     lttng_live->params.url.c_str());
-                status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
-                goto error;
+                return BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
             case SESSION_NOT_FOUND_ACTION_END:
                 BT_COMP_LOGI(
                     "Unable to connect to the requested live viewer session. End gracefully at the first _next() "
@@ -1757,14 +1746,8 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
             }
         }
 
-        bt_self_message_iterator_set_data(self_msg_it, lttng_live_msg_iter);
-        status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_OK;
-        goto end;
-
-error:
-        delete lttng_live_msg_iter;
-end:
-        return status;
+        bt_self_message_iterator_set_data(self_msg_it, lttng_live_msg_iter.release());
+        return BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_OK;
     } catch (const std::bad_alloc&) {
         return BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
     } catch (const bt2_common::Error&) {
