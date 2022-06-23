@@ -18,6 +18,7 @@
 
 #include "common/macros.h"
 #include "compat/socket.h"
+#include "cpp-common/bt2/value.hpp"
 #include "cpp-common/glib-up.hpp"
 #include "cpp-common/optional.hpp"
 #include "cpp-common/log-cfg.hpp"
@@ -113,8 +114,7 @@ live_viewer_connection_create(const char *url, bool in_query,
 enum lttng_live_viewer_status
 lttng_live_create_viewer_session(struct lttng_live_msg_iter *lttng_live_msg_iter);
 
-bt_component_class_query_method_status
-live_viewer_connection_list_sessions(struct live_viewer_connection *viewer_connection,
-                                     nonstd::optional<bt2::Value::Shared>& user_result);
+bt2::Value::Shared
+live_viewer_connection_list_sessions(struct live_viewer_connection *viewer_connection);
 
 #endif /* LTTNG_LIVE_VIEWER_CONNECTION_H */

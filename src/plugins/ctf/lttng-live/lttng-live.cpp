@@ -23,6 +23,7 @@
 #include <babeltrace2/babeltrace.h>
 #include "compat/compiler.h"
 #include <babeltrace2/types.h>
+#include "cpp-common/comp-logging.hpp"
 #include "cpp-common/exc.hpp"
 #include "cpp-common/glib-up.hpp"
 #include "cpp-common/make-unique.hpp"
@@ -1761,12 +1762,9 @@ static struct bt_param_validation_map_value_entry_descr list_sessions_params[] =
      bt_param_validation_value_descr::makeString()},
     BT_PARAM_VALIDATION_MAP_VALUE_ENTRY_END};
 
-static bt_component_class_query_method_status
-lttng_live_query_list_sessions(bt2::ConstMapValue params,
-                               nonstd::optional<bt2::Value::Shared>& result,
-                               const bt2_common::LogCfg& logCfg)
+static bt2::Value::Shared lttng_live_query_list_sessions(bt2::ConstMapValue params,
+                                                         const bt2_common::LogCfg& logCfg)
 {
-    bt_component_class_query_method_status status;
     const char *url;
     live_viewer_connection::UP viewer_connection;
     enum lttng_live_viewer_status viewer_status;
@@ -1776,12 +1774,11 @@ lttng_live_query_list_sessions(bt2::ConstMapValue params,
     validation_status =
         bt_param_validation_validate(params.libObjPtr(), list_sessions_params, &validate_error);
     if (validation_status == BT_PARAM_VALIDATION_STATUS_MEMORY_ERROR) {
-        status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_MEMORY_ERROR;
-        goto error;
+        throw bt2_common::MemoryError {};
     } else if (validation_status == BT_PARAM_VALIDATION_STATUS_VALIDATION_ERROR) {
-        status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(), "%s", validate_error);
-        goto error;
+        bt2_common::GCharUP errorFreer {validate_error};
+        BT_COMP_CLASS_LOGE_APPEND_CAUSE_AND_THROW(bt2::Error, logCfg.selfCompCls(), "%s",
+                                                  validate_error);
     }
 
     url = params[URL_PARAM]->asString().value().c_str();
@@ -1789,44 +1786,22 @@ lttng_live_query_list_sessions(bt2::ConstMapValue params,
     viewer_status = live_viewer_connection_create(url, true, NULL, logCfg, viewer_connection);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
-            BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
-                                            "Failed to create viewer connection");
-            status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
+            BT_COMP_CLASS_LOGE_APPEND_CAUSE_AND_THROW(bt2::Error, logCfg.selfCompCls(),
+                                                      "Failed to create viewer connection");
         } else if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
-            status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_AGAIN;
+            throw bt2_common::TryAgain {};
         } else {
             bt_common_abort();
         }
-        goto error;
     }
 
-    status = live_viewer_connection_list_sessions(viewer_connection.get(), result);
-    if (status != BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK) {
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(), "Failed to list viewer sessions");
-        goto error;
-    }
-
-    goto end;
-
-error:
-    if (status >= 0) {
-        status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
-    }
-
-end:
-    g_free(validate_error);
-
-    return status;
+    return live_viewer_connection_list_sessions(viewer_connection.get());
 }
 
-static bt_component_class_query_method_status
-lttng_live_query_support_info(bt2::ConstMapValue params,
-                              nonstd::optional<bt2::Value::Shared>& result,
-                              const bt2_common::LogCfg& logCfg)
+static bt2::Value::Shared lttng_live_query_support_info(bt2::ConstMapValue params,
+                                                        const bt2_common::LogCfg& logCfg)
 {
-    bt_component_class_query_method_status status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
     nonstd::optional<bt2::ConstValue> inputValue;
-    double weight = 0;
     struct bt_common_lttng_live_url_parts parts = {0};
     bt_common_lttng_live_url_parts_deleter partsDeleter {parts};
 
@@ -1835,32 +1810,29 @@ lttng_live_query_support_info(bt2::ConstMapValue params,
 
     nonstd::optional<bt2::ConstValue> typeValue = params["type"];
     if (!typeValue) {
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(), "Missing expected `type` parameter.");
-        goto error;
+        BT_COMP_CLASS_LOGE_APPEND_CAUSE_AND_THROW(bt2::Error, logCfg.selfCompCls(),
+                                                  "Missing expected `type` parameter.");
     }
 
     if (!typeValue->isString()) {
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
-                                        "`type` parameter is not a string value.");
-        goto error;
+        BT_COMP_CLASS_LOGE_APPEND_CAUSE_AND_THROW(bt2::Error, logCfg.selfCompCls(),
+                                                  "`type` parameter is not a string value.");
     }
 
     if (typeValue->asString().value() != "string") {
         /* We don't handle file system paths */
-        goto create_result;
+        return bt2::RealValue::create();
     }
 
     inputValue = params["input"];
     if (!inputValue) {
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
-                                        "Missing expected `input` parameter.");
-        goto error;
+        BT_COMP_CLASS_LOGE_APPEND_CAUSE_AND_THROW(bt2::Error, logCfg.selfCompCls(),
+                                                  "Missing expected `input` parameter.");
     }
 
     if (!inputValue->isString()) {
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
-                                        "`input` parameter is not a string value.");
-        goto error;
+        BT_COMP_CLASS_LOGE_APPEND_CAUSE_AND_THROW(bt2::Error, logCfg.selfCompCls(),
+                                                  "`input` parameter is not a string value.");
     }
 
     parts = bt_common_parse_lttng_live_url(inputValue->asString().value().c_str(), NULL, 0);
@@ -1869,22 +1841,10 @@ lttng_live_query_support_info(bt2::ConstMapValue params,
          * Looks pretty much like an LTTng live URL: we got the
          * session name part, which forms a complete URL.
          */
-        weight = .75;
+        return bt2::RealValue::create(.75);
     }
 
-create_result:
-    result = bt2::RealValue::create(weight);
-    goto end;
-
-error:
-    if (status >= 0) {
-        status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
-    }
-
-    BT_ASSERT(!result);
-
-end:
-    return status;
+    return bt2::RealValue::create();
 }
 
 BT_HIDDEN
@@ -1901,24 +1861,23 @@ bt_component_class_query_method_status lttng_live_query(bt_self_component_class_
     bt2_common::LogCfg logCfg(log_level, self_comp_class);
 
     try {
-        bt_component_class_query_method_status status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
         bt2::ConstMapValue paramsObj(params);
         nonstd::optional<bt2::Value::Shared> resultObj;
 
         if (strcmp(object, "sessions") == 0) {
-            status = lttng_live_query_list_sessions(paramsObj, resultObj, logCfg);
+            resultObj = lttng_live_query_list_sessions(paramsObj, logCfg);
         } else if (strcmp(object, "babeltrace.support-info") == 0) {
-            status = lttng_live_query_support_info(paramsObj, resultObj, logCfg);
+            resultObj = lttng_live_query_support_info(paramsObj, logCfg);
         } else {
             BT_COMP_LOGI("Unknown query object `%s`", object);
             return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_UNKNOWN_OBJECT;
         }
 
-        if (status == BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK) {
-            *result = resultObj->release().libObjPtr();
-        }
+        *result = resultObj->release().libObjPtr();
 
-        return status;
+        return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
+    } catch (const bt2_common::TryAgain&) {
+        return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_MEMORY_ERROR;
     } catch (const std::bad_alloc&) {
         return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_MEMORY_ERROR;
     } catch (const bt2_common::Error&) {
