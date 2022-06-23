@@ -326,6 +326,7 @@ static int parse_url(struct live_viewer_connection *viewer_connection)
     char error_buf[256] = {0};
     const bt2_common::LogCfg& logCfg = viewer_connection->logCfg;
     struct bt_common_lttng_live_url_parts lttng_live_url_parts = {0};
+    bt_common_lttng_live_url_parts_deleter partsDeleter {lttng_live_url_parts};
     int ret = -1;
 
     if (viewer_connection->url.empty()) {
@@ -361,7 +362,6 @@ static int parse_url(struct live_viewer_connection *viewer_connection)
     ret = 0;
 
 end:
-    bt_common_destroy_lttng_live_url_parts(&lttng_live_url_parts);
     return ret;
 }
 

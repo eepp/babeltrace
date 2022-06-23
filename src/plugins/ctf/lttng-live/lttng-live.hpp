@@ -28,6 +28,26 @@ struct lttng_live_component;
 struct lttng_live_session;
 struct lttng_live_msg_iter;
 
+/*
+ * bt_common_lttng_live_url_parts is defined in common code, and is also used
+ * by C code, so it can't be C++-ified yet.  Use this separate deleter object
+ * in the mean time.
+ */
+struct bt_common_lttng_live_url_parts_deleter
+{
+    bt_common_lttng_live_url_parts_deleter(bt_common_lttng_live_url_parts& obj) : _mObj {obj}
+    {
+    }
+
+    ~bt_common_lttng_live_url_parts_deleter()
+    {
+        bt_common_destroy_lttng_live_url_parts(&_mObj);
+    }
+
+private:
+    bt_common_lttng_live_url_parts& _mObj;
+};
+
 enum lttng_live_stream_state
 {
     /* This stream won't have data until some known time in the future. */
