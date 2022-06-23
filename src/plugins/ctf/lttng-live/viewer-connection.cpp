@@ -328,13 +328,13 @@ static int parse_url(struct live_viewer_connection *viewer_connection)
     const bt2_common::LogCfg& logCfg = viewer_connection->logCfg;
     struct bt_common_lttng_live_url_parts lttng_live_url_parts = {0};
     int ret = -1;
-    const char *path = viewer_connection->url->str;
 
-    if (!path) {
+    if (viewer_connection->url.empty()) {
         goto end;
     }
 
-    lttng_live_url_parts = bt_common_parse_lttng_live_url(path, error_buf, sizeof(error_buf));
+    lttng_live_url_parts = bt_common_parse_lttng_live_url(viewer_connection->url.c_str(), error_buf,
+                                                          sizeof(error_buf));
     if (!lttng_live_url_parts.proto) {
         BT_CLOGE_APPEND_CAUSE("Invalid LTTng live URL format: %s", error_buf);
         goto end;
@@ -593,7 +593,7 @@ end:
     return ret;
 }
 
-static int list_append_session(bt_value *results, GString *base_url,
+static int list_append_session(bt_value *results, const std::string& base_url,
                                const struct lttng_viewer_session *session,
                                struct live_viewer_connection *viewer_connection)
 {
@@ -621,8 +621,8 @@ static int list_append_session(bt_value *results, GString *base_url,
         goto end;
     }
 
-    if (base_url->len < 1) {
-        BT_CLOGE_APPEND_CAUSE("Error: base_url length smaller than 1.");
+    if (base_url.empty()) {
+        BT_CLOGE_APPEND_CAUSE("Error: base_url empty.");
         ret = -1;
         goto end;
     }
@@ -630,7 +630,7 @@ static int list_append_session(bt_value *results, GString *base_url,
      * key = "url",
      * value = <string>,
      */
-    url = base_url->str;
+    url = base_url;
     url += "/host/";
     url += session->hostname;
     url += '/';
@@ -1684,12 +1684,7 @@ enum lttng_live_viewer_status live_viewer_connection_create(
     viewer_connection->port = -1;
     viewer_connection->in_query = in_query;
     viewer_connection->lttng_live_msg_iter = lttng_live_msg_iter;
-    viewer_connection->url = g_string_new(url);
-    if (!viewer_connection->url) {
-        BT_CLOGE_APPEND_CAUSE("Failed to allocate URL buffer");
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto error;
-    }
+    viewer_connection->url = url;
 
     BT_CLOGD("Establishing connection to url \"%s\"...", url);
     status = lttng_live_connect_viewer(viewer_connection);
@@ -1730,13 +1725,9 @@ void live_viewer_connection_destroy(struct live_viewer_connection *viewer_connec
 
     BT_CLOGD("Closing connection to relay:"
              "relay-url=\"%s\"",
-             viewer_connection->url->str);
+             viewer_connection->url.c_str());
 
     lttng_live_disconnect_viewer(viewer_connection);
-
-    if (viewer_connection->url) {
-        g_string_free(viewer_connection->url, true);
-    }
 
     if (viewer_connection->relay_hostname) {
         g_string_free(viewer_connection->relay_hostname, true);

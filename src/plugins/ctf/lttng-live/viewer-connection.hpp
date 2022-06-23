@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string>
 
 #include <glib.h>
 
@@ -60,7 +61,7 @@ struct live_viewer_connection
 
     const bt2_common::LogCfg logCfg;
 
-    GString *url = nullptr;
+    std::string url;
 
     GString *relay_hostname = nullptr;
     GString *target_hostname = nullptr;
