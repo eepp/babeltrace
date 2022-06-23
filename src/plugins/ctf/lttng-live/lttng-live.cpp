@@ -1762,18 +1762,18 @@ static struct bt_param_validation_map_value_entry_descr list_sessions_params[] =
     BT_PARAM_VALIDATION_MAP_VALUE_ENTRY_END};
 
 static bt_component_class_query_method_status
-lttng_live_query_list_sessions(const bt_value *params, const bt_value **result,
+lttng_live_query_list_sessions(bt2::ConstMapValue params, const bt_value **result,
                                const bt2_common::LogCfg& logCfg)
 {
     bt_component_class_query_method_status status;
-    const bt_value *url_value = NULL;
     const char *url;
     live_viewer_connection::UP viewer_connection;
     enum lttng_live_viewer_status viewer_status;
     enum bt_param_validation_status validation_status;
     gchar *validate_error = NULL;
 
-    validation_status = bt_param_validation_validate(params, list_sessions_params, &validate_error);
+    validation_status =
+        bt_param_validation_validate(params.libObjPtr(), list_sessions_params, &validate_error);
     if (validation_status == BT_PARAM_VALIDATION_STATUS_MEMORY_ERROR) {
         status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_MEMORY_ERROR;
         goto error;
@@ -1783,8 +1783,7 @@ lttng_live_query_list_sessions(const bt_value *params, const bt_value **result,
         goto error;
     }
 
-    url_value = bt_value_map_borrow_entry_value_const(params, URL_PARAM);
-    url = bt_value_string_get(url_value);
+    url = params[URL_PARAM]->asString().value().c_str();
 
     viewer_status = live_viewer_connection_create(url, true, NULL, logCfg, viewer_connection);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
@@ -1822,12 +1821,11 @@ end:
 }
 
 static bt_component_class_query_method_status
-lttng_live_query_support_info(const bt_value *params, const bt_value **result,
+lttng_live_query_support_info(bt2::ConstMapValue params, const bt_value **result,
                               const bt2_common::LogCfg& logCfg)
 {
     bt_component_class_query_method_status status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
-    const bt_value *input_type_value;
-    const bt_value *input_value;
+    nonstd::optional<bt2::ConstValue> inputValue;
     double weight = 0;
     struct bt_common_lttng_live_url_parts parts = {0};
     bt_common_lttng_live_url_parts_deleter partsDeleter {parts};
@@ -1836,37 +1834,37 @@ lttng_live_query_support_info(const bt_value *params, const bt_value **result,
     __attribute__((unused)) bt_self_component *self_comp = NULL;
 
     *result = NULL;
-    input_type_value = bt_value_map_borrow_entry_value_const(params, "type");
-    if (!input_type_value) {
+    nonstd::optional<bt2::ConstValue> typeValue = params["type"];
+    if (!typeValue) {
         BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(), "Missing expected `type` parameter.");
         goto error;
     }
 
-    if (!bt_value_is_string(input_type_value)) {
+    if (!typeValue->isString()) {
         BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
                                         "`type` parameter is not a string value.");
         goto error;
     }
 
-    if (strcmp(bt_value_string_get(input_type_value), "string") != 0) {
+    if (typeValue->asString().value() != "string") {
         /* We don't handle file system paths */
         goto create_result;
     }
 
-    input_value = bt_value_map_borrow_entry_value_const(params, "input");
-    if (!input_value) {
+    inputValue = params["input"];
+    if (!inputValue) {
         BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
                                         "Missing expected `input` parameter.");
         goto error;
     }
 
-    if (!bt_value_is_string(input_value)) {
+    if (!inputValue->isString()) {
         BT_COMP_CLASS_LOGE_APPEND_CAUSE(logCfg.selfCompCls(),
                                         "`input` parameter is not a string value.");
         goto error;
     }
 
-    parts = bt_common_parse_lttng_live_url(bt_value_string_get(input_value), NULL, 0);
+    parts = bt_common_parse_lttng_live_url(inputValue->asString().value().c_str(), NULL, 0);
     if (parts.session_name) {
         /*
          * Looks pretty much like an LTTng live URL: we got the
@@ -1910,11 +1908,12 @@ bt_component_class_query_method_status lttng_live_query(bt_self_component_class_
 
     try {
         bt_component_class_query_method_status status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
+        bt2::ConstMapValue paramsObj(params);
 
         if (strcmp(object, "sessions") == 0) {
-            status = lttng_live_query_list_sessions(params, result, logCfg);
+            status = lttng_live_query_list_sessions(paramsObj, result, logCfg);
         } else if (strcmp(object, "babeltrace.support-info") == 0) {
-            status = lttng_live_query_support_info(params, result, logCfg);
+            status = lttng_live_query_support_info(paramsObj, result, logCfg);
         } else {
             BT_COMP_LOGI("Unknown query object `%s`", object);
             status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_UNKNOWN_OBJECT;
