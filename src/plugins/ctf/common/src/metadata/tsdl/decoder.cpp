@@ -125,7 +125,8 @@ ctf_metadata_decoder_create(const struct ctf_metadata_decoder_config *config)
 
     mdec->bo = -1;
     mdec->config = *config;
-    mdec->visitor = ctf_visitor_generate_ir_create(config);
+    mdec->visitor =
+        ctf_visitor_generate_ir_create(config->clkClsCfg, config->self_comp, config->logCfg);
     if (!mdec->visitor) {
         _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Failed to create a CTF IR metadata AST visitor: "
                                                  "mdec-addr=%p",
