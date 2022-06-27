@@ -179,6 +179,10 @@ viewer_status_to_ctf_msg_iter_medium_status(enum lttng_live_viewer_status viewer
 
 static inline void viewer_connection_close_socket(struct live_viewer_connection *viewer_connection)
 {
+    if (viewer_connection->control_sock == BT_INVALID_SOCKET) {
+        return;
+    }
+
     int ret = bt_socket_close(viewer_connection->control_sock);
     if (ret == -1) {
         const bt2_common::LogCfg& logCfg = viewer_connection->logCfg;
@@ -517,29 +521,10 @@ lttng_live_connect_viewer(struct live_viewer_connection *viewer_connection)
     goto end;
 
 error:
-    if (viewer_connection->control_sock != BT_INVALID_SOCKET) {
-        if (bt_socket_close(viewer_connection->control_sock) == BT_SOCKET_ERROR) {
-            BT_COMP_OR_COMP_CLASS_LOGW(logCfg.selfComp(), logCfg.selfCompCls(),
-                                       "Error closing socket: %s.", bt_socket_errormsg());
-        }
-    }
-    viewer_connection->control_sock = BT_INVALID_SOCKET;
+    viewer_connection_close_socket(viewer_connection);
+
 end:
     return status;
-}
-
-static void lttng_live_disconnect_viewer(struct live_viewer_connection *viewer_connection)
-{
-    const bt2_common::LogCfg& logCfg = viewer_connection->logCfg;
-
-    if (viewer_connection->control_sock == BT_INVALID_SOCKET) {
-        return;
-    }
-    if (bt_socket_close(viewer_connection->control_sock) == BT_SOCKET_ERROR) {
-        BT_COMP_OR_COMP_CLASS_LOGW(logCfg.selfComp(), logCfg.selfCompCls(),
-                                   "Error closing socket: %s", bt_socket_errormsg());
-        viewer_connection->control_sock = BT_INVALID_SOCKET;
-    }
 }
 
 static int list_update_session(bt2::ArrayValue results, const struct lttng_viewer_session *session,
@@ -1678,7 +1663,7 @@ live_viewer_connection::~live_viewer_connection()
                                "relay-url=\"%s\"",
                                this->url.c_str());
 
-    lttng_live_disconnect_viewer(this);
+    viewer_connection_close_socket(this);
 
     bt_socket_fini();
 }
