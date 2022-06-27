@@ -164,16 +164,10 @@ bt2::Value::Shared trace_infos_query(bt2::ConstMapValue params, const bt2_common
 {
     ctf_fs_component::UP ctf_fs = bt2_common::makeUnique<ctf_fs_component>(logCfg);
 
-    const bt_value *inputs_value = NULL;
-    const bt_value *trace_name_value;
+    ctf::src::fs::Parameters parameters = read_src_fs_parameters(params, logCfg);
+    ctf_fs->clkClsCfg = parameters.clkClsCfg;
 
-    if (!read_src_fs_parameters(params.libObjPtr(), &inputs_value, &trace_name_value,
-                                ctf_fs.get())) {
-        BT_COMP_CLASS_LOGE_APPEND_CAUSE_AND_THROW(bt2_common::Error, logCfg.selfCompCls(),
-                                                  "Failed to read parameters");
-    }
-
-    if (ctf_fs_component_create_ctf_fs_trace(ctf_fs.get(), inputs_value, trace_name_value,
+    if (ctf_fs_component_create_ctf_fs_trace(ctf_fs.get(), parameters.inputs, parameters.traceName,
                                              nullptr)) {
         BT_COMP_CLASS_LOGE_APPEND_CAUSE_AND_THROW(bt2_common::Error, logCfg.selfCompCls(),
                                                   "Failed to create trace");
