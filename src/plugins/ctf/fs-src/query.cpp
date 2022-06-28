@@ -18,8 +18,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "common/assert.h"
-#include "plugins/ctf/common/src/metadata/tsdl/metadata-stream-decoder.hpp"
-#include "plugins/ctf/common/src/metadata/tsdl/ctf-1-metadata-stream-parser.hpp"
 #include "common/common.h"
 #include "common/macros.h"
 #include "plugins/common/param-validation/param-validation.h"
@@ -30,6 +28,8 @@
 #include "cpp-common/exc.hpp"
 #include "cpp-common/comp-logging.hpp"
 #include "cpp-common/file-utils.hpp"
+#include "../common/src/metadata/metadata-stream-parser-utils.hpp"
+#include "../common/src/metadata/tsdl/metadata-stream-decoder.hpp"
 
 #define METADATA_TEXT_SIG "/* CTF 1.8"
 
@@ -220,16 +220,19 @@ bt2::Value::Shared support_info_query(bt2::ConstMapValue params, const bt2_commo
     try {
         const auto buffer =
             bt2_common::dataFromFile(std::string {input.to_string() + "/metadata"}.c_str());
-        ctf::src::Ctf1MetadataStreamParser parser {ctf::src::ClkClsCfg {}, nullptr, logCfg};
-        parser.parseSection(buffer.data(), buffer.data() + buffer.size());
+        ctf::src::MetadataStreamParser::UP metadataStreamParser =
+            ctf::src::createMetadataStreamParser(buffer.data(), {}, nullptr, logCfg);
+        metadataStreamParser->parseSection(buffer.data(), buffer.data() + buffer.size());
+        const ctf::src::TraceCls *ctfTraceCls = metadataStreamParser->traceCls();
+        BT_ASSERT(ctfTraceCls);
 
         /*
          * We were able to parse the metadata file, so we are confident it's a
          * CTF trace.
          */
         result->insert("weight", 0.75);
-        if (parser.traceCls() && parser.traceCls()->uuid()) {
-            result->insert("group", parser.traceCls()->uuid()->str());
+        if (ctfTraceCls->uuid()) {
+            result->insert("group", ctfTraceCls->uuid()->str());
         }
     } catch (const bt2_common::NoSuchFileOrDirectoryError&) {
         /*

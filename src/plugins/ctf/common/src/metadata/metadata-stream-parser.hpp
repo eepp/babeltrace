@@ -26,6 +26,8 @@ protected:
     explicit MetadataStreamParser(bt_self_component *selfComp) noexcept;
 
 public:
+    using UP = std::unique_ptr<MetadataStreamParser>;
+
     virtual ~MetadataStreamParser() = default;
 
     /*
