@@ -32,6 +32,7 @@ libcppcommon_la_SOURCES = \
 	uuid.hpp \
 	glib-up.hpp \
 	libc-up.hpp \
-	file-utils.hpp file-utils.cpp
+	file-utils.hpp file-utils.cpp \
+	vector.hpp
 
 EXTRA_DIST = bt2
