@@ -16,10 +16,12 @@
 #include "common/macros.h"
 #include <babeltrace2/babeltrace.h>
 #include "cpp-common/data-len.hpp"
-#include "data-stream-file.hpp"
-#include "../common/src/metadata/tsdl/ctf-1-metadata-stream-parser.hpp"
-#include "../common/src/msg-iter.hpp"
 #include "cpp-common/glib-up.hpp"
+#include "data-stream-file.hpp"
+#include "../common/src/msg-iter.hpp"
+#include "../common/src/clk-cls-cfg.hpp"
+#include "../common/src/metadata/metadata-stream-parser.hpp"
+#include "../common/src/metadata/metadata-stream-parser-utils.hpp"
 
 #define CTF_FS_METADATA_FILENAME "metadata"
 
@@ -31,23 +33,26 @@ struct ctf_fs_trace
     using UP = std::unique_ptr<ctf_fs_trace>;
 
     explicit ctf_fs_trace(const ctf::src::ClkClsCfg clkClsCfg, bt_self_component *selfComp,
-                          const bt2_common::LogCfg& logCfgParam) noexcept :
-        logCfg {logCfgParam},
-        _mMetadataStreamParser {clkClsCfg, selfComp, logCfgParam}
+                          const bt2_common::LogCfg& logCfg) noexcept :
+        _mLogCfg {logCfg},
+        _mClkClsCfg {clkClsCfg}, _mSelfComp {selfComp}
     {
     }
 
-    const ctf::src::TraceCls *cls()
+    const ctf::src::TraceCls *cls() const
     {
-        return _mMetadataStreamParser.traceCls();
+        return _mMetadataStreamParser->traceCls();
     }
 
     void parseSection(const uint8_t *begin, const uint8_t *end)
     {
-        _mMetadataStreamParser.parseSection(begin, end);
-    }
+        if (!_mMetadataStreamParser) {
+            _mMetadataStreamParser =
+                ctf::src::createMetadataStreamParser(begin, _mClkClsCfg, _mSelfComp, _mLogCfg);
+        }
 
-    const bt2_common::LogCfg logCfg;
+        _mMetadataStreamParser->parseSection(begin, end);
+    }
 
     nonstd::optional<bt2::Trace::Shared> trace;
 
@@ -59,7 +64,10 @@ struct ctf_fs_trace
     uint64_t next_stream_id = 0;
 
 private:
-    ctf::src::Ctf1MetadataStreamParser _mMetadataStreamParser;
+    const bt2_common::LogCfg _mLogCfg;
+    const ctf::src::ClkClsCfg _mClkClsCfg;
+    bt_self_component *_mSelfComp;
+    ctf::src::MetadataStreamParser::UP _mMetadataStreamParser;
 };
 
 struct ctf_fs_port_data
