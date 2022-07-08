@@ -47,7 +47,6 @@ static bool stream_classes_all_have_default_clock_class(bt_trace_class *tc,
     uint64_t i, sc_count;
     const bt_clock_class *cc = NULL;
     const bt_stream_class *sc;
-    bool ret = true;
 
     sc_count = bt_trace_class_get_stream_class_count(tc);
     for (i = 0; i < sc_count; i++) {
@@ -57,16 +56,14 @@ static bool stream_classes_all_have_default_clock_class(bt_trace_class *tc,
 
         cc = bt_stream_class_borrow_default_clock_class_const(sc);
         if (!cc) {
-            ret = false;
             BT_CLOGE_APPEND_CAUSE("Stream class doesn't have a default clock class: "
                                   "sc-id=%" PRIu64 ", sc-name=\"%s\"",
                                   bt_stream_class_get_id(sc), bt_stream_class_get_name(sc));
-            goto end;
+            return false;
         }
     }
 
-end:
-    return ret;
+    return true;
 }
 /*
  * Iterate over the stream classes and returns the first clock class
@@ -86,12 +83,11 @@ static const bt_clock_class *borrow_any_clock_class(bt_trace_class *tc)
 
         cc = bt_stream_class_borrow_default_clock_class_const(sc);
         if (cc) {
-            goto end;
+            return cc;
         }
     }
-end:
-    BT_ASSERT_DBG(cc);
-    return cc;
+
+    bt_common_abort();
 }
 
 enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_trace *trace)
@@ -102,7 +98,6 @@ enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_tra
     bool keep_receiving;
     bt2_common::FileUP fp;
     enum ctf_metadata_decoder_status decoder_status;
-    enum lttng_live_iterator_status status = LTTNG_LIVE_ITERATOR_STATUS_OK;
     const bt2_common::LogCfg& logCfg = trace->logCfg;
     enum lttng_live_get_one_metadata_status metadata_status;
 
@@ -117,18 +112,17 @@ enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_tra
              * metadata this indicates that we will never receive
              * any metadata.
              */
-            status = LTTNG_LIVE_ITERATOR_STATUS_END;
+            return LTTNG_LIVE_ITERATOR_STATUS_END;
         } else if (session->new_streams_needed) {
-            status = LTTNG_LIVE_ITERATOR_STATUS_AGAIN;
+            return LTTNG_LIVE_ITERATOR_STATUS_AGAIN;
         } else {
             session->new_streams_needed = true;
-            status = LTTNG_LIVE_ITERATOR_STATUS_CONTINUE;
+            return LTTNG_LIVE_ITERATOR_STATUS_CONTINUE;
         }
-        goto end;
     }
 
     if (trace->metadata_stream_state != LTTNG_LIVE_METADATA_STREAM_STATE_NEEDED) {
-        goto end;
+        return LTTNG_LIVE_ITERATOR_STATUS_OK;
     }
 
     keep_receiving = true;
@@ -171,7 +165,7 @@ enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_tra
             BT_CLOGE_APPEND_CAUSE("Error getting one trace metadata packet: "
                                   "trace-id=%" PRIu64,
                                   trace->id);
-            goto error;
+            return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
         default:
             bt_common_abort();
         }
@@ -179,13 +173,12 @@ enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_tra
 
     if (metadataBuf.empty()) {
         if (!trace->trace) {
-            status = LTTNG_LIVE_ITERATOR_STATUS_AGAIN;
-            goto end;
+            return LTTNG_LIVE_ITERATOR_STATUS_AGAIN;
         }
 
         /* The relay sent zero bytes of metdata. */
         trace->metadata_stream_state = LTTNG_LIVE_METADATA_STREAM_STATE_NOT_NEEDED;
-        goto end;
+        return LTTNG_LIVE_ITERATOR_STATUS_OK;
     }
 
     /*
@@ -196,12 +189,11 @@ enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_tra
     if (!fp) {
         if (errno == EINTR && lttng_live_graph_is_canceled(session->lttng_live_msg_iter)) {
             session->lttng_live_msg_iter->was_interrupted = true;
-            status = LTTNG_LIVE_ITERATOR_STATUS_AGAIN;
+            return LTTNG_LIVE_ITERATOR_STATUS_AGAIN;
         } else {
             BT_CLOGE_ERRNO_APPEND_CAUSE("Cannot memory-open metadata buffer", ".");
-            status = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
+            return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
         }
-        goto end;
     }
 
     /*
@@ -220,7 +212,7 @@ enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_tra
             trace->trace = (*trace->trace_class)->instantiate();
             if (!trace->trace) {
                 BT_CLOGE_APPEND_CAUSE("Failed to create bt_trace");
-                goto error;
+                return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
             }
 
             ctf_trace_class_configure_ir_trace(tc, **trace->trace);
@@ -228,7 +220,7 @@ enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_tra
             if (!stream_classes_all_have_default_clock_class((*trace->trace_class)->libObjPtr(),
                                                              logCfg)) {
                 /* Error logged in function. */
-                goto error;
+                return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
             }
             trace->clock_class = borrow_any_clock_class((*trace->trace_class)->libObjPtr());
         }
@@ -236,17 +228,10 @@ enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_tra
         /* The metadata was updated succesfully. */
         trace->metadata_stream_state = LTTNG_LIVE_METADATA_STREAM_STATE_NOT_NEEDED;
 
-        break;
+        return LTTNG_LIVE_ITERATOR_STATUS_OK;
     default:
-        goto error;
+        return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
     }
-
-    goto end;
-
-error:
-    status = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-end:
-    return status;
 }
 
 int lttng_live_metadata_create_stream(struct lttng_live_session *session, uint64_t ctf_trace_id,
