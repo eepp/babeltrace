@@ -18,6 +18,8 @@
 #include "common/uuid.h"
 #include "cpp-common/log-cfg.hpp"
 #include "../../clk-cls-cfg.hpp"
+#include "cpp-common/optional.hpp"
+#include "cpp-common/bt2/trace-ir.hpp"
 
 struct ctf_trace_class;
 
@@ -112,7 +114,8 @@ ctf_metadata_decoder_append_content(struct ctf_metadata_decoder *metadata_decode
  * Returns `NULL` if there's none yet or if the metadata decoder is not
  * configured to create trace classes.
  */
-bt_trace_class *ctf_metadata_decoder_get_ir_trace_class(struct ctf_metadata_decoder *mdec);
+nonstd::optional<bt2::TraceClass::Shared>
+ctf_metadata_decoder_get_ir_trace_class(struct ctf_metadata_decoder *mdec);
 
 /*
  * Returns the CTF IR trace class of this metadata decoder.
