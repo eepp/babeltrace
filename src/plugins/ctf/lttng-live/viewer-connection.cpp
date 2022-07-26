@@ -1173,7 +1173,7 @@ end:
 }
 
 enum lttng_live_get_one_metadata_status
-lttng_live_get_one_metadata_packet(struct lttng_live_trace *trace, FILE *fp, size_t *reply_len)
+lttng_live_get_one_metadata_packet(struct lttng_live_trace *trace, std::vector<char>& buf)
 {
     uint64_t len = 0;
     enum lttng_live_get_one_metadata_status status;
@@ -1182,7 +1182,6 @@ lttng_live_get_one_metadata_packet(struct lttng_live_trace *trace, FILE *fp, siz
     struct lttng_viewer_get_metadata rq;
     struct lttng_viewer_metadata_packet rp;
     gchar *data = NULL;
-    ssize_t writelen;
     struct lttng_live_session *session = trace->session;
     struct lttng_live_msg_iter *lttng_live_msg_iter = session->lttng_live_msg_iter;
     struct lttng_live_metadata *metadata = trace->metadata;
@@ -1280,15 +1279,9 @@ lttng_live_get_one_metadata_packet(struct lttng_live_trace *trace, FILE *fp, siz
     /*
      * Write the metadata to the file handle.
      */
-    writelen = fwrite(data, sizeof(uint8_t), len, fp);
-    if (writelen != len) {
-        BT_CLOGE_APPEND_CAUSE("Writing in the metadata file stream");
-        status = LTTNG_LIVE_GET_ONE_METADATA_STATUS_ERROR;
-        goto end;
-    }
+    buf.insert(buf.end(), data, data + len);
 
 empty_metadata_packet_retry:
-    *reply_len = len;
     status = LTTNG_LIVE_GET_ONE_METADATA_STATUS_OK;
 
 end:
