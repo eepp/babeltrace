@@ -117,8 +117,6 @@ struct ctf_fs_ds_index_entry
 
 struct ctf_fs_ds_index
 {
-    using UP = std::unique_ptr<ctf_fs_ds_index>;
-
     std::vector<ctf_fs_ds_index_entry> entries;
 };
 
@@ -147,7 +145,7 @@ struct ctf_fs_ds_file_group
     /* Weak, belongs to component */
     struct ctf_fs_trace *ctf_fs_trace = nullptr;
 
-    ctf_fs_ds_index::UP index;
+    ctf_fs_ds_index index;
 };
 
 BT_HIDDEN
@@ -156,16 +154,16 @@ ctf_fs_ds_file::UP ctf_fs_ds_file_create(struct ctf_fs_trace *ctf_fs_trace,
                                          const char *path, const bt2_common::LogCfg& logCfg);
 
 BT_HIDDEN
-ctf_fs_ds_index::UP ctf_fs_ds_file_build_index(struct ctf_fs_ds_file *ds_file,
-                                               struct ctf_fs_ds_file_info *ds_file_info,
-                                               struct ctf_msg_iter *msg_iter);
+nonstd::optional<ctf_fs_ds_index>
+ctf_fs_ds_file_build_index(struct ctf_fs_ds_file *ds_file, struct ctf_fs_ds_file_info *ds_file_info,
+                           struct ctf_msg_iter *msg_iter);
 
 BT_HIDDEN ctf_fs_ds_file_info::UP ctf_fs_ds_file_info_create(const char *path, int64_t begin_ns);
 
 BT_HIDDEN ctf_fs_ds_file_group::UP ctf_fs_ds_file_group_create(struct ctf_fs_trace *ctf_fs_trace,
                                                                struct ctf_stream_class *sc,
                                                                uint64_t stream_instance_id,
-                                                               ctf_fs_ds_index::UP index);
+                                                               ctf_fs_ds_index index);
 
 /*
  * Medium operations to iterate on a single ctf_fs_ds_file.
