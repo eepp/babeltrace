@@ -245,10 +245,12 @@ ctf_fs_iterator_init(bt_self_message_iterator *self_msg_iter,
             goto error;
         }
 
-        msg_iter_data->msg_iter = ctf_msg_iter_create(
-            msg_iter_data->ds_file_group->ctf_fs_trace->metadata->tc,
-            bt_common_get_page_size(logCfg.logLevel()) * 8, ctf_fs_ds_group_medops,
-            msg_iter_data->msg_iter_medops_data.get(), self_msg_iter, logCfg);
+        msg_iter_data->msg_iter =
+            ctf_msg_iter_create(msg_iter_data->ds_file_group->ctf_fs_trace->metadata->tc,
+                                bt_common_get_page_size(logCfg.logLevel()) * 8,
+                                ctf_fs_ds_group_medops, msg_iter_data->msg_iter_medops_data.get(),
+                                self_msg_iter, logCfg)
+                .release();
         if (!msg_iter_data->msg_iter) {
             BT_CLOGE_APPEND_CAUSE("Cannot create a CTF message iterator.");
             status = BT_MESSAGE_ITERATOR_CLASS_INITIALIZE_METHOD_STATUS_MEMORY_ERROR;
@@ -528,7 +530,8 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
     /* Create a temporary iterator to read the ds_file. */
     msg_iter = ctf_msg_iter_create(ctf_fs_trace->metadata->tc,
                                    bt_common_get_page_size(logCfg.logLevel()) * 8,
-                                   ctf_fs_ds_file_medops, ds_file.get(), nullptr, logCfg);
+                                   ctf_fs_ds_file_medops, ds_file.get(), nullptr, logCfg)
+                   .release();
     if (!msg_iter) {
         BT_CLOGE_STR("Cannot create a CTF message iterator.");
         goto error;
@@ -1128,7 +1131,9 @@ static int decode_clock_snapshot_after_event(struct ctf_fs_trace *ctf_fs_trace,
 
     msg_iter = ctf_msg_iter_create(ctf_fs_trace->metadata->tc,
                                    bt_common_get_page_size(logCfg.logLevel()) * 8,
-                                   ctf_fs_ds_file_medops, ds_file.get(), NULL, logCfg);
+
+                                   ctf_fs_ds_file_medops, ds_file.get(), NULL, logCfg)
+                   .release();
     if (!msg_iter) {
         /* ctf_msg_iter_create() logs errors. */
         ret = -1;
