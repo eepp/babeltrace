@@ -33,6 +33,7 @@
 #include "data-stream.hpp"
 #include "metadata.hpp"
 #include "cpp-common/cfg-logging-error-reporting.hpp"
+#include "cpp-common/cfg-logging-error-reporting-throw.hpp"
 
 #define viewer_handle_send_recv_status(_logCfg, _status, _action, _msg_str)                        \
     do {                                                                                           \
@@ -703,9 +704,8 @@ static int list_append_session(bt2::ArrayValue results, const std::string& base_
  */
 
 BT_HIDDEN
-bt_component_class_query_method_status
-live_viewer_connection_list_sessions(struct live_viewer_connection *viewer_connection,
-                                     nonstd::optional<bt2::Value::Shared>& user_result)
+bt2::Value::Shared
+live_viewer_connection_list_sessions(struct live_viewer_connection *viewer_connection)
 {
     const bt2_common::LogCfg& logCfg = viewer_connection->logCfg;
     uint32_t i, sessions_count;
@@ -722,19 +722,17 @@ live_viewer_connection_list_sessions(struct live_viewer_connection *viewer_conne
 
     lttng_live_viewer_status viewer_status = lttng_live_send(viewer_connection, &cmd, sizeof(cmd));
     if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
-        BT_CLOGE_APPEND_CAUSE("Error sending list sessions command");
-        return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
+        BT_CLOGE_APPEND_CAUSE_AND_THROW(bt2::Error, "Error sending list sessions command");
     } else if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
-        return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_AGAIN;
+        throw bt2_common::TryAgain {};
     }
 
     lttng_viewer_list_sessions list;
     viewer_status = lttng_live_recv(viewer_connection, &list, sizeof(list));
     if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
-        BT_CLOGE_APPEND_CAUSE("Error receiving session list");
-        return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
+        BT_CLOGE_APPEND_CAUSE_AND_THROW(bt2::Error, "Error receiving session list");
     } else if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
-        return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_AGAIN;
+        throw bt2_common::TryAgain {};
     }
 
     sessions_count = be32toh(list.sessions_count);
@@ -743,24 +741,20 @@ live_viewer_connection_list_sessions(struct live_viewer_connection *viewer_conne
 
         viewer_status = lttng_live_recv(viewer_connection, &lsession, sizeof(lsession));
         if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
-            BT_CLOGE_APPEND_CAUSE("Error receiving session:");
-            return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
+            BT_CLOGE_APPEND_CAUSE_AND_THROW(bt2::Error, "Error receiving session:");
         } else if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
-            return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_AGAIN;
+            throw bt2_common::TryAgain {};
         }
 
         lsession.hostname[LTTNG_VIEWER_HOST_NAME_MAX - 1] = '\0';
         lsession.session_name[LTTNG_VIEWER_NAME_MAX - 1] = '\0';
         if (list_append_session(*result, viewer_connection->url.c_str(), &lsession,
                                 viewer_connection)) {
-            BT_CLOGE_APPEND_CAUSE("Error appending session");
-            return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
+            BT_CLOGE_APPEND_CAUSE_AND_THROW(bt2::Error, "Error appending session");
         }
     }
 
-    user_result = std::move(result);
-
-    return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
+    return result;
 }
 
 static enum lttng_live_viewer_status
