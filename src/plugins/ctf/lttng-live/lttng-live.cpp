@@ -189,11 +189,8 @@ int lttng_live_add_session(struct lttng_live_msg_iter *lttng_live_msg_iter, uint
     session->id = session_id;
     session->lttng_live_msg_iter = lttng_live_msg_iter;
     session->new_streams_needed = true;
-    session->hostname = g_string_new(hostname);
-    BT_ASSERT(session->hostname);
-
-    session->session_name = g_string_new(session_name);
-    BT_ASSERT(session->session_name);
+    session->hostname = hostname;
+    session->session_name = session_name;
 
     g_ptr_array_add(lttng_live_msg_iter->sessions, session);
 
@@ -210,7 +207,7 @@ static void lttng_live_destroy_session(struct lttng_live_session *session)
 
     BT_CLOGD("Destroying live session: "
              "session-id=%" PRIu64 ", session-name=\"%s\"",
-             session->id, session->session_name->str);
+             session->id, session->session_name.c_str());
     if (session->id != -1ULL) {
         if (lttng_live_session_detach(session)) {
             if (!lttng_live_graph_is_canceled(session->lttng_live_msg_iter)) {
@@ -219,14 +216,6 @@ static void lttng_live_destroy_session(struct lttng_live_session *session)
             }
         }
         session->id = -1ULL;
-    }
-
-    if (session->hostname) {
-        g_string_free(session->hostname, TRUE);
-    }
-
-    if (session->session_name) {
-        g_string_free(session->session_name, TRUE);
     }
 
     delete session;
@@ -417,7 +406,7 @@ lttng_live_get_session(struct lttng_live_msg_iter *lttng_live_msg_iter,
 
     BT_CLOGD("Updating all data streams: "
              "session-id=%" PRIu64 ", session-name=\"%s\"",
-             session->id, session->session_name->str);
+             session->id, session->session_name.c_str());
 
     status = lttng_live_session_get_new_streams(session, lttng_live_msg_iter->self_msg_iter);
     switch (status) {
@@ -440,7 +429,7 @@ lttng_live_get_session(struct lttng_live_msg_iter *lttng_live_msg_iter,
         BT_CLOGD(
             "Updating streams returned _END status. Override status to _OK in order fetch any remaining metadata:"
             "session-id=%" PRIu64 ", session-name=\"%s\"",
-            session->id, session->session_name->str);
+            session->id, session->session_name.c_str());
         status = LTTNG_LIVE_ITERATOR_STATUS_OK;
         break;
     default:
@@ -449,7 +438,7 @@ lttng_live_get_session(struct lttng_live_msg_iter *lttng_live_msg_iter,
 
     BT_CLOGD("Updating metadata stream for session: "
              "session-id=%" PRIu64 ", session-name=\"%s\"",
-             session->id, session->session_name->str);
+             session->id, session->session_name.c_str());
 
     for (lttng_live_trace::UP& trace : session->traces) {
         status = lttng_live_metadata_update(trace.get());
