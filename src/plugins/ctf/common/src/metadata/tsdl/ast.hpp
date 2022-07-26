@@ -16,6 +16,8 @@
 #include "common/macros.h"
 #include "common/assert.h"
 
+#include "cpp-common/optional.hpp"
+#include "cpp-common/bt2/trace-ir.hpp"
 #include "decoder.hpp"
 #include "ctf-meta.hpp"
 
@@ -367,7 +369,7 @@ struct ctf_visitor_generate_ir
     }
 
     /* Trace IR trace class being filled (owned by this) */
-    bt_trace_class *trace_class = nullptr;
+    nonstd::optional<bt2::TraceClass::Shared> trace_class;
 
     /* CTF meta trace being filled (owned by this) */
     struct ctf_trace_class *ctf_tc = nullptr;
@@ -390,7 +392,8 @@ ctf_visitor_generate_ir::UP
 ctf_visitor_generate_ir_create(const struct ctf_metadata_decoder_config *config);
 
 BT_HIDDEN
-bt_trace_class *ctf_visitor_generate_ir_get_ir_trace_class(struct ctf_visitor_generate_ir *visitor);
+nonstd::optional<bt2::TraceClass::Shared>
+ctf_visitor_generate_ir_get_ir_trace_class(struct ctf_visitor_generate_ir *visitor);
 
 BT_HIDDEN
 struct ctf_trace_class *
