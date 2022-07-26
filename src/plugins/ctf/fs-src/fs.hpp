@@ -14,6 +14,7 @@
 #include <memory>
 #include "common/macros.h"
 #include <babeltrace2/babeltrace.h>
+#include "cpp-common/data-len.hpp"
 #include "data-stream-file.hpp"
 #include "metadata.hpp"
 #include "../common/src/metadata/tsdl/decoder.hpp"
@@ -106,14 +107,19 @@ struct ctf_fs_trace
 
 struct ctf_fs_ds_index_entry
 {
+    ctf_fs_ds_index_entry(bt2_common::DataLen offsetParam, bt2_common::DataLen packetSizeParam) :
+        offset(offsetParam), packetSize(packetSizeParam)
+    {
+    }
+
     /* Weak, belongs to ctf_fs_ds_file_info. */
     const char *path = nullptr;
 
-    /* Position, in bytes, of the packet from the beginning of the file. */
-    uint64_t offset = 0;
+    /* Position of the packet from the beginning of the file. */
+    const bt2_common::DataLen offset;
 
-    /* Size of the packet, in bytes. */
-    uint64_t packet_size = 0;
+    /* Size of the packet. */
+    const bt2_common::DataLen packetSize;
 
     /*
      * Extracted from the packet context, relative to the respective fields'
