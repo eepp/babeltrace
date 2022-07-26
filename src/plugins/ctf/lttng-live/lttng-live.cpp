@@ -128,29 +128,13 @@ end:
 static struct lttng_live_trace *
 lttng_live_session_borrow_trace_by_id(struct lttng_live_session *session, uint64_t trace_id)
 {
-    uint64_t trace_idx;
-    struct lttng_live_trace *ret_trace = NULL;
-
-    for (trace_idx = 0; trace_idx < session->traces->len; trace_idx++) {
-        struct lttng_live_trace *trace =
-            (lttng_live_trace *) g_ptr_array_index(session->traces, trace_idx);
+    for (lttng_live_trace::UP& trace : session->traces) {
         if (trace->id == trace_id) {
-            ret_trace = trace;
-            goto end;
+            return trace.get();
         }
     }
 
-end:
-    return ret_trace;
-}
-
-static void lttng_live_destroy_trace(struct lttng_live_trace *trace)
-{
-    const bt2_common::LogCfg& logCfg = trace->logCfg;
-
-    BT_CLOGD("Destroying live trace: trace-id=%" PRIu64, trace->id);
-
-    delete trace;
+    return nullptr;
 }
 
 static struct lttng_live_trace *lttng_live_create_trace(struct lttng_live_session *session,
@@ -168,7 +152,7 @@ static struct lttng_live_trace *lttng_live_create_trace(struct lttng_live_sessio
     trace->metadata_stream_state = LTTNG_LIVE_METADATA_STREAM_STATE_NEEDED;
 
     lttng_live_trace *ret = trace.get();
-    g_ptr_array_add(session->traces, trace.release());
+    session->traces.emplace_back(std::move(trace));
 
     return ret;
 }
@@ -203,8 +187,6 @@ int lttng_live_add_session(struct lttng_live_msg_iter *lttng_live_msg_iter, uint
     lttng_live_session *session = new lttng_live_session {logCfg};
     session->self_comp = lttng_live_msg_iter->self_comp;
     session->id = session_id;
-    session->traces = g_ptr_array_new_with_free_func((GDestroyNotify) lttng_live_destroy_trace);
-    BT_ASSERT(session->traces);
     session->lttng_live_msg_iter = lttng_live_msg_iter;
     session->new_streams_needed = true;
     session->hostname = g_string_new(hostname);
@@ -237,10 +219,6 @@ static void lttng_live_destroy_session(struct lttng_live_session *session)
             }
         }
         session->id = -1ULL;
-    }
-
-    if (session->traces) {
-        g_ptr_array_free(session->traces, TRUE);
     }
 
     if (session->hostname) {
@@ -414,7 +392,6 @@ lttng_live_get_session(struct lttng_live_msg_iter *lttng_live_msg_iter,
 {
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     enum lttng_live_iterator_status status;
-    uint64_t trace_idx;
 
     if (!session->attached) {
         BT_CLOGD("Attach to session: session-id=%" PRIu64, session->id);
@@ -474,16 +451,11 @@ lttng_live_get_session(struct lttng_live_msg_iter *lttng_live_msg_iter,
              "session-id=%" PRIu64 ", session-name=\"%s\"",
              session->id, session->session_name->str);
 
-    trace_idx = 0;
-    while (trace_idx < session->traces->len) {
-        struct lttng_live_trace *trace =
-            (lttng_live_trace *) g_ptr_array_index(session->traces, trace_idx);
-
-        status = lttng_live_metadata_update(trace);
+    for (lttng_live_trace::UP& trace : session->traces) {
+        status = lttng_live_metadata_update(trace.get());
         switch (status) {
         case LTTNG_LIVE_ITERATOR_STATUS_END:
         case LTTNG_LIVE_ITERATOR_STATUS_OK:
-            trace_idx++;
             break;
         case LTTNG_LIVE_ITERATOR_STATUS_CONTINUE:
         case LTTNG_LIVE_ITERATOR_STATUS_AGAIN:
@@ -509,7 +481,7 @@ end:
 static void
 lttng_live_force_new_streams_and_metadata(struct lttng_live_msg_iter *lttng_live_msg_iter)
 {
-    uint64_t session_idx, trace_idx;
+    uint64_t session_idx;
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
 
     for (session_idx = 0; session_idx < lttng_live_msg_iter->sessions->len; session_idx++) {
@@ -519,9 +491,7 @@ lttng_live_force_new_streams_and_metadata(struct lttng_live_msg_iter *lttng_live
                  "session-id=%" PRIu64,
                  session->id);
         session->new_streams_needed = true;
-        for (trace_idx = 0; trace_idx < session->traces->len; trace_idx++) {
-            struct lttng_live_trace *trace =
-                (lttng_live_trace *) g_ptr_array_index(session->traces, trace_idx);
+        for (lttng_live_trace::UP& trace : session->traces) {
             BT_CLOGD("Force marking trace metadata state as needing an update: "
                      "session-id=%" PRIu64 ", trace-id=%" PRIu64,
                      session->id, trace->id);
@@ -752,7 +722,7 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_activ
     enum lttng_live_iterator_status ret = LTTNG_LIVE_ITERATOR_STATUS_OK;
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     enum ctf_msg_iter_status status;
-    uint64_t session_idx, trace_idx;
+    uint64_t session_idx;
 
     for (session_idx = 0; session_idx < lttng_live_msg_iter->sessions->len; session_idx++) {
         struct lttng_live_session *session =
@@ -765,9 +735,7 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_activ
             ret = LTTNG_LIVE_ITERATOR_STATUS_CONTINUE;
             goto end;
         }
-        for (trace_idx = 0; trace_idx < session->traces->len; trace_idx++) {
-            struct lttng_live_trace *trace =
-                (lttng_live_trace *) g_ptr_array_index(session->traces, trace_idx);
+        for (lttng_live_trace::UP& trace : session->traces) {
             if (trace->metadata_stream_state == LTTNG_LIVE_METADATA_STREAM_STATE_NEEDED) {
                 BT_CLOGD("Need an update for metadata stream: "
                          "session-id=%" PRIu64 ", trace-id=%" PRIu64,
@@ -1364,13 +1332,10 @@ next_stream_iterator_for_session(struct lttng_live_msg_iter *lttng_live_msg_iter
         goto end;
     }
 
-    BT_ASSERT_DBG(session->traces);
-
-    while (trace_idx < session->traces->len) {
+    while (trace_idx < session->traces.size()) {
         bool trace_is_ended = false;
         struct lttng_live_stream_iterator *stream_iter;
-        struct lttng_live_trace *trace =
-            (lttng_live_trace *) g_ptr_array_index(session->traces, trace_idx);
+        lttng_live_trace *trace = session->traces[trace_idx].get();
 
         stream_iter_status =
             next_stream_iterator_for_trace(lttng_live_msg_iter, trace, &stream_iter);
@@ -1420,10 +1385,10 @@ next_stream_iterator_for_session(struct lttng_live_msg_iter *lttng_live_msg_iter
         } else {
             /*
              * trace_idx is not incremented since
-             * g_ptr_array_remove_index_fast replaces the
+             * vectorFastRemove replaces the
              * element at trace_idx with the array's last element.
              */
-            g_ptr_array_remove_index_fast(session->traces, trace_idx);
+            bt2_common::vectorFastRemove(session->traces, trace_idx);
         }
     }
     if (youngest_candidate_stream_iter) {
@@ -1439,7 +1404,7 @@ next_stream_iterator_for_session(struct lttng_live_msg_iter *lttng_live_msg_iter
          *
          * In either cases, we return END.
          */
-        BT_ASSERT(session->traces->len == 0);
+        BT_ASSERT(session->traces.empty());
         stream_iter_status = LTTNG_LIVE_ITERATOR_STATUS_END;
     }
 end:
@@ -1571,7 +1536,7 @@ lttng_live_msg_iter_next(bt_self_message_iterator *self_msg_it, bt_message_array
                  * - All live stream iterators have ENDed.
                  */
                 if (stream_iter_status == LTTNG_LIVE_ITERATOR_STATUS_END) {
-                    if (session->closed && session->traces->len == 0) {
+                    if (session->closed && session->traces.empty()) {
                         /*
                          * Remove the session from the list.
                          * session_idx is not modified since

@@ -123,7 +123,6 @@ enum lttng_live_iterator_status lttng_live_lazy_msg_init(struct lttng_live_sessi
                                                          bt_self_message_iterator *self_msg_iter)
 {
     struct lttng_live_component *lttng_live = session->lttng_live_msg_iter->lttng_live_comp;
-    uint64_t trace_idx;
     const bt2_common::LogCfg& logCfg = session->logCfg;
 
     if (!session->lazy_stream_msg_init) {
@@ -134,10 +133,7 @@ enum lttng_live_iterator_status lttng_live_lazy_msg_init(struct lttng_live_sessi
              "session-id=%" PRIu64 ", self-msg-iter-addr=%p",
              session->id, self_msg_iter);
 
-    for (trace_idx = 0; trace_idx < session->traces->len; trace_idx++) {
-        struct lttng_live_trace *trace =
-            (lttng_live_trace *) g_ptr_array_index(session->traces, trace_idx);
-
+    for (lttng_live_trace::UP& trace : session->traces) {
         for (lttng_live_stream_iterator::UP& stream_iter : trace->stream_iterators) {
             struct ctf_trace_class *ctf_tc;
 
