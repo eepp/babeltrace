@@ -118,13 +118,13 @@ static void populate_stream_info(struct ctf_fs_ds_file_group *group, bt2::MapVal
     BT_ASSERT(!group->index->entries.empty());
 
     /* First entry. */
-    ctf_fs_ds_index_entry *first_ds_index_entry = group->index->entries.front().get();
+    const ctf_fs_ds_index_entry& first_ds_index_entry = group->index->entries.front();
 
     /* Last entry. */
-    ctf_fs_ds_index_entry *last_ds_index_entry = group->index->entries.back().get();
+    const ctf_fs_ds_index_entry& last_ds_index_entry = group->index->entries.back();
 
-    stream_range->begin_ns = first_ds_index_entry->timestamp_begin_ns;
-    stream_range->end_ns = last_ds_index_entry->timestamp_end_ns;
+    stream_range->begin_ns = first_ds_index_entry.timestamp_begin_ns;
+    stream_range->end_ns = last_ds_index_entry.timestamp_end_ns;
 
     /*
      * If any of the begin and end timestamps is not set it means that
