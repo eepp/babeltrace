@@ -200,7 +200,6 @@ lttng_live_recv(struct live_viewer_connection *viewer_connection, void *buf, siz
     ssize_t received;
     size_t total_received = 0, to_receive = len;
     struct lttng_live_msg_iter *lttng_live_msg_iter = viewer_connection->lttng_live_msg_iter;
-    enum lttng_live_viewer_status status;
     BT_SOCKET sock = viewer_connection->control_sock;
     const bt2_common::LogCfg& logCfg = viewer_connection->logCfg;
 
@@ -217,9 +216,8 @@ lttng_live_recv(struct live_viewer_connection *viewer_connection, void *buf, siz
                      * SIGINT and the graph is being torn
                      * down.
                      */
-                    status = LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED;
                     lttng_live_msg_iter->was_interrupted = true;
-                    goto end;
+                    return LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED;
                 } else {
                     /*
                      * A signal was received, but the graph
@@ -235,8 +233,7 @@ lttng_live_recv(struct live_viewer_connection *viewer_connection, void *buf, siz
                 LTTNG_LIVE_CLOGE_APPEND_CAUSE_ERRNO("Error receiving from Relay", ".");
 
                 viewer_connection_close_socket(viewer_connection);
-                status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-                goto end;
+                return LTTNG_LIVE_VIEWER_STATUS_ERROR;
             }
         } else if (received == 0) {
             /*
@@ -248,8 +245,7 @@ lttng_live_recv(struct live_viewer_connection *viewer_connection, void *buf, siz
              */
             BT_CLOGE_APPEND_CAUSE("Remote side has closed connection");
             viewer_connection_close_socket(viewer_connection);
-            status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-            goto end;
+            return LTTNG_LIVE_VIEWER_STATUS_ERROR;
         }
 
         BT_ASSERT(received <= to_receive);
@@ -259,10 +255,7 @@ lttng_live_recv(struct live_viewer_connection *viewer_connection, void *buf, siz
     } while (to_receive > 0);
 
     BT_ASSERT(total_received == len);
-    status = LTTNG_LIVE_VIEWER_STATUS_OK;
-
-end:
-    return status;
+    return LTTNG_LIVE_VIEWER_STATUS_OK;
 }
 
 /*
@@ -274,7 +267,6 @@ end:
 static enum lttng_live_viewer_status
 lttng_live_send(struct live_viewer_connection *viewer_connection, const void *buf, size_t len)
 {
-    enum lttng_live_viewer_status status;
     struct lttng_live_msg_iter *lttng_live_msg_iter = viewer_connection->lttng_live_msg_iter;
     BT_SOCKET sock = viewer_connection->control_sock;
     size_t to_send = len;
@@ -290,9 +282,8 @@ lttng_live_send(struct live_viewer_connection *viewer_connection, const void *bu
                      * This interruption was a SIGINT and
                      * the graph is being teared down.
                      */
-                    status = LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED;
                     lttng_live_msg_iter->was_interrupted = true;
-                    goto end;
+                    return LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED;
                 } else {
                     /*
                      * A signal was received, but the graph
@@ -308,8 +299,7 @@ lttng_live_send(struct live_viewer_connection *viewer_connection, const void *bu
                 LTTNG_LIVE_CLOGE_APPEND_CAUSE_ERRNO("Error sending to Relay", ".");
 
                 viewer_connection_close_socket(viewer_connection);
-                status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-                goto end;
+                return LTTNG_LIVE_VIEWER_STATUS_ERROR;
             }
         }
 
@@ -320,10 +310,7 @@ lttng_live_send(struct live_viewer_connection *viewer_connection, const void *bu
     } while (to_send > 0);
 
     BT_ASSERT(total_sent == len);
-    status = LTTNG_LIVE_VIEWER_STATUS_OK;
-
-end:
-    return status;
+    return LTTNG_LIVE_VIEWER_STATUS_OK;
 }
 
 static int parse_url(struct live_viewer_connection *viewer_connection)
@@ -332,17 +319,16 @@ static int parse_url(struct live_viewer_connection *viewer_connection)
     const bt2_common::LogCfg& logCfg = viewer_connection->logCfg;
     struct bt_common_lttng_live_url_parts lttng_live_url_parts = {0};
     bt_common_lttng_live_url_parts_deleter partsDeleter {lttng_live_url_parts};
-    int ret = -1;
 
     if (viewer_connection->url.empty()) {
-        goto end;
+        return -1;
     }
 
     lttng_live_url_parts = bt_common_parse_lttng_live_url(viewer_connection->url.c_str(), error_buf,
                                                           sizeof(error_buf));
     if (!lttng_live_url_parts.proto) {
         BT_CLOGE_APPEND_CAUSE("Invalid LTTng live URL format: %s", error_buf);
-        goto end;
+        return -1;
     }
     viewer_connection->proto.reset(lttng_live_url_parts.proto);
     lttng_live_url_parts.proto = NULL;
@@ -364,10 +350,7 @@ static int parse_url(struct live_viewer_connection *viewer_connection)
         lttng_live_url_parts.session_name = NULL;
     }
 
-    ret = 0;
-
-end:
-    return ret;
+    return 0;
 }
 
 static enum lttng_live_viewer_status
@@ -403,13 +386,13 @@ lttng_live_handshake(struct live_viewer_connection *viewer_connection)
     status = lttng_live_send(viewer_connection, &cmd_buf, cmd_buf_len);
     if (status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_send_status(logCfg, status, "viewer connect command");
-        goto end;
+        return status;
     }
 
     status = lttng_live_recv(viewer_connection, &connect, sizeof(connect));
     if (status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_recv_status(logCfg, status, "viewer connect reply");
-        goto end;
+        return status;
     }
 
     BT_CLOGI("Received viewer session ID : %" PRIu64,
@@ -418,8 +401,7 @@ lttng_live_handshake(struct live_viewer_connection *viewer_connection)
 
     if (LTTNG_LIVE_MAJOR != be32toh(connect.major)) {
         BT_CLOGE_APPEND_CAUSE("Incompatible lttng-relayd protocol");
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     }
     /* Use the smallest protocol version implemented. */
     if (LTTNG_LIVE_MINOR > be32toh(connect.minor)) {
@@ -429,12 +411,7 @@ lttng_live_handshake(struct live_viewer_connection *viewer_connection)
     }
     viewer_connection->major = LTTNG_LIVE_MAJOR;
 
-    status = LTTNG_LIVE_VIEWER_STATUS_OK;
-
-    goto end;
-
-end:
-    return status;
+    return LTTNG_LIVE_VIEWER_STATUS_OK;
 }
 
 static enum lttng_live_viewer_status
@@ -447,8 +424,7 @@ lttng_live_connect_viewer(struct live_viewer_connection *viewer_connection)
 
     if (parse_url(viewer_connection)) {
         BT_CLOGE_APPEND_CAUSE("Failed to parse URL");
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto error;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     }
 
     BT_CLOGD("Connecting to hostname : %s, port : %d, "
@@ -463,14 +439,12 @@ lttng_live_connect_viewer(struct live_viewer_connection *viewer_connection)
     if (!host) {
         BT_CLOGE_APPEND_CAUSE("Cannot lookup hostname: hostname=\"%s\"",
                               viewer_connection->relay_hostname->str);
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto error;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     }
 
     if ((viewer_connection->control_sock = socket(AF_INET, SOCK_STREAM, 0)) == BT_INVALID_SOCKET) {
         BT_CLOGE_APPEND_CAUSE("Socket creation failed: %s", bt_socket_errormsg());
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto error;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     }
 
     server_addr.sin_family = AF_INET;
@@ -481,8 +455,8 @@ lttng_live_connect_viewer(struct live_viewer_connection *viewer_connection)
     if (connect(viewer_connection->control_sock, (struct sockaddr *) &server_addr,
                 sizeof(struct sockaddr)) == BT_SOCKET_ERROR) {
         BT_CLOGE_APPEND_CAUSE("Connection failed: %s", bt_socket_errormsg());
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto error;
+        viewer_connection_close_socket(viewer_connection);
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     }
 
     status = lttng_live_handshake(viewer_connection);
@@ -493,18 +467,13 @@ lttng_live_connect_viewer(struct live_viewer_connection *viewer_connection)
      */
     if (status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
         BT_CLOGE_APPEND_CAUSE("Viewer handshake failed");
-        goto error;
+        viewer_connection_close_socket(viewer_connection);
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     } else if (status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED;
     }
 
-    goto end;
-
-error:
-    viewer_connection_close_socket(viewer_connection);
-
-end:
-    return status;
+    return LTTNG_LIVE_VIEWER_STATUS_OK;
 }
 
 static int list_update_session(bt2::ArrayValue results, const struct lttng_viewer_session *session,
@@ -763,13 +732,13 @@ lttng_live_query_session_ids(struct lttng_live_msg_iter *lttng_live_msg_iter)
     status = lttng_live_send(viewer_connection, &cmd, sizeof(cmd));
     if (status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_send_status(logCfg, status, "list sessions command");
-        goto end;
+        return status;
     }
 
     status = lttng_live_recv(viewer_connection, &list, sizeof(list));
     if (status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_recv_status(logCfg, status, "session list reply");
-        goto end;
+        return status;
     }
 
     sessions_count = be32toh(list.sessions_count);
@@ -777,7 +746,7 @@ lttng_live_query_session_ids(struct lttng_live_msg_iter *lttng_live_msg_iter)
         status = lttng_live_recv(viewer_connection, &lsession, sizeof(lsession));
         if (status != LTTNG_LIVE_VIEWER_STATUS_OK) {
             viewer_handle_recv_status(logCfg, status, "session reply");
-            goto end;
+            return status;
         }
         lsession.hostname[LTTNG_VIEWER_HOST_NAME_MAX - 1] = '\0';
         lsession.session_name[LTTNG_VIEWER_NAME_MAX - 1] = '\0';
@@ -794,16 +763,12 @@ lttng_live_query_session_ids(struct lttng_live_msg_iter *lttng_live_msg_iter)
             if (lttng_live_add_session(lttng_live_msg_iter, session_id, lsession.hostname,
                                        lsession.session_name)) {
                 BT_CLOGE_APPEND_CAUSE("Failed to add live session");
-                status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-                goto end;
+                return LTTNG_LIVE_VIEWER_STATUS_ERROR;
             }
         }
     }
 
-    status = LTTNG_LIVE_VIEWER_STATUS_OK;
-
-end:
-    return status;
+    return LTTNG_LIVE_VIEWER_STATUS_OK;
 }
 
 enum lttng_live_viewer_status
@@ -825,31 +790,29 @@ lttng_live_create_viewer_session(struct lttng_live_msg_iter *lttng_live_msg_iter
     status = lttng_live_send(viewer_connection, &cmd, sizeof(cmd));
     if (status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_send_status(logCfg, status, "create session command");
-        goto end;
+        return status;
     }
 
     status = lttng_live_recv(viewer_connection, &resp, sizeof(resp));
     if (status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_recv_status(logCfg, status, "create session reply");
-        goto end;
+        return status;
     }
 
     if (be32toh(resp.status) != LTTNG_VIEWER_CREATE_SESSION_OK) {
         BT_CLOGE_APPEND_CAUSE("Error creating viewer session");
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     }
 
     status = lttng_live_query_session_ids(lttng_live_msg_iter);
     if (status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
         BT_CLOGE_APPEND_CAUSE("Failed to query live viewer session ids");
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     } else if (status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED;
     }
 
-end:
-    return status;
+    return LTTNG_LIVE_VIEWER_STATUS_OK;
 }
 
 static enum lttng_live_viewer_status receive_streams(struct lttng_live_session *session,
@@ -872,7 +835,7 @@ static enum lttng_live_viewer_status receive_streams(struct lttng_live_session *
         status = lttng_live_recv(viewer_connection, &stream, sizeof(stream));
         if (status != LTTNG_LIVE_VIEWER_STATUS_OK) {
             viewer_handle_recv_status(logCfg, status, "stream reply");
-            goto end;
+            return status;
         }
         stream.path_name[LTTNG_VIEWER_PATH_MAX - 1] = '\0';
         stream.channel_name[LTTNG_VIEWER_NAME_MAX - 1] = '\0';
@@ -885,8 +848,7 @@ static enum lttng_live_viewer_status receive_streams(struct lttng_live_session *
             if (lttng_live_metadata_create_stream(session, ctf_trace_id, stream_id,
                                                   stream.path_name)) {
                 BT_CLOGE_APPEND_CAUSE("Error creating metadata stream");
-                status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-                goto end;
+                return LTTNG_LIVE_VIEWER_STATUS_ERROR;
             }
             session->lazy_stream_msg_init = true;
         } else {
@@ -896,15 +858,12 @@ static enum lttng_live_viewer_status receive_streams(struct lttng_live_session *
                 lttng_live_stream_iterator_create(session, ctf_trace_id, stream_id, self_msg_iter);
             if (!live_stream) {
                 BT_CLOGE_APPEND_CAUSE("Error creating stream");
-                status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-                goto end;
+                return LTTNG_LIVE_VIEWER_STATUS_ERROR;
             }
         }
     }
-    status = LTTNG_LIVE_VIEWER_STATUS_OK;
 
-end:
-    return status;
+    return LTTNG_LIVE_VIEWER_STATUS_OK;
 }
 
 enum lttng_live_viewer_status lttng_live_session_attach(struct lttng_live_session *session,
@@ -946,13 +905,13 @@ enum lttng_live_viewer_status lttng_live_session_attach(struct lttng_live_sessio
     status = lttng_live_send(viewer_connection, &cmd_buf, cmd_buf_len);
     if (status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_send_status(logCfg, status, "attach session command");
-        goto end;
+        return status;
     }
 
     status = lttng_live_recv(viewer_connection, &rp, sizeof(rp));
     if (status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_recv_status(logCfg, status, "attach session reply");
-        goto end;
+        return status;
     }
 
     streams_count = be32toh(rp.streams_count);
@@ -961,24 +920,19 @@ enum lttng_live_viewer_status lttng_live_session_attach(struct lttng_live_sessio
         break;
     case LTTNG_VIEWER_ATTACH_UNK:
         BT_CLOGE_APPEND_CAUSE("Session id %" PRIu64 " is unknown", session_id);
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     case LTTNG_VIEWER_ATTACH_ALREADY:
         BT_CLOGE_APPEND_CAUSE("There is already a viewer attached to this session");
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     case LTTNG_VIEWER_ATTACH_NOT_LIVE:
         BT_CLOGE_APPEND_CAUSE("Not a live session");
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     case LTTNG_VIEWER_ATTACH_SEEK_ERR:
         BT_CLOGE_APPEND_CAUSE("Wrong seek parameter");
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     default:
         BT_CLOGE_APPEND_CAUSE("Unknown attach return code %u", be32toh(rp.status));
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     }
 
     /* We receive the initial list of streams. */
@@ -987,10 +941,10 @@ enum lttng_live_viewer_status lttng_live_session_attach(struct lttng_live_sessio
     case LTTNG_LIVE_VIEWER_STATUS_OK:
         break;
     case LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED:
-        goto end;
+        return status;
     case LTTNG_LIVE_VIEWER_STATUS_ERROR:
         BT_CLOGE_APPEND_CAUSE("Error receiving streams");
-        goto end;
+        return status;
     default:
         bt_common_abort();
     }
@@ -998,8 +952,7 @@ enum lttng_live_viewer_status lttng_live_session_attach(struct lttng_live_sessio
     session->attached = true;
     session->new_streams_needed = false;
 
-end:
-    return status;
+    return LTTNG_LIVE_VIEWER_STATUS_OK;
 }
 
 enum lttng_live_viewer_status lttng_live_session_detach(struct lttng_live_session *session)
@@ -1044,13 +997,13 @@ enum lttng_live_viewer_status lttng_live_session_detach(struct lttng_live_sessio
     status = lttng_live_send(viewer_connection, &cmd_buf, cmd_buf_len);
     if (status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_send_status(logCfg, status, "detach session command");
-        goto end;
+        return status;
     }
 
     status = lttng_live_recv(viewer_connection, &rp, sizeof(rp));
     if (status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_recv_status(logCfg, status, "detach session reply");
-        goto end;
+        return status;
     }
 
     switch (be32toh(rp.status)) {
@@ -1058,31 +1011,24 @@ enum lttng_live_viewer_status lttng_live_session_detach(struct lttng_live_sessio
         break;
     case LTTNG_VIEWER_DETACH_SESSION_UNK:
         BT_CLOGW("Session id %" PRIu64 " is unknown", session_id);
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     case LTTNG_VIEWER_DETACH_SESSION_ERR:
         BT_CLOGW("Error detaching session id %" PRIu64 "", session_id);
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     default:
         BT_CLOGE("Unknown detach return code %u", be32toh(rp.status));
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     }
 
     session->attached = false;
 
-    status = LTTNG_LIVE_VIEWER_STATUS_OK;
-
-end:
-    return status;
+    return LTTNG_LIVE_VIEWER_STATUS_OK;
 }
 
 enum lttng_live_get_one_metadata_status
 lttng_live_get_one_metadata_packet(struct lttng_live_trace *trace, std::vector<char>& buf)
 {
     uint64_t len = 0;
-    enum lttng_live_get_one_metadata_status status;
     enum lttng_live_viewer_status viewer_status;
     struct lttng_viewer_cmd cmd;
     struct lttng_viewer_get_metadata rq;
@@ -1116,15 +1062,13 @@ lttng_live_get_one_metadata_packet(struct lttng_live_trace *trace, std::vector<c
     viewer_status = lttng_live_send(viewer_connection, &cmd_buf, cmd_buf_len);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_send_status(logCfg, viewer_status, "get metadata command");
-        status = (enum lttng_live_get_one_metadata_status) viewer_status;
-        goto end;
+        return (lttng_live_get_one_metadata_status) viewer_status;
     }
 
     viewer_status = lttng_live_recv(viewer_connection, &rp, sizeof(rp));
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_recv_status(logCfg, viewer_status, "get metadata reply");
-        status = (enum lttng_live_get_one_metadata_status) viewer_status;
-        goto end;
+        return (lttng_live_get_one_metadata_status) viewer_status;
     }
 
     switch (be32toh(rp.status)) {
@@ -1133,8 +1077,7 @@ lttng_live_get_one_metadata_packet(struct lttng_live_trace *trace, std::vector<c
         break;
     case LTTNG_VIEWER_NO_NEW_METADATA:
         BT_CLOGD("Received get_metadata response: no new");
-        status = LTTNG_LIVE_GET_ONE_METADATA_STATUS_END;
-        goto end;
+        return LTTNG_LIVE_GET_ONE_METADATA_STATUS_END;
     case LTTNG_VIEWER_METADATA_ERR:
         /*
              * The Relayd cannot find this stream id. Maybe its
@@ -1142,12 +1085,10 @@ lttng_live_get_one_metadata_packet(struct lttng_live_trace *trace, std::vector<c
              * in a per-pid session.
              */
         BT_CLOGD("Received get_metadata response: error");
-        status = LTTNG_LIVE_GET_ONE_METADATA_STATUS_CLOSED;
-        goto end;
+        return LTTNG_LIVE_GET_ONE_METADATA_STATUS_CLOSED;
     default:
         BT_CLOGE_APPEND_CAUSE("Received get_metadata response: unknown");
-        status = LTTNG_LIVE_GET_ONE_METADATA_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_GET_ONE_METADATA_STATUS_ERROR;
     }
 
     len = be64toh(rp.len);
@@ -1158,14 +1099,13 @@ lttng_live_get_one_metadata_packet(struct lttng_live_trace *trace, std::vector<c
          * arises when a clear command is performed on an lttng session.
          */
         BT_CLOGD("Expecting a metadata packet of size 0. Retry to get a packet from the relay.");
-        goto empty_metadata_packet_retry;
+        return LTTNG_LIVE_GET_ONE_METADATA_STATUS_OK;
     }
 
     BT_CLOGD("Writing %" PRIu64 " bytes to metadata", len);
     if (len <= 0) {
         BT_CLOGE_APPEND_CAUSE("Erroneous response length");
-        status = LTTNG_LIVE_GET_ONE_METADATA_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_GET_ONE_METADATA_STATUS_ERROR;
     }
 
     data.resize(len);
@@ -1173,8 +1113,7 @@ lttng_live_get_one_metadata_packet(struct lttng_live_trace *trace, std::vector<c
     viewer_status = lttng_live_recv(viewer_connection, data.data(), len);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_recv_status(logCfg, viewer_status, "get metadata packet");
-        status = (enum lttng_live_get_one_metadata_status) viewer_status;
-        goto end;
+        return (lttng_live_get_one_metadata_status) viewer_status;
     }
 
     /*
@@ -1182,11 +1121,7 @@ lttng_live_get_one_metadata_packet(struct lttng_live_trace *trace, std::vector<c
      */
     buf.insert(buf.end(), data.begin(), data.end());
 
-empty_metadata_packet_retry:
-    status = LTTNG_LIVE_GET_ONE_METADATA_STATUS_OK;
-
-end:
-    return status;
+    return LTTNG_LIVE_GET_ONE_METADATA_STATUS_OK;
 }
 
 /*
@@ -1226,7 +1161,6 @@ lttng_live_get_next_index(struct lttng_live_msg_iter *lttng_live_msg_iter,
     struct lttng_viewer_get_next_index rq;
     enum lttng_live_viewer_status viewer_status;
     struct lttng_viewer_index rp;
-    enum lttng_live_iterator_status status;
     live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection.get();
     struct lttng_live_trace *trace = stream->trace;
     const size_t cmd_buf_len = sizeof(cmd) + sizeof(rq);
@@ -1255,13 +1189,13 @@ lttng_live_get_next_index(struct lttng_live_msg_iter *lttng_live_msg_iter,
     viewer_status = lttng_live_send(viewer_connection, &cmd_buf, cmd_buf_len);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_send_status(logCfg, viewer_status, "get next index command");
-        goto error;
+        return viewer_status_to_live_iterator_status(viewer_status);
     }
 
     viewer_status = lttng_live_recv(viewer_connection, &rp, sizeof(rp));
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_recv_status(logCfg, viewer_status, "get next index reply");
-        goto error;
+        return viewer_status_to_live_iterator_status(viewer_status);
     }
 
     flags = be32toh(rp.flags);
@@ -1286,8 +1220,7 @@ lttng_live_get_next_index(struct lttng_live_msg_iter *lttng_live_msg_iter,
             stream->ctf_stream_class_id.is_set = true;
         }
         lttng_live_stream_iterator_set_state(stream, LTTNG_LIVE_STREAM_QUIESCENT);
-        status = LTTNG_LIVE_ITERATOR_STATUS_OK;
-        break;
+        return LTTNG_LIVE_ITERATOR_STATUS_OK;
     }
     case LTTNG_VIEWER_INDEX_OK:
     {
@@ -1316,39 +1249,28 @@ lttng_live_get_next_index(struct lttng_live_msg_iter *lttng_live_msg_iter,
                      lttng_viewer_next_index_return_code_string(rp_status));
             lttng_live_need_new_streams(lttng_live_msg_iter);
         }
-        status = LTTNG_LIVE_ITERATOR_STATUS_OK;
-        break;
+        return LTTNG_LIVE_ITERATOR_STATUS_OK;
     }
     case LTTNG_VIEWER_INDEX_RETRY:
         memset(index, 0, sizeof(struct packet_index));
         lttng_live_stream_iterator_set_state(stream, LTTNG_LIVE_STREAM_ACTIVE_NO_DATA);
-        status = LTTNG_LIVE_ITERATOR_STATUS_AGAIN;
-        goto end;
+        return LTTNG_LIVE_ITERATOR_STATUS_AGAIN;
     case LTTNG_VIEWER_INDEX_HUP:
         memset(index, 0, sizeof(struct packet_index));
         index->offset = EOF;
         lttng_live_stream_iterator_set_state(stream, LTTNG_LIVE_STREAM_EOF);
         stream->has_stream_hung_up = true;
-        status = LTTNG_LIVE_ITERATOR_STATUS_END;
-        break;
+        return LTTNG_LIVE_ITERATOR_STATUS_END;
     case LTTNG_VIEWER_INDEX_ERR:
         memset(index, 0, sizeof(struct packet_index));
         lttng_live_stream_iterator_set_state(stream, LTTNG_LIVE_STREAM_ACTIVE_NO_DATA);
-        status = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
     default:
         BT_CLOGD("Received get_next_index response: unknown value");
         memset(index, 0, sizeof(struct packet_index));
         lttng_live_stream_iterator_set_state(stream, LTTNG_LIVE_STREAM_ACTIVE_NO_DATA);
-        status = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
     }
-    goto end;
-
-error:
-    status = viewer_status_to_live_iterator_status(viewer_status);
-end:
-    return status;
 }
 
 enum ctf_msg_iter_medium_status
@@ -1356,7 +1278,6 @@ lttng_live_get_stream_bytes(struct lttng_live_msg_iter *lttng_live_msg_iter,
                             struct lttng_live_stream_iterator *stream, uint8_t *buf,
                             uint64_t offset, uint64_t req_len, uint64_t *recv_len)
 {
-    enum ctf_msg_iter_medium_status status;
     enum lttng_live_viewer_status viewer_status;
     struct lttng_viewer_trace_packet rp;
     struct lttng_viewer_cmd cmd;
@@ -1392,13 +1313,13 @@ lttng_live_get_stream_bytes(struct lttng_live_msg_iter *lttng_live_msg_iter,
     viewer_status = lttng_live_send(viewer_connection, &cmd_buf, cmd_buf_len);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_send_status(logCfg, viewer_status, "get data packet command");
-        goto error_convert_status;
+        return viewer_status_to_ctf_msg_iter_medium_status(viewer_status);
     }
 
     viewer_status = lttng_live_recv(viewer_connection, &rp, sizeof(rp));
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_recv_status(logCfg, viewer_status, "get data packet reply");
-        goto error_convert_status;
+        return viewer_status_to_ctf_msg_iter_medium_status(viewer_status);
     }
 
     flags = be32toh(rp.flags);
@@ -1415,8 +1336,7 @@ lttng_live_get_stream_bytes(struct lttng_live_msg_iter *lttng_live_msg_iter,
         break;
     case LTTNG_VIEWER_GET_PACKET_RETRY:
         /* Unimplemented by relay daemon */
-        status = CTF_MSG_ITER_MEDIUM_STATUS_AGAIN;
-        goto end;
+        return CTF_MSG_ITER_MEDIUM_STATUS_AGAIN;
     case LTTNG_VIEWER_GET_PACKET_ERR:
         if (flags & LTTNG_VIEWER_FLAG_NEW_METADATA) {
             BT_CLOGD("Marking trace as needing new metadata: "
@@ -1431,42 +1351,31 @@ lttng_live_get_stream_bytes(struct lttng_live_msg_iter *lttng_live_msg_iter,
             lttng_live_need_new_streams(lttng_live_msg_iter);
         }
         if (flags & (LTTNG_VIEWER_FLAG_NEW_METADATA | LTTNG_VIEWER_FLAG_NEW_STREAM)) {
-            status = CTF_MSG_ITER_MEDIUM_STATUS_AGAIN;
             BT_CLOGD("Reply with any one flags set means we should retry: response=%s",
                      lttng_viewer_get_packet_return_code_string(rp_status));
-            goto end;
+            return CTF_MSG_ITER_MEDIUM_STATUS_AGAIN;
         }
         BT_CLOGE_APPEND_CAUSE("Received get_data_packet response: error");
-        status = CTF_MSG_ITER_MEDIUM_STATUS_ERROR;
-        goto end;
+        return CTF_MSG_ITER_MEDIUM_STATUS_ERROR;
     case LTTNG_VIEWER_GET_PACKET_EOF:
-        status = CTF_MSG_ITER_MEDIUM_STATUS_EOF;
-        goto end;
+        return CTF_MSG_ITER_MEDIUM_STATUS_EOF;
     default:
         BT_CLOGE_APPEND_CAUSE("Received get_data_packet response: unknown (%d)", rp_status);
-        status = CTF_MSG_ITER_MEDIUM_STATUS_ERROR;
-        goto end;
+        return CTF_MSG_ITER_MEDIUM_STATUS_ERROR;
     }
 
     if (req_len == 0) {
-        status = CTF_MSG_ITER_MEDIUM_STATUS_ERROR;
-        goto end;
+        return CTF_MSG_ITER_MEDIUM_STATUS_ERROR;
     }
 
     viewer_status = lttng_live_recv(viewer_connection, buf, req_len);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_recv_status(logCfg, viewer_status, "get data packet");
-        goto error_convert_status;
+        return viewer_status_to_ctf_msg_iter_medium_status(viewer_status);
     }
     *recv_len = req_len;
 
-    status = CTF_MSG_ITER_MEDIUM_STATUS_OK;
-    goto end;
-
-error_convert_status:
-    status = viewer_status_to_ctf_msg_iter_medium_status(viewer_status);
-end:
-    return status;
+    return CTF_MSG_ITER_MEDIUM_STATUS_OK;
 }
 
 /*
@@ -1476,7 +1385,6 @@ enum lttng_live_iterator_status
 lttng_live_session_get_new_streams(struct lttng_live_session *session,
                                    bt_self_message_iterator *self_msg_iter)
 {
-    enum lttng_live_iterator_status status = LTTNG_LIVE_ITERATOR_STATUS_OK;
     struct lttng_viewer_cmd cmd;
     struct lttng_viewer_new_streams_request rq;
     struct lttng_viewer_new_streams_response rp;
@@ -1489,8 +1397,7 @@ lttng_live_session_get_new_streams(struct lttng_live_session *session,
     char cmd_buf[cmd_buf_len];
 
     if (!session->new_streams_needed) {
-        status = LTTNG_LIVE_ITERATOR_STATUS_OK;
-        goto end;
+        return LTTNG_LIVE_ITERATOR_STATUS_OK;
     }
 
     BT_CLOGD("Requesting new streams for session: cmd=%s, "
@@ -1515,15 +1422,13 @@ lttng_live_session_get_new_streams(struct lttng_live_session *session,
     viewer_status = lttng_live_send(viewer_connection, &cmd_buf, cmd_buf_len);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_send_status(logCfg, viewer_status, "get new streams command");
-        status = viewer_status_to_live_iterator_status(viewer_status);
-        goto end;
+        return viewer_status_to_live_iterator_status(viewer_status);
     }
 
     viewer_status = lttng_live_recv(viewer_connection, &rp, sizeof(rp));
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_recv_status(logCfg, viewer_status, "get new streams reply");
-        status = viewer_status_to_live_iterator_status(viewer_status);
-        goto end;
+        return viewer_status_to_live_iterator_status(viewer_status);
     }
 
     streams_count = be32toh(rp.streams_count);
@@ -1534,34 +1439,28 @@ lttng_live_session_get_new_streams(struct lttng_live_session *session,
         break;
     case LTTNG_VIEWER_NEW_STREAMS_NO_NEW:
         session->new_streams_needed = false;
-        goto end;
+        return LTTNG_LIVE_ITERATOR_STATUS_OK;
     case LTTNG_VIEWER_NEW_STREAMS_HUP:
         session->new_streams_needed = false;
         session->closed = true;
-        status = LTTNG_LIVE_ITERATOR_STATUS_END;
-        goto end;
+        return LTTNG_LIVE_ITERATOR_STATUS_END;
     case LTTNG_VIEWER_NEW_STREAMS_ERR:
         BT_CLOGD("Received get_new_streams response: error");
-        status = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
     default:
         BT_CLOGE_APPEND_CAUSE("Received get_new_streams response: Unknown:"
                               "return code %u",
                               be32toh(rp.status));
-        status = LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-        goto end;
+        return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
     }
 
     viewer_status = receive_streams(session, streams_count, self_msg_iter);
     if (viewer_status != LTTNG_LIVE_VIEWER_STATUS_OK) {
         viewer_handle_recv_status(logCfg, viewer_status, "new streams");
-        status = viewer_status_to_live_iterator_status(viewer_status);
-        goto end;
+        return viewer_status_to_live_iterator_status(viewer_status);
     }
 
-    status = LTTNG_LIVE_ITERATOR_STATUS_OK;
-end:
-    return status;
+    return LTTNG_LIVE_ITERATOR_STATUS_OK;
 }
 
 enum lttng_live_viewer_status
