@@ -677,8 +677,6 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
     }
 
     while ((basename = g_dir_read_name(dir))) {
-        struct ctf_fs_file *file;
-
         if (strcmp(basename, CTF_FS_METADATA_FILENAME) == 0) {
             /* Ignore the metadata stream. */
             BT_CLOGI("Ignoring metadata file `%s" G_DIR_SEPARATOR_S "%s`", ctf_fs_trace->path->str,
@@ -693,7 +691,7 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
         }
 
         /* Create the file. */
-        file = ctf_fs_file_create(logCfg).release();
+        ctf_fs_file::UP file = ctf_fs_file_create(logCfg);
         if (!file) {
             BT_CLOGE_APPEND_CAUSE("Cannot create stream file object for file `%s" G_DIR_SEPARATOR_S
                                   "%s`",
@@ -706,12 +704,10 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
                                basename);
         if (!g_file_test(file->path->str, G_FILE_TEST_IS_REGULAR)) {
             BT_CLOGI("Ignoring non-regular file `%s`", file->path->str);
-            ctf_fs_file_destroy(file);
-            file = NULL;
             continue;
         }
 
-        ret = ctf_fs_file_open(file, "rb");
+        ret = ctf_fs_file_open(file.get(), "rb");
         if (ret) {
             BT_CLOGE_APPEND_CAUSE("Cannot open stream file `%s`", file->path->str);
             goto error;
@@ -720,7 +716,6 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
         if (file->size == 0) {
             /* Skip empty stream. */
             BT_CLOGI("Ignoring empty file `%s`", file->path->str);
-            ctf_fs_file_destroy(file);
             continue;
         }
 
@@ -728,11 +723,8 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
         if (ret) {
             BT_CLOGE_APPEND_CAUSE("Cannot add stream file `%s` to stream file group",
                                   file->path->str);
-            ctf_fs_file_destroy(file);
             goto error;
         }
-
-        ctf_fs_file_destroy(file);
     }
 
     goto end;
