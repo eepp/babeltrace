@@ -29,6 +29,7 @@
 #include <string.h>
 #include "cpp-common/cfg-logging.hpp"
 #include "cpp-common/cfg-logging-error-reporting.hpp"
+#include "cpp-common/make-unique.hpp"
 
 static inline size_t remaining_mmap_bytes(struct ctf_fs_ds_file *ds_file)
 {
@@ -932,9 +933,9 @@ BT_HIDDEN void ctf_fs_ds_file_info_destroy(struct ctf_fs_ds_file_info *ds_file_i
     delete ds_file_info;
 }
 
-BT_HIDDEN struct ctf_fs_ds_file_info *ctf_fs_ds_file_info_create(const char *path, int64_t begin_ns)
+BT_HIDDEN ctf_fs_ds_file_info::UP ctf_fs_ds_file_info_create(const char *path, int64_t begin_ns)
 {
-    ctf_fs_ds_file_info *ds_file_info = new ctf_fs_ds_file_info;
+    ctf_fs_ds_file_info::UP ds_file_info = bt2_common::makeUnique<ctf_fs_ds_file_info>();
 
     ds_file_info->path = path;
     ds_file_info->begin_ns = begin_ns;
