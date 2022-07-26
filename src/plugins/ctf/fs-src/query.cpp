@@ -28,6 +28,7 @@
 #include "cpp-common/cfg-logging-error-reporting-throw.hpp"
 #include "cpp-common/libc-up.hpp"
 #include "cpp-common/exc.hpp"
+#include "cpp-common/make-unique.hpp"
 
 #define METADATA_TEXT_SIG "/* CTF 1.8"
 
@@ -166,10 +167,7 @@ static void populate_trace_info(const struct ctf_fs_trace *trace, bt2::MapValue 
 
 bt2::Value::Shared trace_infos_query(bt2::ConstMapValue params, const bt2_common::LogCfg& logCfg)
 {
-    ctf_fs_component::UP ctf_fs = ctf_fs_component_create(logCfg);
-    if (!ctf_fs) {
-        BT_CLOGE_APPEND_CAUSE_AND_THROW(bt2_common::Error, "Cannot create ctf_fs_component");
-    }
+    ctf_fs_component::UP ctf_fs = bt2_common::makeUnique<ctf_fs_component>(logCfg);
 
     const bt_value *inputs_value = NULL;
     const bt_value *trace_name_value;
