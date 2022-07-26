@@ -7,6 +7,7 @@
 #ifndef _METADATA_DECODER_H
 #define _METADATA_DECODER_H
 
+#include <memory>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -61,13 +62,20 @@ struct ctf_metadata_decoder_config
     bool keep_plain_text = false;
 };
 
+struct ctf_metadata_decoder_deleter
+{
+    void operator()(ctf_metadata_decoder *decoder);
+};
+
+using ctf_metadata_decoder_up = std::unique_ptr<ctf_metadata_decoder, ctf_metadata_decoder_deleter>;
+
 /*
  * Creates a CTF metadata decoder.
  *
  * Returns `NULL` on error.
  */
 BT_HIDDEN
-struct ctf_metadata_decoder *
+ctf_metadata_decoder_up
 ctf_metadata_decoder_create(const struct ctf_metadata_decoder_config *config);
 
 /*

@@ -51,7 +51,7 @@ bt_component_class_query_method_status metadata_info_query(const bt_value *param
     int bo;
     const char *path;
     bool is_packetized;
-    struct ctf_metadata_decoder *decoder = NULL;
+    ctf_metadata_decoder_up decoder;
     enum ctf_metadata_decoder_status decoder_status;
     ctf_metadata_decoder_config decoder_cfg(logCfg);
 
@@ -106,13 +106,14 @@ bt_component_class_query_method_status metadata_info_query(const bt_value *param
     }
 
     rewind(metadata_fp.get());
-    decoder_status = ctf_metadata_decoder_append_content(decoder, metadata_fp.get());
+    decoder_status = ctf_metadata_decoder_append_content(decoder.get(), metadata_fp.get());
     if (decoder_status) {
         BT_CLOGE_APPEND_CAUSE("Cannot update metadata decoder's content: path=\"%s\".", path);
         goto error;
     }
 
-    ret = bt_value_map_insert_string_entry(result, "text", ctf_metadata_decoder_get_text(decoder));
+    ret = bt_value_map_insert_string_entry(result, "text",
+                                           ctf_metadata_decoder_get_text(decoder.get()));
     if (ret) {
         BT_CLOGE_APPEND_CAUSE("Cannot insert metadata text into query result.");
         goto error;
@@ -135,8 +136,6 @@ error:
     }
 
 end:
-    ctf_metadata_decoder_destroy(decoder);
-
     *user_result = result;
     return status;
 }
@@ -358,7 +357,7 @@ bt_component_class_query_method_status support_info_query(const bt_value *params
     double weight = 0;
     bt2_common::GCharUP metadata_path;
     bt_value *result = NULL;
-    struct ctf_metadata_decoder *metadata_decoder = NULL;
+    ctf_metadata_decoder_up metadata_decoder;
     FILE *metadata_file = NULL;
     char uuid_str[BT_UUID_STR_LEN + 1];
     bool has_uuid = false;
@@ -398,7 +397,7 @@ bt_component_class_query_method_status support_info_query(const bt_value *params
             goto end;
         }
 
-        decoder_status = ctf_metadata_decoder_append_content(metadata_decoder, metadata_file);
+        decoder_status = ctf_metadata_decoder_append_content(metadata_decoder.get(), metadata_file);
         if (decoder_status != CTF_METADATA_DECODER_STATUS_OK) {
             BT_LOGW("cannot append metadata content: metadata-decoder-status=%d", decoder_status);
             status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
@@ -412,7 +411,7 @@ bt_component_class_query_method_status support_info_query(const bt_value *params
         weight = 0.75;
 
         /* If the trace has a UUID, return the stringified UUID as the group. */
-        if (ctf_metadata_decoder_get_trace_class_uuid(metadata_decoder, uuid) == 0) {
+        if (ctf_metadata_decoder_get_trace_class_uuid(metadata_decoder.get(), uuid) == 0) {
             bt_uuid_to_str(uuid, uuid_str);
             has_uuid = true;
         }
@@ -448,7 +447,6 @@ create_result:
 
 end:
     bt_value_put_ref(result);
-    ctf_metadata_decoder_destroy(metadata_decoder);
 
     return status;
 }
