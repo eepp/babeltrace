@@ -26,6 +26,9 @@ Trace class:
         func: String
         src: String
     Event class `lttng_ust_statedump:bin_info` (ID 0):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (6 members):
         baddr: Unsigned integer (64-bit, Base 16)
@@ -35,6 +38,9 @@ Trace class:
         has_build_id: Unsigned integer (8-bit, Base 10)
         has_debug_link: Unsigned integer (8-bit, Base 10)
     Event class `my_provider:my_first_tracepoint` (ID 1):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (2 members):
         my_string_field: String

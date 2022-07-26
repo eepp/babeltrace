@@ -19,9 +19,15 @@ Trace class:
     Packet context field class: Structure (1 member):
       cpu_id: Unsigned integer (32-bit, Base 10)
     Event class `lttng_ust_statedump:start` (ID 0):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (0 members)
     Event class `lttng_ust_statedump:bin_info` (ID 1):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (6 members):
         baddr: Unsigned integer (64-bit, Base 16)
@@ -31,6 +37,9 @@ Trace class:
         has_build_id: Unsigned integer (8-bit, Base 10)
         has_debug_link: Unsigned integer (8-bit, Base 10)
     Event class `lttng_ust_statedump:build_id` (ID 2):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (3 members):
         baddr: Unsigned integer (64-bit, Base 16)
@@ -38,15 +47,24 @@ Trace class:
         build_id: Dynamic array (with length field) (Length field path [Event payload: 1]):
           Element: Unsigned integer (8-bit, Base 16)
     Event class `lttng_ust_statedump:debug_link` (ID 3):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (3 members):
         baddr: Unsigned integer (64-bit, Base 16)
         crc: Unsigned integer (32-bit, Base 10)
         filename: String
     Event class `lttng_ust_statedump:end` (ID 4):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (0 members)
     Event class `lttng_ust_lib:load` (ID 5):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (5 members):
         baddr: Unsigned integer (64-bit, Base 16)
@@ -55,6 +73,9 @@ Trace class:
         has_build_id: Unsigned integer (8-bit, Base 10)
         has_debug_link: Unsigned integer (8-bit, Base 10)
     Event class `lttng_ust_lib:build_id` (ID 6):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (3 members):
         baddr: Unsigned integer (64-bit, Base 16)
@@ -62,21 +83,33 @@ Trace class:
         build_id: Dynamic array (with length field) (Length field path [Event payload: 1]):
           Element: Unsigned integer (8-bit, Base 16)
     Event class `lttng_ust_lib:debug_link` (ID 7):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (3 members):
         baddr: Unsigned integer (64-bit, Base 16)
         crc: Unsigned integer (32-bit, Base 10)
         filename: String
     Event class `lttng_ust_lib:unload` (ID 8):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (1 member):
         baddr: Unsigned integer (64-bit, Base 16)
     Event class `lttng_ust_tracef:event` (ID 9):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug
       Log level: Debug
       Payload field class: Structure (2 members):
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_EMERG` (ID 10):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: emergency
       Log level: Emergency
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -85,6 +118,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_ALERT` (ID 11):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: alert
       Log level: Alert
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -93,6 +129,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_CRIT` (ID 12):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: critical
       Log level: Critical
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -101,6 +140,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_ERR` (ID 13):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: error
       Log level: Error
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -109,6 +151,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_WARNING` (ID 14):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: warning
       Log level: Warning
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -117,6 +162,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_NOTICE` (ID 15):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: notice
       Log level: Notice
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -125,6 +173,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_INFO` (ID 16):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: info
       Log level: Info
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -133,6 +184,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_SYSTEM` (ID 17):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:system
       Log level: Debug (system)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -141,6 +195,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_PROGRAM` (ID 18):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:program
       Log level: Debug (program)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -149,6 +206,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_PROCESS` (ID 19):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:process
       Log level: Debug (process)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -157,6 +217,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_MODULE` (ID 20):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:module
       Log level: Debug (module)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -165,6 +228,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_UNIT` (ID 21):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:unit
       Log level: Debug (unit)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -173,6 +239,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_FUNCTION` (ID 22):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:function
       Log level: Debug (function)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -181,6 +250,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_LINE` (ID 23):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -189,6 +261,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG` (ID 24):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug
       Log level: Debug
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -197,6 +272,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `ust_tests_hello:tptest` (ID 25):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (23 members):
         intfield: Signed integer (32-bit, Base 10)
@@ -231,6 +309,9 @@ Trace class:
         doublefield: Double-precision real
         boolfield: Unsigned integer (8-bit, Base 10)
     Event class `ust_tests_hello:tptest_sighandler` (ID 26):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (0 members)
 
@@ -331,9 +412,15 @@ Trace class:
     Packet context field class: Structure (1 member):
       cpu_id: Unsigned integer (32-bit, Base 10)
     Event class `lttng_ust_statedump:start` (ID 0):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (0 members)
     Event class `lttng_ust_statedump:bin_info` (ID 1):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (6 members):
         baddr: Unsigned integer (64-bit, Base 16)
@@ -343,6 +430,9 @@ Trace class:
         has_build_id: Unsigned integer (8-bit, Base 10)
         has_debug_link: Unsigned integer (8-bit, Base 10)
     Event class `lttng_ust_statedump:build_id` (ID 2):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (3 members):
         baddr: Unsigned integer (64-bit, Base 16)
@@ -350,15 +440,24 @@ Trace class:
         build_id: Dynamic array (with length field) (Length field path [Event payload: 1]):
           Element: Unsigned integer (8-bit, Base 16)
     Event class `lttng_ust_statedump:debug_link` (ID 3):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (3 members):
         baddr: Unsigned integer (64-bit, Base 16)
         crc: Unsigned integer (32-bit, Base 10)
         filename: String
     Event class `lttng_ust_statedump:end` (ID 4):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (0 members)
     Event class `lttng_ust_lib:load` (ID 5):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (5 members):
         baddr: Unsigned integer (64-bit, Base 16)
@@ -367,6 +466,9 @@ Trace class:
         has_build_id: Unsigned integer (8-bit, Base 10)
         has_debug_link: Unsigned integer (8-bit, Base 10)
     Event class `lttng_ust_lib:build_id` (ID 6):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (3 members):
         baddr: Unsigned integer (64-bit, Base 16)
@@ -374,21 +476,33 @@ Trace class:
         build_id: Dynamic array (with length field) (Length field path [Event payload: 1]):
           Element: Unsigned integer (8-bit, Base 16)
     Event class `lttng_ust_lib:debug_link` (ID 7):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (3 members):
         baddr: Unsigned integer (64-bit, Base 16)
         crc: Unsigned integer (32-bit, Base 10)
         filename: String
     Event class `lttng_ust_lib:unload` (ID 8):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (1 member):
         baddr: Unsigned integer (64-bit, Base 16)
     Event class `lttng_ust_tracef:event` (ID 9):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug
       Log level: Debug
       Payload field class: Structure (2 members):
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_EMERG` (ID 10):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: emergency
       Log level: Emergency
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -397,6 +511,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_ALERT` (ID 11):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: alert
       Log level: Alert
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -405,6 +522,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_CRIT` (ID 12):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: critical
       Log level: Critical
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -413,6 +533,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_ERR` (ID 13):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: error
       Log level: Error
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -421,6 +544,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_WARNING` (ID 14):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: warning
       Log level: Warning
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -429,6 +555,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_NOTICE` (ID 15):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: notice
       Log level: Notice
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -437,6 +566,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_INFO` (ID 16):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: info
       Log level: Info
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -445,6 +577,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_SYSTEM` (ID 17):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:system
       Log level: Debug (system)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -453,6 +588,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_PROGRAM` (ID 18):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:program
       Log level: Debug (program)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -461,6 +599,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_PROCESS` (ID 19):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:process
       Log level: Debug (process)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -469,6 +610,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_MODULE` (ID 20):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:module
       Log level: Debug (module)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -477,6 +621,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_UNIT` (ID 21):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:unit
       Log level: Debug (unit)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -485,6 +632,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_FUNCTION` (ID 22):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:function
       Log level: Debug (function)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -493,6 +643,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG_LINE` (ID 23):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -501,6 +654,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `lttng_ust_tracelog:TRACE_DEBUG` (ID 24):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug
       Log level: Debug
       Payload field class: Structure (5 members):
         line: Signed integer (32-bit, Base 10)
@@ -509,6 +665,9 @@ Trace class:
         _msg_length: Unsigned integer (32-bit, Base 10)
         msg: String
     Event class `ust_tests_hello:tptest` (ID 25):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (23 members):
         intfield: Signed integer (32-bit, Base 10)
@@ -543,6 +702,9 @@ Trace class:
         doublefield: Double-precision real
         boolfield: Unsigned integer (8-bit, Base 10)
     Event class `ust_tests_hello:tptest_sighandler` (ID 26):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (0 members)
 
