@@ -2513,10 +2513,10 @@ end:
 }
 
 BT_HIDDEN
-struct ctf_msg_iter *ctf_msg_iter_create(struct ctf_trace_class *tc, size_t max_request_sz,
-                                         struct ctf_msg_iter_medium_ops medops, void *data,
-                                         bt_self_message_iterator *self_msg_iter,
-                                         const bt2_common::LogCfg& logCfg)
+ctf_msg_iter_up ctf_msg_iter_create(struct ctf_trace_class *tc, size_t max_request_sz,
+                                    struct ctf_msg_iter_medium_ops medops, void *data,
+                                    bt_self_message_iterator *self_msg_iter,
+                                    const bt2_common::LogCfg& logCfg)
 {
     struct bt_bfcr_cbs cbs = {
         .classes =
@@ -2549,13 +2549,13 @@ struct ctf_msg_iter *ctf_msg_iter_create(struct ctf_trace_class *tc, size_t max_
                         tc, max_request_sz, data,
                         bt_common_logging_level_string(logCfg.logLevel()));
 
-    ctf_msg_iter *msg_it = new ctf_msg_iter {logCfg};
+    ctf_msg_iter_up msg_it {new ctf_msg_iter {logCfg}};
     msg_it->self_msg_iter = self_msg_iter;
     msg_it->meta.tc = tc;
     msg_it->medium.medops = medops;
     msg_it->medium.max_request_sz = max_request_sz;
     msg_it->medium.data = data;
-    msg_it->stack = stack_new(msg_it);
+    msg_it->stack = stack_new(msg_it.get());
     msg_it->stored_values = g_array_new(FALSE, TRUE, sizeof(uint64_t));
     g_array_set_size(msg_it->stored_values, tc->stored_value_count);
 
@@ -2564,25 +2564,25 @@ struct ctf_msg_iter *ctf_msg_iter_create(struct ctf_trace_class *tc, size_t max_
         goto error;
     }
 
-    msg_it->bfcr = bt_bfcr_create(cbs, msg_it, msg_it->logCfg);
+    msg_it->bfcr = bt_bfcr_create(cbs, msg_it.get(), msg_it->logCfg);
     if (!msg_it->bfcr) {
         BT_CLOGE_APPEND_CAUSE("Failed to create binary class reader (BFCR).");
         goto error;
     }
 
-    ctf_msg_iter_reset(msg_it);
+    ctf_msg_iter_reset(msg_it.get());
     BT_CLOGD("Created CTF plugin message iterator: "
              "trace-addr=%p, max-request-size=%zu, "
              "data=%p, msg-it-addr=%p, log-level=%s",
-             tc, max_request_sz, data, msg_it, bt_common_logging_level_string(logCfg.logLevel()));
+             tc, max_request_sz, data, msg_it.get(),
+             bt_common_logging_level_string(logCfg.logLevel()));
     msg_it->cur_packet_offset = 0;
 
 end:
     return msg_it;
 
 error:
-    ctf_msg_iter_destroy(msg_it);
-    msg_it = NULL;
+    msg_it.reset();
     goto end;
 }
 
@@ -2609,6 +2609,11 @@ void ctf_msg_iter_destroy(struct ctf_msg_iter *msg_it)
     }
 
     delete msg_it;
+}
+
+void ctf_msg_iter_deleter::operator()(ctf_msg_iter *iter)
+{
+    ctf_msg_iter_destroy(iter);
 }
 
 enum ctf_msg_iter_status ctf_msg_iter_get_next_message(struct ctf_msg_iter *msg_it,
