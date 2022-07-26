@@ -197,31 +197,25 @@ int lttng_live_add_session(struct lttng_live_msg_iter *lttng_live_msg_iter, uint
     return 0;
 }
 
-static void lttng_live_destroy_session(struct lttng_live_session *session)
+lttng_live_session::~lttng_live_session()
 {
-    const bt2_common::LogCfg& logCfg = session->logCfg;
-
-    if (!session) {
-        goto end;
-    }
-
     BT_CLOGD("Destroying live session: "
              "session-id=%" PRIu64 ", session-name=\"%s\"",
-             session->id, session->session_name.c_str());
-    if (session->id != -1ULL) {
-        if (lttng_live_session_detach(session)) {
-            if (!lttng_live_graph_is_canceled(session->lttng_live_msg_iter)) {
+             this->id, this->session_name.c_str());
+    if (this->id != -1ULL) {
+        if (lttng_live_session_detach(this)) {
+            if (!lttng_live_graph_is_canceled(this->lttng_live_msg_iter)) {
                 /* Old relayd cannot detach sessions. */
-                BT_CLOGD("Unable to detach lttng live session %" PRIu64, session->id);
+                BT_CLOGD("Unable to detach lttng live session %" PRIu64, this->id);
             }
         }
-        session->id = -1ULL;
+        this->id = -1ULL;
     }
+}
 
+static void lttng_live_destroy_session(struct lttng_live_session *session)
+{
     delete session;
-
-end:
-    return;
 }
 
 static void lttng_live_msg_iter_destroy(struct lttng_live_msg_iter *lttng_live_msg_iter)
