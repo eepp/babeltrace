@@ -521,90 +521,76 @@ static void lttng_live_disconnect_viewer(struct live_viewer_connection *viewer_c
     }
 }
 
-static int list_update_session(bt_value *results, const struct lttng_viewer_session *session,
+static int list_update_session(bt2::ArrayValue results, const struct lttng_viewer_session *session,
                                bool *_found, struct live_viewer_connection *viewer_connection)
 {
     const bt2_common::LogCfg& logCfg = viewer_connection->logCfg;
-    int ret = 0;
-    uint64_t i, len;
-    bt_value *map = NULL;
-    bt_value *hostname = NULL;
-    bt_value *session_name = NULL;
-    bt_value *btval = NULL;
     bool found = false;
 
-    len = bt_value_array_get_length(results);
-    for (i = 0; i < len; i++) {
-        const char *hostname_str = NULL;
-        const char *session_name_str = NULL;
+    for (bt2::Value value : results) {
+        bt2::MapValue map = value.asMap();
 
-        map = bt_value_array_borrow_element_by_index(results, i);
-        hostname = bt_value_map_borrow_entry_value(map, "target-hostname");
-        if (!hostname) {
+        nonstd::optional<bt2::Value> hostnameVal = map["target-hostname"];
+        if (!hostnameVal) {
             BT_CLOGE_APPEND_CAUSE("Error borrowing \"target-hostname\" entry.");
-            ret = -1;
-            goto end;
+            return -1;
         }
-        session_name = bt_value_map_borrow_entry_value(map, "session-name");
-        if (!session_name) {
+
+        nonstd::optional<bt2::Value> sessionNameVal = map["session-name"];
+        if (!sessionNameVal) {
             BT_CLOGE_APPEND_CAUSE("Error borrowing \"session-name\" entry.");
-            ret = -1;
-            goto end;
+            return -1;
         }
-        hostname_str = bt_value_string_get(hostname);
-        session_name_str = bt_value_string_get(session_name);
+
+        const char *hostname_str = hostnameVal->asString().value().c_str();
+        const char *session_name_str = sessionNameVal->asString().value().c_str();
 
         if (strcmp(session->hostname, hostname_str) == 0 &&
             strcmp(session->session_name, session_name_str) == 0) {
-            int64_t val;
             uint32_t streams = be32toh(session->streams);
             uint32_t clients = be32toh(session->clients);
 
             found = true;
 
-            btval = bt_value_map_borrow_entry_value(map, "stream-count");
-            if (!btval) {
+            nonstd::optional<bt2::Value> streamCountVal = map["stream-count"];
+            if (!streamCountVal) {
                 BT_CLOGE_APPEND_CAUSE("Error borrowing \"stream-count\" entry.");
-                ret = -1;
-                goto end;
+                return -1;
             }
-            val = bt_value_integer_unsigned_get(btval);
+
+            uint64_t val = streamCountVal->asUnsignedInteger().value();
             /* sum */
             val += streams;
-            bt_value_integer_unsigned_set(btval, val);
+            streamCountVal->asUnsignedInteger() = val;
 
-            btval = bt_value_map_borrow_entry_value(map, "client-count");
-            if (!btval) {
+            nonstd::optional<bt2::Value> clientCountVal = map["client-count"];
+            if (!clientCountVal) {
                 BT_CLOGE_APPEND_CAUSE("Error borrowing \"client-count\" entry.");
-                ret = -1;
-                goto end;
+                return -1;
             }
-            val = bt_value_integer_unsigned_get(btval);
+
+            val = clientCountVal->asUnsignedInteger().value();
             /* max */
-            val = bt_max_t(int64_t, clients, val);
-            bt_value_integer_unsigned_set(btval, val);
+            val = std::max<uint64_t>(clients, val);
+            clientCountVal->asUnsignedInteger() = val;
         }
 
         if (found) {
             break;
         }
     }
-end:
+
     *_found = found;
-    return ret;
+    return 0;
 }
 
-static int list_append_session(bt_value *results, const std::string& base_url,
+static int list_append_session(bt2::ArrayValue results, const std::string& base_url,
                                const struct lttng_viewer_session *session,
                                struct live_viewer_connection *viewer_connection)
 {
     int ret = 0;
     const bt2_common::LogCfg& logCfg = viewer_connection->logCfg;
-    bt_value_map_insert_entry_status insert_status;
-    bt_value_array_append_element_status append_status;
-    bt_value *map = NULL;
     bool found = false;
-    std::string url;
 
     /*
      * If the session already exists, add the stream count to it,
@@ -612,59 +598,38 @@ static int list_append_session(bt_value *results, const std::string& base_url,
      */
     ret = list_update_session(results, session, &found, viewer_connection);
     if (ret || found) {
-        goto end;
+        return ret;
     }
 
-    map = bt_value_map_create();
-    if (!map) {
-        BT_CLOGE_APPEND_CAUSE("Error creating map value.");
-        ret = -1;
-        goto end;
-    }
+    bt2::MapValue::Shared map = bt2::MapValue::create();
 
     if (base_url.empty()) {
         BT_CLOGE_APPEND_CAUSE("Error: base_url empty.");
-        ret = -1;
-        goto end;
+        return -1;
     }
     /*
      * key = "url",
      * value = <string>,
      */
-    url = base_url;
+    std::string url = base_url;
     url += "/host/";
     url += session->hostname;
     url += '/';
     url += session->session_name;
 
-    insert_status = bt_value_map_insert_string_entry(map, "url", url.c_str());
-    if (insert_status != BT_VALUE_MAP_INSERT_ENTRY_STATUS_OK) {
-        BT_CLOGE_APPEND_CAUSE("Error inserting \"url\" entry.");
-        ret = -1;
-        goto end;
-    }
+    map->insert("url", url.c_str());
 
     /*
      * key = "target-hostname",
      * value = <string>,
      */
-    insert_status = bt_value_map_insert_string_entry(map, "target-hostname", session->hostname);
-    if (insert_status != BT_VALUE_MAP_INSERT_ENTRY_STATUS_OK) {
-        BT_CLOGE_APPEND_CAUSE("Error inserting \"target-hostname\" entry.");
-        ret = -1;
-        goto end;
-    }
+    map->insert("target-hostname", session->hostname);
 
     /*
      * key = "session-name",
      * value = <string>,
      */
-    insert_status = bt_value_map_insert_string_entry(map, "session-name", session->session_name);
-    if (insert_status != BT_VALUE_MAP_INSERT_ENTRY_STATUS_OK) {
-        BT_CLOGE_APPEND_CAUSE("Error inserting \"session-name\" entry.");
-        ret = -1;
-        goto end;
-    }
+    map->insert("session-name", session->session_name);
 
     /*
      * key = "timer-us",
@@ -673,12 +638,7 @@ static int list_append_session(bt_value *results, const std::string& base_url,
     {
         uint32_t live_timer = be32toh(session->live_timer);
 
-        insert_status = bt_value_map_insert_unsigned_integer_entry(map, "timer-us", live_timer);
-        if (insert_status != BT_VALUE_MAP_INSERT_ENTRY_STATUS_OK) {
-            BT_CLOGE_APPEND_CAUSE("Error inserting \"timer-us\" entry.");
-            ret = -1;
-            goto end;
-        }
+        map->insert("timer-us", (uint64_t) live_timer);
     }
 
     /*
@@ -688,12 +648,7 @@ static int list_append_session(bt_value *results, const std::string& base_url,
     {
         uint32_t streams = be32toh(session->streams);
 
-        insert_status = bt_value_map_insert_unsigned_integer_entry(map, "stream-count", streams);
-        if (insert_status != BT_VALUE_MAP_INSERT_ENTRY_STATUS_OK) {
-            BT_CLOGE_APPEND_CAUSE("Error inserting \"stream-count\" entry.");
-            ret = -1;
-            goto end;
-        }
+        map->insert("stream-count", (uint64_t) streams);
     }
 
     /*
@@ -703,23 +658,12 @@ static int list_append_session(bt_value *results, const std::string& base_url,
     {
         uint32_t clients = be32toh(session->clients);
 
-        insert_status = bt_value_map_insert_unsigned_integer_entry(map, "client-count", clients);
-        if (insert_status != BT_VALUE_MAP_INSERT_ENTRY_STATUS_OK) {
-            BT_CLOGE_APPEND_CAUSE("Error inserting \"client-count\" entry.");
-            ret = -1;
-            goto end;
-        }
+        map->insert("client-count", (uint64_t) clients);
     }
 
-    append_status = bt_value_array_append_element(results, map);
-    if (append_status != BT_VALUE_ARRAY_APPEND_ELEMENT_STATUS_OK) {
-        BT_CLOGE_APPEND_CAUSE("Error appending map to results.");
-        ret = -1;
-    }
+    results.append(*map);
 
-end:
-    BT_VALUE_PUT_REF_AND_RESET(map);
-    return ret;
+    return 0;
 }
 
 /*
@@ -761,48 +705,36 @@ end:
 BT_HIDDEN
 bt_component_class_query_method_status
 live_viewer_connection_list_sessions(struct live_viewer_connection *viewer_connection,
-                                     const bt_value **user_result)
+                                     nonstd::optional<bt2::Value::Shared>& user_result)
 {
     const bt2_common::LogCfg& logCfg = viewer_connection->logCfg;
-    bt_component_class_query_method_status status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
-    bt_value *result = NULL;
-    enum lttng_live_viewer_status viewer_status;
-    struct lttng_viewer_cmd cmd;
-    struct lttng_viewer_list_sessions list;
     uint32_t i, sessions_count;
 
-    result = bt_value_array_create();
-    if (!result) {
-        BT_CLOGE_APPEND_CAUSE("Error creating array");
-        status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_MEMORY_ERROR;
-        goto error;
-    }
+    bt2::ArrayValue::Shared result = bt2::ArrayValue::create();
 
     BT_LOGD("Requesting list of sessions: cmd=%s",
             lttng_viewer_command_string(LTTNG_VIEWER_LIST_SESSIONS));
 
+    lttng_viewer_cmd cmd;
     cmd.cmd = htobe32(LTTNG_VIEWER_LIST_SESSIONS);
     cmd.data_size = htobe64((uint64_t) 0);
     cmd.cmd_version = htobe32(0);
 
-    viewer_status = lttng_live_send(viewer_connection, &cmd, sizeof(cmd));
+    lttng_live_viewer_status viewer_status = lttng_live_send(viewer_connection, &cmd, sizeof(cmd));
     if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
         BT_CLOGE_APPEND_CAUSE("Error sending list sessions command");
-        status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
-        goto error;
+        return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
     } else if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
-        status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_AGAIN;
-        goto error;
+        return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_AGAIN;
     }
 
+    lttng_viewer_list_sessions list;
     viewer_status = lttng_live_recv(viewer_connection, &list, sizeof(list));
     if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
         BT_CLOGE_APPEND_CAUSE("Error receiving session list");
-        status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
-        goto error;
+        return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
     } else if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
-        status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_AGAIN;
-        goto error;
+        return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_AGAIN;
     }
 
     sessions_count = be32toh(list.sessions_count);
@@ -812,28 +744,23 @@ live_viewer_connection_list_sessions(struct live_viewer_connection *viewer_conne
         viewer_status = lttng_live_recv(viewer_connection, &lsession, sizeof(lsession));
         if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_ERROR) {
             BT_CLOGE_APPEND_CAUSE("Error receiving session:");
-            status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
-            goto error;
+            return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
         } else if (viewer_status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
-            status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_AGAIN;
-            goto error;
+            return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_AGAIN;
         }
 
         lsession.hostname[LTTNG_VIEWER_HOST_NAME_MAX - 1] = '\0';
         lsession.session_name[LTTNG_VIEWER_NAME_MAX - 1] = '\0';
-        if (list_append_session(result, viewer_connection->url, &lsession, viewer_connection)) {
+        if (list_append_session(*result, viewer_connection->url.c_str(), &lsession,
+                                viewer_connection)) {
             BT_CLOGE_APPEND_CAUSE("Error appending session");
-            status = BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
-            goto error;
+            return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_ERROR;
         }
     }
 
-    *user_result = result;
-    goto end;
-error:
-    BT_VALUE_PUT_REF_AND_RESET(result);
-end:
-    return status;
+    user_result = std::move(result);
+
+    return BT_COMPONENT_CLASS_QUERY_METHOD_STATUS_OK;
 }
 
 static enum lttng_live_viewer_status

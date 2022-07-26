@@ -19,6 +19,7 @@
 #include "common/macros.h"
 #include "compat/socket.h"
 #include "cpp-common/glib-up.hpp"
+#include "cpp-common/optional.hpp"
 #include "cpp-common/log-cfg.hpp"
 
 #define LTTNG_DEFAULT_NETWORK_VIEWER_PORT 5344
@@ -114,6 +115,6 @@ lttng_live_create_viewer_session(struct lttng_live_msg_iter *lttng_live_msg_iter
 
 bt_component_class_query_method_status
 live_viewer_connection_list_sessions(struct live_viewer_connection *viewer_connection,
-                                     const bt_value **user_result);
+                                     nonstd::optional<bt2::Value::Shared>& user_result);
 
 #endif /* LTTNG_LIVE_VIEWER_CONNECTION_H */
