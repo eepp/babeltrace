@@ -79,8 +79,7 @@ struct ctf_fs_trace
     /* Owned by this */
     bt_trace *trace = nullptr;
 
-    /* Array of struct ctf_fs_ds_file_group *, owned by this */
-    GPtrArray *ds_file_groups = nullptr;
+    std::vector<ctf_fs_ds_file_group::UP> ds_file_groups;
 
     /* Owned by this */
     GString *path = nullptr;

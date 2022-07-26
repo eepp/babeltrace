@@ -150,9 +150,8 @@ static void populate_stream_info(struct ctf_fs_ds_file_group *group, bt2::MapVal
 static void populate_trace_info(const struct ctf_fs_trace *trace, bt2::MapValue traceInfo,
                                 const bt2_common::LogCfg& logCfg)
 {
-    BT_ASSERT(trace->ds_file_groups);
     /* Add trace range info only if it contains streams. */
-    if (trace->ds_file_groups->len == 0) {
+    if (trace->ds_file_groups.empty()) {
         BT_CLOGE_APPEND_CAUSE_AND_THROW(bt2_common::Error, "Trace has no streams: trace-path=%s",
                                         trace->path->str);
     }
@@ -160,13 +159,10 @@ static void populate_trace_info(const struct ctf_fs_trace *trace, bt2::MapValue 
     bt2::ArrayValue fileGroups = traceInfo.insertEmptyArray("stream-infos");
 
     /* Find range of all stream groups, and of the trace. */
-    for (size_t group_idx = 0; group_idx < trace->ds_file_groups->len; group_idx++) {
+    for (const ctf_fs_ds_file_group::UP& group : trace->ds_file_groups) {
         range group_range;
-        ctf_fs_ds_file_group *group =
-            (ctf_fs_ds_file_group *) g_ptr_array_index(trace->ds_file_groups, group_idx);
-
         bt2::MapValue groupInfo = fileGroups.appendEmptyMap();
-        populate_stream_info(group, groupInfo, &group_range, logCfg);
+        populate_stream_info(group.get(), groupInfo, &group_range, logCfg);
     }
 }
 
