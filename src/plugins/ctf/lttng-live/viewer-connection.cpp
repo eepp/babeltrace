@@ -1696,31 +1696,19 @@ enum lttng_live_viewer_status live_viewer_connection_create(
     goto end;
 
 error:
-    if (viewer_connection) {
-        live_viewer_connection_destroy(viewer_connection);
-    }
+    delete viewer_connection;
+
 end:
     return status;
 }
 
-void live_viewer_connection_destroy(struct live_viewer_connection *viewer_connection)
+live_viewer_connection::~live_viewer_connection()
 {
-    const bt2_common::LogCfg& logCfg = viewer_connection->logCfg;
-
-    if (!viewer_connection) {
-        goto end;
-    }
-
     BT_CLOGD("Closing connection to relay:"
              "relay-url=\"%s\"",
-             viewer_connection->url.c_str());
+             this->url.c_str());
 
-    lttng_live_disconnect_viewer(viewer_connection);
-
-    delete viewer_connection;
+    lttng_live_disconnect_viewer(this);
 
     bt_socket_fini();
-
-end:
-    return;
 }
