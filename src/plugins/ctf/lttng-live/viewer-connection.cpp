@@ -1306,12 +1306,9 @@ static void lttng_index_to_packet_index(struct lttng_viewer_index *lindex,
 
 static void lttng_live_need_new_streams(struct lttng_live_msg_iter *lttng_live_msg_iter)
 {
-    uint64_t session_idx;
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
 
-    for (session_idx = 0; session_idx < lttng_live_msg_iter->sessions->len; session_idx++) {
-        struct lttng_live_session *session =
-            (lttng_live_session *) g_ptr_array_index(lttng_live_msg_iter->sessions, session_idx);
+    for (lttng_live_session::UP& session : lttng_live_msg_iter->sessions) {
         BT_CLOGD("Marking session as needing new streams: "
                  "session-id=%" PRIu64,
                  session->id);

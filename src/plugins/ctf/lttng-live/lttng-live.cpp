@@ -197,7 +197,7 @@ int lttng_live_add_session(struct lttng_live_msg_iter *lttng_live_msg_iter, uint
     session->hostname = hostname;
     session->session_name = session_name;
 
-    g_ptr_array_add(lttng_live_msg_iter->sessions, session.release());
+    lttng_live_msg_iter->sessions.emplace_back(std::move(session));
 
     return 0;
 }
@@ -218,19 +218,10 @@ lttng_live_session::~lttng_live_session()
     }
 }
 
-static void lttng_live_destroy_session(struct lttng_live_session *session)
-{
-    delete session;
-}
-
 static void lttng_live_msg_iter_destroy(struct lttng_live_msg_iter *lttng_live_msg_iter)
 {
     if (!lttng_live_msg_iter) {
         goto end;
-    }
-
-    if (lttng_live_msg_iter->sessions) {
-        g_ptr_array_free(lttng_live_msg_iter->sessions, TRUE);
     }
 
     if (lttng_live_msg_iter->viewer_connection) {
@@ -470,12 +461,9 @@ end:
 static void
 lttng_live_force_new_streams_and_metadata(struct lttng_live_msg_iter *lttng_live_msg_iter)
 {
-    uint64_t session_idx;
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
 
-    for (session_idx = 0; session_idx < lttng_live_msg_iter->sessions->len; session_idx++) {
-        struct lttng_live_session *session =
-            (lttng_live_session *) g_ptr_array_index(lttng_live_msg_iter->sessions, session_idx);
+    for (lttng_live_session::UP& session : lttng_live_msg_iter->sessions) {
         BT_CLOGD("Force marking session as needing new streams: "
                  "session-id=%" PRIu64,
                  session->id);
@@ -498,8 +486,7 @@ lttng_live_iterator_handle_new_streams_and_metadata(struct lttng_live_msg_iter *
     enum lttng_live_iterator_status status;
     enum lttng_live_viewer_status viewer_status;
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
-    uint64_t session_idx = 0, nr_sessions_opened = 0;
-    struct lttng_live_session *session;
+    uint64_t nr_sessions_opened = 0;
     enum session_not_found_action sess_not_found_act =
         lttng_live_msg_iter->lttng_live_comp->params.sess_not_found_act;
 
@@ -512,7 +499,7 @@ lttng_live_iterator_handle_new_streams_and_metadata(struct lttng_live_msg_iter *
      * need to query for new sessions even though we have sessions
      * currently ongoing.
      */
-    if (lttng_live_msg_iter->sessions->len == 0) {
+    if (lttng_live_msg_iter->sessions.empty()) {
         if (sess_not_found_act != SESSION_NOT_FOUND_ACTION_CONTINUE) {
             BT_CLOGD(
                 "No session found. Exiting in accordance with the `session-not-found-action` parameter");
@@ -540,10 +527,8 @@ lttng_live_iterator_handle_new_streams_and_metadata(struct lttng_live_msg_iter *
         }
     }
 
-    for (session_idx = 0; session_idx < lttng_live_msg_iter->sessions->len; session_idx++) {
-        session =
-            (lttng_live_session *) g_ptr_array_index(lttng_live_msg_iter->sessions, session_idx);
-        status = lttng_live_get_session(lttng_live_msg_iter, session);
+    for (lttng_live_session::UP& session : lttng_live_msg_iter->sessions) {
+        status = lttng_live_get_session(lttng_live_msg_iter, session.get());
         switch (status) {
         case LTTNG_LIVE_ITERATOR_STATUS_OK:
         case LTTNG_LIVE_ITERATOR_STATUS_END:
@@ -711,12 +696,8 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_activ
     enum lttng_live_iterator_status ret = LTTNG_LIVE_ITERATOR_STATUS_OK;
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     enum ctf_msg_iter_status status;
-    uint64_t session_idx;
 
-    for (session_idx = 0; session_idx < lttng_live_msg_iter->sessions->len; session_idx++) {
-        struct lttng_live_session *session =
-            (lttng_live_session *) g_ptr_array_index(lttng_live_msg_iter->sessions, session_idx);
-
+    for (lttng_live_session::UP& session : lttng_live_msg_iter->sessions) {
         if (session->new_streams_needed) {
             BT_CLOGD("Need an update for streams: "
                      "session-id=%" PRIu64,
@@ -1424,7 +1405,6 @@ lttng_live_msg_iter_next(bt_self_message_iterator *self_msg_it, bt_message_array
 
         struct lttng_live_component *lttng_live = lttng_live_msg_iter->lttng_live_comp;
         enum lttng_live_iterator_status stream_iter_status;
-        uint64_t session_idx;
 
         *count = 0;
 
@@ -1456,7 +1436,7 @@ lttng_live_msg_iter_next(bt_self_message_iterator *self_msg_it, bt_message_array
          * the user, session count will be 0. In this case, we return status
          * end to return gracefully.
          */
-        if (lttng_live_msg_iter->sessions->len == 0) {
+        if (lttng_live_msg_iter->sessions.empty()) {
             if (lttng_live->params.sess_not_found_act != SESSION_NOT_FOUND_ACTION_CONTINUE) {
                 status = BT_MESSAGE_ITERATOR_CLASS_NEXT_METHOD_STATUS_END;
                 goto end;
@@ -1509,11 +1489,9 @@ lttng_live_msg_iter_next(bt_self_message_iterator *self_msg_it, bt_message_array
                                               *candidate_stream_iter = NULL;
             int64_t youngest_msg_ts_ns = INT64_MAX;
 
-            BT_ASSERT_DBG(lttng_live_msg_iter->sessions);
-            session_idx = 0;
-            while (session_idx < lttng_live_msg_iter->sessions->len) {
-                struct lttng_live_session *session = (lttng_live_session *) g_ptr_array_index(
-                    lttng_live_msg_iter->sessions, session_idx);
+            uint64_t session_idx = 0;
+            while (session_idx < lttng_live_msg_iter->sessions.size()) {
+                lttng_live_session *session = lttng_live_msg_iter->sessions[session_idx].get();
 
                 /* Find the best candidate message to send downstream. */
                 stream_iter_status = next_stream_iterator_for_session(lttng_live_msg_iter, session,
@@ -1534,7 +1512,7 @@ lttng_live_msg_iter_next(bt_self_message_iterator *self_msg_it, bt_message_array
                          * replaces the the removed element with
                          * the array's last element.
                          */
-                        g_ptr_array_remove_index_fast(lttng_live_msg_iter->sessions, session_idx);
+                        bt2_common::vectorFastRemove(lttng_live_msg_iter->sessions, session_idx);
                     } else {
                         session_idx++;
                     }
@@ -1678,10 +1656,6 @@ lttng_live_msg_iter_create(struct lttng_live_component *lttng_live_comp,
     lttng_live_msg_iter->last_msg_ts_ns = INT64_MIN;
     lttng_live_msg_iter->was_interrupted = false;
 
-    lttng_live_msg_iter->sessions =
-        g_ptr_array_new_with_free_func((GDestroyNotify) lttng_live_destroy_session);
-    BT_ASSERT(lttng_live_msg_iter->sessions);
-
     return lttng_live_msg_iter;
 }
 
@@ -1746,7 +1720,7 @@ lttng_live_msg_iter_init(bt_self_message_iterator *self_msg_it,
             goto error;
         }
 
-        if (lttng_live_msg_iter->sessions->len == 0) {
+        if (lttng_live_msg_iter->sessions.empty()) {
             switch (lttng_live->params.sess_not_found_act) {
             case SESSION_NOT_FOUND_ACTION_CONTINUE:
                 BT_CLOGI(
