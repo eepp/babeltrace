@@ -586,7 +586,8 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
 
     index = ctf_fs_ds_file_build_index(ds_file, ds_file_info.get(), msg_iter);
     if (!index) {
-        BT_CLOGE_APPEND_CAUSE("Failed to index CTF stream file \'%s\'", ds_file->file->path->str);
+        BT_CLOGE_APPEND_CAUSE("Failed to index CTF stream file \'%s\'",
+                              ds_file->file->path.c_str());
         goto error;
     }
 
@@ -700,29 +701,31 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
         }
 
         /* Create full path string. */
-        g_string_append_printf(file->path, "%s" G_DIR_SEPARATOR_S "%s", ctf_fs_trace->path->str,
-                               basename);
-        if (!g_file_test(file->path->str, G_FILE_TEST_IS_REGULAR)) {
-            BT_CLOGI("Ignoring non-regular file `%s`", file->path->str);
+        file->path = ctf_fs_trace->path->str;
+        file->path += G_DIR_SEPARATOR;
+        file->path += basename;
+
+        if (!g_file_test(file->path.c_str(), G_FILE_TEST_IS_REGULAR)) {
+            BT_CLOGI("Ignoring non-regular file `%s`", file->path.c_str());
             continue;
         }
 
         ret = ctf_fs_file_open(file.get(), "rb");
         if (ret) {
-            BT_CLOGE_APPEND_CAUSE("Cannot open stream file `%s`", file->path->str);
+            BT_CLOGE_APPEND_CAUSE("Cannot open stream file `%s`", file->path.c_str());
             goto error;
         }
 
         if (file->size == 0) {
             /* Skip empty stream. */
-            BT_CLOGI("Ignoring empty file `%s`", file->path->str);
+            BT_CLOGI("Ignoring empty file `%s`", file->path.c_str());
             continue;
         }
 
-        ret = add_ds_file_to_ds_file_group(ctf_fs_trace, file->path->str);
+        ret = add_ds_file_to_ds_file_group(ctf_fs_trace, file->path.c_str());
         if (ret) {
             BT_CLOGE_APPEND_CAUSE("Cannot add stream file `%s` to stream file group",
-                                  file->path->str);
+                                  file->path.c_str());
             goto error;
         }
     }

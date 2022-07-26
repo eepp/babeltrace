@@ -61,7 +61,7 @@ static enum ctf_msg_iter_medium_status ds_file_munmap(struct ctf_fs_ds_file *ds_
     if (bt_munmap(ds_file->mmap_addr, ds_file->mmap_len)) {
         BT_CLOGE_ERRNO("Cannot memory-unmap file",
                        ": address=%p, size=%zu, file_path=\"%s\", file=%p", ds_file->mmap_addr,
-                       ds_file->mmap_len, ds_file->file ? ds_file->file->path->str : "NULL",
+                       ds_file->mmap_len, ds_file->file ? ds_file->file->path.c_str() : "NULL",
                        ds_file->file ? ds_file->file->fp.get() : NULL);
         status = CTF_MSG_ITER_MEDIUM_STATUS_ERROR;
         goto end;
@@ -129,7 +129,7 @@ static enum ctf_msg_iter_medium_status ds_file_mmap(struct ctf_fs_ds_file *ds_fi
                 fileno(ds_file->file->fp.get()), ds_file->mmap_offset_in_file, logCfg.logLevel());
     if (ds_file->mmap_addr == MAP_FAILED) {
         BT_CLOGE("Cannot memory-map address (size %zu) of file \"%s\" (%p) at offset %jd: %s",
-                 ds_file->mmap_len, ds_file->file->path->str, ds_file->file->fp.get(),
+                 ds_file->mmap_len, ds_file->file->path.c_str(), ds_file->file->fp.get(),
                  (intmax_t) ds_file->mmap_offset_in_file, strerror(errno));
         status = CTF_MSG_ITER_MEDIUM_STATUS_ERROR;
         goto end;
@@ -193,7 +193,7 @@ static enum ctf_msg_iter_medium_status medop_request_bytes(size_t request_sz, ui
     if (remaining_mmap_bytes(ds_file) == 0) {
         /* Are we at the end of the file? */
         if (ds_file->mmap_offset_in_file >= ds_file->file->size) {
-            BT_CLOGD("Reached end of file \"%s\" (%p)", ds_file->file->path->str,
+            BT_CLOGD("Reached end of file \"%s\" (%p)", ds_file->file->path.c_str(),
                      ds_file->file->fp.get());
             status = CTF_MSG_ITER_MEDIUM_STATUS_EOF;
             goto end;
@@ -206,8 +206,8 @@ static enum ctf_msg_iter_medium_status medop_request_bytes(size_t request_sz, ui
         case CTF_MSG_ITER_MEDIUM_STATUS_EOF:
             goto end;
         default:
-            BT_CLOGE("Cannot memory-map next region of file \"%s\" (%p)", ds_file->file->path->str,
-                     ds_file->file->fp.get());
+            BT_CLOGE("Cannot memory-map next region of file \"%s\" (%p)",
+                     ds_file->file->path.c_str(), ds_file->file->fp.get());
             goto error;
         }
     }
@@ -330,7 +330,7 @@ ctf_fs_ds_group_medops_set_file(struct ctf_fs_ds_group_medops_data *data,
     BT_ASSERT(index_entry);
 
     /* Check if that file is already the one mapped. */
-    if (!data->file || strcmp(index_entry->path, data->file->file->path->str) != 0) {
+    if (!data->file || strcmp(index_entry->path, data->file->file->path.c_str()) != 0) {
         /* Destroy the previously used file. */
         ctf_fs_ds_file_destroy(data->file);
 
@@ -489,7 +489,7 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
     uint32_t version_major, version_minor;
     const bt2_common::LogCfg& logCfg = ds_file->logCfg;
 
-    BT_CLOGI("Building index from .idx file of stream file %s", ds_file->file->path->str);
+    BT_CLOGI("Building index from .idx file of stream file %s", ds_file->file->path.c_str());
     ret = ctf_msg_iter_get_packet_properties(msg_iter, &props);
     if (ret) {
         BT_CLOGI_STR("Cannot read first packet's header and context fields.");
@@ -504,15 +504,15 @@ static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_f
     }
 
     /* Look for index file in relative path index/name.idx. */
-    basename = g_path_get_basename(ds_file->file->path->str);
+    basename = g_path_get_basename(ds_file->file->path.c_str());
     if (!basename) {
-        BT_CLOGE("Cannot get the basename of datastream file %s", ds_file->file->path->str);
+        BT_CLOGE("Cannot get the basename of datastream file %s", ds_file->file->path.c_str());
         goto error;
     }
 
-    directory = g_path_get_dirname(ds_file->file->path->str);
+    directory = g_path_get_dirname(ds_file->file->path.c_str());
     if (!directory) {
-        BT_CLOGE("Cannot get dirname of datastream file %s", ds_file->file->path->str);
+        BT_CLOGE("Cannot get dirname of datastream file %s", ds_file->file->path.c_str());
         goto error;
     }
 
@@ -726,7 +726,7 @@ static ctf_fs_ds_index::UP build_index_from_stream_file(struct ctf_fs_ds_file *d
     bt2_common::DataLen currentPacketOffset = bt2_common::DataLen::fromBytes(0);
     const bt2_common::LogCfg& logCfg = ds_file->logCfg;
 
-    BT_CLOGI("Indexing stream file %s", ds_file->file->path->str);
+    BT_CLOGI("Indexing stream file %s", ds_file->file->path.c_str());
 
     index = ctf_fs_ds_index_create(logCfg);
     if (!index) {
@@ -769,7 +769,7 @@ static ctf_fs_ds_index::UP build_index_from_stream_file(struct ctf_fs_ds_file *d
             BT_CLOGW("Invalid packet size reported in file: stream=\"%s\", "
                      "packet-offset-bytes=%llu, packet-size-bytes=%llu, "
                      "file-size-bytes=%jd",
-                     ds_file->file->path->str, currentPacketOffset.bytes(),
+                     ds_file->file->path.c_str(), currentPacketOffset.bytes(),
                      currentPacketSize.bytes(), (intmax_t) ds_file->file->size);
             goto error;
         }
@@ -823,7 +823,7 @@ struct ctf_fs_ds_file *ctf_fs_ds_file_create(struct ctf_fs_trace *ctf_fs_trace,
 
     ds_file->stream = std::move(stream);
     ds_file->metadata = ctf_fs_trace->metadata;
-    g_string_assign(ds_file->file->path, path);
+    ds_file->file->path = path;
     ret = ctf_fs_file_open(ds_file->file.get(), "rb");
     if (ret) {
         goto error;
