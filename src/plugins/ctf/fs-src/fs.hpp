@@ -153,11 +153,6 @@ BT_HIDDEN
 bt_message_iterator_class_seek_beginning_method_status
 ctf_fs_iterator_seek_beginning(bt_self_message_iterator *message_iterator);
 
-/* Create and initialize a new, empty ctf_fs_component. */
-
-BT_HIDDEN
-ctf_fs_component::UP ctf_fs_component_create(const bt2_common::LogCfg& logCfg);
-
 /*
  * Create one `struct ctf_fs_trace` from one trace, or multiple traces sharing
  * the same UUID.

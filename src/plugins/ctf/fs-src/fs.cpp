@@ -278,11 +278,6 @@ end:
     }
 }
 
-ctf_fs_component::UP ctf_fs_component_create(const bt2_common::LogCfg& logCfg)
-{
-    return ctf_fs_component::UP {new ctf_fs_component {logCfg}};
-}
-
 void ctf_fs_finalize(bt_self_component_source *component)
 {
     ctf_fs_component::UP {(ctf_fs_component *) bt_self_component_get_data(
@@ -1799,10 +1794,7 @@ static ctf_fs_component::UP ctf_fs_create(const bt_value *params,
     const bt_value *trace_name_value;
     bt_self_component *self_comp = bt_self_component_source_as_self_component(self_comp_src);
 
-    ctf_fs_component::UP ctf_fs = ctf_fs_component_create(logCfg);
-    if (!ctf_fs) {
-        return nullptr;
-    }
+    ctf_fs_component::UP ctf_fs = bt2_common::makeUnique<ctf_fs_component>(logCfg);
 
     if (!read_src_fs_parameters(params, &inputs_value, &trace_name_value, ctf_fs.get())) {
         return nullptr;
