@@ -505,12 +505,12 @@ end:
  * @param trace	Associated trace
  * @returns	New visitor context, or NULL on error
  */
-static struct ctf_visitor_generate_ir *
+static ctf_visitor_generate_ir::UP
 ctx_create(const struct ctf_metadata_decoder_config *decoder_config)
 {
     BT_ASSERT(decoder_config);
 
-    ctf_visitor_generate_ir *ctx = new ctf_visitor_generate_ir {*decoder_config};
+    ctf_visitor_generate_ir::UP ctx {new ctf_visitor_generate_ir {*decoder_config}};
 
     if (decoder_config->self_comp) {
         ctx->trace_class = bt_trace_class_create(decoder_config->self_comp);
@@ -527,7 +527,7 @@ ctx_create(const struct ctf_metadata_decoder_config *decoder_config)
     }
 
     /* Root declaration scope */
-    ctx->current_scope = ctx_decl_scope_create(ctx, NULL);
+    ctx->current_scope = ctx_decl_scope_create(ctx.get(), NULL);
     if (!ctx->current_scope) {
         BT_CLOGE_APPEND_CAUSE("Cannot create declaration scope.");
         goto error;
@@ -537,8 +537,7 @@ ctx_create(const struct ctf_metadata_decoder_config *decoder_config)
     goto end;
 
 error:
-    ctx_destroy(ctx);
-    ctx = NULL;
+    ctx.reset();
 
 end:
     return ctx;
@@ -4403,13 +4402,11 @@ end:
     return ret;
 }
 
-struct ctf_visitor_generate_ir *
+ctf_visitor_generate_ir::UP
 ctf_visitor_generate_ir_create(const struct ctf_metadata_decoder_config *decoder_config)
 {
-    struct ctf_visitor_generate_ir *ctx = NULL;
-
     /* Create visitor's context */
-    ctx = ctx_create(decoder_config);
+    ctf_visitor_generate_ir::UP ctx = ctx_create(decoder_config);
     if (!ctx) {
         BT_CLOGE_APPEND_CAUSE_EX(decoder_config->logCfg, "Cannot create visitor's context.");
         goto error;
@@ -4418,16 +4415,20 @@ ctf_visitor_generate_ir_create(const struct ctf_metadata_decoder_config *decoder
     goto end;
 
 error:
-    ctx_destroy(ctx);
-    ctx = NULL;
+    ctx.reset();
 
 end:
     return ctx;
 }
 
-void ctf_visitor_generate_ir_destroy(struct ctf_visitor_generate_ir *visitor)
+static void ctf_visitor_generate_ir_destroy(struct ctf_visitor_generate_ir *visitor)
 {
     ctx_destroy(visitor);
+}
+
+void ctf_visitor_generate_ir_deleter::operator()(ctf_visitor_generate_ir *visitor)
+{
+    ctf_visitor_generate_ir_destroy(visitor);
 }
 
 bt_trace_class *ctf_visitor_generate_ir_get_ir_trace_class(struct ctf_visitor_generate_ir *ctx)
