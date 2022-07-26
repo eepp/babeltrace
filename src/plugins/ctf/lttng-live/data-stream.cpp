@@ -21,6 +21,7 @@
 
 #include "cpp-common/cfg-logging.hpp"
 #include "../common/src/msg-iter/msg-iter.hpp"
+#include "cpp-common/make-unique.hpp"
 #include "common/assert.h"
 #include "compat/mman.h"
 #include "data-stream.hpp"
@@ -184,11 +185,12 @@ lttng_live_stream_iterator_create(struct lttng_live_session *session, uint64_t c
 
     lttng_live = session->lttng_live_msg_iter->lttng_live_comp;
 
-    lttng_live_stream_iterator *stream_iter = new lttng_live_stream_iterator {logCfg};
+    lttng_live_stream_iterator::UP stream_iter =
+        bt2_common::makeUnique<lttng_live_stream_iterator>(logCfg);
     trace = lttng_live_session_borrow_or_create_trace_by_id(session, ctf_trace_id);
     if (!trace) {
         BT_CLOGE_APPEND_CAUSE("Failed to borrow CTF trace.");
-        goto error;
+        return nullptr;
     }
 
     stream_iter->trace = trace;
@@ -206,27 +208,24 @@ lttng_live_stream_iterator_create(struct lttng_live_session *session, uint64_t c
             ctf_metadata_decoder_borrow_ctf_trace_class(trace->metadata->decoder.get());
         BT_ASSERT(!stream_iter->msg_iter);
         stream_iter->msg_iter = ctf_msg_iter_create(ctf_tc, lttng_live->max_query_size, medops,
-                                                    stream_iter, self_msg_iter, logCfg);
+                                                    stream_iter.get(), self_msg_iter, logCfg);
         if (!stream_iter->msg_iter) {
             BT_CLOGE_APPEND_CAUSE("Failed to create CTF message iterator");
-            goto error;
+            return nullptr;
         }
     }
     stream_iter->buf.resize(lttng_live->max_query_size);
 
     nameSs << STREAM_NAME_PREFIX << stream_iter->viewer_stream_id;
     stream_iter->name = nameSs.str();
-    g_ptr_array_add(trace->stream_iterators, stream_iter);
+
+    lttng_live_stream_iterator *ret = stream_iter.get();
+    g_ptr_array_add(trace->stream_iterators, stream_iter.release());
 
     /* Track the number of active stream iterator. */
     session->lttng_live_msg_iter->active_stream_iter++;
 
-    goto end;
-error:
-    delete stream_iter;
-    stream_iter = NULL;
-end:
-    return stream_iter;
+    return ret;
 }
 
 lttng_live_stream_iterator::~lttng_live_stream_iterator()
