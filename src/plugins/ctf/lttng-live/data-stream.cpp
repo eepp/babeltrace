@@ -15,6 +15,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sstream>
 
 #include <glib.h>
 
@@ -76,7 +77,7 @@ static bt_stream *medop_borrow_stream(bt_stream_class *stream_class, int64_t str
 
         BT_CLOGI("Creating stream %s (ID: %" PRIu64 ") out of stream "
                  "class %" PRId64,
-                 lttng_live_stream->name->str, stream_id, stream_class_id);
+                 lttng_live_stream->name.c_str(), stream_id, stream_class_id);
 
         bt_stream *stream;
 
@@ -99,13 +100,13 @@ static bt_stream *medop_borrow_stream(bt_stream_class *stream_class, int64_t str
         if (!stream) {
             BT_CLOGE_APPEND_CAUSE("Cannot create stream %s (stream class ID "
                                   "%" PRId64 ", stream ID %" PRIu64 ")",
-                                  lttng_live_stream->name->str, stream_class_id, stream_id);
+                                  lttng_live_stream->name.c_str(), stream_class_id, stream_id);
             return nullptr;
         }
 
         lttng_live_stream->stream = bt2::Stream::Shared::createWithoutRef(stream);
 
-        (*lttng_live_stream->stream)->name(lttng_live_stream->name->str);
+        (*lttng_live_stream->stream)->name(lttng_live_stream->name);
     }
 
     return (*lttng_live_stream->stream)->libObjPtr();
@@ -152,7 +153,7 @@ enum lttng_live_iterator_status lttng_live_lazy_msg_init(struct lttng_live_sessi
             BT_CLOGD("Creating CTF message iterator: "
                      "session-id=%" PRIu64 ", ctf-tc-addr=%p, "
                      "stream-iter-name=%s, self-msg-iter-addr=%p",
-                     session->id, ctf_tc, stream_iter->name->str, self_msg_iter);
+                     session->id, ctf_tc, stream_iter->name.c_str(), self_msg_iter);
             stream_iter->msg_iter = ctf_msg_iter_create(ctf_tc, lttng_live->max_query_size, medops,
                                                         stream_iter, self_msg_iter, logCfg);
             if (!stream_iter->msg_iter) {
@@ -177,6 +178,7 @@ lttng_live_stream_iterator_create(struct lttng_live_session *session, uint64_t c
 {
     struct lttng_live_component *lttng_live;
     struct lttng_live_trace *trace;
+    std::stringstream nameSs;
 
     BT_ASSERT(session);
     BT_ASSERT(session->lttng_live_msg_iter);
@@ -215,14 +217,9 @@ lttng_live_stream_iterator_create(struct lttng_live_session *session, uint64_t c
         }
     }
     stream_iter->buf.resize(lttng_live->max_query_size);
-    stream_iter->name = g_string_new(NULL);
-    if (!stream_iter->name) {
-        BT_CLOGE_APPEND_CAUSE("Failed to allocate live stream iterator name buffer");
-        goto error;
-    }
 
-    g_string_printf(stream_iter->name, STREAM_NAME_PREFIX "%" PRIu64,
-                    stream_iter->viewer_stream_id);
+    nameSs << STREAM_NAME_PREFIX << stream_iter->viewer_stream_id;
+    stream_iter->name = nameSs.str();
     g_ptr_array_add(trace->stream_iterators, stream_iter);
 
     /* Track the number of active stream iterator. */
@@ -241,10 +238,6 @@ void lttng_live_stream_iterator_destroy(struct lttng_live_stream_iterator *strea
 {
     if (!stream_iter) {
         return;
-    }
-
-    if (stream_iter->name) {
-        g_string_free(stream_iter->name, TRUE);
     }
 
     bt_message_put_ref(stream_iter->current_msg);
