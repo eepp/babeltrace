@@ -121,8 +121,7 @@ struct ctf_fs_ds_index
 {
     using UP = std::unique_ptr<ctf_fs_ds_index, ctf_fs_ds_index_deleter>;
 
-    /* Array of pointer to struct ctf_fs_ds_index_entry. */
-    GPtrArray *entries = nullptr;
+    std::vector<ctf_fs_ds_index_entry::UP> entries;
 };
 
 struct ctf_fs_ds_file_group_deleter
