@@ -60,6 +60,8 @@ struct live_viewer_connection
     {
     }
 
+    ~live_viewer_connection();
+
     const bt2_common::LogCfg logCfg;
 
     std::string url;
@@ -103,8 +105,6 @@ struct packet_index
 enum lttng_live_viewer_status live_viewer_connection_create(
     const char *url, bool in_query, struct lttng_live_msg_iter *lttng_live_msg_iter,
     const bt2_common::LogCfg& logCfg, struct live_viewer_connection **viewer);
-
-void live_viewer_connection_destroy(struct live_viewer_connection *conn);
 
 enum lttng_live_viewer_status
 lttng_live_create_viewer_session(struct lttng_live_msg_iter *lttng_live_msg_iter);
