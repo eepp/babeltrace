@@ -32,8 +32,6 @@ struct ctf_fs_file
     off_t size = 0;
 };
 
-ctf_fs_file::UP ctf_fs_file_create(const bt2_common::LogCfg& logCfg);
-
 int ctf_fs_file_open(struct ctf_fs_file *file, const char *mode);
 
 #endif /* CTF_FS_FILE_H */

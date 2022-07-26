@@ -22,6 +22,7 @@
 #include "metadata.hpp"
 #include "../common/src/metadata/tsdl/decoder.hpp"
 #include "cpp-common/cfg-logging.hpp"
+#include "cpp-common/make-unique.hpp"
 
 FILE *ctf_fs_metadata_open_file(const char *trace_path)
 {
@@ -42,7 +43,7 @@ end:
 
 static ctf_fs_file::UP get_file(const char *trace_path, const bt2_common::LogCfg& logCfg)
 {
-    ctf_fs_file::UP file = ctf_fs_file_create(logCfg);
+    ctf_fs_file::UP file = bt2_common::makeUnique<ctf_fs_file>(logCfg);
 
     if (!file) {
         goto error;
