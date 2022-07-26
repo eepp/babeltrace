@@ -266,6 +266,8 @@ struct lttng_live_component
 
 struct lttng_live_msg_iter
 {
+    using UP = std::unique_ptr<lttng_live_msg_iter>;
+
     explicit lttng_live_msg_iter(const bt2_common::LogCfg& logCfgParam) noexcept :
         logCfg {logCfgParam}
     {
