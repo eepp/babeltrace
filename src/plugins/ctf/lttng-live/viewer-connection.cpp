@@ -23,6 +23,7 @@
 #include "compat/compiler.h"
 #include "common/common.h"
 #include <babeltrace2/babeltrace.h>
+#include "cpp-common/make-unique.hpp"
 
 #include "lttng-live.hpp"
 #include "viewer-connection.hpp"
@@ -841,7 +842,7 @@ lttng_live_query_session_ids(struct lttng_live_msg_iter *lttng_live_msg_iter)
     uint32_t i, sessions_count;
     uint64_t session_id;
     enum lttng_live_viewer_status status;
-    struct live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection;
+    live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection.get();
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
 
     BT_CLOGD("Asking the relay daemon for the list of sessions: cmd=%s",
@@ -903,7 +904,7 @@ lttng_live_create_viewer_session(struct lttng_live_msg_iter *lttng_live_msg_iter
     struct lttng_viewer_cmd cmd;
     struct lttng_viewer_create_session_response resp;
     enum lttng_live_viewer_status status;
-    struct live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection;
+    live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection.get();
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
 
     BT_CLOGD("Creating a viewer session: cmd=%s",
@@ -950,7 +951,7 @@ static enum lttng_live_viewer_status receive_streams(struct lttng_live_session *
     uint32_t i;
     struct lttng_live_msg_iter *lttng_live_msg_iter = session->lttng_live_msg_iter;
     enum lttng_live_viewer_status status;
-    struct live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection;
+    live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection.get();
     const bt2_common::LogCfg& logCfg = session->logCfg;
 
     BT_CLOGI("Getting %" PRIu32 " new streams", stream_count);
@@ -1006,7 +1007,7 @@ enum lttng_live_viewer_status lttng_live_session_attach(struct lttng_live_sessio
     struct lttng_viewer_attach_session_request rq;
     struct lttng_viewer_attach_session_response rp;
     struct lttng_live_msg_iter *lttng_live_msg_iter = session->lttng_live_msg_iter;
-    struct live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection;
+    live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection.get();
     const bt2_common::LogCfg& logCfg = session->logCfg;
     uint64_t session_id = session->id;
     uint32_t streams_count;
@@ -1100,7 +1101,7 @@ enum lttng_live_viewer_status lttng_live_session_detach(struct lttng_live_sessio
     struct lttng_viewer_detach_session_request rq;
     struct lttng_viewer_detach_session_response rp;
     struct lttng_live_msg_iter *lttng_live_msg_iter = session->lttng_live_msg_iter;
-    struct live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection;
+    live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection.get();
     uint64_t session_id = session->id;
     const size_t cmd_buf_len = sizeof(cmd) + sizeof(rq);
     char cmd_buf[cmd_buf_len];
@@ -1182,7 +1183,7 @@ lttng_live_get_one_metadata_packet(struct lttng_live_trace *trace, std::vector<c
     struct lttng_live_session *session = trace->session;
     struct lttng_live_msg_iter *lttng_live_msg_iter = session->lttng_live_msg_iter;
     struct lttng_live_metadata *metadata = trace->metadata.get();
-    struct live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection;
+    live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection.get();
     const bt2_common::LogCfg& logCfg = trace->logCfg;
     const size_t cmd_buf_len = sizeof(cmd) + sizeof(rq);
     char cmd_buf[cmd_buf_len];
@@ -1318,7 +1319,7 @@ lttng_live_get_next_index(struct lttng_live_msg_iter *lttng_live_msg_iter,
     enum lttng_live_viewer_status viewer_status;
     struct lttng_viewer_index rp;
     enum lttng_live_iterator_status status;
-    struct live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection;
+    live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection.get();
     struct lttng_live_trace *trace = stream->trace;
     const size_t cmd_buf_len = sizeof(cmd) + sizeof(rq);
     char cmd_buf[cmd_buf_len];
@@ -1452,7 +1453,7 @@ lttng_live_get_stream_bytes(struct lttng_live_msg_iter *lttng_live_msg_iter,
     struct lttng_viewer_trace_packet rp;
     struct lttng_viewer_cmd cmd;
     struct lttng_viewer_get_packet rq;
-    struct live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection;
+    live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection.get();
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     struct lttng_live_trace *trace = stream->trace;
     const size_t cmd_buf_len = sizeof(cmd) + sizeof(rq);
@@ -1573,7 +1574,7 @@ lttng_live_session_get_new_streams(struct lttng_live_session *session,
     struct lttng_viewer_new_streams_response rp;
     struct lttng_live_msg_iter *lttng_live_msg_iter = session->lttng_live_msg_iter;
     enum lttng_live_viewer_status viewer_status;
-    struct live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection;
+    live_viewer_connection *viewer_connection = lttng_live_msg_iter->viewer_connection.get();
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
     uint32_t streams_count;
     const size_t cmd_buf_len = sizeof(cmd) + sizeof(rq);
@@ -1655,18 +1656,19 @@ end:
     return status;
 }
 
-enum lttng_live_viewer_status live_viewer_connection_create(
-    const char *url, bool in_query, struct lttng_live_msg_iter *lttng_live_msg_iter,
-    const bt2_common::LogCfg& logCfg, struct live_viewer_connection **viewer)
+enum lttng_live_viewer_status
+live_viewer_connection_create(const char *url, bool in_query,
+                              struct lttng_live_msg_iter *lttng_live_msg_iter,
+                              const bt2_common::LogCfg& logCfg, live_viewer_connection::UP& viewer)
 {
     enum lttng_live_viewer_status status;
 
-    live_viewer_connection *viewer_connection = new live_viewer_connection {logCfg};
+    live_viewer_connection::UP viewer_connection =
+        bt2_common::makeUnique<live_viewer_connection>(logCfg);
 
     if (bt_socket_init(logCfg.logLevel()) != 0) {
         BT_CLOGE_APPEND_CAUSE("Failed to init socket");
-        status = LTTNG_LIVE_VIEWER_STATUS_ERROR;
-        goto error;
+        return LTTNG_LIVE_VIEWER_STATUS_ERROR;
     }
 
     viewer_connection->control_sock = BT_INVALID_SOCKET;
@@ -1676,7 +1678,7 @@ enum lttng_live_viewer_status live_viewer_connection_create(
     viewer_connection->url = url;
 
     BT_CLOGD("Establishing connection to url \"%s\"...", url);
-    status = lttng_live_connect_viewer(viewer_connection);
+    status = lttng_live_connect_viewer(viewer_connection.get());
     /*
      * Only print error and append cause in case of error. not in case of
      * interruption.
@@ -1685,20 +1687,15 @@ enum lttng_live_viewer_status live_viewer_connection_create(
         BT_CLOGE_APPEND_CAUSE("Failed to establish connection: "
                               "url=\"%s\"",
                               url);
-        goto error;
+        return status;
     } else if (status == LTTNG_LIVE_VIEWER_STATUS_INTERRUPTED) {
-        goto error;
+        return status;
     }
     BT_CLOGD("Connection to url \"%s\" is established", url);
 
-    *viewer = viewer_connection;
+    viewer = std::move(viewer_connection);
     status = LTTNG_LIVE_VIEWER_STATUS_OK;
-    goto end;
 
-error:
-    delete viewer_connection;
-
-end:
     return status;
 }
 
