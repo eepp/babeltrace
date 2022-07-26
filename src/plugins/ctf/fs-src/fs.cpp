@@ -275,10 +275,6 @@ static void ctf_fs_trace_destroy(struct ctf_fs_trace *ctf_fs_trace)
         return;
     }
 
-    if (ctf_fs_trace->path) {
-        g_string_free(ctf_fs_trace->path, TRUE);
-    }
-
     if (ctf_fs_trace->metadata) {
         ctf_fs_metadata_fini(ctf_fs_trace->metadata);
         delete ctf_fs_trace->metadata;
@@ -323,7 +319,7 @@ bt2_common::GCharUP ctf_fs_make_port_name(struct ctf_fs_ds_file_group *ds_file_g
         bt_uuid_to_str(ds_file_group->ctf_fs_trace->metadata->tc->uuid, uuid_str);
         g_string_assign(name, uuid_str);
     } else {
-        g_string_assign(name, ds_file_group->ctf_fs_trace->path->str);
+        g_string_assign(name, ds_file_group->ctf_fs_trace->path.c_str());
     }
 
     /*
@@ -629,23 +625,23 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
     const bt2_common::LogCfg& logCfg = ctf_fs_trace->logCfg;
 
     /* Check each file in the path directory, except specific ones */
-    dir = g_dir_open(ctf_fs_trace->path->str, 0, &error);
+    dir = g_dir_open(ctf_fs_trace->path.c_str(), 0, &error);
     if (!dir) {
-        BT_CLOGE_APPEND_CAUSE("Cannot open directory `%s`: %s (code %d)", ctf_fs_trace->path->str,
-                              error->message, error->code);
+        BT_CLOGE_APPEND_CAUSE("Cannot open directory `%s`: %s (code %d)",
+                              ctf_fs_trace->path.c_str(), error->message, error->code);
         goto error;
     }
 
     while ((basename = g_dir_read_name(dir))) {
         if (strcmp(basename, CTF_FS_METADATA_FILENAME) == 0) {
             /* Ignore the metadata stream. */
-            BT_CLOGI("Ignoring metadata file `%s" G_DIR_SEPARATOR_S "%s`", ctf_fs_trace->path->str,
-                     basename);
+            BT_CLOGI("Ignoring metadata file `%s" G_DIR_SEPARATOR_S "%s`",
+                     ctf_fs_trace->path.c_str(), basename);
             continue;
         }
 
         if (basename[0] == '.') {
-            BT_CLOGI("Ignoring hidden file `%s" G_DIR_SEPARATOR_S "%s`", ctf_fs_trace->path->str,
+            BT_CLOGI("Ignoring hidden file `%s" G_DIR_SEPARATOR_S "%s`", ctf_fs_trace->path.c_str(),
                      basename);
             continue;
         }
@@ -655,12 +651,12 @@ static int create_ds_file_groups(struct ctf_fs_trace *ctf_fs_trace)
         if (!file) {
             BT_CLOGE_APPEND_CAUSE("Cannot create stream file object for file `%s" G_DIR_SEPARATOR_S
                                   "%s`",
-                                  ctf_fs_trace->path->str, basename);
+                                  ctf_fs_trace->path.c_str(), basename);
             goto error;
         }
 
         /* Create full path string. */
-        file->path = ctf_fs_trace->path->str;
+        file->path = ctf_fs_trace->path;
         file->path += G_DIR_SEPARATOR;
         file->path += basename;
 
@@ -759,13 +755,9 @@ static ctf_fs_trace::UP ctf_fs_trace_create(const char *path, const char *name,
                                             const bt2_common::LogCfg& logCfg)
 {
     int ret;
-
     ctf_fs_trace::UP ctf_fs_trace {new struct ctf_fs_trace(logCfg)};
-    ctf_fs_trace->path = g_string_new(path);
-    if (!ctf_fs_trace->path) {
-        goto error;
-    }
 
+    ctf_fs_trace->path = path;
     ctf_fs_trace->metadata = new ctf_fs_metadata;
     ctf_fs_metadata_init(ctf_fs_trace->metadata);
 
@@ -1682,7 +1674,7 @@ int ctf_fs_component_create_ctf_fs_trace(struct ctf_fs_component *ctf_fs,
             if (!this_trace->metadata->tc->is_uuid_set) {
                 BT_CLOGE_APPEND_CAUSE(
                     "Multiple traces given, but a trace does not have a UUID: path=%s",
-                    this_trace->path->str);
+                    this_trace->path.c_str());
                 goto error;
             }
 
@@ -1696,8 +1688,8 @@ int ctf_fs_component_create_ctf_fs_trace(struct ctf_fs_component *ctf_fs,
                 BT_CLOGE_APPEND_CAUSE("Multiple traces given, but UUIDs don't match: "
                                       "first-trace-uuid=%s, first-trace-path=%s, "
                                       "trace-uuid=%s, trace-path=%s",
-                                      first_trace_uuid_str, first_trace->path->str,
-                                      this_trace_uuid_str, this_trace->path->str);
+                                      first_trace_uuid_str, first_trace->path.c_str(),
+                                      this_trace_uuid_str, this_trace->path.c_str());
                 goto error;
             }
         }
