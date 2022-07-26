@@ -25,17 +25,6 @@ void ctf_fs_file_destroy(struct ctf_fs_file *file)
         return;
     }
 
-    if (file->fp) {
-        const bt2_common::LogCfg& logCfg = file->logCfg;
-
-        BT_CLOGD("Closing file \"%s\" (%p)", file->path ? file->path->str : NULL, file->fp);
-
-        if (fclose(file->fp)) {
-            BT_CLOGE("Cannot close file \"%s\": %s", file->path ? file->path->str : "NULL",
-                     strerror(errno));
-        }
-    }
-
     if (file->path) {
         g_string_free(file->path, TRUE);
     }
@@ -75,16 +64,16 @@ int ctf_fs_file_open(struct ctf_fs_file *file, const char *mode)
     const bt2_common::LogCfg& logCfg = file->logCfg;
 
     BT_CLOGI("Opening file \"%s\" with mode \"%s\"", file->path->str, mode);
-    file->fp = fopen(file->path->str, mode);
+    file->fp.reset(fopen(file->path->str, mode));
     if (!file->fp) {
         BT_CLOGE_ERRNO_APPEND_CAUSE("Cannot open file", ": path=%s, mode=%s", file->path->str,
                                     mode);
         goto error;
     }
 
-    BT_CLOGI("Opened file: %p", file->fp);
+    BT_CLOGI("Opened file: %p", file->fp.get());
 
-    if (fstat(fileno(file->fp), &stat)) {
+    if (fstat(fileno(file->fp.get()), &stat)) {
         BT_CLOGE_ERRNO_APPEND_CAUSE("Cannot get file information", ": path=%s", file->path->str);
         goto error;
     }
@@ -95,12 +84,6 @@ int ctf_fs_file_open(struct ctf_fs_file *file, const char *mode)
 
 error:
     ret = -1;
-
-    if (file->fp) {
-        if (fclose(file->fp)) {
-            BT_CLOGE("Cannot close file \"%s\": %s", file->path->str, strerror(errno));
-        }
-    }
 
 end:
     return ret;

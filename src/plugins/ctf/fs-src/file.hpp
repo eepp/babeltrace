@@ -12,6 +12,7 @@
 #include <memory>
 #include "common/macros.h"
 #include "cpp-common/log-cfg.hpp"
+#include "cpp-common/libc-up.hpp"
 
 struct ctf_fs_file_deleter
 {
@@ -31,8 +32,7 @@ struct ctf_fs_file
     /* Owned by this */
     GString *path = nullptr;
 
-    /* Owned by this */
-    FILE *fp = nullptr;
+    bt2_common::FileUP fp;
 
     off_t size = 0;
 };
