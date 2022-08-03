@@ -483,15 +483,9 @@ ctf_visitor_generate_ir::~ctf_visitor_generate_ir()
     }
 }
 
-/**
- * Creates a new visitor context.
- *
- * @param trace	Associated trace
- * @returns	New visitor context, or NULL on error
- */
-static ctf_visitor_generate_ir::UP ctx_create(const ctf::src::ClkClsCfg clkClsCfg,
-                                              bt_self_component *selfComp,
-                                              const bt2_common::LogCfg& logCfg)
+ctf_visitor_generate_ir::UP ctf_visitor_generate_ir_create(const ctf::src::ClkClsCfg clkClsCfg,
+                                                           bt_self_component *selfComp,
+                                                           const bt2_common::LogCfg& logCfg)
 {
     ctf_visitor_generate_ir::UP ctx =
         bt2_common::makeUnique<ctf_visitor_generate_ir>(clkClsCfg, selfComp, logCfg);
@@ -4386,26 +4380,6 @@ static int visit_root_decl(struct ctf_visitor_generate_ir *ctx, struct ctf_node 
 
 end:
     return ret;
-}
-
-ctf_visitor_generate_ir::UP ctf_visitor_generate_ir_create(const ctf::src::ClkClsCfg clkClsCfg,
-                                                           bt_self_component *selfComp,
-                                                           const bt2_common::LogCfg& logCfg)
-{
-    /* Create visitor's context */
-    ctf_visitor_generate_ir::UP ctx = ctx_create(clkClsCfg, selfComp, logCfg);
-    if (!ctx) {
-        BT_CLOGE_APPEND_CAUSE_EX(logCfg, "Cannot create visitor's context.");
-        goto error;
-    }
-
-    goto end;
-
-error:
-    ctx.reset();
-
-end:
-    return ctx;
 }
 
 nonstd::optional<bt2::TraceClass::Shared>
