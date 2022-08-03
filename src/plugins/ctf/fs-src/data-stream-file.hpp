@@ -20,6 +20,7 @@
 #include "cpp-common/data-len.hpp"
 #include "lttng-index.hpp"
 #include "cpp-common/log-cfg.hpp"
+#include "cpp-common/bt2/trace-ir.hpp"
 
 struct ctf_fs_component;
 struct ctf_fs_file;
@@ -141,7 +142,7 @@ struct ctf_fs_ds_file_group
     struct ctf_stream_class *sc = nullptr;
 
     /* Owned by this */
-    bt_stream *stream = nullptr;
+    nonstd::optional<bt2::Stream::Shared> stream;
 
     /* Stream (instance) ID; -1ULL means none */
     uint64_t stream_id = 0;
