@@ -10,6 +10,7 @@ libcppcommon_la_SOURCES = \
 	cfg-logging.hpp \
 	exc.hpp \
 	log-cfg.hpp \
+	lib-str.hpp \
 	nlohmann/json.hpp \
 	optional.hpp \
 	string_view.hpp \
