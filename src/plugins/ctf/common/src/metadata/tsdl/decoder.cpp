@@ -100,7 +100,7 @@ ctf_metadata_decoder_create(const struct ctf_metadata_decoder_config *config)
                 "Creating CTF metadata decoder: "
                 "clock-class-offset-s=%" PRId64 ", "
                 "clock-class-offset-ns=%" PRId64,
-                config->clock_class_offset_s, config->clock_class_offset_ns);
+                config->clkClsCfg.offsetSec, config->clkClsCfg.offsetNanoSec);
 
     ctf_metadata_decoder *mdec = new ctf_metadata_decoder {config->logCfg};
     mdec->scanner = ctf_scanner_alloc();
@@ -132,7 +132,7 @@ ctf_metadata_decoder_create(const struct ctf_metadata_decoder_config *config)
     BT_CLOGD("Creating CTF metadata decoder: "
              "clock-class-offset-s=%" PRId64 ", "
              "clock-class-offset-ns=%" PRId64 ", addr=%p",
-             config->clock_class_offset_s, config->clock_class_offset_ns, mdec);
+             config->clkClsCfg.offsetSec, config->clkClsCfg.offsetNanoSec, mdec);
     goto end;
 
 error:

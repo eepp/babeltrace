@@ -68,17 +68,14 @@ end:
 }
 
 int ctf_fs_metadata_set_trace_class(struct ctf_fs_trace *ctf_fs_trace,
-                                    struct ctf_fs_metadata_config *config,
-                                    bt_self_component *selfComp, const bt2_common::LogCfg& logCfg)
+                                    ctf::src::ClkClsCfg clkClsCfg, bt_self_component *selfComp,
+                                    const bt2_common::LogCfg& logCfg)
 {
     int ret = 0;
     struct ctf_fs_file *file = NULL;
 
     ctf_metadata_decoder_config decoder_config(logCfg);
-    decoder_config.clock_class_offset_s = config ? config->clock_class_offset_s : 0;
-    decoder_config.clock_class_offset_ns = config ? config->clock_class_offset_ns : 0;
-    decoder_config.force_clock_class_origin_unix_epoch =
-        config ? config->force_clock_class_origin_unix_epoch : false;
+    decoder_config.clkClsCfg = clkClsCfg;
     decoder_config.create_trace_class = true;
     decoder_config.self_comp = selfComp;
 
