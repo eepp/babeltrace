@@ -322,10 +322,6 @@ void ctf_fs_destroy(struct ctf_fs_component *ctf_fs)
         return;
     }
 
-    if (ctf_fs->port_data) {
-        g_ptr_array_free(ctf_fs->port_data, TRUE);
-    }
-
     delete ctf_fs;
 }
 
@@ -334,35 +330,9 @@ void ctf_fs_component_deleter::operator()(ctf_fs_component *comp)
     ctf_fs_destroy(comp);
 }
 
-static void port_data_destroy(struct ctf_fs_port_data *port_data)
-{
-    if (!port_data) {
-        return;
-    }
-
-    delete port_data;
-}
-
-static void port_data_destroy_notifier(void *data)
-{
-    port_data_destroy((struct ctf_fs_port_data *) data);
-}
-
 ctf_fs_component::UP ctf_fs_component_create(const bt2_common::LogCfg& logCfg)
 {
-    ctf_fs_component::UP ctf_fs {new ctf_fs_component {logCfg}};
-    ctf_fs->port_data = g_ptr_array_new_with_free_func(port_data_destroy_notifier);
-    if (!ctf_fs->port_data) {
-        goto error;
-    }
-
-    goto end;
-
-error:
-    ctf_fs.reset();
-
-end:
-    return ctf_fs;
+    return ctf_fs_component::UP {new ctf_fs_component {logCfg}};
 }
 
 void ctf_fs_finalize(bt_self_component_source *component)
@@ -421,7 +391,7 @@ static int create_one_port_for_trace(struct ctf_fs_component *ctf_fs,
                                      bt_self_component_source *self_comp_src)
 {
     int ret = 0;
-    struct ctf_fs_port_data *port_data = NULL;
+    ctf_fs_port_data::UP port_data;
     const bt2_common::LogCfg& logCfg = ctf_fs->logCfg;
 
     bt2_common::GCharUP port_name = ctf_fs_make_port_name(ds_file_group);
@@ -432,23 +402,22 @@ static int create_one_port_for_trace(struct ctf_fs_component *ctf_fs,
     BT_CLOGI("Creating one port named `%s`", port_name.get());
 
     /* Create output port for this file */
-    port_data = new ctf_fs_port_data;
+    port_data = bt2_common::makeUnique<ctf_fs_port_data>();
     port_data->ctf_fs = ctf_fs;
     port_data->ds_file_group = ds_file_group;
-    ret = bt_self_component_source_add_output_port(self_comp_src, port_name.get(), port_data, NULL);
+    ret = bt_self_component_source_add_output_port(self_comp_src, port_name.get(), port_data.get(),
+                                                   NULL);
     if (ret) {
         goto error;
     }
 
-    g_ptr_array_add(ctf_fs->port_data, port_data);
-    port_data = NULL;
+    ctf_fs->port_data.emplace_back(std::move(port_data));
     goto end;
 
 error:
     ret = -1;
 
 end:
-    port_data_destroy(port_data);
     return ret;
 }
 
@@ -474,80 +443,6 @@ static int create_ports_for_trace(struct ctf_fs_component *ctf_fs,
 
 end:
     return ret;
-}
-
-static void ctf_fs_ds_file_info_destroy(struct ctf_fs_ds_file_info *ds_file_info)
-{
-    if (!ds_file_info) {
-        return;
-    }
-
-    if (ds_file_info->path) {
-        g_string_free(ds_file_info->path, TRUE);
-    }
-
-    delete ds_file_info;
-}
-
-static struct ctf_fs_ds_file_info *ctf_fs_ds_file_info_create(const char *path, int64_t begin_ns)
-{
-    ctf_fs_ds_file_info *ds_file_info = new ctf_fs_ds_file_info;
-    ds_file_info->path = g_string_new(path);
-    if (!ds_file_info->path) {
-        ctf_fs_ds_file_info_destroy(ds_file_info);
-        ds_file_info = NULL;
-        goto end;
-    }
-
-    ds_file_info->begin_ns = begin_ns;
-
-end:
-    return ds_file_info;
-}
-
-static void ctf_fs_ds_file_group_destroy(struct ctf_fs_ds_file_group *ds_file_group)
-{
-    if (!ds_file_group) {
-        return;
-    }
-
-    if (ds_file_group->ds_file_infos) {
-        g_ptr_array_free(ds_file_group->ds_file_infos, TRUE);
-    }
-
-    ctf_fs_ds_index_destroy(ds_file_group->index);
-
-    bt_stream_put_ref(ds_file_group->stream);
-    delete ds_file_group;
-}
-
-static struct ctf_fs_ds_file_group *ctf_fs_ds_file_group_create(struct ctf_fs_trace *ctf_fs_trace,
-                                                                struct ctf_stream_class *sc,
-                                                                uint64_t stream_instance_id,
-                                                                struct ctf_fs_ds_index *index)
-{
-    ctf_fs_ds_file_group *ds_file_group = new ctf_fs_ds_file_group;
-    ds_file_group->ds_file_infos =
-        g_ptr_array_new_with_free_func((GDestroyNotify) ctf_fs_ds_file_info_destroy);
-    if (!ds_file_group->ds_file_infos) {
-        goto error;
-    }
-
-    ds_file_group->index = index;
-
-    ds_file_group->stream_id = stream_instance_id;
-    BT_ASSERT(sc);
-    ds_file_group->sc = sc;
-    ds_file_group->ctf_fs_trace = ctf_fs_trace;
-    goto end;
-
-error:
-    ctf_fs_ds_file_group_destroy(ds_file_group);
-    ctf_fs_ds_index_destroy(index);
-    ds_file_group = NULL;
-
-end:
-    return ds_file_group;
 }
 
 /* Replace by g_ptr_array_insert when we depend on glib >= 2.40. */
