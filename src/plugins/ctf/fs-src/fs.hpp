@@ -17,9 +17,10 @@
 #include <babeltrace2/babeltrace.h>
 #include "cpp-common/data-len.hpp"
 #include "data-stream-file.hpp"
-#include "../common/src/metadata/tsdl/ctf-1-metadata-stream-parser.hpp"
+#include "../common/src/metadata/metadata-stream-parser.hpp"
 #include "../common/src/metadata/metadata-stream-parser-utils.hpp"
 #include "../common/src/msg-iter.hpp"
+#include "../common/src/clk-cls-cfg.hpp"
 #include "cpp-common/glib-up.hpp"
 
 #define CTF_FS_METADATA_FILENAME "metadata"
@@ -31,8 +32,8 @@ struct ctf_fs_trace
     using UP = std::unique_ptr<ctf_fs_trace>;
 
     explicit ctf_fs_trace(const ctf::src::ClkClsCfg clkClsCfg, bt_self_component *selfComp,
-                          const bt2_common::LogCfg& logCfgParam) noexcept :
-        logCfg {logCfgParam},
+                          const bt2_common::LogCfg& logCfg) noexcept :
+        _mLogCfg {logCfg},
         _mClkClsCfg {clkClsCfg}, _mSelfComp {selfComp}
     {
     }
@@ -52,11 +53,8 @@ struct ctf_fs_trace
 
     void parseMetadata(const uint8_t *begin, const uint8_t *end)
     {
-        _mParseRet =
-            ctf::src::parseMetadataStream(_mClkClsCfg, _mSelfComp, begin, end, this->logCfg);
+        _mParseRet = ctf::src::parseMetadataStream(_mClkClsCfg, _mSelfComp, begin, end, _mLogCfg);
     }
-
-    const bt2_common::LogCfg logCfg;
 
     nonstd::optional<bt2::Trace::Shared> trace;
 
@@ -68,6 +66,7 @@ struct ctf_fs_trace
     uint64_t next_stream_id = 0;
 
 private:
+    const bt2_common::LogCfg _mLogCfg;
     const ctf::src::ClkClsCfg _mClkClsCfg;
     bt_self_component *_mSelfComp;
     nonstd::optional<ctf::src::MetadataStreamParser::ParseRet> _mParseRet;
