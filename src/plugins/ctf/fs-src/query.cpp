@@ -18,7 +18,8 @@
 #include <sys/stat.h>
 #include "common/assert.h"
 #include "metadata.hpp"
-#include "../common/src/metadata/tsdl/decoder.hpp"
+#include "../common/src/metadata/tsdl/metadata-stream-decoder.hpp"
+#include "../common/src/metadata/metadata-stream-parser-utils.hpp"
 #include "common/common.h"
 #include "common/macros.h"
 #include "plugins/common/param-validation/param-validation.h"
@@ -28,6 +29,7 @@
 #include "cpp-common/cfg-logging-error-reporting-throw.hpp"
 #include "cpp-common/libc-up.hpp"
 #include "cpp-common/exc.hpp"
+#include "cpp-common/file-utils.hpp"
 #include "cpp-common/make-unique.hpp"
 
 #define METADATA_TEXT_SIG "/* CTF 1.8"
@@ -59,44 +61,33 @@ bt2::Value::Shared metadata_info_query(bt2::ConstMapValue params, const bt2_comm
         BT_CLOGE_APPEND_CAUSE_AND_THROW(bt2_common::Error, "%s", error.data());
     }
 
-    const char *path = params["path"]->asString().value().data();
+    const auto path = params["path"]->asString().value();
 
-    bt2_common::FileUP metadataFp(ctf_fs_metadata_open_file(path));
-    if (!metadataFp) {
-        BT_CLOGE_APPEND_CAUSE_AND_THROW(bt2_common::Error,
-                                        "Cannot open trace metadata: path=\"%s\".", path);
+    try {
+        const auto buffer =
+            bt2_common::dataFromFile(std::string {path.to_string() + "/metadata"}.c_str());
+
+        ctf::src::MetadataStreamDecoder decoder {logCfg};
+
+        auto plainText =
+            decoder.decode(buffer.data(), bt2_common::DataLen::fromBytes(buffer.size()));
+
+        auto result = bt2::MapValue::create();
+        /*
+         * If the metadata does not already start with the plaintext metadata
+         * signature, prepend it.
+         */
+        if (plainText.rfind(METADATA_TEXT_SIG, 0) != 0) {
+            plainText.insert(0, std::string {METADATA_TEXT_SIG} + " */\n\n");
+        }
+
+        result->insert("text", plainText.data());
+
+        result->insert("is-packetized", decoder.pktInfo().has_value());
+        return result;
+    } catch (const bt2_common::Error&) {
+        BT_CLOGE_APPEND_CAUSE_AND_RETHROW("Error getting plaintext metadata section from file");
     }
-
-    int bo;
-    bool is_packetized;
-    int ret = ctf_metadata_decoder_is_packetized(metadataFp.get(), &is_packetized, &bo, logCfg);
-    if (ret) {
-        BT_CLOGE_APPEND_CAUSE_AND_THROW(
-            bt2_common::Error,
-            "Cannot check whether or not the metadata stream is packetized: path=\"%s\".", path);
-    }
-
-    ctf_metadata_decoder_config decoder_cfg(logCfg);
-    decoder_cfg.keep_plain_text = true;
-    ctf_metadata_decoder_up decoder = ctf_metadata_decoder_create(&decoder_cfg);
-    if (!decoder) {
-        BT_CLOGE_APPEND_CAUSE_AND_THROW(bt2_common::Error,
-                                        "Cannot create metadata decoder: path=\"%s\".", path);
-    }
-
-    rewind(metadataFp.get());
-    ctf_metadata_decoder_status decoder_status =
-        ctf_metadata_decoder_append_content(decoder.get(), metadataFp.get());
-    if (decoder_status) {
-        BT_CLOGE_APPEND_CAUSE_AND_THROW(
-            bt2_common::Error, "Cannot update metadata decoder's content: path=\"%s\".", path);
-    }
-
-    bt2::MapValue::Shared result = bt2::MapValue::create();
-    result->insert("text", ctf_metadata_decoder_get_text(decoder.get()));
-    result->insert("is-packetized", is_packetized);
-
-    return result;
 }
 
 static void add_range(bt2::MapValue info, struct range *range, const char *range_name)
@@ -226,58 +217,31 @@ bt2::Value::Shared support_info_query(bt2::ConstMapValue params, const bt2_commo
 
     bpstd::string_view input = params["input"]->asString().value();
 
-    bt2_common::GCharUP metadataPath {
-        g_build_filename(input.c_str(), CTF_FS_METADATA_FILENAME, NULL)};
-    if (!metadataPath) {
-        BT_CLOGE_APPEND_CAUSE_AND_THROW(bt2_common::Error, "Failed to read parameters");
-    }
-
-    double weight = 0;
-    char uuid_str[BT_UUID_STR_LEN + 1];
-    bool has_uuid = false;
-    bt2_common::FileUP metadataFile {g_fopen(metadataPath.get(), "rb")};
-    if (metadataFile) {
-        enum ctf_metadata_decoder_status decoder_status;
-        bt_uuid_t uuid;
-
-        ctf_metadata_decoder_config metadata_decoder_config(logCfg);
-
-        ctf_metadata_decoder_up metadata_decoder =
-            ctf_metadata_decoder_create(&metadata_decoder_config);
-        if (!metadata_decoder) {
-            BT_CLOGE_APPEND_CAUSE_AND_THROW(bt2_common::Error, "Failed to create metadata decoder");
-        }
-
-        decoder_status =
-            ctf_metadata_decoder_append_content(metadata_decoder.get(), metadataFile.get());
-        if (decoder_status != CTF_METADATA_DECODER_STATUS_OK) {
-            BT_CLOGE_APPEND_CAUSE_AND_THROW(
-                bt2_common::Error, "Failed to append metadata content: metadata-decoder-status=%d",
-                decoder_status);
-        }
+    auto result = bt2::MapValue::create();
+    try {
+        const auto buffer =
+            bt2_common::dataFromFile(std::string {input.to_string() + "/metadata"}.c_str());
+        ctf::src::MetadataStreamParser::ParseRet parseRet = ctf::src::parseMetadataStream(
+            {}, nullptr, buffer.data(), buffer.data() + buffer.size(), logCfg);
+        ctf::src::TraceCls *ctfTraceCls = parseRet.first.get();
+        BT_ASSERT(ctfTraceCls);
 
         /*
-         * We were able to parse the metadata file, so we are
-         * confident it's a CTF trace.
+         * We were able to parse the metadata file, so we are confident it's a
+         * CTF trace.
          */
-        weight = 0.75;
-
-        /* If the trace has a UUID, return the stringified UUID as the group. */
-        if (ctf_metadata_decoder_get_trace_class_uuid(metadata_decoder.get(), uuid) == 0) {
-            bt_uuid_to_str(uuid, uuid_str);
-            has_uuid = true;
+        result->insert("weight", 0.75);
+        if (ctfTraceCls->uuid()) {
+            result->insert("group", ctfTraceCls->uuid()->str());
         }
+    } catch (const bt2_common::NoSuchFileOrDirectoryError&) {
+        /*
+         * Failing to find the metadata file is not an error, it simply
+         * indicates that the directory is not a trace. Report appropriate
+         * weight of zero.
+         */
+        bt_current_thread_clear_error();
+        result->insert("weight", 0.0);
     }
-
-    bt2::MapValue::Shared result = bt2::MapValue::create();
-    result->insert("weight", weight);
-
-    /* We are not supposed to have weight == 0 and a UUID. */
-    BT_ASSERT(weight > 0 || !has_uuid);
-
-    if (weight > 0 && has_uuid) {
-        result->insert("group", uuid_str);
-    }
-
     return result;
 }
