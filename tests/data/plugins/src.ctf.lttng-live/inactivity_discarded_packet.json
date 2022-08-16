@@ -7,7 +7,7 @@
         "client-count": 0,
         "traces": [
             {
-                "path": "packet_seq_num/7_lost_between_2_with_index/",
+                "path": "1/packet_seq_num/7_lost_between_2_with_index/",
                 "beacons": {
                     "stream_0": [ 80 ]
                 }

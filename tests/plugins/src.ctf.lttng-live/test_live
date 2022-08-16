@@ -317,7 +317,7 @@ test_compare_to_ctf_fs() {
 	expected_stdout="$(mktemp -t test_live_compare_stdout_expected.XXXXXX)"
 	expected_stderr="$(mktemp -t test_live_compare_stderr_expected.XXXXXX)"
 
-	bt_cli "$expected_stdout" "$expected_stderr" "${trace_dir}/succeed/multi-domains" -c sink.text.details --params "with-trace-name=false,with-stream-name=false"
+	bt_cli "$expected_stdout" "$expected_stderr" "${trace_dir}/1/succeed/multi-domains" -c sink.text.details --params "with-trace-name=false,with-stream-name=false"
 	bt_remove_cr "${expected_stdout}"
 	bt_remove_cr "${expected_stderr}"
 

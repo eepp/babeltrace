@@ -9,7 +9,7 @@ import os
 
 
 session_rotation_trace_path = os.path.join(
-    os.environ["BT_CTF_TRACES_PATH"], "succeed", "session-rotation"
+    os.environ["BT_CTF_TRACES_PATH"], "1", "succeed", "session-rotation"
 )
 
 
