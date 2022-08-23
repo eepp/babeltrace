@@ -33,6 +33,8 @@ libctf_ast_la_SOURCES = \
 	decoder.hpp \
 	metadata-stream-decoder.cpp \
 	metadata-stream-decoder.hpp \
+	ctf-1-metadata-stream-parser.cpp \
+	ctf-1-metadata-stream-parser.hpp \
 	decoder-packetized-file-stream-to-buf.cpp \
 	decoder-packetized-file-stream-to-buf.hpp \
 	logging.cpp \
