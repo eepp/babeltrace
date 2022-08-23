@@ -34,6 +34,7 @@
 #include "ctf-meta-visitors.hpp"
 #include "cpp-common/cfg-logging-error-reporting.hpp"
 #include "../normalize-clk-offset.hpp"
+#include "cpp-common/make-unique.hpp"
 
 /* Bit value (left shift) */
 #define _BV(_val) (1 << (_val))
@@ -463,20 +464,9 @@ static int ctx_decl_scope_register_variant(struct ctf_visitor_generate_ir *ctx,
     return ctx_decl_scope_register_prefix_alias(ctx, scope, _PREFIX_VARIANT, name, &decl->base);
 }
 
-/**
- * Destroys a visitor context.
- *
- * @param ctx	Visitor context to destroy
- */
-static void ctx_destroy(struct ctf_visitor_generate_ir *ctx)
+ctf_visitor_generate_ir::~ctf_visitor_generate_ir()
 {
-    struct ctx_decl_scope *scope;
-
-    if (!ctx) {
-        goto end;
-    }
-
-    scope = ctx->current_scope;
+    struct ctx_decl_scope *scope = this->current_scope;
 
     /*
      * Destroy all scopes, from current one to the root scope.
@@ -488,14 +478,9 @@ static void ctx_destroy(struct ctf_visitor_generate_ir *ctx)
         scope = parent_scope;
     }
 
-    if (ctx->ctf_tc) {
-        ctf_trace_class_destroy(ctx->ctf_tc);
+    if (this->ctf_tc) {
+        ctf_trace_class_destroy(this->ctf_tc);
     }
-
-    delete ctx;
-
-end:
-    return;
 }
 
 /**
@@ -508,7 +493,8 @@ static ctf_visitor_generate_ir::UP ctx_create(const ctf::src::ClkClsCfg clkClsCf
                                               bt_self_component *selfComp,
                                               const bt2_common::LogCfg& logCfg)
 {
-    ctf_visitor_generate_ir::UP ctx {new ctf_visitor_generate_ir {clkClsCfg, selfComp, logCfg}};
+    ctf_visitor_generate_ir::UP ctx =
+        bt2_common::makeUnique<ctf_visitor_generate_ir>(clkClsCfg, selfComp, logCfg);
 
     if (selfComp) {
         bt_trace_class *trace_class = bt_trace_class_create(selfComp);
@@ -4420,16 +4406,6 @@ error:
 
 end:
     return ctx;
-}
-
-static void ctf_visitor_generate_ir_destroy(struct ctf_visitor_generate_ir *visitor)
-{
-    ctx_destroy(visitor);
-}
-
-void ctf_visitor_generate_ir_deleter::operator()(ctf_visitor_generate_ir *visitor)
-{
-    ctf_visitor_generate_ir_destroy(visitor);
 }
 
 nonstd::optional<bt2::TraceClass::Shared>
