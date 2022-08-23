@@ -686,12 +686,10 @@ Ctf1MetadataStreamParser::Ctf1MetadataStreamParser(const ClkClsCfg& clkClsCfg,
                                                    bt_self_component * const selfComp,
                                                    const bt2c::LogCfg& logCfg) :
     MetadataStreamParser {clkClsCfg, selfComp},
-    _mLogCfg {logCfg}, _mScanner {ctf_scanner_alloc()}, _mStreamDecoder {logCfg}
+    _mLogCfg {logCfg}, _mOrigCtfIrGenerator {ctf_visitor_generate_ir_create(clkClsCfg, selfComp,
+                                                                            logCfg)},
+    _mScanner {ctf_scanner_alloc()}, _mStreamDecoder {logCfg}
 {
-    ctf_metadata_decoder_config metadataCfg {logCfg};
-
-    metadataCfg.clkClsCfg = clkClsCfg;
-    _mOrigCtfIrGenerator = ctf_visitor_generate_ir_create(&metadataCfg);
 }
 
 MetadataStreamParser::ParseRet Ctf1MetadataStreamParser::parse(const ClkClsCfg& clkClsCfg,

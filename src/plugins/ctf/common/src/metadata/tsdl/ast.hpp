@@ -363,10 +363,18 @@ struct ctf_visitor_generate_ir
 {
     using UP = std::unique_ptr<ctf_visitor_generate_ir, ctf_visitor_generate_ir_deleter>;
 
-    explicit ctf_visitor_generate_ir(const ctf_metadata_decoder_config& decoderConfig) noexcept :
-        decoder_config {decoderConfig}
+    explicit ctf_visitor_generate_ir(const ctf::src::ClkClsCfg clkClsCfgParam,
+                                     bt_self_component *selfCompParam,
+                                     const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam},
+        selfComp {selfCompParam}, clkClsCfg {clkClsCfgParam}
     {
     }
+
+    const bt2_common::LogCfg logCfg;
+
+    /* Weak, used to create a bt_trace_class, if not nullptr. */
+    bt_self_component *selfComp = nullptr;
 
     /* Trace IR trace class being filled (owned by this) */
     nonstd::optional<bt2::TraceClass::Shared> trace_class;
@@ -383,12 +391,12 @@ struct ctf_visitor_generate_ir
     /* True if this is an LTTng trace */
     bool is_lttng = false;
 
-    /* Config passed by the user */
-    struct ctf_metadata_decoder_config decoder_config;
+    const ctf::src::ClkClsCfg clkClsCfg;
 };
 
-ctf_visitor_generate_ir::UP
-ctf_visitor_generate_ir_create(const struct ctf_metadata_decoder_config *config);
+ctf_visitor_generate_ir::UP ctf_visitor_generate_ir_create(const ctf::src::ClkClsCfg clkClsCfg,
+                                                           bt_self_component *selfComp,
+                                                           const bt2_common::LogCfg& logCfg);
 
 nonstd::optional<bt2::TraceClass::Shared>
 ctf_visitor_generate_ir_get_ir_trace_class(struct ctf_visitor_generate_ir *visitor);
