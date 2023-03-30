@@ -40,6 +40,13 @@ struct bt_event_class {
 		const char *value;
 	} name;
 
+	struct {
+		GString *str;
+
+		/* NULL or `str->str` above */
+		const char *value;
+	} ns;
+
 	uint64_t id;
 	struct bt_property_uint log_level;
 
