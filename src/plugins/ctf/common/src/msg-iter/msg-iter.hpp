@@ -18,6 +18,7 @@
 #include "common/macros.h"
 
 #include "../metadata/tsdl/ctf-meta.hpp"
+#include "cpp-common/log-cfg.hpp"
 
 /**
  * @file ctf-msg-iter.h
@@ -228,8 +229,8 @@ struct ctf_msg_iter;
  */
 struct ctf_msg_iter *ctf_msg_iter_create(struct ctf_trace_class *tc, size_t max_request_sz,
                                          struct ctf_msg_iter_medium_ops medops, void *medops_data,
-                                         bt_logging_level log_level, bt_self_component *self_comp,
-                                         bt_self_message_iterator *self_msg_iter);
+                                         bt_self_message_iterator *self_msg_iter,
+                                         const bt2_common::LogCfg& logCfg);
 
 /**
  * Destroys a CTF message iterator, freeing all internal resources.

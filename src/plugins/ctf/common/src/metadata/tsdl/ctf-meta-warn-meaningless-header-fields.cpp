@@ -4,10 +4,8 @@
  * Copyright 2018 Philippe Proulx <pproulx@efficios.com>
  */
 
-#define BT_COMP_LOG_SELF_COMP (log_cfg->self_comp)
-#define BT_LOG_OUTPUT_LEVEL   (log_cfg->log_level)
-#define BT_LOG_TAG            "PLUGIN/CTF/META/WARN-MEANINGLESS-HEADER-FIELDS"
-#include "logging/comp-logging.h"
+#define BT_CLOG_CFG (logCfg)
+#define BT_LOG_TAG  "PLUGIN/CTF/META/WARN-MEANINGLESS-HEADER-FIELDS"
 
 #include <babeltrace2/babeltrace.h>
 #include "common/macros.h"
@@ -21,14 +19,14 @@
 #include "logging.hpp"
 
 static inline void warn_meaningless_field(const char *name, const char *scope_name,
-                                          struct meta_log_config *log_cfg)
+                                          const bt2_common::LogCfg& logCfg)
 {
     BT_ASSERT(name);
-    BT_COMP_LOGW("User field found in %s: ignoring: name=\"%s\"", scope_name, name);
+    BT_CLOGW("User field found in %s: ignoring: name=\"%s\"", scope_name, name);
 }
 
 static inline void warn_meaningless_fields(struct ctf_field_class *fc, const char *name,
-                                           const char *scope_name, struct meta_log_config *log_cfg)
+                                           const char *scope_name, const bt2_common::LogCfg& logCfg)
 {
     uint64_t i;
 
@@ -44,7 +42,7 @@ static inline void warn_meaningless_fields(struct ctf_field_class *fc, const cha
     switch (fc->type) {
     case CTF_FIELD_CLASS_TYPE_FLOAT:
     case CTF_FIELD_CLASS_TYPE_STRING:
-        warn_meaningless_field(name, scope_name, log_cfg);
+        warn_meaningless_field(name, scope_name, logCfg);
         break;
     case CTF_FIELD_CLASS_TYPE_INT:
     case CTF_FIELD_CLASS_TYPE_ENUM:
@@ -52,7 +50,7 @@ static inline void warn_meaningless_fields(struct ctf_field_class *fc, const cha
         struct ctf_field_class_int *int_fc = ctf_field_class_as_int(fc);
 
         if (int_fc->meaning == CTF_FIELD_CLASS_MEANING_NONE && !int_fc->mapped_clock_class) {
-            warn_meaningless_field(name, scope_name, log_cfg);
+            warn_meaningless_field(name, scope_name, logCfg);
         }
 
         break;
@@ -65,7 +63,7 @@ static inline void warn_meaningless_fields(struct ctf_field_class *fc, const cha
             struct ctf_named_field_class *named_fc =
                 ctf_field_class_struct_borrow_member_by_index(struct_fc, i);
 
-            warn_meaningless_fields(named_fc->fc, named_fc->name->str, scope_name, log_cfg);
+            warn_meaningless_fields(named_fc->fc, named_fc->name->str, scope_name, logCfg);
         }
 
         break;
@@ -78,7 +76,7 @@ static inline void warn_meaningless_fields(struct ctf_field_class *fc, const cha
             struct ctf_named_field_class *named_fc =
                 ctf_field_class_variant_borrow_option_by_index(var_fc, i);
 
-            warn_meaningless_fields(named_fc->fc, named_fc->name->str, scope_name, log_cfg);
+            warn_meaningless_fields(named_fc->fc, named_fc->name->str, scope_name, logCfg);
         }
 
         break;
@@ -96,7 +94,7 @@ static inline void warn_meaningless_fields(struct ctf_field_class *fc, const cha
     {
         struct ctf_field_class_array_base *array_fc = ctf_field_class_as_array_base(fc);
 
-        warn_meaningless_fields(array_fc->elem_fc, name, scope_name, log_cfg);
+        warn_meaningless_fields(array_fc->elem_fc, name, scope_name, logCfg);
         break;
     }
     default:
@@ -108,19 +106,19 @@ end:
 }
 
 void ctf_trace_class_warn_meaningless_header_fields(struct ctf_trace_class *ctf_tc,
-                                                    struct meta_log_config *log_cfg)
+                                                    const bt2_common::LogCfg& logCfg)
 {
     uint64_t i;
 
     if (!ctf_tc->is_translated) {
-        warn_meaningless_fields(ctf_tc->packet_header_fc, NULL, "packet header", log_cfg);
+        warn_meaningless_fields(ctf_tc->packet_header_fc, NULL, "packet header", logCfg);
     }
 
     for (i = 0; i < ctf_tc->stream_classes->len; i++) {
         ctf_stream_class *sc = (ctf_stream_class *) ctf_tc->stream_classes->pdata[i];
 
         if (!sc->is_translated) {
-            warn_meaningless_fields(sc->event_header_fc, NULL, "event header", log_cfg);
+            warn_meaningless_fields(sc->event_header_fc, NULL, "event header", logCfg);
         }
     }
 }

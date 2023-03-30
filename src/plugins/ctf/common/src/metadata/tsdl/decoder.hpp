@@ -15,6 +15,7 @@
 
 #include "common/macros.h"
 #include "common/uuid.h"
+#include "cpp-common/log-cfg.hpp"
 
 struct ctf_trace_class;
 
@@ -35,15 +36,15 @@ enum ctf_metadata_decoder_status
 /* Decoding configuration */
 struct ctf_metadata_decoder_config
 {
-    /* Active log level to use */
-    bt_logging_level log_level = (bt_logging_level) 0;
+    explicit ctf_metadata_decoder_config(const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam}
+    {
+    }
 
-    /*
-     * Component or component class to use for logging (exactly one of
-     * them must be non-`NULL`); weak
-     */
+    bt2_common::LogCfg logCfg;
+
+    /* Weak, used to create a bt_trace_class, if not nullptr. */
     bt_self_component *self_comp = nullptr;
-    bt_self_component_class *self_comp_class = nullptr;
 
     /* Additional clock class offset to apply */
     int64_t clock_class_offset_s = 0;
@@ -126,7 +127,7 @@ ctf_metadata_decoder_borrow_ctf_trace_class(struct ctf_metadata_decoder *mdec);
  * `self_comp` can be `NULL` if not available.
  */
 int ctf_metadata_decoder_is_packetized(FILE *fp, bool *is_packetized, int *byte_order,
-                                       bt_logging_level log_level, bt_self_component *self_comp);
+                                       const bt2_common::LogCfg& logCfg);
 
 /*
  * Returns the byte order of the decoder's metadata stream as set by the

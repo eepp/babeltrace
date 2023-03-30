@@ -4,11 +4,8 @@
  * Copyright 2016-2017 Philippe Proulx <pproulx@efficios.com>
  */
 
-#define BT_COMP_LOG_SELF_COMP       (mdec->config.self_comp)
-#define BT_COMP_LOG_SELF_COMP_CLASS (mdec->config.self_comp_class)
-#define BT_LOG_OUTPUT_LEVEL         (mdec->config.log_level)
-#define BT_LOG_TAG                  "PLUGIN/CTF/META/DECODER"
-#include "logging/comp-logging.h"
+#define BT_CLOG_CFG (mdec->config.logCfg)
+#define BT_LOG_TAG  "PLUGIN/CTF/META/DECODER"
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -28,11 +25,16 @@
 #include "logging.hpp"
 #include "parser-wrap.hpp"
 #include "decoder-packetized-file-stream-to-buf.hpp"
+#include "cpp-common/cfg-logging-error-reporting.hpp"
 
 #define TSDL_MAGIC 0x75d11d57
 
 struct ctf_metadata_decoder
 {
+    explicit ctf_metadata_decoder(const bt2_common::LogCfg& logCfg) noexcept : config {logCfg}
+    {
+    }
+
     struct ctf_scanner *scanner = nullptr;
     GString *text = nullptr;
     struct ctf_visitor_generate_ir *visitor = nullptr;
@@ -40,7 +42,6 @@ struct ctf_metadata_decoder
     bool is_uuid_set = false;
     int bo = 0;
     struct ctf_metadata_decoder_config config;
-    struct meta_log_config log_cfg;
     bool has_checked_plaintext_signature = false;
 };
 
@@ -59,7 +60,7 @@ struct packet_header
 } __attribute__((__packed__));
 
 int ctf_metadata_decoder_is_packetized(FILE *fp, bool *is_packetized, int *byte_order,
-                                       bt_logging_level log_level, bt_self_component *self_comp)
+                                       const bt2_common::LogCfg& logCfg)
 {
     uint32_t magic;
     size_t len;
@@ -68,8 +69,8 @@ int ctf_metadata_decoder_is_packetized(FILE *fp, bool *is_packetized, int *byte_
     *is_packetized = false;
     len = fread(&magic, sizeof(magic), 1, fp);
     if (len != 1) {
-        BT_COMP_LOG_CUR_LVL(
-            BT_LOG_INFO, log_level, self_comp,
+        BT_CLOGI_EX(
+            logCfg,
             "Cannot read first metadata packet header: assuming the stream is not packetized.");
         ret = -1;
         goto end;
@@ -95,29 +96,26 @@ struct ctf_metadata_decoder *
 ctf_metadata_decoder_create(const struct ctf_metadata_decoder_config *config)
 {
     BT_ASSERT(config);
-    BT_COMP_LOG_CUR_LVL(BT_LOG_DEBUG, config->log_level, config->self_comp,
-                        "Creating CTF metadata decoder: "
-                        "clock-class-offset-s=%" PRId64 ", "
-                        "clock-class-offset-ns=%" PRId64,
-                        config->clock_class_offset_s, config->clock_class_offset_ns);
+    BT_CLOGD_EX(config->logCfg,
+                "Creating CTF metadata decoder: "
+                "clock-class-offset-s=%" PRId64 ", "
+                "clock-class-offset-ns=%" PRId64,
+                config->clock_class_offset_s, config->clock_class_offset_ns);
 
-    ctf_metadata_decoder *mdec = new ctf_metadata_decoder;
-    mdec->log_cfg.log_level = config->log_level;
-    mdec->log_cfg.self_comp = config->self_comp;
-    mdec->log_cfg.self_comp_class = config->self_comp_class;
+    ctf_metadata_decoder *mdec = new ctf_metadata_decoder {config->logCfg};
     mdec->scanner = ctf_scanner_alloc();
     if (!mdec->scanner) {
-        _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Cannot allocate a metadata lexical scanner: "
-                                                 "mdec-addr=%p",
-                                                 mdec);
+        BT_CLOGE_APPEND_CAUSE("Cannot allocate a metadata lexical scanner: "
+                              "mdec-addr=%p",
+                              mdec);
         goto error;
     }
 
     mdec->text = g_string_new(NULL);
     if (!mdec->text) {
-        _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Failed to allocate one GString: "
-                                                 "mdec-addr=%p",
-                                                 mdec);
+        BT_CLOGE_APPEND_CAUSE("Failed to allocate one GString: "
+                              "mdec-addr=%p",
+                              mdec);
         goto error;
     }
 
@@ -125,16 +123,16 @@ ctf_metadata_decoder_create(const struct ctf_metadata_decoder_config *config)
     mdec->config = *config;
     mdec->visitor = ctf_visitor_generate_ir_create(config);
     if (!mdec->visitor) {
-        _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Failed to create a CTF IR metadata AST visitor: "
-                                                 "mdec-addr=%p",
-                                                 mdec);
+        BT_CLOGE_APPEND_CAUSE("Failed to create a CTF IR metadata AST visitor: "
+                              "mdec-addr=%p",
+                              mdec);
         goto error;
     }
 
-    BT_COMP_LOGD("Creating CTF metadata decoder: "
-                 "clock-class-offset-s=%" PRId64 ", "
-                 "clock-class-offset-ns=%" PRId64 ", addr=%p",
-                 config->clock_class_offset_s, config->clock_class_offset_ns, mdec);
+    BT_CLOGD("Creating CTF metadata decoder: "
+             "clock-class-offset-s=%" PRId64 ", "
+             "clock-class-offset-ns=%" PRId64 ", addr=%p",
+             config->clock_class_offset_s, config->clock_class_offset_ns, mdec);
     goto end;
 
 error:
@@ -159,7 +157,7 @@ void ctf_metadata_decoder_destroy(struct ctf_metadata_decoder *mdec)
         g_string_free(mdec->text, TRUE);
     }
 
-    BT_COMP_LOGD("Destroying CTF metadata decoder: addr=%p", mdec);
+    BT_CLOGD("Destroying CTF metadata decoder: addr=%p", mdec);
     ctf_visitor_generate_ir_destroy(mdec->visitor);
     delete mdec;
 }
@@ -175,23 +173,20 @@ ctf_metadata_decoder_append_content(struct ctf_metadata_decoder *mdec, FILE *fp)
     bool is_packetized;
 
     BT_ASSERT(mdec);
-    ret = ctf_metadata_decoder_is_packetized(fp, &is_packetized, &mdec->bo, mdec->config.log_level,
-                                             mdec->config.self_comp);
+    ret = ctf_metadata_decoder_is_packetized(fp, &is_packetized, &mdec->bo, mdec->config.logCfg);
     if (ret) {
         status = CTF_METADATA_DECODER_STATUS_ERROR;
         goto end;
     }
 
     if (is_packetized) {
-        BT_COMP_LOGI("Metadata stream is packetized: mdec-addr=%p", mdec);
+        BT_CLOGI("Metadata stream is packetized: mdec-addr=%p", mdec);
         ret = ctf_metadata_decoder_packetized_file_stream_to_buf(
-            fp, &buf, mdec->bo, &mdec->is_uuid_set, mdec->uuid, mdec->config.log_level,
-            mdec->config.self_comp, mdec->config.self_comp_class);
+            fp, &buf, mdec->bo, &mdec->is_uuid_set, mdec->uuid, mdec->config.logCfg);
         if (ret) {
-            _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE(
-                "Cannot decode packetized metadata packets to metadata text: "
-                "mdec-addr=%p, ret=%d",
-                mdec, ret);
+            BT_CLOGE_APPEND_CAUSE("Cannot decode packetized metadata packets to metadata text: "
+                                  "mdec-addr=%p, ret=%d",
+                                  mdec, ret);
             status = CTF_METADATA_DECODER_STATUS_ERROR;
             goto end;
         }
@@ -205,9 +200,9 @@ ctf_metadata_decoder_append_content(struct ctf_metadata_decoder *mdec, FILE *fp)
         fp = bt_fmemopen(buf, strlen(buf), "rb");
         close_fp = true;
         if (!fp) {
-            _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Cannot memory-open metadata buffer: %s: "
-                                                     "mdec-addr=%p",
-                                                     strerror(errno), mdec);
+            BT_CLOGE_APPEND_CAUSE("Cannot memory-open metadata buffer: %s: "
+                                  "mdec-addr=%p",
+                                  strerror(errno), mdec);
             status = CTF_METADATA_DECODER_STATUS_ERROR;
             goto end;
         }
@@ -216,11 +211,10 @@ ctf_metadata_decoder_append_content(struct ctf_metadata_decoder *mdec, FILE *fp)
         ssize_t nr_items;
         const long init_pos = ftell(fp);
 
-        BT_COMP_LOGI("Metadata stream is plain text: mdec-addr=%p", mdec);
+        BT_CLOGI("Metadata stream is plain text: mdec-addr=%p", mdec);
 
         if (init_pos < 0) {
-            BT_COMP_LOGE_APPEND_CAUSE_ERRNO(BT_COMP_LOG_SELF_COMP,
-                                            "Failed to get current file position", ".");
+            BT_CLOGE_ERRNO_APPEND_CAUSE("Failed to get current file position", ".");
             status = CTF_METADATA_DECODER_STATUS_ERROR;
             goto end;
         }
@@ -228,28 +222,25 @@ ctf_metadata_decoder_append_content(struct ctf_metadata_decoder *mdec, FILE *fp)
         /* Check text-only metadata header and version */
         nr_items = fscanf(fp, "/* CTF %10u.%10u", &major, &minor);
         if (nr_items < 2) {
-            BT_COMP_LOGW(
-                "Missing \"/* CTF major.minor\" signature in plain text metadata file stream: "
-                "mdec-addr=%p",
-                mdec);
+            BT_CLOGW("Missing \"/* CTF major.minor\" signature in plain text metadata file stream: "
+                     "mdec-addr=%p",
+                     mdec);
         }
 
-        BT_COMP_LOGI("Found metadata stream version in signature: version=%u.%u", major, minor);
+        BT_CLOGI("Found metadata stream version in signature: version=%u.%u", major, minor);
 
         if (!ctf_metadata_decoder_is_packet_version_valid(major, minor)) {
-            _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE(
-                "Invalid metadata version found in plain text signature: "
-                "version=%u.%u, mdec-addr=%p",
-                major, minor, mdec);
+            BT_CLOGE_APPEND_CAUSE("Invalid metadata version found in plain text signature: "
+                                  "version=%u.%u, mdec-addr=%p",
+                                  major, minor, mdec);
             status = CTF_METADATA_DECODER_STATUS_INVAL_VERSION;
             goto end;
         }
 
         if (fseek(fp, init_pos, SEEK_SET)) {
-            _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE(
-                "Cannot seek metadata file stream to initial position: %s: "
-                "mdec-addr=%p",
-                strerror(errno), mdec);
+            BT_CLOGE_APPEND_CAUSE("Cannot seek metadata file stream to initial position: %s: "
+                                  "mdec-addr=%p",
+                                  strerror(errno), mdec);
             status = CTF_METADATA_DECODER_STATUS_ERROR;
             goto end;
         }
@@ -273,10 +264,9 @@ ctf_metadata_decoder_append_content(struct ctf_metadata_decoder *mdec, FILE *fp)
     /* Append the metadata text content */
     ret = ctf_scanner_append_ast(mdec->scanner, fp);
     if (ret) {
-        _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE(
-            "Cannot create the metadata AST out of the metadata text: "
-            "mdec-addr=%p",
-            mdec);
+        BT_CLOGE_APPEND_CAUSE("Cannot create the metadata AST out of the metadata text: "
+                              "mdec-addr=%p",
+                              mdec);
         status = CTF_METADATA_DECODER_STATUS_INCOMPLETE;
         goto end;
     }
@@ -286,27 +276,26 @@ ctf_metadata_decoder_append_content(struct ctf_metadata_decoder *mdec, FILE *fp)
         BT_ASSERT(start_pos != -1);
         ret = fseek(fp, start_pos, SEEK_SET);
         if (ret) {
-            _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Failed to seek file: ret=%d, mdec-addr=%p",
-                                                     ret, mdec);
+            BT_CLOGE_APPEND_CAUSE("Failed to seek file: ret=%d, mdec-addr=%p", ret, mdec);
             status = CTF_METADATA_DECODER_STATUS_ERROR;
             goto end;
         }
 
         ret = bt_common_append_file_content_to_g_string(mdec->text, fp);
         if (ret) {
-            _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Failed to append to current plain text: "
-                                                     "ret=%d, mdec-addr=%p",
-                                                     ret, mdec);
+            BT_CLOGE_APPEND_CAUSE("Failed to append to current plain text: "
+                                  "ret=%d, mdec-addr=%p",
+                                  ret, mdec);
             status = CTF_METADATA_DECODER_STATUS_ERROR;
             goto end;
         }
     }
 
-    ret = ctf_visitor_semantic_check(0, &mdec->scanner->ast->root, &mdec->log_cfg);
+    ret = ctf_visitor_semantic_check(0, &mdec->scanner->ast->root, mdec->config.logCfg);
     if (ret) {
-        _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Validation of the metadata semantics failed: "
-                                                 "mdec-addr=%p",
-                                                 mdec);
+        BT_CLOGE_APPEND_CAUSE("Validation of the metadata semantics failed: "
+                              "mdec-addr=%p",
+                              mdec);
         status = CTF_METADATA_DECODER_STATUS_ERROR;
         goto end;
     }
@@ -318,16 +307,15 @@ ctf_metadata_decoder_append_content(struct ctf_metadata_decoder *mdec, FILE *fp)
             /* Success */
             break;
         case -EINCOMPLETE:
-            BT_COMP_LOGD("While visiting metadata AST: incomplete data: "
-                         "mdec-addr=%p",
-                         mdec);
+            BT_CLOGD("While visiting metadata AST: incomplete data: "
+                     "mdec-addr=%p",
+                     mdec);
             status = CTF_METADATA_DECODER_STATUS_INCOMPLETE;
             goto end;
         default:
-            _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE(
-                "Failed to visit AST node to create CTF IR objects: "
-                "mdec-addr=%p, ret=%d",
-                mdec, ret);
+            BT_CLOGE_APPEND_CAUSE("Failed to visit AST node to create CTF IR objects: "
+                                  "mdec-addr=%p, ret=%d",
+                                  mdec, ret);
             status = CTF_METADATA_DECODER_STATUS_IR_VISITOR_ERROR;
             goto end;
         }
@@ -340,9 +328,9 @@ end:
 
     if (fp && close_fp) {
         if (fclose(fp)) {
-            BT_COMP_LOGE("Cannot close metadata file stream: "
-                         "mdec-addr=%p",
-                         mdec);
+            BT_CLOGE("Cannot close metadata file stream: "
+                     "mdec-addr=%p",
+                     mdec);
         }
     }
 
@@ -411,16 +399,16 @@ static enum ctf_metadata_decoder_status find_uuid_in_trace_decl(struct ctf_metad
 
             left = ctf_ast_concatenate_unary_strings(&entry_node->u.ctf_expression.left);
             if (!left) {
-                _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Cannot concatenate unary strings.");
+                BT_CLOGE_APPEND_CAUSE("Cannot concatenate unary strings.");
                 status = CTF_METADATA_DECODER_STATUS_ERROR;
                 goto end;
             }
 
             if (strcmp(left, "uuid") == 0) {
                 ret = ctf_ast_get_unary_uuid(&entry_node->u.ctf_expression.right, uuid,
-                                             mdec->config.log_level, mdec->config.self_comp);
+                                             mdec->config.logCfg);
                 if (ret) {
-                    _BT_COMP_OR_COMP_CLASS_LOGE_APPEND_CAUSE("Invalid trace's `uuid` attribute.");
+                    BT_CLOGE_APPEND_CAUSE("Invalid trace's `uuid` attribute.");
                     status = CTF_METADATA_DECODER_STATUS_ERROR;
                     goto end;
                 }
