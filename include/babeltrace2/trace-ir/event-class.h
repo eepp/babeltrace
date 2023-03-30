@@ -398,6 +398,17 @@ See the \ref api-tir-ev-cls-prop-id "numeric ID" property.
 extern uint64_t bt_event_class_get_id(
 		const bt_event_class *event_class) __BT_NOEXCEPT;
 
+typedef enum bt_event_class_set_namespace_status {
+	BT_EVENT_CLASS_SET_NAMESPACE_STATUS_OK			= __BT_FUNC_STATUS_OK,
+
+	BT_EVENT_CLASS_SET_NAMESPACE_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_event_class_set_namespace_status;
+
+extern bt_event_class_set_namespace_status bt_event_class_set_namespace(
+		bt_event_class *event_class, const char *ns);
+
+extern const char *bt_event_class_get_namespace(const bt_event_class *event_class);
+
 /*!
 @brief
     Status codes for bt_event_class_set_name().
