@@ -21,6 +21,9 @@ Trace class:
     Event common context field class: Structure (1 member):
       vpid: Signed integer (32-bit, Base 10)
     Event class `lttng_ust_statedump:procname` (ID 0):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (1 member):
         procname: String

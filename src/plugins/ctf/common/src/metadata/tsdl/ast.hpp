@@ -358,11 +358,10 @@ struct ctf_visitor_generate_ir
 {
     using UP = std::unique_ptr<ctf_visitor_generate_ir>;
 
-    explicit ctf_visitor_generate_ir(const ctf::src::ClkClsCfg clkClsCfgParam,
-                                     bt_self_component *selfCompParam,
+    explicit ctf_visitor_generate_ir(bt_self_component *selfCompParam,
                                      const bt2_common::LogCfg& logCfgParam) noexcept :
         logCfg {logCfgParam},
-        selfComp {selfCompParam}, clkClsCfg {clkClsCfgParam}
+        selfComp {selfCompParam}
     {
     }
 
@@ -387,12 +386,9 @@ struct ctf_visitor_generate_ir
 
     /* True if this is an LTTng trace */
     bool is_lttng = false;
-
-    const ctf::src::ClkClsCfg clkClsCfg;
 };
 
-ctf_visitor_generate_ir::UP ctf_visitor_generate_ir_create(const ctf::src::ClkClsCfg clkClsCfg,
-                                                           bt_self_component *selfComp,
+ctf_visitor_generate_ir::UP ctf_visitor_generate_ir_create(bt_self_component *selfComp,
                                                            const bt2_common::LogCfg& logCfg);
 
 nonstd::optional<bt2::TraceClass::Shared>

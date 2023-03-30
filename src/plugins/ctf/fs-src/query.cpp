@@ -17,7 +17,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "common/assert.h"
-#include "metadata.hpp"
 #include "../common/src/metadata/tsdl/metadata-stream-decoder.hpp"
 #include "../common/src/metadata/metadata-stream-parser-utils.hpp"
 #include "common/common.h"

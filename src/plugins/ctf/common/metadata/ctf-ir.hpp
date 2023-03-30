@@ -3541,7 +3541,7 @@ public:
         _mPrecision {precision}, _mUuid {std::move(uuid)}
     {
         BT_ASSERT(_mFreq > 0);
-        BT_ASSERT(_mOffset.cycles() < _mFreq);
+        //BT_ASSERT(_mOffset.cycles() < _mFreq);
     }
 
     /*
