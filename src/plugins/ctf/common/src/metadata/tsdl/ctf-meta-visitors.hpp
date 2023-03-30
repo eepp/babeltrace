@@ -16,23 +16,14 @@
 int ctf_trace_class_resolve_field_classes(struct ctf_trace_class *tc,
                                           const bt2_common::LogCfg& logCfg);
 
-int ctf_trace_class_translate(bt_self_component *self_comp, bt_trace_class *ir_tc,
-                              struct ctf_trace_class *tc);
-
 int ctf_trace_class_update_default_clock_classes(struct ctf_trace_class *ctf_tc,
                                                  const bt2_common::LogCfg& logCfg);
-
-int ctf_trace_class_update_in_ir(struct ctf_trace_class *ctf_tc);
 
 int ctf_trace_class_update_meanings(struct ctf_trace_class *ctf_tc);
 
 int ctf_trace_class_update_text_array_sequence(struct ctf_trace_class *ctf_tc);
 
 int ctf_trace_class_update_alignments(struct ctf_trace_class *ctf_tc);
-
-int ctf_trace_class_update_value_storing_indexes(struct ctf_trace_class *ctf_tc);
-
-int ctf_trace_class_update_stream_class_config(struct ctf_trace_class *ctf_tc);
 
 int ctf_trace_class_validate(struct ctf_trace_class *ctf_tc, const bt2_common::LogCfg& logCfg);
 

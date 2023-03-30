@@ -80,20 +80,12 @@ struct ctf_clock_class
     bt_uuid_t uuid;
     bool has_uuid;
     bool is_absolute;
-
-    /* Weak, set during translation */
-    bt_clock_class *ir_cc;
 };
 
 struct ctf_field_class
 {
     enum ctf_field_class_type type;
     unsigned int alignment;
-    bool is_compound;
-    bool in_ir;
-
-    /* Weak, set during translation. NULL if `in_ir` is false below. */
-    bt_field_class *ir_fc;
 };
 
 struct ctf_field_class_bit_array
@@ -110,7 +102,6 @@ struct ctf_field_class_int
     bool is_signed;
     bt_field_class_integer_preferred_display_base disp_base;
     enum ctf_encoding encoding;
-    int64_t storing_index;
 
     /* Weak */
     struct ctf_clock_class *mapped_clock_class;
@@ -155,7 +146,6 @@ struct ctf_field_class_float
 struct ctf_field_class_string
 {
     struct ctf_field_class base;
-    enum ctf_encoding encoding;
 };
 
 struct ctf_named_field_class
@@ -197,7 +187,6 @@ struct ctf_field_class_variant
     struct ctf_field_class base;
     GString *tag_ref;
     struct ctf_field_path tag_path;
-    uint64_t stored_tag_index;
 
     /* Array of `struct ctf_named_field_class` */
     GArray *options;
@@ -228,7 +217,6 @@ struct ctf_field_class_sequence
     struct ctf_field_class_array_base base;
     GString *length_ref;
     struct ctf_field_path length_path;
-    uint64_t stored_length_index;
 
     /* Weak */
     struct ctf_field_class_int *length_fc;
@@ -248,21 +236,12 @@ struct ctf_event_class
 
     /* Owned by this */
     struct ctf_field_class *payload_fc;
-
-    /* Weak, set during translation */
-    bt_event_class *ir_ec;
 };
 
 struct ctf_stream_class
 {
     uint64_t id;
     bool is_translated;
-    bool packets_have_ts_begin;
-    bool packets_have_ts_end;
-    bool has_discarded_events;
-    bool has_discarded_packets;
-    bool discarded_events_have_default_cs;
-    bool discarded_packets_have_default_cs;
 
     /* Owned by this */
     struct ctf_field_class *packet_context_fc;
@@ -284,9 +263,6 @@ struct ctf_stream_class
 
     /* Weak */
     struct ctf_clock_class *default_clock_class;
-
-    /* Weak, set during translation */
-    bt_stream_class *ir_sc;
 };
 
 enum ctf_trace_class_env_entry_type
@@ -318,8 +294,6 @@ struct ctf_trace_class
     /* Owned by this */
     struct ctf_field_class *packet_header_fc;
 
-    uint64_t stored_value_count;
-
     /* Array of `struct ctf_clock_class *` (owned by this) */
     GPtrArray *clock_classes;
 
@@ -330,9 +304,6 @@ struct ctf_trace_class
     GArray *env_entries;
 
     bool is_translated;
-
-    /* Weak, set during translation */
-    bt_trace_class *ir_tc;
 
     struct
     {
@@ -414,7 +385,6 @@ static inline void _ctf_field_class_init(struct ctf_field_class *fc, enum ctf_fi
     BT_ASSERT(fc);
     fc->type = type;
     fc->alignment = alignment;
-    fc->in_ir = false;
 }
 
 static inline void _ctf_field_class_bit_array_init(struct ctf_field_class_bit_array *fc,
@@ -428,7 +398,6 @@ static inline void _ctf_field_class_int_init(struct ctf_field_class_int *fc,
 {
     _ctf_field_class_bit_array_init(&fc->base, type);
     fc->meaning = CTF_FIELD_CLASS_MEANING_NONE;
-    fc->storing_index = -1;
 }
 
 static inline void ctf_field_path_init(struct ctf_field_path *field_path)
@@ -539,7 +508,6 @@ static inline struct ctf_field_class_struct *ctf_field_class_struct_create(void)
     _ctf_field_class_init(&fc->base, CTF_FIELD_CLASS_TYPE_STRUCT, 1);
     fc->members = g_array_new(FALSE, TRUE, sizeof(struct ctf_named_field_class));
     BT_ASSERT(fc->members);
-    fc->base.is_compound = true;
     return fc;
 }
 
@@ -556,7 +524,6 @@ static inline struct ctf_field_class_variant *ctf_field_class_variant_create(voi
     fc->tag_ref = g_string_new(NULL);
     BT_ASSERT(fc->tag_ref);
     ctf_field_path_init(&fc->tag_path);
-    fc->base.is_compound = true;
     return fc;
 }
 
@@ -566,7 +533,6 @@ static inline struct ctf_field_class_array *ctf_field_class_array_create(void)
 
     BT_ASSERT(fc);
     _ctf_field_class_init(&fc->base.base, CTF_FIELD_CLASS_TYPE_ARRAY, 1);
-    fc->base.base.is_compound = true;
     return fc;
 }
 
@@ -579,7 +545,6 @@ static inline struct ctf_field_class_sequence *ctf_field_class_sequence_create(v
     fc->length_ref = g_string_new(NULL);
     BT_ASSERT(fc->length_ref);
     ctf_field_path_init(&fc->length_path);
-    fc->base.base.is_compound = true;
     return fc;
 }
 
@@ -1325,7 +1290,6 @@ static inline void ctf_field_class_int_copy_content(struct ctf_field_class_int *
     dst_fc->disp_base = src_fc->disp_base;
     dst_fc->encoding = src_fc->encoding;
     dst_fc->mapped_clock_class = src_fc->mapped_clock_class;
-    dst_fc->storing_index = src_fc->storing_index;
 }
 
 static inline struct ctf_field_class_int *_ctf_field_class_int_copy(struct ctf_field_class_int *fc)
@@ -1443,7 +1407,6 @@ _ctf_field_class_variant_copy(struct ctf_field_class_variant *fc)
 
     ctf_field_path_copy_content(&copy_fc->tag_path, &fc->tag_path);
     g_string_assign(copy_fc->tag_ref, fc->tag_ref->str);
-    copy_fc->stored_tag_index = fc->stored_tag_index;
     return copy_fc;
 }
 
@@ -1477,7 +1440,6 @@ _ctf_field_class_sequence_copy(struct ctf_field_class_sequence *fc)
     ctf_field_class_array_base_copy_content(&copy_fc->base, &fc->base);
     ctf_field_path_copy_content(&copy_fc->length_path, &fc->length_path);
     g_string_assign(copy_fc->length_ref, fc->length_ref->str);
-    copy_fc->stored_length_index = fc->stored_length_index;
     return copy_fc;
 }
 
@@ -1488,11 +1450,6 @@ static inline struct ctf_field_class *ctf_field_class_copy(struct ctf_field_clas
     if (!fc) {
         goto end;
     }
-
-    /*
-     * Translation should not have happened yet.
-     */
-    BT_ASSERT(!fc->ir_fc);
 
     switch (fc->type) {
     case CTF_FIELD_CLASS_TYPE_INT:
@@ -1525,7 +1482,6 @@ static inline struct ctf_field_class *ctf_field_class_copy(struct ctf_field_clas
 
     copy_fc->type = fc->type;
     copy_fc->alignment = fc->alignment;
-    copy_fc->in_ir = fc->in_ir;
 
 end:
     return copy_fc;
@@ -1666,7 +1622,6 @@ static inline void ctf_clock_class_destroy(struct ctf_clock_class *cc)
         g_string_free(cc->description, TRUE);
     }
 
-    bt_clock_class_put_ref(cc->ir_cc);
     g_free(cc);
 }
 

@@ -18,8 +18,10 @@
 
 #include "cpp-common/optional.hpp"
 #include "cpp-common/bt2/trace-ir.hpp"
-#include "decoder.hpp"
+#include "cpp-common/log-cfg.hpp"
 #include "ctf-meta.hpp"
+
+#include "../../clk-cls-cfg.hpp"
 
 // the parameter name (of the reentrant 'yyparse' function)
 // data is a pointer to a 'SParserParam' structure
@@ -358,22 +360,14 @@ struct ctf_visitor_generate_ir
 {
     using UP = std::unique_ptr<ctf_visitor_generate_ir>;
 
-    explicit ctf_visitor_generate_ir(bt_self_component *selfCompParam,
-                                     const bt2_common::LogCfg& logCfgParam) noexcept :
-        logCfg {logCfgParam},
-        selfComp {selfCompParam}
+    explicit ctf_visitor_generate_ir(const bt2_common::LogCfg& logCfgParam) noexcept :
+        logCfg {logCfgParam}
     {
     }
 
     ~ctf_visitor_generate_ir();
 
     const bt2_common::LogCfg logCfg;
-
-    /* Weak, used to create a bt_trace_class, if not nullptr. */
-    bt_self_component *selfComp = nullptr;
-
-    /* Trace IR trace class being filled (owned by this) */
-    nonstd::optional<bt2::TraceClass::Shared> trace_class;
 
     /* CTF meta trace being filled (owned by this) */
     struct ctf_trace_class *ctf_tc = nullptr;
@@ -388,14 +382,7 @@ struct ctf_visitor_generate_ir
     bool is_lttng = false;
 };
 
-ctf_visitor_generate_ir::UP ctf_visitor_generate_ir_create(bt_self_component *selfComp,
-                                                           const bt2_common::LogCfg& logCfg);
-
-nonstd::optional<bt2::TraceClass::Shared>
-ctf_visitor_generate_ir_get_ir_trace_class(struct ctf_visitor_generate_ir *visitor);
-
-struct ctf_trace_class *
-ctf_visitor_generate_ir_borrow_ctf_trace_class(struct ctf_visitor_generate_ir *visitor);
+ctf_visitor_generate_ir::UP ctf_visitor_generate_ir_create(const bt2_common::LogCfg& logCfg);
 
 int ctf_visitor_generate_ir_visit_node(struct ctf_visitor_generate_ir *visitor,
                                        struct ctf_node *node);

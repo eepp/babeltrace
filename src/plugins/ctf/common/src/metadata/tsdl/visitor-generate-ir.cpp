@@ -29,7 +29,6 @@
 #include "logging.hpp"
 #include "scanner.hpp"
 #include "ast.hpp"
-#include "decoder.hpp"
 #include "ctf-meta.hpp"
 #include "ctf-meta-visitors.hpp"
 #include "cpp-common/cfg-logging-error-reporting.hpp"
@@ -483,41 +482,23 @@ ctf_visitor_generate_ir::~ctf_visitor_generate_ir()
     }
 }
 
-ctf_visitor_generate_ir::UP ctf_visitor_generate_ir_create(bt_self_component *selfComp,
-                                                           const bt2_common::LogCfg& logCfg)
+ctf_visitor_generate_ir::UP ctf_visitor_generate_ir_create(const bt2_common::LogCfg& logCfg)
 {
-    ctf_visitor_generate_ir::UP ctx =
-        bt2_common::makeUnique<ctf_visitor_generate_ir>(selfComp, logCfg);
-
-    if (selfComp) {
-        bt_trace_class *trace_class = bt_trace_class_create(selfComp);
-        if (!trace_class) {
-            BT_CLOGE_APPEND_CAUSE("Cannot create empty trace class.");
-            goto error;
-        }
-
-        ctx->trace_class = bt2::TraceClass::Shared::createWithoutRef(trace_class);
-    }
+    ctf_visitor_generate_ir::UP ctx = bt2_common::makeUnique<ctf_visitor_generate_ir>(logCfg);
 
     ctx->ctf_tc = ctf_trace_class_create();
     if (!ctx->ctf_tc) {
         BT_CLOGE_APPEND_CAUSE("Cannot create CTF trace class.");
-        goto error;
+        return nullptr;
     }
 
     /* Root declaration scope */
     ctx->current_scope = ctx_decl_scope_create(ctx.get(), NULL);
     if (!ctx->current_scope) {
         BT_CLOGE_APPEND_CAUSE("Cannot create declaration scope.");
-        goto error;
+        return nullptr;
     }
 
-    goto end;
-
-error:
-    ctx.reset();
-
-end:
     return ctx;
 }
 
@@ -2556,7 +2537,6 @@ static int visit_string_decl(struct ctf_visitor_generate_ir *ctx, struct bt_list
     int set = 0;
     int ret = 0;
     struct ctf_node *expression;
-    enum ctf_encoding encoding = CTF_ENCODING_UTF8;
 
     *string_decl = NULL;
 
@@ -2603,9 +2583,9 @@ static int visit_string_decl(struct ctf_visitor_generate_ir *ctx, struct bt_list
             if (strcmp(s_right, "UTF8") == 0 || strcmp(s_right, "utf8") == 0 ||
                 strcmp(s_right, "utf-8") == 0 || strcmp(s_right, "UTF-8") == 0 ||
                 strcmp(s_right, "ASCII") == 0 || strcmp(s_right, "ascii") == 0) {
-                encoding = CTF_ENCODING_UTF8;
+                /* empty */
             } else if (strcmp(s_right, "none") == 0) {
-                encoding = CTF_ENCODING_NONE;
+                /* empty */
             } else {
                 _BT_CLOGE_APPEND_CAUSE_NODE(right,
                                             "Invalid `encoding` attribute in string field class: "
@@ -2628,7 +2608,6 @@ static int visit_string_decl(struct ctf_visitor_generate_ir *ctx, struct bt_list
 
     *string_decl = ctf_field_class_string_create();
     BT_ASSERT(*string_decl);
-    (*string_decl)->encoding = encoding;
     return 0;
 
 error:
@@ -4294,22 +4273,6 @@ end:
     return ret;
 }
 
-nonstd::optional<bt2::TraceClass::Shared>
-ctf_visitor_generate_ir_get_ir_trace_class(struct ctf_visitor_generate_ir *ctx)
-{
-    BT_ASSERT_DBG(ctx);
-
-    return ctx->trace_class;
-}
-
-struct ctf_trace_class *
-ctf_visitor_generate_ir_borrow_ctf_trace_class(struct ctf_visitor_generate_ir *ctx)
-{
-    BT_ASSERT_DBG(ctx);
-    BT_ASSERT_DBG(ctx->ctf_tc);
-    return ctx->ctf_tc;
-}
-
 int ctf_visitor_generate_ir_visit_node(struct ctf_visitor_generate_ir *ctx, struct ctf_node *node)
 {
     int ret = 0;
@@ -4465,13 +4428,6 @@ int ctf_visitor_generate_ir_visit_node(struct ctf_visitor_generate_ir *ctx, stru
         goto end;
     }
 
-    /* Update stream class configuration */
-    ret = ctf_trace_class_update_stream_class_config(ctx->ctf_tc);
-    if (ret) {
-        ret = -EINVAL;
-        goto end;
-    }
-
     /* Update text arrays and sequences */
     ret = ctf_trace_class_update_text_array_sequence(ctx->ctf_tc);
     if (ret) {
@@ -4493,28 +4449,6 @@ int ctf_visitor_generate_ir_visit_node(struct ctf_visitor_generate_ir *ctx, stru
         goto end;
     }
 
-    if (ctx->trace_class) {
-        /*
-         * Update "in IR" for field classes.
-         *
-         * If we have no IR trace class, then we'll have no way
-         * to create IR fields anyway, so we leave all the
-         * `in_ir` members false.
-         */
-        ret = ctf_trace_class_update_in_ir(ctx->ctf_tc);
-        if (ret) {
-            ret = -EINVAL;
-            goto end;
-        }
-    }
-
-    /* Update saved value indexes */
-    ret = ctf_trace_class_update_value_storing_indexes(ctx->ctf_tc);
-    if (ret) {
-        ret = -EINVAL;
-        goto end;
-    }
-
     /* Validate what we have so far */
     ret = ctf_trace_class_validate(ctx->ctf_tc, ctx->logCfg);
     if (ret) {
@@ -4528,16 +4462,6 @@ int ctf_visitor_generate_ir_visit_node(struct ctf_visitor_generate_ir *ctx, stru
      * classes, warn about it because they are never translated.
      */
     ctf_trace_class_warn_meaningless_header_fields(ctx->ctf_tc, ctx->logCfg);
-
-    if (ctx->trace_class) {
-        /* Copy new CTF metadata -> new IR metadata */
-        ret =
-            ctf_trace_class_translate(ctx->selfComp, (*ctx->trace_class)->libObjPtr(), ctx->ctf_tc);
-        if (ret) {
-            ret = -EINVAL;
-            goto end;
-        }
-    }
 
 end:
     return ret;

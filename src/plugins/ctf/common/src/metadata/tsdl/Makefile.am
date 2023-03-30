@@ -29,28 +29,20 @@ libctf_ast_la_SOURCES = \
 	parser-wrap.hpp \
 	scanner.hpp \
 	scanner-symbols.hpp \
-	decoder.cpp \
-	decoder.hpp \
 	metadata-stream-decoder.cpp \
 	metadata-stream-decoder.hpp \
 	ctf-1-metadata-stream-parser.cpp \
 	ctf-1-metadata-stream-parser.hpp \
-	decoder-packetized-file-stream-to-buf.cpp \
-	decoder-packetized-file-stream-to-buf.hpp \
 	logging.cpp \
 	logging.hpp \
 	ctf-meta.hpp \
 	ctf-meta-visitors.hpp \
 	ctf-meta-validate.cpp \
 	ctf-meta-update-meanings.cpp \
-	ctf-meta-update-in-ir.cpp \
 	ctf-meta-update-default-clock-classes.cpp \
 	ctf-meta-update-text-array-sequence.cpp \
 	ctf-meta-update-alignments.cpp \
-	ctf-meta-update-value-storing-indexes.cpp \
-	ctf-meta-update-stream-class-config.cpp \
 	ctf-meta-warn-meaningless-header-fields.cpp \
-	ctf-meta-translate.cpp \
 	ctf-meta-resolve.cpp \
 	ctf-meta-configure-ir-trace.cpp \
 	ctf-meta-configure-ir-trace.hpp
