@@ -57,6 +57,9 @@ Trace class:
     Packet context field class: Structure (1 member):
       cpu_id: Unsigned integer (32-bit, Base 10)
     Event class `sample_component:message` (ID 0):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: warning
       Log level: Warning
       Payload field class: Structure (1 member):
         message: String

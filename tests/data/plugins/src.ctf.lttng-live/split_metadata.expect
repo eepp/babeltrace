@@ -19,9 +19,15 @@ Trace class:
     Packet context field class: Structure (1 member):
       cpu_id: Unsigned integer (32-bit, Base 10)
     Event class `my_app:signe_de_pia$$e` (ID 0):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (0 members)
     Event class `my_app:signe_de_pia$$e_2` (ID 1):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (0 members)
 

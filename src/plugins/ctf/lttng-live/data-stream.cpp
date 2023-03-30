@@ -19,111 +19,138 @@
 
 #include <babeltrace2/babeltrace.h>
 
-#include "cpp-common/cfg-logging.hpp"
-#include "../common/src/msg-iter/msg-iter.hpp"
 #include "cpp-common/make-unique.hpp"
 #include "common/assert.h"
 #include "compat/mman.h"
+#include "../common/src/pkt-props.hpp"
 #include "cpp-common/make-unique.hpp"
 #include "data-stream.hpp"
+#include "cpp-common/exc.hpp"
 #include "cpp-common/cfg-logging-error-reporting.hpp"
+#include "cpp-common/cfg-logging-error-reporting-throw.hpp"
 
 #define STREAM_NAME_PREFIX "stream-"
 
-static enum ctf_msg_iter_medium_status medop_request_bytes(size_t request_sz, uint8_t **buffer_addr,
-                                                           size_t *buffer_sz, void *data)
+namespace ctf {
+namespace src {
+namespace live {
+
+Buf CtfLiveMedium::buf(bt2_common::DataLen requestedOffsetInStream, bt2_common::DataLen minSize)
 {
-    lttng_live_stream_iterator *stream = (lttng_live_stream_iterator *) data;
-    struct lttng_live_trace *trace = stream->trace;
-    struct lttng_live_session *session = trace->session;
-    struct lttng_live_msg_iter *live_msg_iter = session->lttng_live_msg_iter;
-    uint64_t recv_len = 0;
-    uint64_t len_left;
-    uint64_t read_len;
+    const bt2_common::LogCfg& logCfg = _mLiveStreamIter.logCfg;
+    BT_CLOGD("CtfLiveMedium::buf called: stream-id=%" PRId64
+             ", offset-bytes=%llu, min-size-bytes=%llu",
+             _mLiveStreamIter.stream ? (*_mLiveStreamIter.stream)->id() : -1,
+             requestedOffsetInStream.bytes(), minSize.bytes());
 
-    BT_ASSERT(request_sz);
+    if (_mLiveStreamIter.has_stream_hung_up)
+        throw NoData {};
 
-    if (stream->has_stream_hung_up) {
-        return CTF_MSG_ITER_MEDIUM_STATUS_EOF;
+    BT_ASSERT(requestedOffsetInStream >= _mCurPktBegOffsetInStream);
+    bt2_common::DataLen requestedOffsetInPacket =
+        requestedOffsetInStream - _mCurPktBegOffsetInStream;
+
+    BT_ASSERT(_mLiveStreamIter.curPktInfo);
+
+    if (requestedOffsetInPacket == _mLiveStreamIter.curPktInfo->len) {
+        _mCurPktBegOffsetInStream += _mLiveStreamIter.curPktInfo->len;
+        _mLiveStreamIter.curPktInfo.reset();
+        lttng_live_stream_iterator_set_state(&_mLiveStreamIter, LTTNG_LIVE_STREAM_ACTIVE_NO_DATA);
+        throw bt2_common::TryAgain {};
     }
 
-    len_left = stream->base_offset + stream->len - stream->offset;
-    if (!len_left) {
-        lttng_live_stream_iterator_set_state(stream, LTTNG_LIVE_STREAM_ACTIVE_NO_DATA);
-        return CTF_MSG_ITER_MEDIUM_STATUS_AGAIN;
+    bt2_common::DataLen requestedOffsetInRelay =
+        _mLiveStreamIter.curPktInfo->offsetInRelay + requestedOffsetInPacket;
+    bt2_common::DataLen lenUntilEndOfPacket =
+        _mLiveStreamIter.curPktInfo->len - requestedOffsetInPacket;
+
+    bt2_common::DataLen maxReqLen = bt2_common::DataLen::fromBytes(
+        _mLiveStreamIter.trace->session->lttng_live_msg_iter->lttng_live_comp->max_query_size);
+    bt2_common::DataLen reqLen = std::min(lenUntilEndOfPacket, maxReqLen);
+    uint64_t recvLen;
+
+    _mBuf.resize(reqLen.bytes());
+
+    lttng_live_get_stream_bytes_status status = lttng_live_get_stream_bytes(
+        _mLiveStreamIter.trace->session->lttng_live_msg_iter, &_mLiveStreamIter, _mBuf.data(),
+        requestedOffsetInRelay.bytes(), reqLen.bytes(), &recvLen);
+    switch (status) {
+    case LTTNG_LIVE_GET_STREAM_BYTES_STATUS_OK:
+        _mBuf.resize(recvLen);
+        break;
+
+    case LTTNG_LIVE_GET_STREAM_BYTES_STATUS_AGAIN:
+        BT_CLOGD("CtfLiveMedium::buf try again");
+        throw bt2_common::TryAgain();
+
+    case LTTNG_LIVE_GET_STREAM_BYTES_STATUS_EOF:
+        BT_CLOGD("CtfLiveMedium::buf eof");
+        throw NoData();
+
+    case LTTNG_LIVE_GET_STREAM_BYTES_STATUS_ERROR:
+        BT_CLOGD("CtfLiveMedium::buf error");
+        throw bt2_common::Error();
     }
 
-    read_len = MIN(request_sz, stream->buf.size());
-    read_len = MIN(read_len, len_left);
-    ctf_msg_iter_medium_status status = lttng_live_get_stream_bytes(
-        live_msg_iter, stream, stream->buf.data(), stream->offset, read_len, &recv_len);
-    if (status != CTF_MSG_ITER_MEDIUM_STATUS_OK) {
-        return status;
-    }
+    Buf buf {_mBuf.data(), bt2_common::DataLen::fromBytes(_mBuf.size())};
 
-    *buffer_addr = stream->buf.data();
-    *buffer_sz = recv_len;
-    stream->offset += recv_len;
+    BT_CLOGD("CtfLiveMedium::buf returns: stream-id=%" PRId64 ", buf-addr=%p, buf-size-bytes=%llu",
+             _mLiveStreamIter.stream ? (*_mLiveStreamIter.stream)->id() : -1, buf.addr(),
+             buf.size().bytes());
 
-    return CTF_MSG_ITER_MEDIUM_STATUS_OK;
+    return buf;
 }
 
-static bt_stream *medop_borrow_stream(bt_stream_class *stream_class, int64_t stream_id, void *data)
+} /* namespace live */
+} /* namespace src */
+} /* namespace ctf */
+
+lttng_live_iterator_status
+lttng_live_stream_iterator_create_msg_iter(lttng_live_stream_iterator *liveStreamIter)
 {
-    lttng_live_stream_iterator *lttng_live_stream = (lttng_live_stream_iterator *) data;
-    const bt2_common::LogCfg& logCfg = lttng_live_stream->logCfg;
+    BT_ASSERT(!liveStreamIter->msg_iter);
+    BT_ASSERT(!liveStreamIter->stream);
+    lttng_live_trace *trace = liveStreamIter->trace;
+    lttng_live_msg_iter *liveMsgIter = trace->session->lttng_live_msg_iter;
 
-    if (!lttng_live_stream->stream) {
-        uint64_t stream_class_id = bt_stream_class_get_id(stream_class);
+    ctf::src::Medium::UP tempMedium =
+        bt2_common::makeUnique<ctf::src::live::CtfLiveMedium>(*liveStreamIter);
+    const ctf::src::TraceCls *ctfTc = liveStreamIter->trace->metadata->traceCls();
+    BT_ASSERT(ctfTc);
+    ctf::src::PktProps pktProps = ctf::src::readPktProps(
+        *ctfTc, std::move(tempMedium), bt2_common::DataLen::fromBytes(0), liveStreamIter->logCfg);
 
-        BT_CLOGI("Creating stream %s (ID: %" PRIu64 ") out of stream "
-                 "class %" PRId64,
-                 lttng_live_stream->name.c_str(), stream_id, stream_class_id);
+    nonstd::optional<bt2::TraceClass> tc = ctfTc->libCls();
+    BT_ASSERT(tc);
+    BT_ASSERT(liveStreamIter->ctf_stream_class_id.is_set);
+    BT_ASSERT(trace->trace);
 
-        bt_stream *stream;
-
-        if (stream_id < 0) {
-            /*
-             * No stream instance ID in the stream. It's possible
-             * to encounter this situation with older version of
-             * LTTng. In these cases, use the viewer_stream_id that
-             * is unique for a live viewer session.
-             */
-            stream = bt_stream_create_with_id(stream_class,
-                                              (*lttng_live_stream->trace->trace)->libObjPtr(),
-                                              lttng_live_stream->viewer_stream_id);
-        } else {
-            stream = bt_stream_create_with_id(stream_class,
-                                              (*lttng_live_stream->trace->trace)->libObjPtr(),
-                                              (uint64_t) stream_id);
-        }
-
-        if (!stream) {
-            BT_CLOGE_APPEND_CAUSE("Cannot create stream %s (stream class ID "
-                                  "%" PRId64 ", stream ID %" PRIu64 ")",
-                                  lttng_live_stream->name.c_str(), stream_class_id, stream_id);
-            return nullptr;
-        }
-
-        lttng_live_stream->stream = bt2::Stream::Shared::createWithoutRef(stream);
-
-        (*lttng_live_stream->stream)->name(lttng_live_stream->name);
+    const bt2_common::LogCfg& logCfg = liveStreamIter->logCfg;
+    nonstd::optional<bt2::StreamClass> sc =
+        tc->streamClassById(liveStreamIter->ctf_stream_class_id.value);
+    if (!sc) {
+        BT_CLOGE_APPEND_CAUSE_AND_THROW(bt2::Error, "No stream class with id %" PRId64,
+                                        liveStreamIter->ctf_stream_class_id.value);
     }
 
-    return (*lttng_live_stream->stream)->libObjPtr();
-}
+    // FIXME: in the original, there is a fall back if the data stream id is not available.
+    bt_stream *streamPtr = bt_stream_create_with_id(sc->libObjPtr(), (*trace->trace)->libObjPtr(),
+                                                    *pktProps.dataStreamId);
+    BT_ASSERT(streamPtr);
+    liveStreamIter->stream = bt2::Stream::Shared::createWithoutRef(streamPtr);
+    (*liveStreamIter->stream)->name(liveStreamIter->name);
 
-static struct ctf_msg_iter_medium_ops medops = {
-    medop_request_bytes,
-    nullptr,
-    nullptr,
-    medop_borrow_stream,
-};
+    ctf::src::Medium::UP medium =
+        bt2_common::makeUnique<ctf::src::live::CtfLiveMedium>(*liveStreamIter);
+    liveStreamIter->msg_iter.emplace(
+        liveMsgIter->self_msg_iter, *ctfTc, liveStreamIter->trace->metadata->metadataStreamUuid(),
+        **liveStreamIter->stream, std::move(medium), ctf::src::MsgIterQuirks {}, logCfg);
+    return LTTNG_LIVE_ITERATOR_STATUS_OK;
+}
 
 enum lttng_live_iterator_status lttng_live_lazy_msg_init(struct lttng_live_session *session,
                                                          bt_self_message_iterator *self_msg_iter)
 {
-    struct lttng_live_component *lttng_live = session->lttng_live_msg_iter->lttng_live_comp;
     const bt2_common::LogCfg& logCfg = session->logCfg;
 
     if (!session->lazy_stream_msg_init) {
@@ -136,23 +163,15 @@ enum lttng_live_iterator_status lttng_live_lazy_msg_init(struct lttng_live_sessi
 
     for (lttng_live_trace::UP& trace : session->traces) {
         for (lttng_live_stream_iterator::UP& stream_iter : trace->stream_iterators) {
-            struct ctf_trace_class *ctf_tc;
-
             if (stream_iter->msg_iter) {
                 continue;
             }
 
-            ctf_tc = ctf_metadata_decoder_borrow_ctf_trace_class(trace->metadata->decoder.get());
+            const ctf::src::TraceCls *ctfTraceCls = trace->metadata->traceCls();
             BT_CLOGD("Creating CTF message iterator: "
                      "session-id=%" PRIu64 ", ctf-tc-addr=%p, "
                      "stream-iter-name=%s, self-msg-iter-addr=%p",
-                     session->id, ctf_tc, stream_iter->name.c_str(), self_msg_iter);
-            stream_iter->msg_iter = ctf_msg_iter_create(ctf_tc, lttng_live->max_query_size, medops,
-                                                        stream_iter.get(), self_msg_iter, logCfg);
-            if (!stream_iter->msg_iter) {
-                BT_CLOGE_APPEND_CAUSE("Failed to create CTF message iterator");
-                return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-            }
+                     session->id, ctfTraceCls, stream_iter->name.c_str(), self_msg_iter);
         }
     }
 
@@ -165,7 +184,6 @@ struct lttng_live_stream_iterator *
 lttng_live_stream_iterator_create(struct lttng_live_session *session, uint64_t ctf_trace_id,
                                   uint64_t stream_id, bt_self_message_iterator *self_msg_iter)
 {
-    struct lttng_live_component *lttng_live;
     struct lttng_live_trace *trace;
     std::stringstream nameSs;
 
@@ -174,8 +192,6 @@ lttng_live_stream_iterator_create(struct lttng_live_session *session, uint64_t c
     BT_ASSERT(session->lttng_live_msg_iter->lttng_live_comp);
 
     const bt2_common::LogCfg& logCfg = session->logCfg;
-
-    lttng_live = session->lttng_live_msg_iter->lttng_live_comp;
 
     lttng_live_stream_iterator::UP stream_iter =
         bt2_common::makeUnique<lttng_live_stream_iterator>(logCfg);
@@ -195,19 +211,6 @@ lttng_live_stream_iterator_create(struct lttng_live_session *session, uint64_t c
     stream_iter->last_inactivity_ts.is_set = false;
     stream_iter->last_inactivity_ts.value = 0;
 
-    if (trace->trace) {
-        struct ctf_trace_class *ctf_tc =
-            ctf_metadata_decoder_borrow_ctf_trace_class(trace->metadata->decoder.get());
-        BT_ASSERT(!stream_iter->msg_iter);
-        stream_iter->msg_iter = ctf_msg_iter_create(ctf_tc, lttng_live->max_query_size, medops,
-                                                    stream_iter.get(), self_msg_iter, logCfg);
-        if (!stream_iter->msg_iter) {
-            BT_CLOGE_APPEND_CAUSE("Failed to create CTF message iterator");
-            return nullptr;
-        }
-    }
-    stream_iter->buf.resize(lttng_live->max_query_size);
-
     nameSs << STREAM_NAME_PREFIX << stream_iter->viewer_stream_id;
     stream_iter->name = nameSs.str();
 
@@ -218,6 +221,18 @@ lttng_live_stream_iterator_create(struct lttng_live_session *session, uint64_t c
     session->lttng_live_msg_iter->active_stream_iter++;
 
     return ret;
+}
+
+void lttng_live_stream_iterator_set_stream_class(lttng_live_stream_iterator *streamIter,
+                                                 uint64_t ctfStreamClsId)
+{
+    if (streamIter->ctf_stream_class_id.is_set) {
+        BT_ASSERT(streamIter->ctf_stream_class_id.value == ctfStreamClsId);
+        return;
+    } else {
+        streamIter->ctf_stream_class_id.value = ctfStreamClsId;
+        streamIter->ctf_stream_class_id.is_set = true;
+    }
 }
 
 lttng_live_stream_iterator::~lttng_live_stream_iterator()

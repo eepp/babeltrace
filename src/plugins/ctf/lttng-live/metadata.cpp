@@ -20,7 +20,6 @@
 #include "cpp-common/libc-up.hpp"
 
 #include "metadata.hpp"
-#include "../common/src/metadata/tsdl/decoder.hpp"
 #include "../common/src/metadata/tsdl/ctf-meta-configure-ir-trace.hpp"
 #include "cpp-common/cfg-logging.hpp"
 #include "cpp-common/cfg-logging-error-reporting.hpp"
@@ -41,24 +40,17 @@ struct packet_header
     uint8_t minor;
 } __attribute__((__packed__));
 
-static bool stream_classes_all_have_default_clock_class(bt_trace_class *tc,
+static bool stream_classes_all_have_default_clock_class(bt2::ConstTraceClass tc,
                                                         const bt2_common::LogCfg& logCfg)
 {
-    uint64_t i, sc_count;
-    const bt_clock_class *cc = NULL;
-    const bt_stream_class *sc;
+    for (std::uint64_t i = 0; i < tc.size(); ++i) {
+        bt2::ConstStreamClass sc = tc[i];
+        nonstd::optional<bt2::ConstClockClass> cc = sc.defaultClockClass();
 
-    sc_count = bt_trace_class_get_stream_class_count(tc);
-    for (i = 0; i < sc_count; i++) {
-        sc = bt_trace_class_borrow_stream_class_by_index_const(tc, i);
-
-        BT_ASSERT(sc);
-
-        cc = bt_stream_class_borrow_default_clock_class_const(sc);
         if (!cc) {
             BT_CLOGE_APPEND_CAUSE("Stream class doesn't have a default clock class: "
                                   "sc-id=%" PRIu64 ", sc-name=\"%s\"",
-                                  bt_stream_class_get_id(sc), bt_stream_class_get_name(sc));
+                                  sc.id(), sc.name()->c_str());
             return false;
         }
     }
@@ -70,34 +62,16 @@ static bool stream_classes_all_have_default_clock_class(bt_trace_class *tc,
  * encountered. This is useful to create message iterator inactivity message as
  * we don't need a particular clock class.
  */
-static const bt_clock_class *borrow_any_clock_class(bt_trace_class *tc)
+static bt2::ConstClockClass borrow_any_clock_class(bt2::ConstTraceClass tc)
 {
-    uint64_t i, sc_count;
-    const bt_clock_class *cc = NULL;
-    const bt_stream_class *sc;
-
-    sc_count = bt_trace_class_get_stream_class_count(tc);
-    for (i = 0; i < sc_count; i++) {
-        sc = bt_trace_class_borrow_stream_class_by_index_const(tc, i);
-        BT_ASSERT_DBG(sc);
-
-        cc = bt_stream_class_borrow_default_clock_class_const(sc);
-        if (cc) {
-            return cc;
-        }
-    }
-
-    bt_common_abort();
+    return *tc[0].defaultClockClass();
 }
 
 enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_trace *trace)
 {
     struct lttng_live_session *session = trace->session;
     struct lttng_live_metadata *metadata = trace->metadata.get();
-    std::vector<char> metadataBuf;
     bool keep_receiving;
-    bt2_common::FileUP fp;
-    enum ctf_metadata_decoder_status decoder_status;
     const bt2_common::LogCfg& logCfg = trace->logCfg;
     enum lttng_live_get_one_metadata_status metadata_status;
 
@@ -127,6 +101,7 @@ enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_tra
 
     keep_receiving = true;
     /* Grab all available metadata. */
+    std::vector<uint8_t> metadataBuf;
     while (keep_receiving) {
         /*
          * lttng_live_get_one_metadata_packet() asks the Relay Daemon
@@ -182,56 +157,34 @@ enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_tra
     }
 
     /*
-     * Open a new reading file handle on the `metadata_buf` and pass it to
-     * the metadata decoder.
-     */
-    fp.reset(bt_fmemopen(metadataBuf.data(), metadataBuf.size(), "rb"));
-    if (!fp) {
-        if (errno == EINTR && lttng_live_graph_is_canceled(session->lttng_live_msg_iter)) {
-            session->lttng_live_msg_iter->was_interrupted = true;
-            return LTTNG_LIVE_ITERATOR_STATUS_AGAIN;
-        } else {
-            BT_CLOGE_ERRNO_APPEND_CAUSE("Cannot memory-open metadata buffer", ".");
-            return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-        }
-    }
-
-    /*
      * The call to ctf_metadata_decoder_append_content() will append
      * new metadata to our current trace class.
      */
     BT_CLOGD("Appending new metadata to the ctf_trace class");
-    decoder_status = ctf_metadata_decoder_append_content(metadata->decoder.get(), fp.get());
-    switch (decoder_status) {
-    case CTF_METADATA_DECODER_STATUS_OK:
-        if (!trace->trace_class) {
-            struct ctf_trace_class *tc =
-                ctf_metadata_decoder_borrow_ctf_trace_class(metadata->decoder.get());
+    metadata->parseSection(metadataBuf.data(), metadataBuf.data() + metadataBuf.size());
+    if (!trace->trace) {
+        const ctf::src::TraceCls *ctfTraceCls = metadata->traceCls();
+        BT_ASSERT(ctfTraceCls);
+        nonstd::optional<bt2::TraceClass> irTraceCls = ctfTraceCls->libCls();
 
-            trace->trace_class = ctf_metadata_decoder_get_ir_trace_class(metadata->decoder.get());
-            trace->trace = (*trace->trace_class)->instantiate();
-            if (!trace->trace) {
-                BT_CLOGE_APPEND_CAUSE("Failed to create bt_trace");
-                return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-            }
+        if (irTraceCls) {
+            trace->trace = irTraceCls->instantiate();
 
-            ctf_trace_class_configure_ir_trace(tc, **trace->trace);
+            ctf_trace_class_configure_ir_trace(*ctfTraceCls, **trace->trace, logCfg);
 
-            if (!stream_classes_all_have_default_clock_class((*trace->trace_class)->libObjPtr(),
-                                                             logCfg)) {
+            if (!stream_classes_all_have_default_clock_class((*trace->trace)->cls(), logCfg)) {
                 /* Error logged in function. */
                 return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
             }
-            trace->clock_class = borrow_any_clock_class((*trace->trace_class)->libObjPtr());
+
+            trace->clock_class = borrow_any_clock_class((*trace->trace)->cls());
         }
-
-        /* The metadata was updated succesfully. */
-        trace->metadata_stream_state = LTTNG_LIVE_METADATA_STREAM_STATE_NOT_NEEDED;
-
-        return LTTNG_LIVE_ITERATOR_STATUS_OK;
-    default:
-        return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
     }
+
+    /* The metadata was updated succesfully. */
+    trace->metadata_stream_state = LTTNG_LIVE_METADATA_STREAM_STATE_NOT_NEEDED;
+
+    return LTTNG_LIVE_ITERATOR_STATUS_OK;
 }
 
 int lttng_live_metadata_create_stream(struct lttng_live_session *session, uint64_t ctf_trace_id,
@@ -239,19 +192,11 @@ int lttng_live_metadata_create_stream(struct lttng_live_session *session, uint64
 {
     const bt2_common::LogCfg& logCfg = session->logCfg;
     struct lttng_live_trace *trace;
+    lttng_live_metadata::UP metadata =
+        bt2_common::makeUnique<lttng_live_metadata>(session->self_comp, logCfg);
 
-    ctf_metadata_decoder_config cfg(logCfg);
-    cfg.self_comp = session->self_comp;
-    cfg.create_trace_class = true;
-
-    lttng_live_metadata::UP metadata = bt2_common::makeUnique<lttng_live_metadata>(logCfg);
     metadata->stream_id = stream_id;
 
-    metadata->decoder = ctf_metadata_decoder_create(&cfg);
-    if (!metadata->decoder) {
-        BT_CLOGE_APPEND_CAUSE("Failed to create CTF metadata decoder");
-        return -1;
-    }
     trace = lttng_live_session_borrow_or_create_trace_by_id(session, ctf_trace_id);
     if (!trace) {
         BT_CLOGE_APPEND_CAUSE("Failed to borrow trace");

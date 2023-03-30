@@ -23,6 +23,7 @@
 #include <babeltrace2/types.h>
 #include "cpp-common/exc.hpp"
 #include "cpp-common/glib-up.hpp"
+#include "cpp-common/lib-str.hpp"
 #include "cpp-common/make-unique.hpp"
 #include "cpp-common/vector.hpp"
 
@@ -30,6 +31,8 @@
 #include "plugins/common/param-validation/param-validation.h"
 #include "cpp-common/cfg-logging-error-reporting.hpp"
 #include "cpp-common/cfg-logging-error-reporting-throw.hpp"
+
+#include "../common/src/pkt-props.hpp"
 
 #include "data-stream.hpp"
 #include "metadata.hpp"
@@ -307,15 +310,17 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_no_da
         goto end;
     }
 
-    lttng_live_stream->base_offset = index.offset;
-    lttng_live_stream->offset = index.offset;
-    lttng_live_stream->len = index.packet_size / CHAR_BIT;
+    lttng_live_stream->curPktInfo.emplace(lttng_live_stream_iterator::CurPktInfo {
+        bt2_common::DataLen::fromBytes(index.offset),
+        bt2_common::DataLen::fromBits(index.packet_size),
+    });
 
     BT_CLOGD("Setting live stream reading info: stream-name=\"%s\", "
-             "viewer-stream-id=%" PRIu64 ", stream-base-offset=%" PRIu64 ", stream-offset=%" PRIu64
-             ", stream-len=%" PRIu64,
+             "viewer-stream-id=%" PRIu64 ", stream-base-offset=%llu"
+             ", stream-len-bytes=%llu",
              lttng_live_stream->name.c_str(), lttng_live_stream->viewer_stream_id,
-             lttng_live_stream->base_offset, lttng_live_stream->offset, lttng_live_stream->len);
+             lttng_live_stream->curPktInfo->offsetInRelay.bytes(),
+             lttng_live_stream->curPktInfo->len.bytes());
 
 end:
     if (ret == LTTNG_LIVE_ITERATOR_STATUS_OK) {
@@ -369,18 +374,18 @@ lttng_live_get_session(struct lttng_live_msg_iter *lttng_live_msg_iter,
         break;
     case LTTNG_LIVE_ITERATOR_STATUS_END:
         /*
-		 * We received a `_END` from the `_get_new_streams()` function,
-		 * which means no more data will ever be received from the data
-		 * streams of this session. But it's possible that the metadata
-		 * is incomplete.
-		 * The live protocol guarantees that we receive all the
-		 * metadata needed before we receive data streams needing it.
-		 * But it's possible to receive metadata NOT needed by
-		 * data streams after the session was closed. For example, this
-		 * could happen if a new event is registered and the session is
-		 * stopped before any tracepoint for that event is actually
-		 * fired.
-		 */
+         * We received a `_END` from the `_get_new_streams()` function,
+         * which means no more data will ever be received from the data
+         * streams of this session. But it's possible that the metadata
+         * is incomplete.
+         * The live protocol guarantees that we receive all the
+         * metadata needed before we receive data streams needing it.
+         * But it's possible to receive metadata NOT needed by
+         * data streams after the session was closed. For example, this
+         * could happen if a new event is registered and the session is
+         * stopped before any tracepoint for that event is actually
+         * fired.
+         */
         BT_CLOGD(
             "Updating streams returned _END status. Override status to _OK in order fetch any remaining metadata:"
             "session-id=%" PRIu64 ", session-name=\"%s\"",
@@ -525,8 +530,9 @@ emit_inactivity_message(struct lttng_live_msg_iter *lttng_live_msg_iter,
              ", viewer-stream-id=%" PRIu64 ", timestamp=%" PRIu64,
              stream_iter->ctf_stream_class_id.value, stream_iter->viewer_stream_id, timestamp);
 
-    msg = bt_message_message_iterator_inactivity_create(lttng_live_msg_iter->self_msg_iter,
-                                                        stream_iter->trace->clock_class, timestamp);
+    msg = bt_message_message_iterator_inactivity_create(
+        lttng_live_msg_iter->self_msg_iter, stream_iter->trace->clock_class->libObjPtr(),
+        timestamp);
     if (!msg) {
         BT_CLOGE_APPEND_CAUSE("Error emitting message iterator inactivity message");
         return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
@@ -572,62 +578,53 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_quies
 
 static int live_get_msg_ts_ns(struct lttng_live_stream_iterator *stream_iter,
                               struct lttng_live_msg_iter *lttng_live_msg_iter,
-                              const bt_message *msg, int64_t last_msg_ts_ns, int64_t *ts_ns)
+                              bt2::ConstMessage msg, int64_t last_msg_ts_ns, int64_t *ts_ns)
 {
-    const bt_clock_snapshot *clock_snapshot = NULL;
-    int ret = 0;
+    nonstd::optional<bt2::ConstClockSnapshot> clockSnapshot;
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
 
-    BT_ASSERT_DBG(msg);
     BT_ASSERT_DBG(ts_ns);
 
     BT_CLOGD("Getting message's timestamp: iter-data-addr=%p, msg-addr=%p, "
              "last-msg-ts=%" PRId64,
-             lttng_live_msg_iter, msg, last_msg_ts_ns);
+             lttng_live_msg_iter, msg.libObjPtr(), last_msg_ts_ns);
 
-    switch (bt_message_get_type(msg)) {
-    case BT_MESSAGE_TYPE_EVENT:
-        clock_snapshot = bt_message_event_borrow_default_clock_snapshot_const(msg);
+    switch (msg.type()) {
+    case bt2::MessageType::EVENT:
+        clockSnapshot = msg.asEvent().defaultClockSnapshot();
         break;
-    case BT_MESSAGE_TYPE_PACKET_BEGINNING:
-        clock_snapshot = bt_message_packet_beginning_borrow_default_clock_snapshot_const(msg);
+    case bt2::MessageType::PACKET_BEGINNING:
+
+        clockSnapshot = msg.asPacketBeginning().defaultClockSnapshot();
         break;
-    case BT_MESSAGE_TYPE_PACKET_END:
-        clock_snapshot = bt_message_packet_end_borrow_default_clock_snapshot_const(msg);
+    case bt2::MessageType::PACKET_END:
+        clockSnapshot = msg.asPacketEnd().defaultClockSnapshot();
         break;
-    case BT_MESSAGE_TYPE_DISCARDED_EVENTS:
-        clock_snapshot =
-            bt_message_discarded_events_borrow_beginning_default_clock_snapshot_const(msg);
+    case bt2::MessageType::DISCARDED_EVENTS:
+        clockSnapshot = msg.asDiscardedEvents().beginningDefaultClockSnapshot();
         break;
-    case BT_MESSAGE_TYPE_DISCARDED_PACKETS:
-        clock_snapshot =
-            bt_message_discarded_packets_borrow_beginning_default_clock_snapshot_const(msg);
+    case bt2::MessageType::DISCARDED_PACKETS:
+        clockSnapshot = msg.asDiscardedPackets().beginningDefaultClockSnapshot();
         break;
-    case BT_MESSAGE_TYPE_MESSAGE_ITERATOR_INACTIVITY:
-        clock_snapshot = bt_message_message_iterator_inactivity_borrow_clock_snapshot_const(msg);
+    case bt2::MessageType::MESSAGE_ITERATOR_INACTIVITY:
+        clockSnapshot = msg.asMessageIteratorInactivity().clockSnapshot();
         break;
     default:
         /* All the other messages have a higher priority */
         BT_CLOGD(
             "Message has no timestamp, using the last message timestamp: iter-data-addr=%p, msg-addr=%p, "
             "last-msg-ts=%" PRId64 ", ts=%" PRId64,
-            lttng_live_msg_iter, msg, last_msg_ts_ns, *ts_ns);
+            lttng_live_msg_iter, msg.libObjPtr(), last_msg_ts_ns, *ts_ns);
         *ts_ns = last_msg_ts_ns;
         return 0;
     }
 
-    ret = bt_clock_snapshot_get_ns_from_origin(clock_snapshot, ts_ns);
-    if (ret) {
-        BT_CLOGE_APPEND_CAUSE("Cannot get nanoseconds from Epoch of clock snapshot: "
-                              "clock-snapshot-addr=%p",
-                              clock_snapshot);
-        return -1;
-    }
+    *ts_ns = clockSnapshot->nsFromOrigin();
 
     BT_CLOGD("Found message's timestamp: "
              "iter-data-addr=%p, msg-addr=%p, "
              "last-msg-ts=%" PRId64 ", ts=%" PRId64,
-             lttng_live_msg_iter, msg, last_msg_ts_ns, *ts_ns);
+             lttng_live_msg_iter, msg.libObjPtr(), last_msg_ts_ns, *ts_ns);
 
     return 0;
 }
@@ -638,7 +635,6 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_activ
     nonstd::optional<bt2::ConstMessage::Shared>& message)
 {
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
-    enum ctf_msg_iter_status status;
 
     for (lttng_live_session::UP& session : lttng_live_msg_iter->sessions) {
         if (session->new_streams_needed) {
@@ -664,27 +660,28 @@ static enum lttng_live_iterator_status lttng_live_iterator_next_handle_one_activ
         return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
     }
 
-    const bt_message *msg;
-    status = ctf_msg_iter_get_next_message(lttng_live_stream->msg_iter.get(), &msg);
-    switch (status) {
-    case CTF_MSG_ITER_STATUS_EOF:
-        return LTTNG_LIVE_ITERATOR_STATUS_END;
-    case CTF_MSG_ITER_STATUS_OK:
-        message = bt2::ConstMessage::Shared::createWithoutRef(msg);
-        return LTTNG_LIVE_ITERATOR_STATUS_OK;
-    case CTF_MSG_ITER_STATUS_AGAIN:
-        /*
-         * Continue immediately (end of packet). The next
-         * get_index may return AGAIN to delay the following
-         * attempt.
-         */
-        return LTTNG_LIVE_ITERATOR_STATUS_CONTINUE;
-    case CTF_MSG_ITER_STATUS_ERROR:
-    default:
+    if (!lttng_live_stream->msg_iter) {
+        /* The first time we're called for this stream, the MsgIter is not instantiated.  */
+        enum lttng_live_iterator_status ret =
+            lttng_live_stream_iterator_create_msg_iter(lttng_live_stream);
+        if (ret != LTTNG_LIVE_ITERATOR_STATUS_OK) {
+            return ret;
+        }
+    }
+
+    try {
+        message = lttng_live_stream->msg_iter->next();
+        if (message) {
+            return LTTNG_LIVE_ITERATOR_STATUS_OK;
+        } else {
+            return LTTNG_LIVE_ITERATOR_STATUS_END;
+        }
+    } catch (const bt2_common::TryAgain&) {
+        return LTTNG_LIVE_ITERATOR_STATUS_AGAIN;
+    } catch (const bt2::Error&) {
         BT_CLOGE_APPEND_CAUSE("CTF message iterator failed to get next message: "
-                              "msg-iter=%p, msg-iter-status=%s",
-                              lttng_live_stream->msg_iter.get(),
-                              ctf_msg_iter_status_string(status));
+                              "msg-iter=%p",
+                              &*lttng_live_stream->msg_iter);
         return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
     }
 }
@@ -705,23 +702,23 @@ lttng_live_iterator_close_stream(struct lttng_live_msg_iter *lttng_live_msg_iter
      * `ctf_msg_iter` should simply realize that it needs to close the
      * stream properly by emitting the necessary stream end message.
      */
-    const bt_message *msg;
-    enum ctf_msg_iter_status status =
-        ctf_msg_iter_get_next_message(stream_iter->msg_iter.get(), &msg);
+    try {
+        if (!stream_iter->msg_iter) {
+            BT_CLOGI("Reached the end of the live stream iterator.");
+            return LTTNG_LIVE_ITERATOR_STATUS_END;
+        }
 
-    if (status == CTF_MSG_ITER_STATUS_ERROR) {
+        curr_msg = stream_iter->msg_iter->next();
+        if (!curr_msg) {
+            BT_CLOGI("Reached the end of the live stream iterator.");
+            return LTTNG_LIVE_ITERATOR_STATUS_END;
+        }
+
+        return LTTNG_LIVE_ITERATOR_STATUS_OK;
+    } catch (const bt2::Error&) {
         BT_CLOGE_APPEND_CAUSE("Error getting the next message from CTF message iterator");
         return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-    } else if (status == CTF_MSG_ITER_STATUS_EOF) {
-        BT_CLOGI("Reached the end of the live stream iterator.");
-        return LTTNG_LIVE_ITERATOR_STATUS_END;
     }
-
-    BT_ASSERT(status == CTF_MSG_ITER_STATUS_OK);
-
-    curr_msg = bt2::ConstMessage::Shared::createWithoutRef(msg);
-
-    return LTTNG_LIVE_ITERATOR_STATUS_OK;
 }
 
 /*
@@ -859,58 +856,43 @@ static bool is_discarded_packet_or_event_message(bt2::ConstMessage msg)
 }
 
 static enum lttng_live_iterator_status adjust_discarded_packets_message(
-    bt_self_message_iterator *iter, const bt_stream *stream, const bt_message *msg_in,
-    nonstd::optional<bt2::ConstMessage::Shared>& msg_out, uint64_t new_begin_ts)
+    bt_self_message_iterator *iter, bt2::Stream stream, bt2::ConstDiscardedPacketsMessage msgIn,
+    nonstd::optional<bt2::Message::Shared>& msgOut, uint64_t new_begin_ts)
 {
-    enum lttng_live_iterator_status status = LTTNG_LIVE_ITERATOR_STATUS_OK;
-    enum bt_property_availability availability;
-    const bt_clock_snapshot *clock_snapshot;
-    uint64_t end_ts;
-    uint64_t count;
-
-    clock_snapshot = bt_message_discarded_packets_borrow_end_default_clock_snapshot_const(msg_in);
-    end_ts = bt_clock_snapshot_get_value(clock_snapshot);
-
-    availability = bt_message_discarded_packets_get_count(msg_in, &count);
-    BT_ASSERT_DBG(availability == BT_PROPERTY_AVAILABILITY_AVAILABLE);
+    uint64_t end_ts = msgIn.endDefaultClockSnapshot().value();
+    nonstd::optional<uint64_t> count = msgIn.count();
+    BT_ASSERT_DBG(count);
 
     bt_message *msg = bt_message_discarded_packets_create_with_default_clock_snapshots(
-        iter, stream, new_begin_ts, end_ts);
-    if (!msg) {
-        status = LTTNG_LIVE_ITERATOR_STATUS_NOMEM;
-        goto end;
-    }
-
-    bt_message_discarded_packets_set_count(msg, count);
-    msg_out = bt2::ConstMessage::Shared::createWithoutRef(msg);
-
-end:
-    return status;
-}
-
-static enum lttng_live_iterator_status adjust_discarded_events_message(
-    bt_self_message_iterator *iter, const bt_stream *stream, const bt_message *msg_in,
-    nonstd::optional<bt2::ConstMessage::Shared>& msg_out, uint64_t new_begin_ts)
-{
-    enum bt_property_availability availability;
-    const bt_clock_snapshot *clock_snapshot;
-    uint64_t end_ts;
-    uint64_t count;
-
-    clock_snapshot = bt_message_discarded_events_borrow_end_default_clock_snapshot_const(msg_in);
-    end_ts = bt_clock_snapshot_get_value(clock_snapshot);
-
-    availability = bt_message_discarded_events_get_count(msg_in, &count);
-    BT_ASSERT_DBG(availability == BT_PROPERTY_AVAILABILITY_AVAILABLE);
-
-    bt_message *msg = bt_message_discarded_events_create_with_default_clock_snapshots(
-        iter, stream, new_begin_ts, end_ts);
+        iter, stream.libObjPtr(), new_begin_ts, end_ts);
     if (!msg) {
         return LTTNG_LIVE_ITERATOR_STATUS_NOMEM;
     }
 
-    bt_message_discarded_events_set_count(msg, count);
-    msg_out = bt2::ConstMessage::Shared::createWithoutRef(msg);
+    bt_message_discarded_packets_set_count(msg, *count);
+    msgOut = bt2::Message::Shared::createWithoutRef(msg);
+
+    return LTTNG_LIVE_ITERATOR_STATUS_OK;
+}
+
+static enum lttng_live_iterator_status
+adjust_discarded_events_message(bt_self_message_iterator *iter, const bt2::Stream stream,
+                                bt2::ConstDiscardedEventsMessage msgIn,
+                                nonstd::optional<bt2::Message::Shared>& msgOut,
+                                uint64_t new_begin_ts)
+{
+    uint64_t end_ts = msgIn.endDefaultClockSnapshot().value();
+    nonstd::optional<uint64_t> count = msgIn.count();
+    BT_ASSERT_DBG(count);
+
+    bt_message *msg = bt_message_discarded_events_create_with_default_clock_snapshots(
+        iter, stream.libObjPtr(), new_begin_ts, end_ts);
+    if (!msg) {
+        return LTTNG_LIVE_ITERATOR_STATUS_NOMEM;
+    }
+
+    bt_message_discarded_events_set_count(msg, *count);
+    msgOut = bt2::Message::Shared::createWithoutRef(msg);
 
     return LTTNG_LIVE_ITERATOR_STATUS_OK;
 }
@@ -921,12 +903,6 @@ handle_late_message(struct lttng_live_msg_iter *lttng_live_msg_iter,
                     bt2::ConstMessage::Shared late_msg)
 {
     const bt2_common::LogCfg& logCfg = lttng_live_msg_iter->logCfg;
-    const bt_clock_class *clock_class;
-    const bt_stream_class *stream_class;
-    enum bt_clock_class_cycles_to_ns_from_origin_status ts_ns_status;
-    int64_t last_inactivity_ts_ns;
-    enum lttng_live_iterator_status adjust_status;
-    nonstd::optional<bt2::ConstMessage::Shared> adjusted_message;
 
     /*
      * The timestamp of the current message is before the last message sent
@@ -969,25 +945,18 @@ handle_late_message(struct lttng_live_msg_iter *lttng_live_msg_iter,
     }
 
     if (!is_discarded_packet_or_event_message(*late_msg)) {
-        BT_CLOGE_APPEND_CAUSE(
-            "Invalid live stream state: "
-            "have a late message that is not a packet discarded or "
-            "event discarded message: late-msg-type=%s",
-            bt_common_message_type_string(bt_message_get_type(late_msg->libObjPtr())));
+        BT_CLOGE_APPEND_CAUSE("Invalid live stream state: "
+                              "have a late message that is not a packet discarded or "
+                              "event discarded message: late-msg-type=%s",
+                              bt2_common::messageTypeStr(late_msg->type()));
         return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
     }
 
-    stream_class = bt_stream_borrow_class_const((*stream_iter->stream)->libObjPtr());
-    clock_class = bt_stream_class_borrow_default_clock_class_const(stream_class);
+    bt2::StreamClass streamClass = (*stream_iter->stream)->cls();
+    nonstd::optional<bt2::ClockClass> clockClass = streamClass.defaultClockClass();
 
-    ts_ns_status = bt_clock_class_cycles_to_ns_from_origin(
-        clock_class, stream_iter->last_inactivity_ts.value, &last_inactivity_ts_ns);
-    if (ts_ns_status != BT_CLOCK_CLASS_CYCLES_TO_NS_FROM_ORIGIN_STATUS_OK) {
-        BT_CLOGE_APPEND_CAUSE("Error converting last "
-                              "inactivity message timestamp to nanoseconds");
-        return LTTNG_LIVE_ITERATOR_STATUS_ERROR;
-    }
-
+    int64_t last_inactivity_ts_ns =
+        clockClass->cyclesToNsFromOrigin(stream_iter->last_inactivity_ts.value);
     if (last_inactivity_ts_ns <= late_msg_ts_ns) {
         BT_CLOGE_APPEND_CAUSE("Invalid live stream state: "
                               "have a late message that is none included in a stream "
@@ -1003,18 +972,19 @@ handle_late_message(struct lttng_live_msg_iter *lttng_live_msg_iter,
      */
     BT_CLOGD("Adjusting the timestamp of late message: late-msg-type=%s, "
              "msg-new-ts-ns=%" PRIu64,
-             bt_common_message_type_string(bt_message_get_type(late_msg->libObjPtr())),
-             stream_iter->last_inactivity_ts.value);
+             bt2_common::messageTypeStr(late_msg->type()), stream_iter->last_inactivity_ts.value);
+    nonstd::optional<bt2::Message::Shared> adjustedMessage;
+    lttng_live_iterator_status adjust_status;
     switch (late_msg->type()) {
     case bt2::MessageType::DISCARDED_EVENTS:
         adjust_status = adjust_discarded_events_message(
-            lttng_live_msg_iter->self_msg_iter, (*stream_iter->stream)->libObjPtr(),
-            late_msg->libObjPtr(), adjusted_message, stream_iter->last_inactivity_ts.value);
+            lttng_live_msg_iter->self_msg_iter, **stream_iter->stream,
+            late_msg->asDiscardedEvents(), adjustedMessage, stream_iter->last_inactivity_ts.value);
         break;
     case bt2::MessageType::DISCARDED_PACKETS:
         adjust_status = adjust_discarded_packets_message(
-            lttng_live_msg_iter->self_msg_iter, (*stream_iter->stream)->libObjPtr(),
-            late_msg->libObjPtr(), adjusted_message, stream_iter->last_inactivity_ts.value);
+            lttng_live_msg_iter->self_msg_iter, **stream_iter->stream,
+            late_msg->asDiscardedPackets(), adjustedMessage, stream_iter->last_inactivity_ts.value);
         break;
     default:
         bt_common_abort();
@@ -1024,8 +994,8 @@ handle_late_message(struct lttng_live_msg_iter *lttng_live_msg_iter,
         return adjust_status;
     }
 
-    BT_ASSERT_DBG(adjusted_message);
-    stream_iter->current_msg = adjusted_message;
+    BT_ASSERT_DBG(adjustedMessage);
+    stream_iter->current_msg = std::move(adjustedMessage);
     stream_iter->current_msg_ts_ns = last_inactivity_ts_ns;
 
     return LTTNG_LIVE_ITERATOR_STATUS_OK;
@@ -1082,14 +1052,14 @@ next_stream_iterator_for_trace(struct lttng_live_msg_iter *lttng_live_msg_iter,
 
             BT_CLOGD("Live stream iterator returned message: msg-type=%s, "
                      "stream-name=\"%s\", viewer-stream-id=%" PRIu64,
-                     bt_common_message_type_string(bt_message_get_type((*msg)->libObjPtr())),
-                     stream_iter->name.c_str(), stream_iter->viewer_stream_id);
+                     bt2_common::messageTypeStr((*msg)->type()), stream_iter->name.c_str(),
+                     stream_iter->viewer_stream_id);
 
             /*
              * Get the timestamp in nanoseconds from origin of this
              * messsage.
              */
-            live_get_msg_ts_ns(stream_iter, lttng_live_msg_iter, (*msg)->libObjPtr(),
+            live_get_msg_ts_ns(stream_iter, lttng_live_msg_iter, **msg,
                                lttng_live_msg_iter->last_msg_ts_ns, &curr_msg_ts_ns);
 
             /*
