@@ -617,7 +617,7 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
         goto error;
     }
 
-    index = ctf_fs_ds_file_build_index(ds_file, ds_file_info.get(), msg_iter);
+    index = ctf_fs_ds_file_build_index(ds_file, ds_file_info.get(), msg_iter).release();
     if (!index) {
         BT_CLOGE_APPEND_CAUSE("Failed to index CTF stream file \'%s\'", ds_file->file->path->str);
         goto error;
@@ -1069,7 +1069,7 @@ static int merge_matching_ctf_fs_ds_file_groups(struct ctf_fs_trace *dest_trace,
                                                            src_group->sc->id);
             BT_ASSERT(sc);
 
-            index = ctf_fs_ds_index_create(dest_trace->logCfg);
+            index = ctf_fs_ds_index_create(dest_trace->logCfg).release();
             if (!index) {
                 ret = -1;
                 goto end;

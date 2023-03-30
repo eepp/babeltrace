@@ -468,9 +468,9 @@ static int convert_cycles_to_ns(struct ctf_clock_class *clock_class, uint64_t cy
                                                   clock_class->offset_cycles, ns);
 }
 
-static struct ctf_fs_ds_index *build_index_from_idx_file(struct ctf_fs_ds_file *ds_file,
-                                                         struct ctf_fs_ds_file_info *file_info,
-                                                         struct ctf_msg_iter *msg_iter)
+static ctf_fs_ds_index::UP build_index_from_idx_file(struct ctf_fs_ds_file *ds_file,
+                                                     struct ctf_fs_ds_file_info *file_info,
+                                                     struct ctf_msg_iter *msg_iter)
 {
     int ret;
     gchar *directory = NULL;
@@ -481,7 +481,7 @@ static struct ctf_fs_ds_index *build_index_from_idx_file(struct ctf_fs_ds_file *
     gsize filesize;
     const char *mmap_begin = NULL, *file_pos = NULL;
     const struct ctf_packet_index_file_hdr *header = NULL;
-    struct ctf_fs_ds_index *index = NULL;
+    ctf_fs_ds_index::UP index;
     struct ctf_fs_ds_index_entry *index_entry = NULL, *prev_index_entry = NULL;
     bt2_common::DataLen totalPacketsSize = bt2_common::DataLen::fromBytes(0);
     size_t file_index_entry_size;
@@ -673,9 +673,8 @@ end:
     }
     return index;
 error:
-    ctf_fs_ds_index_destroy(index);
+    index.reset();
     ctf_fs_ds_index_entry_destroy(index_entry);
-    index = NULL;
     goto end;
 }
 
@@ -723,12 +722,12 @@ end:
     return ret;
 }
 
-static struct ctf_fs_ds_index *build_index_from_stream_file(struct ctf_fs_ds_file *ds_file,
-                                                            struct ctf_fs_ds_file_info *file_info,
-                                                            struct ctf_msg_iter *msg_iter)
+static ctf_fs_ds_index::UP build_index_from_stream_file(struct ctf_fs_ds_file *ds_file,
+                                                        struct ctf_fs_ds_file_info *file_info,
+                                                        struct ctf_msg_iter *msg_iter)
 {
     int ret;
-    struct ctf_fs_ds_index *index = NULL;
+    ctf_fs_ds_index::UP index;
     enum ctf_msg_iter_status iter_status = CTF_MSG_ITER_STATUS_OK;
     bt2_common::DataLen currentPacketOffset = bt2_common::DataLen::fromBytes(0);
     const bt2_common::LogCfg& logCfg = ds_file->logCfg;
@@ -808,8 +807,7 @@ end:
     return index;
 
 error:
-    ctf_fs_ds_index_destroy(index);
-    index = NULL;
+    index.reset();
     goto end;
 }
 
@@ -851,11 +849,11 @@ end:
     return ds_file;
 }
 
-struct ctf_fs_ds_index *ctf_fs_ds_file_build_index(struct ctf_fs_ds_file *ds_file,
-                                                   struct ctf_fs_ds_file_info *file_info,
-                                                   struct ctf_msg_iter *msg_iter)
+ctf_fs_ds_index::UP ctf_fs_ds_file_build_index(struct ctf_fs_ds_file *ds_file,
+                                               struct ctf_fs_ds_file_info *file_info,
+                                               struct ctf_msg_iter *msg_iter)
 {
-    struct ctf_fs_ds_index *index;
+    ctf_fs_ds_index::UP index;
     const bt2_common::LogCfg& logCfg = ds_file->logCfg;
 
     index = build_index_from_idx_file(ds_file, file_info, msg_iter);
@@ -870,9 +868,10 @@ end:
     return index;
 }
 
-struct ctf_fs_ds_index *ctf_fs_ds_index_create(const bt2_common::LogCfg& logCfg)
+ctf_fs_ds_index::UP ctf_fs_ds_index_create(const bt2_common::LogCfg& logCfg)
 {
-    ctf_fs_ds_index *index = new ctf_fs_ds_index;
+    ctf_fs_ds_index::UP index {new ctf_fs_ds_index};
+
     index->entries = g_ptr_array_new_with_free_func((GDestroyNotify) ctf_fs_ds_index_entry_destroy);
     if (!index->entries) {
         BT_CLOGE("Failed to allocate index entries.");
@@ -882,8 +881,8 @@ struct ctf_fs_ds_index *ctf_fs_ds_index_create(const bt2_common::LogCfg& logCfg)
     goto end;
 
 error:
-    ctf_fs_ds_index_destroy(index);
-    index = NULL;
+    index.reset();
+
 end:
     return index;
 }
@@ -915,6 +914,11 @@ void ctf_fs_ds_index_destroy(struct ctf_fs_ds_index *index)
     }
 
     delete index;
+}
+
+void ctf_fs_ds_index_deleter::operator()(struct ctf_fs_ds_index *index)
+{
+    ctf_fs_ds_index_destroy(index);
 }
 
 BT_HIDDEN ctf_fs_ds_file_info::UP ctf_fs_ds_file_info_create(const char *path, int64_t begin_ns)
