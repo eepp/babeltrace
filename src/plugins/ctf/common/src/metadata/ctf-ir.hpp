@@ -375,6 +375,9 @@ public:
 
     /*
      * Adds the value saving index `index` to this field class.
+     *
+     * IMPORTANT: Only call this method if you can guarantee that you
+     * you won't clone `*this` (through Fc::clone()).
      */
     void addValSavingIndex(std::size_t index) noexcept;
 
@@ -391,6 +394,9 @@ public:
 
     /*
      * Adds the value saving index `index` to this field class.
+     *
+     * IMPORTANT: Only call this method if you can guarantee that you
+     * you won't clone `*this` (through Fc::clone()).
      */
     void addValSavingIndex(std::size_t index) noexcept;
 
@@ -407,6 +413,9 @@ public:
 
     /*
      * Adds the value saving index `index` to this field class.
+     *
+     * IMPORTANT: Only call this method if you can guarantee that you
+     * you won't clone `*this` (through Fc::clone()).
      */
     void addValSavingIndex(std::size_t index) noexcept;
 
@@ -435,6 +444,9 @@ public:
     /*
      * Sets the index of the saved dependency value of this field class
      * to `savedDepValIndex`.
+     *
+     * IMPORTANT: Only call this method if you can guarantee that you
+     * you won't clone `*this` (through Fc::clone()).
      */
     void savedDepValIndex(const std::size_t savedDepValIndex) noexcept
     {
@@ -451,6 +463,9 @@ public:
 
     /*
      * Sets the dependencies of this field class to `deps`.
+     *
+     * IMPORTANT: Only call this method if you can guarantee that you
+     * you won't clone `*this` (through Fc::clone()).
      */
     void deps(FcSet deps)
     {
