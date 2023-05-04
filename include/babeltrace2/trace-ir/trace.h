@@ -430,6 +430,9 @@ See the \ref api-tir-trace-prop-uuid "UUID" property.
 */
 extern void bt_trace_set_uuid(bt_trace *trace, bt_uuid uuid);
 
+/* FIXME: documentation */
+extern void bt_trace_set_uid(bt_trace *trace, const char *uid);
+
 /*!
 @brief
     Returns the UUID of the trace \bt_p{trace}.
@@ -455,6 +458,9 @@ If \bt_p{trace} has no UUID, this function returns \c NULL.
     Sets the UUID of a trace.
 */
 extern bt_uuid bt_trace_get_uuid(const bt_trace *trace);
+
+/* FIXME: documentation */
+extern const char *bt_trace_get_uid(const bt_trace *trace);
 
 /*!
 @brief
