@@ -434,6 +434,27 @@ extern void bt_trace_set_uuid(bt_trace *trace, bt_uuid uuid) __BT_NOEXCEPT;
 
 /*!
 @brief
+    Status codes for bt_trace_set_uid().
+*/
+typedef enum bt_trace_set_uid_status {
+	/*!
+	@brief
+	    Success.
+	*/
+	BT_TRACE_SET_UID_STATUS_OK		= __BT_FUNC_STATUS_OK,
+
+	/*!
+	@brief
+	    Out of memory.
+	*/
+	BT_TRACE_SET_UID_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_trace_set_uid_status;
+
+/* FIXME: documentation */
+extern bt_trace_set_uid_status bt_trace_set_uid(bt_trace *trace, const char *uid);
+
+/*!
+@brief
     Returns the UUID of the trace \bt_p{trace}.
 
 See the \ref api-tir-trace-prop-uuid "UUID" property.
@@ -457,6 +478,9 @@ If \bt_p{trace} has no UUID, this function returns \c NULL.
     Sets the UUID of a trace.
 */
 extern bt_uuid bt_trace_get_uuid(const bt_trace *trace) __BT_NOEXCEPT;
+
+/* FIXME: documentation */
+extern const char *bt_trace_get_uid(const bt_trace *trace);
 
 /*!
 @brief
