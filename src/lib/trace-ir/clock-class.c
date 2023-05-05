@@ -273,6 +273,7 @@ BT_EXPORT
 bt_uuid bt_clock_class_get_uuid(const struct bt_clock_class *clock_class)
 {
 	BT_ASSERT_PRE_DEV_CLK_CLS_NON_NULL(clock_class);
+	BT_ASSERT_PRE_MIP_VERSION_EQ(clock_class->mip_version, 0);
 	return clock_class->uuid.value;
 }
 
