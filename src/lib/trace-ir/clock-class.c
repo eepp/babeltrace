@@ -30,6 +30,11 @@
 	BT_ASSERT_PRE_DEV_HOT("clock-class", (_cc), "Clock class",	\
 		": %!+K", (_cc))
 
+/* Constants for the UNIX epoch origin */
+#define CC_ORIGIN_UNIX_EPOCH_NS		"babeltrace.org,2020"
+#define CC_ORIGIN_UNIX_EPOCH_NAME	"unix-epoch"
+#define CC_ORIGIN_UNIX_EPOCH_UID	""
+
 static
 void destroy_clock_class(struct bt_object *obj)
 {
@@ -67,6 +72,42 @@ void set_base_offset(struct bt_clock_class *clock_class)
 	clock_class->base_offset.overflows = bt_util_get_base_offset_ns(
 		clock_class->offset_seconds, clock_class->offset_cycles,
 		clock_class->frequency, &clock_class->base_offset.value_ns);
+}
+
+static
+void free_clock_class_origin_data(struct bt_clock_class *clock_class)
+{
+	g_free(clock_class->origin.ns);
+	clock_class->origin.ns = NULL;
+	g_free(clock_class->origin.name);
+	clock_class->origin.name = NULL;
+	g_free(clock_class->origin.uid);
+	clock_class->origin.uid = NULL;
+}
+
+static
+void set_clock_class_origin_data(struct bt_clock_class *clock_class,
+		const char *ns, const char *name, const char *uid)
+{
+	free_clock_class_origin_data(clock_class);
+	clock_class->origin.ns = g_strdup(ns);
+	clock_class->origin.name = g_strdup(name);
+	clock_class->origin.uid = g_strdup(uid);
+}
+
+static void
+set_origin_unix_epoch(struct bt_clock_class *clock_class)
+{
+	set_clock_class_origin_data(clock_class,
+		CC_ORIGIN_UNIX_EPOCH_NS,
+		CC_ORIGIN_UNIX_EPOCH_NAME,
+		CC_ORIGIN_UNIX_EPOCH_UID);
+}
+
+static void
+set_origin_unknown(struct bt_clock_class *clock_class)
+{
+	free_clock_class_origin_data(clock_class);
 }
 
 BT_EXPORT
@@ -109,7 +150,7 @@ struct bt_clock_class *bt_clock_class_create(bt_self_component *self_comp)
 	}
 
 	clock_class->frequency = UINT64_C(1000000000);
-	clock_class->origin_is_unix_epoch = BT_TRUE;
+	set_origin_unix_epoch(clock_class);
 	set_base_offset(clock_class);
 	ret = bt_object_pool_initialize(&clock_class->cs_pool,
 		(bt_object_pool_new_object_func) bt_clock_snapshot_new,
@@ -252,21 +293,92 @@ void bt_clock_class_set_offset(struct bt_clock_class *clock_class,
 }
 
 BT_EXPORT
+const char *bt_clock_class_get_origin_namespace(
+		const bt_clock_class *clock_class)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_DEV_CLK_CLS_NON_NULL(clock_class);
+	BT_ASSERT_PRE_MIP_VERSION_GE(clock_class->mip_version, 1);
+	return clock_class->origin.ns;
+}
+
+BT_EXPORT
+const char *bt_clock_class_get_origin_name(
+		const bt_clock_class *clock_class)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_DEV_CLK_CLS_NON_NULL(clock_class);
+	BT_ASSERT_PRE_MIP_VERSION_GE(clock_class->mip_version, 1);
+	return clock_class->origin.name;
+}
+
+BT_EXPORT
+const char *bt_clock_class_get_origin_uid(
+		const bt_clock_class *clock_class)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_DEV_CLK_CLS_NON_NULL(clock_class);
+	BT_ASSERT_PRE_MIP_VERSION_GE(clock_class->mip_version, 1);
+	return clock_class->origin.uid;
+}
+
+BT_EXPORT
 bt_bool bt_clock_class_origin_is_unix_epoch(const struct bt_clock_class *clock_class)
 {
+	BT_ASSERT_PRE_NO_ERROR();
 	BT_ASSERT_PRE_DEV_CLK_CLS_NON_NULL(clock_class);
-	return (bool) clock_class->origin_is_unix_epoch;
+	return g_strcmp0(clock_class->origin.ns, CC_ORIGIN_UNIX_EPOCH_NS) == 0 &&
+		g_strcmp0(clock_class->origin.name, CC_ORIGIN_UNIX_EPOCH_NAME) == 0 &&
+		g_strcmp0(clock_class->origin.uid, CC_ORIGIN_UNIX_EPOCH_UID) == 0;
 }
 
 BT_EXPORT
 void bt_clock_class_set_origin_is_unix_epoch(struct bt_clock_class *clock_class,
 		bt_bool origin_is_unix_epoch)
 {
+	BT_ASSERT_PRE_NO_ERROR();
 	BT_ASSERT_PRE_CLK_CLS_NON_NULL(clock_class);
 	BT_ASSERT_PRE_DEV_CLOCK_CLASS_HOT(clock_class);
-	clock_class->origin_is_unix_epoch = (bool) origin_is_unix_epoch;
+
+	if (origin_is_unix_epoch) {
+		set_origin_unix_epoch(clock_class);
+	} else {
+		set_origin_unknown(clock_class);
+	}
+
 	BT_LIB_LOGD("Set clock class's origin is Unix epoch property: %!+K",
 		clock_class);
+}
+
+BT_EXPORT
+void bt_clock_class_set_origin_unknown(struct bt_clock_class *clock_class)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_CLK_CLS_NON_NULL(clock_class);
+	BT_ASSERT_PRE_DEV_CLOCK_CLASS_HOT(clock_class);
+	set_origin_unknown(clock_class);
+}
+
+BT_EXPORT
+void bt_clock_class_set_origin(struct bt_clock_class *clock_class,
+		const char *ns, const char *name, const char *uid)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_CLK_CLS_NON_NULL(clock_class);
+	BT_ASSERT_PRE_DEV_CLOCK_CLASS_HOT(clock_class);
+	BT_ASSERT_PRE_MIP_VERSION_GE(clock_class->mip_version, 1);
+	BT_ASSERT_PRE_NAME_NON_NULL(name);
+	BT_ASSERT_PRE_NAMESPACE_NON_NULL(ns);
+	set_clock_class_origin_data(clock_class, ns, name, uid);
+}
+
+BT_EXPORT
+void bt_clock_class_set_origin_unix_epoch(struct bt_clock_class *clock_class)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_CLK_CLS_NON_NULL(clock_class);
+	BT_ASSERT_PRE_DEV_CLOCK_CLASS_HOT(clock_class);
+	set_origin_unix_epoch(clock_class);
 }
 
 BT_EXPORT

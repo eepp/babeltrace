@@ -503,6 +503,13 @@ property.
 extern void bt_clock_class_set_origin_is_unix_epoch(bt_clock_class *clock_class,
 		bt_bool origin_is_unix_epoch);
 
+extern void bt_clock_class_set_origin_unknown(bt_clock_class *clock_class);
+
+extern void bt_clock_class_set_origin(bt_clock_class *clock_class,
+		const char *ns, const char *name, const char *uid);
+
+extern void bt_clock_class_set_origin_unix_epoch(bt_clock_class *clock_class);
+
 /*!
 @brief
     Returns whether or not the \ref api-tir-clock-cls-origin "origin"
@@ -526,6 +533,15 @@ property.
 */
 extern bt_bool bt_clock_class_origin_is_unix_epoch(
 		const bt_clock_class *clock_class);
+
+extern const char *bt_clock_class_get_origin_namespace(
+	const bt_clock_class *clock_class);
+
+extern const char *bt_clock_class_get_origin_name(
+	const bt_clock_class *clock_class);
+
+extern const char *bt_clock_class_get_origin_uid(
+	const bt_clock_class *clock_class);
 
 /*!
 @brief
