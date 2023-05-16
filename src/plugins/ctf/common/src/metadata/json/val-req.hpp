@@ -215,6 +215,10 @@ class Ctf2JsonAnyFragmentValReqImpl;
  *   doesn't use them to find dependencies because there's not enough
  *   context.
  *
+ * • Relative field locations.
+ *
+ * • Field roles.
+ *
  * • Overlaps of integer ranges between variant field class options.
  *
  */

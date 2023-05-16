@@ -35,6 +35,7 @@ libcppcommon_la_SOURCES = \
 	glib-up.hpp \
 	libc-up.hpp \
 	file-utils.hpp file-utils.cpp \
-	vector.hpp
+	vector.hpp \
+	contains.hpp
 
 EXTRA_DIST = bt2

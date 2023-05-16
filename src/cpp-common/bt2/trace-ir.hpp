@@ -807,6 +807,28 @@ public:
         return nonstd::nullopt;
     }
 
+    void uid(const char * const uid)
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        // TODO: use status when it's available
+        bt_trace_set_uid(this->libObjPtr(), uid);
+    }
+
+    void uid(const std::string& uid)
+    {
+        this->uid(uid.data());
+    }
+
+    nonstd::optional<bpstd::string_view> uid() const noexcept
+    {
+        if (const auto uid = bt_trace_get_uid(this->libObjPtr())) {
+            return uid;
+        }
+
+        return nonstd::nullopt;
+    }
+
     std::uint64_t size() const noexcept
     {
         return bt_trace_get_stream_count(this->libObjPtr());

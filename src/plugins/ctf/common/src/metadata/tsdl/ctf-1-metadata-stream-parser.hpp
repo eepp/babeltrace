@@ -50,7 +50,7 @@ public:
                           const bt2_common::LogCfg& logCfg);
 
 private:
-    void _parseSection(const uint8_t *begin, const uint8_t *end) override;
+    void _parseSection(const std::uint8_t *begin, const std::uint8_t *end) override;
 
     /*
      * Translates the original CTF IR field class `origFc` and returns

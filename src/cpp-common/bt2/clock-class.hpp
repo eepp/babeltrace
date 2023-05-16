@@ -63,16 +63,16 @@ struct CommonClockClassSpec<const bt_clock_class> final
 
 } /* namespace internal */
 
-class ClockClassOffset final
+class ClockOffset final
 {
 public:
-    explicit ClockClassOffset(const std::int64_t seconds, const std::uint64_t cycles) :
+    explicit ClockOffset(const std::int64_t seconds, const std::uint64_t cycles) :
         _mSeconds {seconds}, _mCycles {cycles}
     {
     }
 
-    ClockClassOffset(const ClockClassOffset&) noexcept = default;
-    ClockClassOffset& operator=(const ClockClassOffset&) noexcept = default;
+    ClockOffset(const ClockOffset&) noexcept = default;
+    ClockOffset& operator=(const ClockOffset&) noexcept = default;
 
     std::int64_t seconds() const noexcept
     {
@@ -133,20 +133,77 @@ public:
         return bt_clock_class_get_frequency(this->libObjPtr());
     }
 
-    void offset(const ClockClassOffset& offset) noexcept
+    void offsetFromOrigin(const ClockOffset& offsetFromOrigin) noexcept
     {
         static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
 
-        bt_clock_class_set_offset(this->libObjPtr(), offset.seconds(), offset.cycles());
+        bt_clock_class_set_offset(this->libObjPtr(), offsetFromOrigin.seconds(),
+                                  offsetFromOrigin.cycles());
     }
 
-    ClockClassOffset offset() const noexcept
+    ClockOffset offsetFromOrigin() const noexcept
     {
         std::int64_t seconds;
         std::uint64_t cycles;
 
         bt_clock_class_get_offset(this->libObjPtr(), &seconds, &cycles);
-        return ClockClassOffset {seconds, cycles};
+        return ClockOffset {seconds, cycles};
+    }
+
+    void setOriginIsUnixEpoch() noexcept
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        bt_clock_class_set_origin_unix_epoch(this->libObjPtr());
+    }
+
+    void setOriginIsUnknown() noexcept
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        bt_clock_class_set_origin_unknown(this->libObjPtr());
+    }
+
+    void origin(const char * const nameSpace, const char * const name,
+                const char * const uid) noexcept
+    {
+        static_assert(!std::is_const<LibObjT>::value, "`LibObjT` must NOT be `const`.");
+
+        // TODO: use status when it's available
+        bt_clock_class_set_origin(this->libObjPtr(), nameSpace, name, uid);
+    }
+
+    void origin(const nonstd::optional<std::string>& nameSpace, const std::string& name,
+                const std::string& uid) noexcept
+    {
+        this->origin(nameSpace ? nameSpace->data() : nullptr, name.data(), uid.data());
+    }
+
+    nonstd::optional<bpstd::string_view> originNamespace() const noexcept
+    {
+        if (const auto ns = bt_clock_class_get_origin_namespace(this->libObjPtr())) {
+            return ns;
+        }
+
+        return nonstd::nullopt;
+    }
+
+    nonstd::optional<bpstd::string_view> originName() const noexcept
+    {
+        if (const auto name = bt_clock_class_get_origin_name(this->libObjPtr())) {
+            return name;
+        }
+
+        return nonstd::nullopt;
+    }
+
+    nonstd::optional<bpstd::string_view> originUid() const noexcept
+    {
+        if (const auto name = bt_clock_class_get_uid(this->libObjPtr())) {
+            return name;
+        }
+
+        return nonstd::nullopt;
     }
 
     void precision(const std::uint64_t precision) noexcept

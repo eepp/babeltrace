@@ -16,6 +16,7 @@
 #include "cpp-common/optional.hpp"
 #include "cpp-common/string_view.hpp"
 #include "cpp-common/data-len.hpp"
+#include "cpp-common/uuid.hpp"
 #include "../metadata/ctf-ir.hpp"
 #include "item-visitor.hpp"
 

@@ -19,6 +19,8 @@
 #include "../metadata-stream-parser.hpp"
 #include "cpp-common/log-cfg.hpp"
 #include "val-req.hpp"
+#include "ctf-2-fc-builder.hpp"
+#include "logging-obj.hpp"
 
 namespace ctf {
 namespace src {
@@ -27,10 +29,10 @@ namespace src {
  * CTF 2 metadata stream (JSON text sequence) parser.
  *
  * Build an instance of `Ctf2MetadataStreamParser`, and then call
- * parseSection() as often as needed with one or more complete CTF 2
+ * parseSection() as often as needed with one or more _complete_ CTF 2
  * fragments.
  */
-class Ctf2MetadataStreamParser final : public MetadataStreamParser
+class Ctf2MetadataStreamParser final : public MetadataStreamParser, public LoggingObj
 {
 public:
     /*
@@ -53,7 +55,7 @@ public:
                           const bt2_common::LogCfg& logCfg);
 
 private:
-    void _parseSection(const uint8_t *begin, const uint8_t *end) override;
+    void _parseSection(const std::uint8_t *begin, const std::uint8_t *end) override;
 
     /*
      * Parses one or more complete fragments between `begin` and `end`,
@@ -79,16 +81,27 @@ private:
     void _handleFragment(bt2_common::JsonVal::UP jsonFragment);
 
     /*
-     * Validates the field roles of the JSON packet header field class
-     * `jsonPktHeaderFc`.
+     * Handles the JSON field class alias fragment `jsonFragment`,
+     * updating the internal state on success, or appending a cause to
+     * the error of the current thread and throwing `bt2_common::Error`
+     * on failure.
      */
-    void _validatePktHeaderFcRoles(const bt2_common::JsonObjVal& jsonPktHeaderFc);
+    void _handleFcAliasFragment(bt2_common::JsonVal::UP jsonFragment);
 
     /*
-     * Validates the field roles of the JSON trace class fragment
-     * `jsonFragment`.
+     * Forwards to validateScopeFcRoles() using the log configuration
+     * and text location string format of this parser.
+     *
+     * Appends a cause to the error of the current thread and throws
+     * `bt2_common::Error` on error.
      */
-    void _validateTraceClsFragmentRoles(const bt2_common::JsonObjVal& jsonFragment);
+    void _validateScopeFcRoles(const Fc& fc, const ir::UIntFieldRoles& allowedRoles,
+                               bool allowMetadataStreamUuidRole);
+
+    /*
+     * Validates the field roles of the packet header field class `fc`.
+     */
+    void _validatePktHeaderFcRoles(const Fc& fc);
 
     /*
      * Handles the JSON trace class fragment `jsonFragment`, updating
@@ -107,19 +120,19 @@ private:
     void _handleClkClsFragment(const bt2_common::JsonObjVal& jsonFragment);
 
     /*
-     * Validates that the JSON scope field class `jsonScopeFc` doesn't
-     * contain a JSON unsigned integer field class having a default
-     * clock timestamp role if `hasDefClkCls` is false.
+     * Validates that the field class `fc` doesn't contain an unsigned
+     * integer field class having a default clock timestamp role if
+     * `allowDefClkTsRole` is false.
      */
-    void _validateDefClkTsRoles(const bt2_common::JsonObjVal& jsonScopeFc, bool hasDefClkCls);
+    void _validateClkTsRoles(const Fc& fc, bool allowClkTsRole);
 
     /*
-     * Validates that the JSON data stream class fragment `jsonFragment`
-     * doesn't contain a JSON unsigned integer field class having a
-     * default clock timestamp role if `hasDefClkCls` is false.
+     * Validates the roles of the packet context, event record header,
+     * and common event record context field classes `pktCtxFc`,
+     * `eventRecordHeaderFc`, and `commonEventRecordCtxFc`.
      */
-    void _validateDataStreamClsFragmentRoles(const bt2_common::JsonObjVal& jsonFragment,
-                                             bool hasDefClkCls);
+    void _validateDataStreamClsRoles(const Fc *pktCtxFc, const Fc *eventRecordHeaderFc,
+                                     const Fc *commonEventRecordCtxFc, bool allowDefClkTsRole);
 
     /*
      * Handles the JSON data stream class fragment `jsonFragment`,
@@ -128,6 +141,12 @@ private:
      * on failure.
      */
     void _handleDataStreamClsFragment(bt2_common::JsonVal::UP jsonFragment);
+
+    /*
+     * Validates the roles of specific event record context and event
+     * record payload field classes `specCtxFc` and `payloadFc`.
+     */
+    void _validateEventRecordClsRoles(const Fc *specCtxFc, const Fc *payloadFc);
 
     /*
      * Handles the JSON event record class fragment `jsonFragment`,
@@ -148,15 +167,19 @@ private:
      *
      * Otherwise:
      *     Converts `*jsonVal[key]` to a scope field class and returns
-     *     it, considering the JSON trace class fragment value
-     *     `jsonTraceCls`, the JSON data stream class fragment value
-     *     `jsonDataStreamCls` and the JSON event record class fragment
-     *     value `jsonEventRecordCls` as the conversion context.
+     *     it, considering `pktHeaderFc`, `pktCtxFc`,
+     *     `eventRecordHeaderFc`, `commonEventRecordCtxFc`,
+     *     `specEventRecordCtxFc`, and `eventRecordPayloadFc` as the
+     *     current packet header, packet context, event record header,
+     *     common event record context, specific event record context,
+     *     and event record payload field classes.
      */
     Fc::UP _scopeFcOfJsonVal(const bt2_common::JsonObjVal& jsonVal, const std::string& key,
-                             ir::FieldLocScope scope, const bt2_common::JsonVal *jsonTraceCls,
-                             const bt2_common::JsonVal *jsonDataStreamCls,
-                             const bt2_common::JsonVal *jsonEventRecordCls);
+                             ir::FieldLocScope scope, const Fc *pktHeaderFc = nullptr,
+                             const Fc *pktCtxFc = nullptr, const Fc *eventRecordHeaderFc = nullptr,
+                             const Fc *commonEventRecordCtxFc = nullptr,
+                             const Fc *specEventRecordCtxFc = nullptr,
+                             const Fc *eventRecordPayloadFc = nullptr);
 
     /*
      * If a JSON value has the key `key` in the JSON event record class
@@ -165,14 +188,17 @@ private:
      *
      * Otherwise:
      *     Converts `*jsonEventRecordCls[key]` to a scope field class
-     *     and returns it, considering the JSON trace class fragment
-     *     value `_mJsonTraceCls`, the data stream class `dataStreamCls`
-     *     and the JSON event record class fragment value
-     *     `jsonEventRecordCls` as the conversion context.
+     *     and returns it, considering the current packet header field
+     *     class, the field classes of `dataStreamCls`, and
+     *     `specEventRecordCtxFc` and `eventRecordPayloadFc` as the
+     *     current specific event record context and event record
+     *     payload field classes.
      */
     Fc::UP _eventRecordClsScopeFcOfJsonVal(const bt2_common::JsonObjVal& jsonEventRecordCls,
                                            const std::string& key, ir::FieldLocScope scope,
-                                           const DataStreamCls& dataStreamCls);
+                                           const DataStreamCls& dataStreamCls,
+                                           const Fc *specEventRecordCtxFc = nullptr,
+                                           const Fc *eventRecordPayloadFc = nullptr);
 
     /*
      * If a JSON value has the key `key` in the JSON data stream class
@@ -180,13 +206,17 @@ private:
      *     Returns `nullptr`.
      *
      * Otherwise:
-     *     Converts `*jsonDataStreamCls[key]` to a field class and returns it,
-     *     considering the JSON trace class fragment value
-     *     `_mJsonTraceCls`, the JSON data stream class fragment value
-     *     `jsonDataStreamCls` as the conversion context.
+     *     Converts `*jsonDataStreamCls[key]` to a field class and
+     *     returns it, considering the current packet header field
+     *     class, and `pktCtxFc`, `eventRecordHeaderFc`, and
+     *     `commonEventRecordCtxFc` as the current packet context, event
+     *     record header, and common event record context field classes.
      */
     Fc::UP _dataStreamClsScopeFcOfJsonVal(const bt2_common::JsonObjVal& jsonDataStreamCls,
-                                          const std::string& key, ir::FieldLocScope scope);
+                                          const std::string& key, ir::FieldLocScope scope,
+                                          const Fc *pktCtxFc = nullptr,
+                                          const Fc *eventRecordHeaderFc = nullptr,
+                                          const Fc *commonEventRecordCtxFc = nullptr);
 
     /*
      * If a JSON value has the key `key` in the JSON trace class
@@ -209,6 +239,13 @@ private:
                              const std::uint8_t * const at) const noexcept
     {
         return bt2_common::TextLoc {_mCurOffsetInStream.bytes() + (at - begin)};
+    }
+
+    using LoggingObj::_locStr;
+
+    std::string _locStr(const bt2_common::JsonVal& val) const
+    {
+        return this->_locStr(val.loc());
     }
 
 private:
@@ -236,58 +273,11 @@ private:
      */
     std::unordered_map<std::string, ClkCls::SP> _mClkClasses;
 
-    /*
-     * fcFromJsonVal() needs some JSON context (trace class, data stream
-     * class, and event record class) to validate the length/selector
-     * field classes (dependencies) of dependent (dynamic-length,
-     * optional, and variant) field classes.
-     *
-     * The `_mJsonDataStreamClasses` member keeps a mapping of CTF IR
-     * data stream classes (owned by `*_mTraceCls` below) to their
-     * original JSON value. The `_mJsonTraceCls` member is possibly the
-     * JSON value of `*_mTraceCls` (`*_mTraceCls` may exist without any
-     * JSON value equivalent).
-     *
-     * When _handleEventRecordClsFragment() calls fcFromJsonVal(),
-     * it passes:
-     *
-     * `jsonTraceCls` parameter:
-     *     `_mJsonTraceCls.get()`
-     *
-     * `jsonDataStreamClsCls` parameter:
-     *     The corresponding JSON value within
-     *     `_mJsonDataStreamClasses`.
-     *
-     * `jsonEventRecordCls` parameter:
-     *     The current JSON event record class fragment value.
-     *
-     * Those three JSON values constitute what's needed to find any
-     * dependency. fcFromJsonVal() uses JSON values instead of CTF IR
-     * objects because:
-     *
-     * • Finding a dependency within the current scope requires the JSON
-     *   value, as the corresponding CTF IR object is currently being
-     *   built and many members of CTF IR objects are immutable.
-     *
-     *   Using only JSON values makes it possible to apply the same
-     *   scope traversing strategy, whether it's the current one or a
-     *   previous one.
-     *
-     * • For text parsing error messages, the JSON values contain their
-     *   original location within the metadata stream.
-     *
-     *   Using a CTF IR trace class and CTF IR data stream classes would
-     *   require keeping mappings of CTF IR field classes to text
-     *   locations.
-     */
-    std::unordered_map<const DataStreamCls *, bt2_common::JsonVal::UP> _mJsonDataStreamClasses;
-    bt2_common::JsonVal::UP _mJsonTraceCls;
+    /* Field class builder, which keeps track of field class aliases */
+    Ctf2FcBuilder _mFcBuilder;
 
     /*  True if the tracer is LTTng (see _handleTraceClsFragment()) */
     bool _mIsLttng = false;
-
-    /* Logging configuration */
-    bt2_common::LogCfg _mLogCfg;
 };
 
 } /* namespace src */

@@ -17,12 +17,10 @@
 #include <vector>
 
 #include "common/common.h"
-#include "common/uuid.h"
 #include "common/assert.h"
 #include "cpp-common/optional.hpp"
 #include "cpp-common/make-unique.hpp"
 #include "cpp-common/data-len.hpp"
-#include "cpp-common/uuid.hpp"
 #include "cpp-common/bt2/field-class.hpp"
 #include "cpp-common/bt2/integer-range-set.hpp"
 #include "cpp-common/bt2/trace-ir.hpp"
@@ -499,7 +497,7 @@ struct FcTypeTraits
         UINT_SEL            = (1 << 16) | INT_SEL,
         SINT_SEL            = (1 << 17) | INT_SEL,
         OPTION              = 1 << 18,
-        VARIANT             = 1 << 19
+        VARIANT             = 1 << 19,
     };
 };
 
@@ -508,30 +506,30 @@ struct FcTypeTraits
  */
 enum class FcType
 {
-    FIXED_LEN_BIT_ARRAY     = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY,
-    FIXED_LEN_BOOL          = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::BOOL,
-    FIXED_LEN_UINT          = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::UINT,
-    FIXED_LEN_SINT          = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::SINT,
-    FIXED_LEN_UENUM         = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::ENUM | FcTypeTraits::UINT,
-    FIXED_LEN_SENUM         = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::ENUM | FcTypeTraits::SINT,
-    FIXED_LEN_FLOAT         = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::FLOAT,
-    VAR_LEN_UINT            = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::UINT,
-    VAR_LEN_SINT            = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::SINT,
-    VAR_LEN_UENUM           = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::ENUM | FcTypeTraits::UINT,
-    VAR_LEN_SENUM           = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::ENUM | FcTypeTraits::SINT,
-    NULL_TERMINATED_STR     = FcTypeTraits::NULL_TERMINATED,
-    STATIC_LEN_STR          = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::NON_NULL_TERMINATED,
-    DYN_LEN_STR             = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::NON_NULL_TERMINATED,
-    STATIC_LEN_BLOB         = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BLOB,
-    DYN_LEN_BLOB            = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::BLOB,
-    STATIC_LEN_ARRAY        = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::ARRAY,
-    DYN_LEN_ARRAY           = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::ARRAY,
-    STRUCT                  = FcTypeTraits::STRUCT,
-    OPTIONAL_WITH_BOOL_SEL  = FcTypeTraits::OPTION | FcTypeTraits::BOOL_SEL,
-    OPTIONAL_WITH_UINT_SEL  = FcTypeTraits::OPTION | FcTypeTraits::UINT_SEL,
-    OPTIONAL_WITH_SINT_SEL  = FcTypeTraits::OPTION | FcTypeTraits::SINT_SEL,
-    VARIANT_WITH_UINT_SEL   = FcTypeTraits::VARIANT | FcTypeTraits::UINT_SEL,
-    VARIANT_WITH_SINT_SEL   = FcTypeTraits::VARIANT | FcTypeTraits::SINT_SEL,
+    FIXED_LEN_BIT_ARRAY         = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY,
+    FIXED_LEN_BOOL              = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::BOOL,
+    FIXED_LEN_UINT              = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::UINT,
+    FIXED_LEN_SINT              = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::SINT,
+    FIXED_LEN_UENUM             = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::ENUM | FcTypeTraits::UINT,
+    FIXED_LEN_SENUM             = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::ENUM | FcTypeTraits::SINT,
+    FIXED_LEN_FLOAT             = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::FLOAT,
+    VAR_LEN_UINT                = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::UINT,
+    VAR_LEN_SINT                = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::SINT,
+    VAR_LEN_UENUM               = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::ENUM | FcTypeTraits::UINT,
+    VAR_LEN_SENUM               = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::ENUM | FcTypeTraits::SINT,
+    NULL_TERMINATED_STR         = FcTypeTraits::NULL_TERMINATED,
+    STATIC_LEN_STR              = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::NON_NULL_TERMINATED,
+    DYN_LEN_STR                 = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::NON_NULL_TERMINATED,
+    STATIC_LEN_BLOB             = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BLOB,
+    DYN_LEN_BLOB                = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::BLOB,
+    STATIC_LEN_ARRAY            = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::ARRAY,
+    DYN_LEN_ARRAY               = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::ARRAY,
+    STRUCT                      = FcTypeTraits::STRUCT,
+    OPTIONAL_WITH_BOOL_SEL      = FcTypeTraits::OPTION | FcTypeTraits::BOOL_SEL,
+    OPTIONAL_WITH_UINT_SEL      = FcTypeTraits::OPTION | FcTypeTraits::UINT_SEL,
+    OPTIONAL_WITH_SINT_SEL      = FcTypeTraits::OPTION | FcTypeTraits::SINT_SEL,
+    VARIANT_WITH_UINT_SEL       = FcTypeTraits::VARIANT | FcTypeTraits::UINT_SEL,
+    VARIANT_WITH_SINT_SEL       = FcTypeTraits::VARIANT | FcTypeTraits::SINT_SEL,
 };
 /* clang-format on */
 
@@ -587,6 +585,14 @@ class WithUserAttrsMixin
 protected:
     explicit WithUserAttrsMixin(OptUserAttrs userAttrs) : _mUserAttrs {std::move(userAttrs)}
     {
+    }
+
+    /*
+     * Moves the user attributes to the caller.
+     */
+    OptUserAttrs _takeUserAttrs() noexcept
+    {
+        return std::move(_mUserAttrs);
     }
 
 public:
@@ -651,6 +657,14 @@ public:
     unsigned int align() const noexcept
     {
         return _mAlign;
+    }
+
+    /*
+     * Moves the user attributes of this field class to the caller.
+     */
+    OptUserAttrs takeUserAttrs() noexcept
+    {
+        return this->_takeUserAttrs();
     }
 
     /*
@@ -1804,17 +1818,28 @@ enum class FieldLocScope
 
 /*
  * Field location.
+ *
+ * A field location may be:
+ *
+ * Absolute:
+ *     Has a scope and no `nonstd::nullopt` items.
+ *
+ * Relative:
+ *     Has no scope and may contain `nonstd::nullopt` items.
+ *
+ * A `nonstd::nullopt` item means "go to parent structure field"
+ * (CTF 2 strategy).
  */
 template <typename UserMixinsT>
 class FieldLoc : public UserMixinsT::FieldLoc
 {
 public:
-    using Items = std::vector<std::string>;
+    using Items = std::vector<nonstd::optional<std::string>>;
 
-    explicit FieldLoc(typename UserMixinsT::FieldLoc mixin, const FieldLocScope scope,
+    explicit FieldLoc(typename UserMixinsT::FieldLoc mixin, nonstd::optional<FieldLocScope> scope,
                       Items items) :
         UserMixinsT::FieldLoc {std::move(mixin)},
-        _mScope {scope}, _mItems {std::move(items)}
+        _mScope {std::move(scope)}, _mItems {std::move(items)}
     {
     }
 
@@ -1827,7 +1852,7 @@ public:
     /*
      * Scope of this field location.
      */
-    FieldLocScope scope() const noexcept
+    const nonstd::optional<FieldLocScope>& scope() const noexcept
     {
         return _mScope;
     }
@@ -1862,7 +1887,7 @@ public:
 
 private:
     /* Scope of this field location */
-    FieldLocScope _mScope;
+    nonstd::optional<FieldLocScope> _mScope;
 
     /* Path items of this field location */
     Items _mItems;
@@ -1911,6 +1936,15 @@ public:
     const FieldLoc<UserMixinsT>& lenFieldLoc() const noexcept
     {
         return _mLenFieldLoc;
+    }
+
+    /*
+     * Sets the length field location of instances of this field class
+     * to `loc`.
+     */
+    void lenFieldLoc(FieldLoc<UserMixinsT> loc) noexcept
+    {
+        _mLenFieldLoc = std::move(loc);
     }
 
 private:
@@ -2185,6 +2219,24 @@ public:
     }
 
     /*
+     * Sets the class of the element fields of instances of this field
+     * class.
+     */
+    void elemFc(typename Fc<UserMixinsT>::UP elemFc) noexcept
+    {
+        _mElemFc = std::move(elemFc);
+    }
+
+    /*
+     * Moves the class of the element fields of instances of this field
+     * class to the caller.
+     */
+    typename Fc<UserMixinsT>::UP takeElemFc() noexcept
+    {
+        return std::move(_mElemFc);
+    }
+
+    /*
      * Minimum alignment (bits) of instances of this field class.
      */
     unsigned int minAlign() const noexcept
@@ -2345,6 +2397,22 @@ public:
     Fc<UserMixinsT>& fc() noexcept
     {
         return *_mFc;
+    }
+
+    /*
+     * Moves the field class of this member class to the caller.
+     */
+    typename Fc<UserMixinsT>::UP takeFc() noexcept
+    {
+        return std::move(_mFc);
+    }
+
+    /*
+     * Sets the field class of this member class.
+     */
+    void fc(typename Fc<UserMixinsT>::UP fc) noexcept
+    {
+        _mFc = std::move(fc);
     }
 
 private:
@@ -2549,6 +2617,24 @@ public:
     }
 
     /*
+     * Sets the selector field location of instances of this field class
+     * to `loc`.
+     */
+    void selFieldLoc(FieldLoc<UserMixinsT> loc) noexcept
+    {
+        _mSelFieldLoc = std::move(loc);
+    }
+
+    /*
+     * Moves the selector field location of instances of this field
+     * class to the caller.
+     */
+    FieldLoc<UserMixinsT> takeSelFieldLoc() noexcept
+    {
+        return std::move(_mSelFieldLoc);
+    }
+
+    /*
      * Class of the optional field of instances of this field class.
      */
     const Fc<UserMixinsT>& fc() const noexcept
@@ -2562,6 +2648,24 @@ public:
     Fc<UserMixinsT>& fc() noexcept
     {
         return *_mFc;
+    }
+
+    /*
+     * Sets the class of the optional field of instances of this field
+     * class.
+     */
+    void fc(typename Fc<UserMixinsT>::UP fc) noexcept
+    {
+        _mFc = std::move(fc);
+    }
+
+    /*
+     * Moves the class of the optional field of instances of this field
+     * class to the caller.
+     */
+    typename Fc<UserMixinsT>::UP takeFc() noexcept
+    {
+        return std::move(_mFc);
     }
 
 private:
@@ -2815,6 +2919,14 @@ public:
     }
 
     /*
+     * Moves the name of this variant field class option to the caller.
+     */
+    typename nonstd::optional<std::string> takeName() noexcept
+    {
+        return std::move(_mName);
+    }
+
+    /*
      * Field class of this variant field class option.
      */
     const Fc<UserMixinsT>& fc() const noexcept
@@ -2831,12 +2943,38 @@ public:
     }
 
     /*
+     * Moves the field class of this variant field class option to the
+     * caller.
+     */
+    typename Fc<UserMixinsT>::UP takeFc() noexcept
+    {
+        return std::move(_mFc);
+    }
+
+    /*
+     * Sets the field class of this variant field class option.
+     */
+    void fc(typename Fc<UserMixinsT>::UP fc) noexcept
+    {
+        _mFc = std::move(fc);
+    }
+
+    /*
      * Integer selector field ranges which select this variant field
      * class option.
      */
     const IntRangeSetT& selFieldRanges() const noexcept
     {
         return _mSelFieldRanges;
+    }
+
+    /*
+     * Moves the user attributes of this variant field class option to
+     * the caller.
+     */
+    OptUserAttrs takeUserAttrs() noexcept
+    {
+        return this->_takeUserAttrs();
     }
 
 private:
@@ -2888,6 +3026,24 @@ public:
     const FieldLoc<UserMixinsT>& selFieldLoc() const noexcept
     {
         return _mSelFieldLoc;
+    }
+
+    /*
+     * Sets the selector field location of instances of this field class
+     * to `loc`.
+     */
+    void selFieldLoc(FieldLoc<UserMixinsT> loc) noexcept
+    {
+        _mSelFieldLoc = std::move(loc);
+    }
+
+    /*
+     * Moves the selector field location of instances of this field
+     * class to the caller.
+     */
+    FieldLoc<UserMixinsT> takeSelFieldLoc() noexcept
+    {
+        return std::move(_mSelFieldLoc);
     }
 
     /*
@@ -3483,7 +3639,7 @@ const VariantWithSIntSelFc<UserMixinsT>& Fc<UserMixinsT>::asVariantWithSIntSel()
 /*
  * Clock offset (seconds and cycles).
  */
-class ClkOffset
+class ClkOffset final
 {
 public:
     explicit ClkOffset(const long long seconds = 0, const unsigned long long cycles = 0) noexcept :
@@ -3516,6 +3672,82 @@ private:
 };
 
 /*
+ * Clock origin (namespace, name, and unique ID).
+ */
+class ClkOrigin final
+{
+public:
+    /*
+     * Builds a clock origin having the (optional) namespace `ns`, the
+     * name `name`, and the unique ID `uid`.
+     */
+    explicit ClkOrigin(nonstd::optional<std::string> ns, std::string name, std::string uid) :
+        _mNs {std::move(ns)}, _mName {std::move(name)}, _mUid {std::move(uid)}
+    {
+    }
+
+    /*
+     * Builds a Unix epoch clock origin.
+     */
+    explicit ClkOrigin() : ClkOrigin {_unixEpochNs, _unixEpochName, _unixEpochName}
+    {
+    }
+
+    /* Use default copy/move operations */
+    ClkOrigin(const ClkOrigin&) = default;
+    ClkOrigin& operator=(const ClkOrigin&) = default;
+    ClkOrigin(ClkOrigin&&) = default;
+    ClkOrigin& operator=(ClkOrigin&&) = default;
+
+    /*
+     * Namespace.
+     */
+    const nonstd::optional<std::string>& ns() const noexcept
+    {
+        return _mNs;
+    }
+
+    /*
+     * Name.
+     */
+    const std::string& name() const noexcept
+    {
+        return _mName;
+    }
+
+    /*
+     * Unique ID.
+     */
+    const std::string& uid() const noexcept
+    {
+        return _mUid;
+    }
+
+    /*
+     * Returns whether or not this clock origin is the Unix epoch.
+     */
+    bool isUnixEpoch() const noexcept
+    {
+        return _mNs == _unixEpochNs && _mName == _unixEpochName && _mUid == _unixEpochUid;
+    }
+
+private:
+    /* Internal Unix epoch origin namespace, name, and unique ID */
+    static constexpr const char *_unixEpochNs = "babeltrace.org,2020";
+    static constexpr const char *_unixEpochName = "unix-epoch";
+    static constexpr const char *_unixEpochUid = "";
+
+    /* Namespace */
+    nonstd::optional<std::string> _mNs;
+
+    /* Name */
+    std::string _mName;
+
+    /* Unique ID */
+    std::string _mUid;
+};
+
+/*
  * Clock class.
  */
 template <typename UserMixinsT>
@@ -3529,16 +3761,15 @@ public:
     using SP = std::shared_ptr<ClkCls>;
 
     explicit ClkCls(typename UserMixinsT::ClkCls mixin, std::string name,
-                    const unsigned long long freq, const ClkOffset& clkOffset = ClkOffset {},
-                    const bool originIsUnixEpoch = true,
+                    const unsigned long long freq, const ClkOffset& offsetFromOrigin = ClkOffset {},
+                    nonstd::optional<ClkOrigin> origin = ClkOrigin {},
                     nonstd::optional<std::string> descr = nonstd::nullopt,
                     const unsigned long long precision = 0,
-                    nonstd::optional<bt2_common::Uuid> uuid = nonstd::nullopt,
                     OptUserAttrs userAttrs = nonstd::nullopt) :
         internal::WithUserAttrsMixin {std::move(userAttrs)},
         UserMixinsT::ClkCls {std::move(mixin)}, _mName {std::move(name)}, _mFreq {freq},
-        _mOffset {clkOffset}, _mOriginIsUnixEpoch {originIsUnixEpoch}, _mDescr {std::move(descr)},
-        _mPrecision {precision}, _mUuid {std::move(uuid)}
+        _mOffsetFromOrigin {offsetFromOrigin}, _mOrigin {std::move(origin)},
+        _mDescr {std::move(descr)}, _mPrecision {precision}
     {
         BT_ASSERT(_mFreq > 0);
         //BT_ASSERT(_mOffset.cycles() < _mFreq);
@@ -3563,35 +3794,33 @@ public:
     /*
      * Offset from origin of instances of this clock class.
      */
-    const ClkOffset& offset() const noexcept
+    const ClkOffset& offsetFromOrigin() const noexcept
     {
-        return _mOffset;
+        return _mOffsetFromOrigin;
     }
 
     /*
      * Sets the offset from origin of instances of this clock class.
      */
-    void offset(const ClkOffset& offset) noexcept
+    void offsetFromOrigin(const ClkOffset& offsetFromOrigin) noexcept
     {
-        _mOffset = offset;
+        _mOffsetFromOrigin = offsetFromOrigin;
     }
 
     /*
-     * Whether or not the origin of instances of this clock class is the
-     * Unix epoch.
+     * Origin of instances of this clock class.
      */
-    bool originIsUnixEpoch() const noexcept
+    const nonstd::optional<ClkOrigin>& origin() const noexcept
     {
-        return _mOriginIsUnixEpoch;
+        return _mOrigin;
     }
 
     /*
-     * Sets whether or not the origin of instances of this clock class is the
-     * Unix epoch.
+     * Sets the origin of instances of this clock class.
      */
-    void originIsUnixEpoch(const bool originIsUnixEpoch) noexcept
+    void origin(nonstd::optional<ClkOrigin> origin) noexcept
     {
-        _mOriginIsUnixEpoch = originIsUnixEpoch;
+        _mOrigin = std::move(origin);
     }
 
     /*
@@ -3610,14 +3839,6 @@ public:
         return _mPrecision;
     }
 
-    /*
-     * UUID of instances of this clock class.
-     */
-    const nonstd::optional<bt2_common::Uuid>& uuid() const noexcept
-    {
-        return _mUuid;
-    }
-
 private:
     /* Name of instances of this clock class */
     std::string _mName;
@@ -3626,22 +3847,16 @@ private:
     unsigned long long _mFreq;
 
     /* Offset from origin of instances of this clock class */
-    ClkOffset _mOffset;
+    ClkOffset _mOffsetFromOrigin;
 
-    /*
-     * Whether or not the origin of instances of this clock class is the
-     * Unix epoch.
-     */
-    bool _mOriginIsUnixEpoch;
+    /* Origin of instances of this clock class */
+    nonstd::optional<ClkOrigin> _mOrigin;
 
     /* Description of instances of this clock class */
     nonstd::optional<std::string> _mDescr;
 
     /* Precision (cycles) of instances of this clock class */
     unsigned long long _mPrecision;
-
-    /* UUID of instances of this clock class */
-    nonstd::optional<bt2_common::Uuid> _mUuid;
 };
 
 /*
@@ -3792,14 +4007,14 @@ public:
                            nonstd::optional<std::string> name = nonstd::nullopt,
                            typename StructFc<UserMixinsT>::UP pktCtxFc = nullptr,
                            typename StructFc<UserMixinsT>::UP eventRecordHeaderFc = nullptr,
-                           typename StructFc<UserMixinsT>::UP eventRecordCommonCtxFc = nullptr,
+                           typename StructFc<UserMixinsT>::UP commonEventRecordCtxFc = nullptr,
                            typename ClkCls<UserMixinsT>::SP defClkCls = nullptr,
                            OptUserAttrs userAttrs = nonstd::nullopt) :
         internal::WithUserAttrsMixin {std::move(userAttrs)},
         UserMixinsT::DataStreamCls {std::move(mixin)}, _mId {id}, _mNs {std::move(ns)},
         _mName {std::move(name)}, _mPktCtxFc {std::move(pktCtxFc)},
         _mEventRecordHeaderFc {std::move(eventRecordHeaderFc)},
-        _mEventRecordCommonCtxFc {std::move(eventRecordCommonCtxFc)}, _mDefClkCls {
+        _mCommonEventRecordCtxFc {std::move(commonEventRecordCtxFc)}, _mDefClkCls {
                                                                           std::move(defClkCls)}
     {
     }
@@ -3868,18 +4083,18 @@ public:
      * Class of the header field of event records which are part of
      * instances of this data stream class.
      */
-    const StructFc<UserMixinsT> *eventRecordCommonCtxFc() const noexcept
+    const StructFc<UserMixinsT> *commonEventRecordCtxFc() const noexcept
     {
-        return static_cast<StructFc<UserMixinsT> *>(_mEventRecordCommonCtxFc.get());
+        return static_cast<StructFc<UserMixinsT> *>(_mCommonEventRecordCtxFc.get());
     }
 
     /*
      * Class of the common context field of event records which are part
      * of instances of this data stream class.
      */
-    StructFc<UserMixinsT> *eventRecordCommonCtxFc() noexcept
+    StructFc<UserMixinsT> *commonEventRecordCtxFc() noexcept
     {
-        return static_cast<StructFc<UserMixinsT> *>(_mEventRecordCommonCtxFc.get());
+        return static_cast<StructFc<UserMixinsT> *>(_mCommonEventRecordCtxFc.get());
     }
 
     /*
@@ -4002,7 +4217,7 @@ private:
      * Class of the common context field of event records which are part
      * of instances of this data stream class.
      */
-    typename Fc<UserMixinsT>::UP _mEventRecordCommonCtxFc;
+    typename Fc<UserMixinsT>::UP _mCommonEventRecordCtxFc;
 
     /*
      * Class of the default clock of instances of this data stream
@@ -4026,23 +4241,23 @@ public:
                                       internal::ObjUpIdLt<DataStreamCls<UserMixinsT>>>;
 
     explicit TraceCls(typename UserMixinsT::TraceCls mixin,
-                      nonstd::optional<bt2_common::Uuid> uuid = nonstd::nullopt,
+                      nonstd::optional<std::string> uid = nonstd::nullopt,
                       nonstd::optional<bt2::ConstMapValue::Shared> env = nonstd::nullopt,
                       typename Fc<UserMixinsT>::UP pktHeaderFc = nullptr,
                       OptUserAttrs userAttrs = nonstd::nullopt) :
         internal::WithUserAttrsMixin {std::move(userAttrs)},
-        UserMixinsT::TraceCls {std::move(mixin)}, _mUuid {std::move(uuid)}, _mEnv {std::move(env)},
+        UserMixinsT::TraceCls {std::move(mixin)}, _mUid {std::move(uid)}, _mEnv {std::move(env)},
         _mPktHeaderFc {std::move(pktHeaderFc)}
     {
         BT_ASSERT(!_mPktHeaderFc || _mPktHeaderFc->isStruct());
     }
 
     /*
-     * UUID of instances of this trace class.
+     * Unique ID of instances of this trace class.
      */
-    const nonstd::optional<bt2_common::Uuid>& uuid() const noexcept
+    const nonstd::optional<std::string>& uid() const noexcept
     {
-        return _mUuid;
+        return _mUid;
     }
 
     /*
@@ -4151,8 +4366,8 @@ private:
     /* Map of data stream class ID to data stream class */
     _DataStreamClsByIdMap _mDataStreamClsIdMap;
 
-    /* UUID of instances of this trace class */
-    nonstd::optional<bt2_common::Uuid> _mUuid;
+    /* Unique ID of instances of this trace class */
+    nonstd::optional<std::string> _mUid;
 
     /* Environment of instances of this trace class */
     nonstd::optional<bt2::ConstMapValue::Shared> _mEnv;

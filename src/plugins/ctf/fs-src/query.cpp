@@ -222,8 +222,8 @@ bt2::Value::Shared support_info_query(bt2::ConstMapValue params, const bt2_commo
          * CTF trace.
          */
         result->insert("weight", 0.75);
-        if (ctfTraceCls->uuid()) {
-            result->insert("group", ctfTraceCls->uuid()->str());
+        if (ctfTraceCls->uid()) {
+            result->insert("group", *ctfTraceCls->uid());
         }
     } catch (const bt2_common::NoSuchFileOrDirectoryError&) {
         /*

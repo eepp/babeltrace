@@ -9,7 +9,14 @@
 
 namespace ctf {
 namespace src {
+
+namespace bt2c = bt2_common;
+
 namespace internal {
+
+FieldLocMixin::FieldLocMixin(const bt2_common::TextLoc& loc) noexcept : _mLoc {loc}
+{
+}
 
 void ClkClsMixin::sharedLibCls(bt2::ClockClass::Shared cls) noexcept
 {
@@ -264,17 +271,23 @@ void VarLenIntFcMixin::addValSavingIndex(const std::size_t index) noexcept
 
 } /* namespace internal */
 
-static inline bool isStdBitArrayFc(const unsigned int align, const bt2_common::DataLen len) noexcept
+namespace {
+
+bool isStdBitArrayFc(const unsigned int align, const bt2_common::DataLen len) noexcept
 {
     return align % 8 == 0 && (*len == 8 || *len == 16 || *len == 32 || *len == 64);
 }
 
-FieldLoc createFieldLoc(const ir::FieldLocScope scope, FieldLoc::Items items)
+} /* namespace */
+
+FieldLoc createFieldLoc(nonstd::optional<ir::FieldLocScope> scope, FieldLoc::Items items,
+                        const bt2c::TextLoc& loc)
 {
-    return FieldLoc {internal::CtfIrMixins::FieldLoc {}, scope, std::move(items)};
+    return FieldLoc {internal::CtfIrMixins::FieldLoc {loc}, std::move(scope), std::move(items)};
 }
 
-std::unique_ptr<FixedLenBitArrayFc> createFixedLenBitArrayFc(const unsigned int align,
+std::unique_ptr<FixedLenBitArrayFc> createFixedLenBitArrayFc(const bt2_common::TextLoc& loc,
+                                                             const unsigned int align,
                                                              const bt2_common::DataLen len,
                                                              const ir::ByteOrder byteOrder,
                                                              ir::OptUserAttrs userAttrs)
@@ -317,12 +330,13 @@ std::unique_ptr<FixedLenBitArrayFc> createFixedLenBitArrayFc(const unsigned int 
         }
     }();
 
-    return bt2_common::makeUnique<FixedLenBitArrayFc>(internal::CtfIrMixins::Fc {deepType},
+    return bt2_common::makeUnique<FixedLenBitArrayFc>(internal::CtfIrMixins::Fc {deepType, loc},
                                                       internal::CtfIrMixins::FixedLenBitArrayFc {},
                                                       align, len, byteOrder, std::move(userAttrs));
 }
 
-std::unique_ptr<FixedLenBoolFc> createFixedLenBoolFc(const unsigned int align,
+std::unique_ptr<FixedLenBoolFc> createFixedLenBoolFc(const bt2_common::TextLoc& loc,
+                                                     const unsigned int align,
                                                      const bt2_common::DataLen len,
                                                      const ir::ByteOrder byteOrder,
                                                      ir::OptUserAttrs userAttrs)
@@ -366,11 +380,12 @@ std::unique_ptr<FixedLenBoolFc> createFixedLenBoolFc(const unsigned int align,
     }();
 
     return bt2_common::makeUnique<FixedLenBoolFc>(
-        internal::CtfIrMixins::Fc {deepType}, internal::CtfIrMixins::FixedLenBitArrayFc {},
+        internal::CtfIrMixins::Fc {deepType, loc}, internal::CtfIrMixins::FixedLenBitArrayFc {},
         internal::CtfIrMixins::FixedLenBoolFc {}, align, len, byteOrder, std::move(userAttrs));
 }
 
-std::unique_ptr<FixedLenFloatFc> createFixedLenFloatFc(const unsigned int align,
+std::unique_ptr<FixedLenFloatFc> createFixedLenFloatFc(const bt2_common::TextLoc& loc,
+                                                       const unsigned int align,
                                                        const bt2_common::DataLen len,
                                                        const ir::ByteOrder byteOrder,
                                                        ir::OptUserAttrs userAttrs)
@@ -419,15 +434,16 @@ std::unique_ptr<FixedLenFloatFc> createFixedLenFloatFc(const unsigned int align,
         }
     }();
 
-    return bt2_common::makeUnique<FixedLenFloatFc>(internal::CtfIrMixins::Fc {deepType},
+    return bt2_common::makeUnique<FixedLenFloatFc>(internal::CtfIrMixins::Fc {deepType, loc},
                                                    internal::CtfIrMixins::FixedLenBitArrayFc {},
                                                    align, len, byteOrder, std::move(userAttrs));
 }
 
 std::unique_ptr<FixedLenUIntFc>
-createFixedLenUIntFc(const unsigned int align, const bt2_common::DataLen len,
-                     const ir::ByteOrder byteOrder, const ir::DispBase prefDispBase,
-                     ir::UIntFieldRoles roles, ir::OptUserAttrs userAttrs)
+createFixedLenUIntFc(const bt2_common::TextLoc& loc, const unsigned int align,
+                     const bt2_common::DataLen len, const ir::ByteOrder byteOrder,
+                     const ir::DispBase prefDispBase, ir::UIntFieldRoles roles,
+                     ir::OptUserAttrs userAttrs)
 {
     const auto deepType = [align, len, byteOrder, &roles] {
         if (byteOrder == ir::ByteOrder::BIG) {
@@ -478,16 +494,15 @@ createFixedLenUIntFc(const unsigned int align, const bt2_common::DataLen len,
     }();
 
     return bt2_common::makeUnique<FixedLenUIntFc>(
-        internal::CtfIrMixins::Fc {deepType}, internal::CtfIrMixins::FixedLenBitArrayFc {},
+        internal::CtfIrMixins::Fc {deepType, loc}, internal::CtfIrMixins::FixedLenBitArrayFc {},
         internal::CtfIrMixins::FixedLenIntFc {}, internal::CtfIrMixins::FixedLenUIntFc {}, align,
         len, byteOrder, prefDispBase, std::move(roles), std::move(userAttrs));
 }
 
-std::unique_ptr<FixedLenSIntFc> createFixedLenSIntFc(const unsigned int align,
-                                                     const bt2_common::DataLen len,
-                                                     const ir::ByteOrder byteOrder,
-                                                     const ir::DispBase prefDispBase,
-                                                     ir::OptUserAttrs userAttrs)
+std::unique_ptr<FixedLenSIntFc>
+createFixedLenSIntFc(const bt2_common::TextLoc& loc, const unsigned int align,
+                     const bt2_common::DataLen len, const ir::ByteOrder byteOrder,
+                     const ir::DispBase prefDispBase, ir::OptUserAttrs userAttrs)
 {
     const auto deepType = [align, len, byteOrder] {
         if (byteOrder == ir::ByteOrder::BIG) {
@@ -528,16 +543,16 @@ std::unique_ptr<FixedLenSIntFc> createFixedLenSIntFc(const unsigned int align,
     }();
 
     return bt2_common::makeUnique<FixedLenSIntFc>(
-        internal::CtfIrMixins::Fc {deepType}, internal::CtfIrMixins::FixedLenBitArrayFc {},
+        internal::CtfIrMixins::Fc {deepType, loc}, internal::CtfIrMixins::FixedLenBitArrayFc {},
         internal::CtfIrMixins::FixedLenIntFc {}, align, len, byteOrder, prefDispBase,
         std::move(userAttrs));
 }
 
 std::unique_ptr<FixedLenUEnumFc>
-createFixedLenUEnumFc(const unsigned int align, const bt2_common::DataLen len,
-                      const ir::ByteOrder byteOrder, FixedLenUEnumFc::Mappings mappings,
-                      const ir::DispBase prefDispBase, ir::UIntFieldRoles roles,
-                      ir::OptUserAttrs userAttrs)
+createFixedLenUEnumFc(const bt2_common::TextLoc& loc, const unsigned int align,
+                      const bt2_common::DataLen len, const ir::ByteOrder byteOrder,
+                      FixedLenUEnumFc::Mappings mappings, const ir::DispBase prefDispBase,
+                      ir::UIntFieldRoles roles, ir::OptUserAttrs userAttrs)
 {
     const auto deepType = [align, len, byteOrder, &roles] {
         if (byteOrder == ir::ByteOrder::BIG) {
@@ -588,15 +603,16 @@ createFixedLenUEnumFc(const unsigned int align, const bt2_common::DataLen len,
     }();
 
     return bt2_common::makeUnique<FixedLenUEnumFc>(
-        internal::CtfIrMixins::Fc {deepType}, internal::CtfIrMixins::FixedLenBitArrayFc {},
+        internal::CtfIrMixins::Fc {deepType, loc}, internal::CtfIrMixins::FixedLenBitArrayFc {},
         internal::CtfIrMixins::FixedLenIntFc {}, internal::CtfIrMixins::FixedLenUIntFc {}, align,
         len, byteOrder, std::move(mappings), prefDispBase, std::move(roles), std::move(userAttrs));
 }
 
 std::unique_ptr<FixedLenSEnumFc>
-createFixedLenSEnumFc(const unsigned int align, const bt2_common::DataLen len,
-                      const ir::ByteOrder byteOrder, FixedLenSEnumFc::Mappings mappings,
-                      const ir::DispBase prefDispBase, ir::OptUserAttrs userAttrs)
+createFixedLenSEnumFc(const bt2_common::TextLoc& loc, const unsigned int align,
+                      const bt2_common::DataLen len, const ir::ByteOrder byteOrder,
+                      FixedLenSEnumFc::Mappings mappings, const ir::DispBase prefDispBase,
+                      ir::OptUserAttrs userAttrs)
 {
     const auto deepType = [align, len, byteOrder] {
         if (byteOrder == ir::ByteOrder::BIG) {
@@ -637,12 +653,13 @@ createFixedLenSEnumFc(const unsigned int align, const bt2_common::DataLen len,
     }();
 
     return bt2_common::makeUnique<FixedLenSEnumFc>(
-        internal::CtfIrMixins::Fc {deepType}, internal::CtfIrMixins::FixedLenBitArrayFc {},
+        internal::CtfIrMixins::Fc {deepType, loc}, internal::CtfIrMixins::FixedLenBitArrayFc {},
         internal::CtfIrMixins::FixedLenIntFc {}, align, len, byteOrder, std::move(mappings),
         prefDispBase, std::move(userAttrs));
 }
 
-std::unique_ptr<VarLenUIntFc> createVarLenUIntFc(const ir::DispBase prefDispBase,
+std::unique_ptr<VarLenUIntFc> createVarLenUIntFc(const bt2_common::TextLoc& loc,
+                                                 const ir::DispBase prefDispBase,
                                                  ir::UIntFieldRoles roles,
                                                  ir::OptUserAttrs userAttrs)
 {
@@ -650,20 +667,22 @@ std::unique_ptr<VarLenUIntFc> createVarLenUIntFc(const ir::DispBase prefDispBase
         roles.empty() ? FcDeepType::VAR_LEN_UINT : FcDeepType::VAR_LEN_UINT_WITH_ROLE;
 
     return bt2_common::makeUnique<VarLenUIntFc>(
-        internal::CtfIrMixins::Fc {deepType}, internal::CtfIrMixins::VarLenIntFc {},
+        internal::CtfIrMixins::Fc {deepType, loc}, internal::CtfIrMixins::VarLenIntFc {},
         internal::CtfIrMixins::VarLenUIntFc {}, prefDispBase, std::move(roles),
         std::move(userAttrs));
 }
 
-std::unique_ptr<VarLenSIntFc> createVarLenSIntFc(const ir::DispBase prefDispBase,
+std::unique_ptr<VarLenSIntFc> createVarLenSIntFc(const bt2_common::TextLoc& loc,
+                                                 const ir::DispBase prefDispBase,
                                                  ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<VarLenSIntFc>(
-        internal::CtfIrMixins::Fc {FcDeepType::VAR_LEN_SINT}, internal::CtfIrMixins::VarLenIntFc {},
-        prefDispBase, std::move(userAttrs));
+        internal::CtfIrMixins::Fc {FcDeepType::VAR_LEN_SINT, loc},
+        internal::CtfIrMixins::VarLenIntFc {}, prefDispBase, std::move(userAttrs));
 }
 
-std::unique_ptr<VarLenUEnumFc> createVarLenUEnumFc(FixedLenUEnumFc::Mappings mappings,
+std::unique_ptr<VarLenUEnumFc> createVarLenUEnumFc(const bt2_common::TextLoc& loc,
+                                                   FixedLenUEnumFc::Mappings mappings,
                                                    const ir::DispBase prefDispBase,
                                                    ir::UIntFieldRoles roles,
                                                    ir::OptUserAttrs userAttrs)
@@ -672,28 +691,31 @@ std::unique_ptr<VarLenUEnumFc> createVarLenUEnumFc(FixedLenUEnumFc::Mappings map
         roles.empty() ? FcDeepType::VAR_LEN_UENUM : FcDeepType::VAR_LEN_UENUM_WITH_ROLE;
 
     return bt2_common::makeUnique<VarLenUEnumFc>(
-        internal::CtfIrMixins::Fc {deepType}, internal::CtfIrMixins::VarLenIntFc {},
+        internal::CtfIrMixins::Fc {deepType, loc}, internal::CtfIrMixins::VarLenIntFc {},
         internal::CtfIrMixins::VarLenUIntFc {}, std::move(mappings), prefDispBase, std::move(roles),
         std::move(userAttrs));
 }
 
-std::unique_ptr<VarLenSEnumFc> createVarLenSEnumFc(FixedLenSEnumFc::Mappings mappings,
+std::unique_ptr<VarLenSEnumFc> createVarLenSEnumFc(const bt2_common::TextLoc& loc,
+                                                   FixedLenSEnumFc::Mappings mappings,
                                                    const ir::DispBase prefDispBase,
                                                    ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<VarLenSEnumFc>(
-        internal::CtfIrMixins::Fc {FcDeepType::VAR_LEN_SENUM},
+        internal::CtfIrMixins::Fc {FcDeepType::VAR_LEN_SENUM, loc},
         internal::CtfIrMixins::VarLenIntFc {}, std::move(mappings), prefDispBase,
         std::move(userAttrs));
 }
 
-std::unique_ptr<NullTerminatedStrFc> createNullTerminatedStrFc(ir::OptUserAttrs userAttrs)
+std::unique_ptr<NullTerminatedStrFc> createNullTerminatedStrFc(const bt2_common::TextLoc& loc,
+                                                               ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<NullTerminatedStrFc>(
-        internal::CtfIrMixins::Fc {FcDeepType::NULL_TERMINATED_STR}, std::move(userAttrs));
+        internal::CtfIrMixins::Fc {FcDeepType::NULL_TERMINATED_STR, loc}, std::move(userAttrs));
 }
 
-std::unique_ptr<StaticLenArrayFc> createStaticLenArrayFc(const std::size_t len, Fc::UP elemFc,
+std::unique_ptr<StaticLenArrayFc> createStaticLenArrayFc(const bt2_common::TextLoc& loc,
+                                                         const std::size_t len, Fc::UP elemFc,
                                                          const unsigned int minAlign,
                                                          ir::OptUserAttrs userAttrs,
                                                          const bool hasMetadataStreamUuidRole)
@@ -703,36 +725,40 @@ std::unique_ptr<StaticLenArrayFc> createStaticLenArrayFc(const std::size_t len, 
                               FcDeepType::STATIC_LEN_ARRAY;
 
     return bt2_common::makeUnique<StaticLenArrayFc>(
-        internal::CtfIrMixins::Fc {deepType}, internal::CtfIrMixins::StaticLenArrayFc {}, len,
+        internal::CtfIrMixins::Fc {deepType, loc}, internal::CtfIrMixins::StaticLenArrayFc {}, len,
         std::move(elemFc), minAlign, std::move(userAttrs));
 }
 
-std::unique_ptr<DynLenArrayFc> createDynLenArrayFc(FieldLoc lenFieldLoc, Fc::UP elemFc,
+std::unique_ptr<DynLenArrayFc> createDynLenArrayFc(const bt2_common::TextLoc& loc,
+                                                   FieldLoc lenFieldLoc, Fc::UP elemFc,
                                                    const unsigned int minAlign,
                                                    ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<DynLenArrayFc>(
-        internal::CtfIrMixins::Fc {FcDeepType::DYN_LEN_ARRAY},
+        internal::CtfIrMixins::Fc {FcDeepType::DYN_LEN_ARRAY, loc},
         internal::CtfIrMixins::DynLenArrayFc {}, std::move(lenFieldLoc), std::move(elemFc),
         minAlign, std::move(userAttrs));
 }
 
-std::unique_ptr<StaticLenStrFc> createStaticLenStrFc(const std::size_t len,
+std::unique_ptr<StaticLenStrFc> createStaticLenStrFc(const bt2_common::TextLoc& loc,
+                                                     const std::size_t len,
                                                      ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<StaticLenStrFc>(
-        internal::CtfIrMixins::Fc {FcDeepType::STATIC_LEN_STR},
+        internal::CtfIrMixins::Fc {FcDeepType::STATIC_LEN_STR, loc},
         internal::CtfIrMixins::StaticLenStrFc {}, len, std::move(userAttrs));
 }
 
-std::unique_ptr<DynLenStrFc> createDynLenStrFc(FieldLoc lenFieldLoc, ir::OptUserAttrs userAttrs)
+std::unique_ptr<DynLenStrFc> createDynLenStrFc(const bt2_common::TextLoc& loc, FieldLoc lenFieldLoc,
+                                               ir::OptUserAttrs userAttrs)
 {
-    return bt2_common::makeUnique<DynLenStrFc>(internal::CtfIrMixins::Fc {FcDeepType::DYN_LEN_STR},
-                                               internal::CtfIrMixins::DynLenStrFc {},
-                                               std::move(lenFieldLoc), std::move(userAttrs));
+    return bt2_common::makeUnique<DynLenStrFc>(
+        internal::CtfIrMixins::Fc {FcDeepType::DYN_LEN_STR, loc},
+        internal::CtfIrMixins::DynLenStrFc {}, std::move(lenFieldLoc), std::move(userAttrs));
 }
 
-std::unique_ptr<StaticLenBlobFc> createStaticLenBlobFc(const std::size_t len, std::string mediaType,
+std::unique_ptr<StaticLenBlobFc> createStaticLenBlobFc(const bt2_common::TextLoc& loc,
+                                                       const std::size_t len, std::string mediaType,
                                                        const bool hasMetadataStreamUuidRole,
                                                        ir::OptUserAttrs userAttrs)
 {
@@ -741,15 +767,16 @@ std::unique_ptr<StaticLenBlobFc> createStaticLenBlobFc(const std::size_t len, st
                               FcDeepType::STATIC_LEN_BLOB;
 
     return bt2_common::makeUnique<StaticLenBlobFc>(
-        internal::CtfIrMixins::Fc {deepType}, internal::CtfIrMixins::StaticLenBlobFc {}, len,
+        internal::CtfIrMixins::Fc {deepType, loc}, internal::CtfIrMixins::StaticLenBlobFc {}, len,
         std::move(mediaType), hasMetadataStreamUuidRole, std::move(userAttrs));
 }
 
-std::unique_ptr<DynLenBlobFc> createDynLenBlobFc(FieldLoc lenFieldLoc, std::string mediaType,
+std::unique_ptr<DynLenBlobFc> createDynLenBlobFc(const bt2_common::TextLoc& loc,
+                                                 FieldLoc lenFieldLoc, std::string mediaType,
                                                  ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<DynLenBlobFc>(
-        internal::CtfIrMixins::Fc {FcDeepType::DYN_LEN_BLOB},
+        internal::CtfIrMixins::Fc {FcDeepType::DYN_LEN_BLOB, loc},
         internal::CtfIrMixins::DynLenBlobFc {}, std::move(lenFieldLoc), std::move(mediaType),
         std::move(userAttrs));
 }
@@ -761,40 +788,44 @@ StructFieldMemberCls createStructFieldMemberCls(std::string name, Fc::UP fc,
                                  std::move(fc), std::move(userAttrs)};
 }
 
-std::unique_ptr<StructFc> createStructFc(StructFc::MemberClasses&& memberClasses,
+std::unique_ptr<StructFc> createStructFc(const bt2_common::TextLoc& loc,
+                                         StructFc::MemberClasses&& memberClasses,
                                          const unsigned int minAlign, ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<StructFc>(
-        internal::CtfIrMixins::Fc {FcDeepType::STRUCT}, internal::CtfIrMixins::StructFc {},
+        internal::CtfIrMixins::Fc {FcDeepType::STRUCT, loc}, internal::CtfIrMixins::StructFc {},
         std::move(memberClasses), minAlign, std::move(userAttrs));
 }
 
-std::unique_ptr<OptionalWithBoolSelFc> createOptionalFc(Fc::UP fc, FieldLoc selFieldLoc,
+std::unique_ptr<OptionalWithBoolSelFc> createOptionalFc(const bt2_common::TextLoc& loc, Fc::UP fc,
+                                                        FieldLoc selFieldLoc,
                                                         ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<OptionalWithBoolSelFc>(
-        internal::CtfIrMixins::Fc {FcDeepType::OPTIONAL_WITH_BOOL_SEL},
+        internal::CtfIrMixins::Fc {FcDeepType::OPTIONAL_WITH_BOOL_SEL, loc},
         internal::CtfIrMixins::OptionalFc {}, internal::CtfIrMixins::OptionalWithBoolSelFc {},
         std::move(fc), std::move(selFieldLoc), std::move(userAttrs));
 }
 
-std::unique_ptr<OptionalWithUIntSelFc> createOptionalFc(Fc::UP fc, FieldLoc selFieldLoc,
+std::unique_ptr<OptionalWithUIntSelFc> createOptionalFc(const bt2_common::TextLoc& loc, Fc::UP fc,
+                                                        FieldLoc selFieldLoc,
                                                         UIntRangeSet selFieldRanges,
                                                         ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<OptionalWithUIntSelFc>(
-        internal::CtfIrMixins::Fc {FcDeepType::OPTIONAL_WITH_UINT_SEL},
+        internal::CtfIrMixins::Fc {FcDeepType::OPTIONAL_WITH_UINT_SEL, loc},
         internal::CtfIrMixins::OptionalFc {}, internal::CtfIrMixins::OptionalWithIntSelFc {},
         internal::CtfIrMixins::OptionalWithUIntSelFc {}, std::move(fc), std::move(selFieldLoc),
         std::move(selFieldRanges), std::move(userAttrs));
 }
 
-std::unique_ptr<OptionalWithSIntSelFc> createOptionalFc(Fc::UP fc, FieldLoc selFieldLoc,
+std::unique_ptr<OptionalWithSIntSelFc> createOptionalFc(const bt2_common::TextLoc& loc, Fc::UP fc,
+                                                        FieldLoc selFieldLoc,
                                                         SIntRangeSet selFieldRanges,
                                                         ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<OptionalWithSIntSelFc>(
-        internal::CtfIrMixins::Fc {FcDeepType::OPTIONAL_WITH_SINT_SEL},
+        internal::CtfIrMixins::Fc {FcDeepType::OPTIONAL_WITH_SINT_SEL, loc},
         internal::CtfIrMixins::OptionalFc {}, internal::CtfIrMixins::OptionalWithIntSelFc {},
         internal::CtfIrMixins::OptionalWithSIntSelFc {}, std::move(fc), std::move(selFieldLoc),
         std::move(selFieldRanges), std::move(userAttrs));
@@ -818,32 +849,36 @@ VariantWithSIntSelFc::Opt createVariantFcOpt(Fc::UP fc, SIntRangeSet selFieldRan
                                       std::move(userAttrs)};
 }
 
-std::unique_ptr<VariantWithUIntSelFc>
-createVariantFc(VariantWithUIntSelFc::Opts&& opts, FieldLoc selFieldLoc, ir::OptUserAttrs userAttrs)
+std::unique_ptr<VariantWithUIntSelFc> createVariantFc(const bt2_common::TextLoc& loc,
+                                                      VariantWithUIntSelFc::Opts&& opts,
+                                                      FieldLoc selFieldLoc,
+                                                      ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<VariantWithUIntSelFc>(
-        internal::CtfIrMixins::Fc {FcDeepType::VARIANT_WITH_UINT_SEL},
+        internal::CtfIrMixins::Fc {FcDeepType::VARIANT_WITH_UINT_SEL, loc},
         internal::CtfIrMixins::VariantFc {}, internal::CtfIrMixins::VariantWithUIntSelFc {},
         std::move(opts), std::move(selFieldLoc), std::move(userAttrs));
 }
 
-std::unique_ptr<VariantWithSIntSelFc>
-createVariantFc(VariantWithSIntSelFc::Opts&& opts, FieldLoc selFieldLoc, ir::OptUserAttrs userAttrs)
+std::unique_ptr<VariantWithSIntSelFc> createVariantFc(const bt2_common::TextLoc& loc,
+                                                      VariantWithSIntSelFc::Opts&& opts,
+                                                      FieldLoc selFieldLoc,
+                                                      ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<VariantWithSIntSelFc>(
-        internal::CtfIrMixins::Fc {FcDeepType::VARIANT_WITH_SINT_SEL},
+        internal::CtfIrMixins::Fc {FcDeepType::VARIANT_WITH_SINT_SEL, loc},
         internal::CtfIrMixins::VariantFc {}, internal::CtfIrMixins::VariantWithSIntSelFc {},
         std::move(opts), std::move(selFieldLoc), std::move(userAttrs));
 }
 
 ClkCls::SP createClkCls(std::string name, const unsigned long long freq,
-                        const ir::ClkOffset& clkOffset, const bool originIsUnixEpoch,
-                        nonstd::optional<std::string> descr, const unsigned long long precision,
-                        nonstd::optional<bt2_common::Uuid> uuid, ir::OptUserAttrs userAttrs)
+                        const ir::ClkOffset& offsetFromOrigin,
+                        nonstd::optional<ir::ClkOrigin> origin, nonstd::optional<std::string> descr,
+                        const unsigned long long precision, ir::OptUserAttrs userAttrs)
 {
     return std::make_shared<ClkCls>(internal::CtfIrMixins::ClkCls {}, std::move(name), freq,
-                                    clkOffset, originIsUnixEpoch, std::move(descr), precision,
-                                    std::move(uuid), std::move(userAttrs));
+                                    offsetFromOrigin, std::move(origin), std::move(descr),
+                                    precision, std::move(userAttrs));
 }
 
 std::unique_ptr<EventRecordCls> createEventRecordCls(const unsigned long long id,
@@ -860,19 +895,19 @@ std::unique_ptr<EventRecordCls> createEventRecordCls(const unsigned long long id
 std::unique_ptr<DataStreamCls>
 createDataStreamCls(const unsigned long long id, nonstd::optional<std::string> ns,
                     nonstd::optional<std::string> name, Fc::UP pktCtxFc, Fc::UP eventRecordHeaderFc,
-                    Fc::UP eventRecordCommonCtxFc, ClkCls::SP defClkCls, ir::OptUserAttrs userAttrs)
+                    Fc::UP commonEventRecordCtxFc, ClkCls::SP defClkCls, ir::OptUserAttrs userAttrs)
 {
     return bt2_common::makeUnique<DataStreamCls>(
         internal::CtfIrMixins::DataStreamCls {}, id, std::move(ns), std::move(name),
-        std::move(pktCtxFc), std::move(eventRecordHeaderFc), std::move(eventRecordCommonCtxFc),
+        std::move(pktCtxFc), std::move(eventRecordHeaderFc), std::move(commonEventRecordCtxFc),
         std::move(defClkCls), std::move(userAttrs));
 }
 
-std::unique_ptr<TraceCls> createTraceCls(nonstd::optional<bt2_common::Uuid> uuid,
+std::unique_ptr<TraceCls> createTraceCls(nonstd::optional<std::string> uid,
                                          nonstd::optional<bt2::ConstMapValue::Shared> env,
                                          Fc::UP pktHeaderFc, ir::OptUserAttrs userAttrs)
 {
-    return bt2_common::makeUnique<TraceCls>(internal::CtfIrMixins::TraceCls {}, std::move(uuid),
+    return bt2_common::makeUnique<TraceCls>(internal::CtfIrMixins::TraceCls {}, std::move(uid),
                                             std::move(env), std::move(pktHeaderFc),
                                             std::move(userAttrs));
 }

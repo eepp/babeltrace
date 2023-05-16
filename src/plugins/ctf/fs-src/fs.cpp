@@ -218,9 +218,8 @@ std::string ctf_fs_make_port_name(struct ctf_fs_ds_file_group *ds_file_group)
      */
 
     /* For the trace, use the uuid if present, else the path. */
-    nonstd::optional<bt2_common::Uuid> uuid = ds_file_group->ctf_fs_trace->cls()->uuid();
-    if (uuid) {
-        name << uuid->str();
+    if (auto& uid = ds_file_group->ctf_fs_trace->cls()->uid()) {
+        name << *uid;
     } else {
         name << ds_file_group->ctf_fs_trace->path;
     }
@@ -371,7 +370,8 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
         BT_ASSERT(sc->defClkCls());
         int ret = bt_util_clock_cycles_to_ns_from_origin(
             *props.snapshots.beginDefClk, sc->defClkCls()->freq(),
-            sc->defClkCls()->offset().seconds(), sc->defClkCls()->offset().cycles(), &begin_ns);
+            sc->defClkCls()->offsetFromOrigin().seconds(),
+            sc->defClkCls()->offsetFromOrigin().cycles(), &begin_ns);
         if (ret) {
             BT_CLOGE_APPEND_CAUSE("Cannot convert clock cycles to nanoseconds from origin (`%s`).",
                                   path);
@@ -739,7 +739,7 @@ static int merge_ctf_fs_traces(std::vector<ctf_fs_trace::UP> traces, ctf_fs_trac
         unsigned int candidate_count;
 
         /* A bit of sanity check. */
-        BT_ASSERT(winner->cls()->uuid() == candidate->cls()->uuid());
+        BT_ASSERT(winner->cls()->uid() == candidate->cls()->uid());
 
         candidate_count = metadata_count_stream_and_event_classes(candidate);
 
@@ -881,8 +881,9 @@ static int decode_clock_snapshot_after_event(struct ctf_fs_trace *ctf_fs_trace,
     *cs = *visitor->result();
 
     /* Convert clock snapshot to timestamp. */
-    int ret = bt_util_clock_cycles_to_ns_from_origin(
-        *cs, default_cc.freq(), default_cc.offset().seconds(), default_cc.offset().cycles(), ts_ns);
+    int ret = bt_util_clock_cycles_to_ns_from_origin(*cs, default_cc.freq(),
+                                                     default_cc.offsetFromOrigin().seconds(),
+                                                     default_cc.offsetFromOrigin().cycles(), ts_ns);
     if (ret) {
         BT_CLOGE_APPEND_CAUSE("Failed to convert clock snapshot to timestamp");
         return ret;
@@ -1354,25 +1355,22 @@ int ctf_fs_component_create_ctf_fs_trace(struct ctf_fs_component *ctf_fs,
          * UUID, verify that.
          */
         for (const ctf_fs_trace::UP& this_trace : traces) {
-            if (!this_trace->cls()->uuid()) {
+            if (!this_trace->cls()->uid()) {
                 BT_CLOGE_APPEND_CAUSE(
-                    "Multiple traces given, but a trace does not have a UUID: path=%s",
+                    "Multiple traces given, but a trace does not have a UID: path=%s",
                     this_trace->path.c_str());
                 return -1;
             }
 
-            const bt2_common::Uuid first_trace_uuid = *first_trace->cls()->uuid();
-            const bt2_common::Uuid this_trace_uuid = *this_trace->cls()->uuid();
+            auto& first_trace_uid = *first_trace->cls()->uid();
+            auto& this_trace_uid = *this_trace->cls()->uid();
 
-            if (first_trace_uuid != this_trace_uuid) {
-                std::string firstTraceUUidStr = first_trace_uuid.str();
-                std::string thisTraceUuidStr = this_trace_uuid.str();
-
-                BT_CLOGE_APPEND_CAUSE("Multiple traces given, but UUIDs don't match: "
-                                      "first-trace-uuid=%s, first-trace-path=%s, "
-                                      "trace-uuid=%s, trace-path=%s",
-                                      firstTraceUUidStr.c_str(), first_trace->path.c_str(),
-                                      thisTraceUuidStr.c_str(), this_trace->path.c_str());
+            if (first_trace_uid != this_trace_uid) {
+                BT_CLOGE_APPEND_CAUSE("Multiple traces given, but UIDs don't match: "
+                                      "first-trace-uid=%s, first-trace-path=%s, "
+                                      "trace-uid=%s, trace-path=%s",
+                                      first_trace_uid.c_str(), first_trace->path.c_str(),
+                                      this_trace_uid.c_str(), this_trace->path.c_str());
                 return -1;
             }
         }

@@ -10,6 +10,7 @@
 #include "cpp-common/cfg-logging-error-reporting-throw.hpp"
 #include "cpp-common/exc.hpp"
 #include "cpp-common/optional.hpp"
+#include "cpp-common/uuid-view.hpp"
 #include "ctf-1-metadata-stream-parser.hpp"
 
 namespace ctf {
@@ -377,7 +378,7 @@ FieldLoc Ctf1MetadataStreamParser::_fieldLocFromOrigFieldPath(const ctf_field_pa
         }
     }
 
-    return createFieldLoc(origFcAndScope.second, std::move(items));
+    return createFieldLoc(origFcAndScope.second, std::move(items), bt2c::TextLoc {});
 }
 
 Fc::UP Ctf1MetadataStreamParser::_fcFromOrigFc(const ctf_field_class_sequence& origFc)
@@ -538,15 +539,15 @@ Ctf1MetadataStreamParser::_translateTraceCls(ctf_trace_class& origTraceCls)
         pktHeaderFc = this->_fcFromOrigFc(*origTraceCls.packet_header_fc);
     }
 
-    /* UUID */
-    nonstd::optional<bt2_common::Uuid> uuid;
+    /* Unique ID */
+    nonstd::optional<std::string> uid;
 
     if (origTraceCls.is_uuid_set) {
-        uuid = origTraceCls.uuid;
+        uid = bt2c::UuidView {origTraceCls.uuid}.str();
     }
 
     /* Create trace class */
-    auto traceCls = createTraceCls(std::move(uuid), envMapValFromOrigTraceCls(origTraceCls),
+    auto traceCls = createTraceCls(std::move(uid), envMapValFromOrigTraceCls(origTraceCls),
                                    std::move(pktHeaderFc));
 
     /* Mark original CTF IR trace class as translated */
@@ -575,18 +576,23 @@ ClkCls::SP Ctf1MetadataStreamParser::_clkClsFromOrigClkCls(const ctf_clock_class
             descr = origClkCls.description->str;
         }
 
-        /* UUID */
-        nonstd::optional<bt2c::Uuid> uuid;
+        /* Origin */
+        nonstd::optional<ir::ClkOrigin> origin;
 
-        if (origClkCls.has_uuid) {
-            uuid = origClkCls.uuid;
+        if (origClkCls.is_absolute) {
+            /* Unix epoch */
+            origin.emplace();
+        } else if (origClkCls.has_uuid) {
+            /* Provided by the producer */
+            origin.emplace(nonstd::nullopt, origClkCls.name->str,
+                           bt2c::UuidView {origClkCls.uuid}.str());
         }
 
         /* Create clock class */
-        auto clkCls = createClkCls(
-            origClkCls.name->str, origClkCls.frequency,
-            ir::ClkOffset {origClkCls.offset_seconds, origClkCls.offset_cycles},
-            origClkCls.is_absolute, std::move(descr), origClkCls.precision, std::move(uuid));
+        auto clkCls =
+            createClkCls(origClkCls.name->str, origClkCls.frequency,
+                         ir::ClkOffset {origClkCls.offset_seconds, origClkCls.offset_cycles},
+                         std::move(origin), std::move(descr), origClkCls.precision);
 
         /* Add to map of translated clock classes */
         _mClkClsMap.emplace(&origClkCls, clkCls);

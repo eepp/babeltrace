@@ -530,14 +530,14 @@ struct VarLenIntFieldVal<true> final
  *             width = 3
  *         ]
  *
- *         read_event_record_common_ctx_struct_field [
+ *         read_common_event_record_ctx_struct_field [
  *             label = "Read structure field"
  *             fillcolor = "#8e44ad"
  *             fontcolor = "white"
  *             width = 3
  *         ]
  *
- *         read_event_record_spec_ctx_struct_field [
+ *         read_spec_event_record_ctx_struct_field [
  *             label = "Read structure field"
  *             fillcolor = "#8e44ad"
  *             fontcolor = "white"
@@ -559,14 +559,14 @@ struct VarLenIntFieldVal<true> final
  *         TRY_BEGIN_READ_PKT_HEADER_SCOPE [fillcolor = "#f39c12", fontcolor = white]
  *         TRY_BEGIN_READ_PKT_CTX_SCOPE [fillcolor = "#f39c12", fontcolor = white]
  *         TRY_BEGIN_READ_EVENT_RECORD_HEADER_SCOPE [fillcolor = "#f39c12", fontcolor = white]
- *         TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE [fillcolor = "#f39c12", fontcolor = white]
- *         TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE [fillcolor = "#f39c12", fontcolor = white]
+ *         TRY_BEGIN_READ_COMMON_EVENT_RECORD_CTX_SCOPE [fillcolor = "#f39c12", fontcolor = white]
+ *         TRY_BEGIN_READ_SPEC_EVENT_RECORD_CTX_SCOPE [fillcolor = "#f39c12", fontcolor = white]
  *         TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE [fillcolor = "#f39c12", fontcolor = white]
  *         END_READ_PKT_HEADER_SCOPE [fillcolor = "#34495e", fontcolor = white]
  *         END_READ_PKT_CTX_SCOPE [fillcolor = "#34495e", fontcolor = white]
  *         END_READ_EVENT_RECORD_HEADER_SCOPE [fillcolor = "#34495e", fontcolor = white]
- *         END_READ_EVENT_RECORD_COMMON_CTX_SCOPE [fillcolor = "#34495e", fontcolor = white]
- *         END_READ_EVENT_RECORD_SPEC_CTX_SCOPE [fillcolor = "#34495e", fontcolor = white]
+ *         END_READ_COMMON_EVENT_RECORD_CTX_SCOPE [fillcolor = "#34495e", fontcolor = white]
+ *         END_READ_SPEC_EVENT_RECORD_CTX_SCOPE [fillcolor = "#34495e", fontcolor = white]
  *         END_READ_EVENT_RECORD_PAYLOAD_SCOPE [fillcolor = "#34495e", fontcolor = white]
  *         END_READ_EVENT_RECORD [fillcolor = "#2c3e50", fontcolor = white]
  *         END_READ_PKT_CONTENT [fillcolor = "#2c3e50", fontcolor = white]
@@ -597,17 +597,17 @@ struct VarLenIntFieldVal<true> final
  *         TRY_BEGIN_READ_EVENT_RECORD_HEADER_SCOPE -> read_event_record_header_struct_field
  *         read_event_record_header_struct_field -> END_READ_EVENT_RECORD_HEADER_SCOPE
  *         END_READ_EVENT_RECORD_HEADER_SCOPE -> SET_EVENT_RECORD_INFO_ITEM
- *         SET_EVENT_RECORD_INFO_ITEM -> TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE
- *         TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE -> END_READ_EVENT_RECORD [label = "No field,\nno event record class"]
- *         TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE -> TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE [label = "No field"]
- *         TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE -> read_event_record_common_ctx_struct_field
- *         read_event_record_common_ctx_struct_field -> END_READ_EVENT_RECORD_COMMON_CTX_SCOPE
- *         END_READ_EVENT_RECORD_COMMON_CTX_SCOPE -> END_READ_EVENT_RECORD [label = "No event record class"]
- *         END_READ_EVENT_RECORD_COMMON_CTX_SCOPE -> TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE
- *         TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE -> TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE [label = "No field"]
- *         TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE -> read_event_record_spec_ctx_struct_field
- *         read_event_record_spec_ctx_struct_field -> END_READ_EVENT_RECORD_SPEC_CTX_SCOPE
- *         END_READ_EVENT_RECORD_SPEC_CTX_SCOPE -> TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE
+ *         SET_EVENT_RECORD_INFO_ITEM -> TRY_BEGIN_READ_COMMON_EVENT_RECORD_CTX_SCOPE
+ *         TRY_BEGIN_READ_COMMON_EVENT_RECORD_CTX_SCOPE -> END_READ_EVENT_RECORD [label = "No field,\nno event record class"]
+ *         TRY_BEGIN_READ_COMMON_EVENT_RECORD_CTX_SCOPE -> TRY_BEGIN_READ_SPEC_EVENT_RECORD_CTX_SCOPE [label = "No field"]
+ *         TRY_BEGIN_READ_COMMON_EVENT_RECORD_CTX_SCOPE -> read_common_event_record_ctx_struct_field
+ *         read_common_event_record_ctx_struct_field -> END_READ_COMMON_EVENT_RECORD_CTX_SCOPE
+ *         END_READ_COMMON_EVENT_RECORD_CTX_SCOPE -> END_READ_EVENT_RECORD [label = "No event record class"]
+ *         END_READ_COMMON_EVENT_RECORD_CTX_SCOPE -> TRY_BEGIN_READ_SPEC_EVENT_RECORD_CTX_SCOPE
+ *         TRY_BEGIN_READ_SPEC_EVENT_RECORD_CTX_SCOPE -> TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE [label = "No field"]
+ *         TRY_BEGIN_READ_SPEC_EVENT_RECORD_CTX_SCOPE -> read_spec_event_record_ctx_struct_field
+ *         read_spec_event_record_ctx_struct_field -> END_READ_SPEC_EVENT_RECORD_CTX_SCOPE
+ *         END_READ_SPEC_EVENT_RECORD_CTX_SCOPE -> TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE
  *         TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE -> END_READ_EVENT_RECORD [label = "No field"]
  *         TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE -> read_event_record_payload_struct_field
  *         read_event_record_payload_struct_field -> END_READ_EVENT_RECORD_PAYLOAD_SCOPE
@@ -818,7 +818,7 @@ private:
         END_READ_EVENT_RECORD,
 
         /* End reading a common event record context scope */
-        END_READ_EVENT_RECORD_COMMON_CTX_SCOPE,
+        END_READ_COMMON_EVENT_RECORD_CTX_SCOPE,
 
         /* End reading an event record header scope */
         END_READ_EVENT_RECORD_HEADER_SCOPE,
@@ -827,7 +827,7 @@ private:
         END_READ_EVENT_RECORD_PAYLOAD_SCOPE,
 
         /* End reading a specific event record context scope */
-        END_READ_EVENT_RECORD_SPEC_CTX_SCOPE,
+        END_READ_SPEC_EVENT_RECORD_CTX_SCOPE,
 
         /* End reading a null-terminated string field */
         END_READ_NULL_TERMINATED_STR_FIELD,
@@ -1846,7 +1846,7 @@ private:
         TRY_BEGIN_READ_EVENT_RECORD,
 
         /* Try beginning reading a common event record context scope */
-        TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE,
+        TRY_BEGIN_READ_COMMON_EVENT_RECORD_CTX_SCOPE,
 
         /* Try beginning reading an event record header scope */
         TRY_BEGIN_READ_EVENT_RECORD_HEADER_SCOPE,
@@ -1855,7 +1855,7 @@ private:
         TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE,
 
         /* Try beginning reading a specific event record context scope */
-        TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE,
+        TRY_BEGIN_READ_SPEC_EVENT_RECORD_CTX_SCOPE,
 
         /* Try beginning reading a packet */
         TRY_BEGIN_READ_PKT,
@@ -3095,10 +3095,10 @@ private:
             return this->_handleTryBeginReadPktCtxScopeState();
         case _State::TRY_BEGIN_READ_EVENT_RECORD_HEADER_SCOPE:
             return this->_handleTryBeginReadEventRecordHeaderScopeState();
-        case _State::TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE:
-            return this->_handleTryBeginReadEventRecordCommonCtxScopeState();
-        case _State::TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE:
-            return this->_handleTryBeginReadEventRecordSpecCtxScopeState();
+        case _State::TRY_BEGIN_READ_COMMON_EVENT_RECORD_CTX_SCOPE:
+            return this->_handleTryBeginReadCommonEventRecordCtxScopeState();
+        case _State::TRY_BEGIN_READ_SPEC_EVENT_RECORD_CTX_SCOPE:
+            return this->_handleTryBeginReadSpecEventRecordCtxScopeState();
         case _State::TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE:
             return this->_handleTryBeginReadEventRecordPayloadScopeState();
         case _State::END_READ_PKT_HEADER_SCOPE:
@@ -3107,10 +3107,10 @@ private:
             return this->_handleEndReadPktCtxScopeState();
         case _State::END_READ_EVENT_RECORD_HEADER_SCOPE:
             return this->_handleEndReadEventRecordHeaderScopeState();
-        case _State::END_READ_EVENT_RECORD_COMMON_CTX_SCOPE:
-            return this->_handleEndReadEventRecordCommonCtxScopeState();
-        case _State::END_READ_EVENT_RECORD_SPEC_CTX_SCOPE:
-            return this->_handleEndReadEventRecordSpecCtxScopeState();
+        case _State::END_READ_COMMON_EVENT_RECORD_CTX_SCOPE:
+            return this->_handleEndReadCommonEventRecordCtxScopeState();
+        case _State::END_READ_SPEC_EVENT_RECORD_CTX_SCOPE:
+            return this->_handleEndReadSpecEventRecordCtxScopeState();
         case _State::END_READ_EVENT_RECORD_PAYLOAD_SCOPE:
             return this->_handleEndReadEventRecordPayloadScopeState();
         case _State::TRY_BEGIN_READ_EVENT_RECORD:
@@ -3533,14 +3533,14 @@ private:
     _StateHandlingReaction _handleTryBeginReadPktHeaderScopeState();
     _StateHandlingReaction _handleTryBeginReadPktCtxScopeState();
     _StateHandlingReaction _handleTryBeginReadEventRecordHeaderScopeState();
-    _StateHandlingReaction _handleTryBeginReadEventRecordCommonCtxScopeState();
-    _StateHandlingReaction _handleTryBeginReadEventRecordSpecCtxScopeState();
+    _StateHandlingReaction _handleTryBeginReadCommonEventRecordCtxScopeState();
+    _StateHandlingReaction _handleTryBeginReadSpecEventRecordCtxScopeState();
     _StateHandlingReaction _handleTryBeginReadEventRecordPayloadScopeState();
     _StateHandlingReaction _handleEndReadPktHeaderScopeState();
     _StateHandlingReaction _handleEndReadPktCtxScopeState();
     _StateHandlingReaction _handleEndReadEventRecordHeaderScopeState();
-    _StateHandlingReaction _handleEndReadEventRecordCommonCtxScopeState();
-    _StateHandlingReaction _handleEndReadEventRecordSpecCtxScopeState();
+    _StateHandlingReaction _handleEndReadCommonEventRecordCtxScopeState();
+    _StateHandlingReaction _handleEndReadSpecEventRecordCtxScopeState();
     _StateHandlingReaction _handleEndReadEventRecordPayloadScopeState();
     _StateHandlingReaction _handleTryBeginReadEventRecordState();
     _StateHandlingReaction _handleEndReadEventRecordState();
@@ -3748,8 +3748,8 @@ private:
                                                                    _State contentState,
                                                                    const Fc& fc);
     _StateHandlingReaction _handleCommonBeginReadStaticLenBlobFieldState(_State contentState);
-    void _handleCommonAfterEventRecordCommonCtxScopeState();
-    void _handleCommonAfterEventRecordSpecCtxScopeState();
+    void _handleCommonAfterCommonEventRecordCtxScopeState();
+    void _handleCommonAfterSpecEventRecordCtxScopeState();
 
     /*
      * Common compound field reading end state handler using `item`.

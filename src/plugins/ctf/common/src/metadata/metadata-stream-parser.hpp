@@ -67,7 +67,7 @@ public:
     }
 
 private:
-    virtual void _parseSection(const uint8_t *begin, const uint8_t *end) = 0;
+    virtual void _parseSection(const std::uint8_t *begin, const std::uint8_t *end) = 0;
 
     /*
      * Finalizes `*_mTraceCls` after its creation or when it gets new
@@ -85,7 +85,7 @@ private:
      * • Normalizes the offsets of the clock classes of `*_mTraceCls` so
      *   that the cycle part is less than the frequency.
      *
-     * • If `selfComp` is not `nullptr`, translates the contained
+     * • If `_mSelfComp` is not `nullptr`, translates the contained
      *   objects to their trace IR equivalents.
      */
     void _finalizeTraceCls();
@@ -93,7 +93,7 @@ private:
     /*
      * Applies the clock offset of `_mClkClsCfg` to `clkCls`.
      */
-    void _adjustClkClsOffset(ClkCls& clkCls) noexcept;
+    void _adjustClkClsOffsetFromOrigin(ClkCls& clkCls) noexcept;
 
     /*
      * Reconfigures `clkCls` using `_mClkClsCfg`.

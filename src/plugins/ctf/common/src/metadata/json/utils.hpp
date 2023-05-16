@@ -24,12 +24,6 @@ namespace ctf {
 namespace src {
 
 /*
- * Returns the UUID of the JSON object value `jsonObjVal`, or
- * `nonstd::nullopt` if there's no such property.
- */
-nonstd::optional<bt2_common::Uuid> uuidOfObj(const bt2_common::JsonObjVal& jsonObjVal);
-
-/*
  * Returns the object of the JSON object value `jsonObjVal` having the
  * key `key` as a libbabeltrace2 value object, or `nonstd::nullopt` if
  * there's no such key.
@@ -97,15 +91,13 @@ static inline const char *scopeStr(const ir::FieldLocScope scope) noexcept
     }
 }
 
-static inline std::string textLocStr(const bt2_common::TextLoc& loc)
-{
-    return bt2_common::textLocStr(loc, bt2_common::TextLocStrFmt::OFFSET);
-}
-
-static inline std::string textLocStr(const bt2_common::JsonVal& val)
-{
-    return textLocStr(val.loc());
-}
+/*
+ * Returns a string representation of `fieldLoc`, considering all its
+ * path items until `end` (excluded).
+ *
+ * `fieldLoc` must be an absolute field location.
+ */
+std::string absFieldLocStr(const FieldLoc& fieldLoc, FieldLoc::Items::const_iterator end);
 
 } /* namespace src */
 } /* namespace ctf */

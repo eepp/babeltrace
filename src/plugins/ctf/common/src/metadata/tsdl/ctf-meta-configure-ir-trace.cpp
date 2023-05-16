@@ -16,8 +16,8 @@
 void ctf_trace_class_configure_ir_trace(const ctf::src::TraceCls& tc, bt2::Trace irTrace,
                                         const bt2_common::LogCfg& logCfg)
 {
-    if (tc.uuid()) {
-        irTrace.uuid(*tc.uuid());
+    if (tc.uid()) {
+        irTrace.uid(*tc.uid());
     }
 
     if (tc.env()) {

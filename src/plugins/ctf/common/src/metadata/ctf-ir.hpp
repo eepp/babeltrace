@@ -15,6 +15,7 @@
 #include "common/uuid.h"
 #include "common/assert.h"
 #include "cpp-common/optional.hpp"
+#include "cpp-common/text-loc.hpp"
 #include "cpp-common/bt2/trace-ir.hpp"
 #include "../../metadata/ctf-ir.hpp"
 
@@ -287,6 +288,27 @@ using FcSet = std::unordered_set<ir::Fc<internal::CtfIrMixins> *>;
 namespace internal {
 
 /*
+ * Field location user mixin.
+ */
+class FieldLocMixin
+{
+public:
+    explicit FieldLocMixin(const bt2_common::TextLoc& loc) noexcept;
+
+    /*
+     * Text location of this field location within the metadata stream.
+     */
+    const bt2_common::TextLoc& loc() const noexcept
+    {
+        return _mLoc;
+    }
+
+private:
+    /* Text location of this field location within the metadata stream */
+    bt2_common::TextLoc _mLoc;
+};
+
+/*
  * Clock class user mixin.
  */
 class ClkClsMixin
@@ -318,10 +340,23 @@ class FcMixin
     friend class VarLenIntFcMixin;
 
 public:
-    explicit FcMixin() noexcept = default;
-
-    explicit FcMixin(const FcDeepType deepType) noexcept : _mDeepType {deepType}
+    explicit FcMixin(const bt2_common::TextLoc& loc = bt2_common::TextLoc {}) noexcept : _mLoc {loc}
     {
+    }
+
+    explicit FcMixin(const FcDeepType deepType,
+                     const bt2_common::TextLoc& loc = bt2_common::TextLoc {}) noexcept :
+        _mDeepType {deepType},
+        _mLoc {loc}
+    {
+    }
+
+    /*
+     * Text location of this field class within the metadata stream.
+     */
+    const bt2_common::TextLoc& loc() const noexcept
+    {
+        return _mLoc;
     }
 
     /*
@@ -335,6 +370,9 @@ public:
 private:
     /* Deep type of this field class */
     FcDeepType _mDeepType;
+
+    /* Text location of this field class within the metadata stream */
+    bt2_common::TextLoc _mLoc;
 };
 
 /*
@@ -431,10 +469,10 @@ public:
 class DependentFcMixin
 {
 public:
-    explicit DependentFcMixin() noexcept = default;
+    explicit DependentFcMixin() noexcept;
 
     /*
-     * Index of the saved dependency value of this field class.
+     * Index of the saved  endency value of this field class.
      */
     const nonstd::optional<std::size_t>& savedDepValIndex() const noexcept
     {
@@ -560,6 +598,7 @@ private:
  */
 struct CtfIrMixins final : public ir::DefUserMixins
 {
+    using FieldLoc = FieldLocMixin;
     using ClkCls = ClkClsMixin;
     using Fc = FcMixin;
     using FixedLenBoolFc = FixedLenBoolFcMixin;
@@ -622,7 +661,8 @@ using ConstFcVisitor = ir::ConstFcVisitor<internal::CtfIrMixins>;
  * Creates and returns a field location having the scope `scope` and the
  * path items `items`.
  */
-FieldLoc createFieldLoc(ir::FieldLocScope scope, FieldLoc::Items items);
+FieldLoc createFieldLoc(nonstd::optional<ir::FieldLocScope> scope, FieldLoc::Items items,
+                        const bt2_common::TextLoc& loc);
 
 /*
  * Creates and returns a class of fixed-length bit array fields having
@@ -630,17 +670,41 @@ FieldLoc createFieldLoc(ir::FieldLocScope scope, FieldLoc::Items items);
  * `byteOrder`, and the user attributes `userAttrs`.
  */
 std::unique_ptr<FixedLenBitArrayFc>
-createFixedLenBitArrayFc(unsigned int align, bt2_common::DataLen len, ir::ByteOrder byteOrder,
+createFixedLenBitArrayFc(const bt2_common::TextLoc& loc, unsigned int align,
+                         bt2_common::DataLen len, ir::ByteOrder byteOrder,
                          ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<FixedLenBitArrayFc>
+createFixedLenBitArrayFc(unsigned int align, bt2_common::DataLen len, ir::ByteOrder byteOrder,
+                         ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createFixedLenBitArrayFc(bt2_common::TextLoc {}, align, len, byteOrder,
+                                    std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of fixed-length boolean fields having the
  * alignment `align` bits, the length `len`, the byte order `byteOrder`,
  * and the user attributes `userAttrs`.
  */
-std::unique_ptr<FixedLenBoolFc> createFixedLenBoolFc(unsigned int align, bt2_common::DataLen len,
+std::unique_ptr<FixedLenBoolFc> createFixedLenBoolFc(const bt2_common::TextLoc& loc,
+                                                     unsigned int align, bt2_common::DataLen len,
                                                      ir::ByteOrder byteOrder,
                                                      ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<FixedLenBoolFc>
+createFixedLenBoolFc(unsigned int align, bt2_common::DataLen len, ir::ByteOrder byteOrder,
+                     ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createFixedLenBoolFc(bt2_common::TextLoc {}, align, len, byteOrder,
+                                std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of fixed-length floating point number
@@ -648,8 +712,19 @@ std::unique_ptr<FixedLenBoolFc> createFixedLenBoolFc(unsigned int align, bt2_com
  * order `byteOrder`, and the user attributes `userAttrs`.
  */
 std::unique_ptr<FixedLenFloatFc>
+createFixedLenFloatFc(const bt2_common::TextLoc& loc, unsigned int align, bt2_common::DataLen len,
+                      ir::ByteOrder byteOrder, ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<FixedLenFloatFc>
 createFixedLenFloatFc(unsigned int align, bt2_common::DataLen len, ir::ByteOrder byteOrder,
-                      ir::OptUserAttrs userAttrs = nonstd::nullopt);
+                      ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createFixedLenFloatFc(bt2_common::TextLoc {}, align, len, byteOrder,
+                                 std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of fixed-length unsigned integer fields
@@ -657,11 +732,22 @@ createFixedLenFloatFc(unsigned int align, bt2_common::DataLen len, ir::ByteOrder
  * `byteOrder`, the preferred display base `prefDispBase`, the roles
  * `roles`, and the user attributes `userAttrs`.
  */
-std::unique_ptr<FixedLenUIntFc> createFixedLenUIntFc(unsigned int align, bt2_common::DataLen len,
-                                                     ir::ByteOrder byteOrder,
-                                                     ir::DispBase prefDispBase = ir::DispBase::DEC,
-                                                     ir::UIntFieldRoles roles = {},
-                                                     ir::OptUserAttrs userAttrs = nonstd::nullopt);
+std::unique_ptr<FixedLenUIntFc>
+createFixedLenUIntFc(const bt2_common::TextLoc& loc, unsigned int align, bt2_common::DataLen len,
+                     ir::ByteOrder byteOrder, ir::DispBase prefDispBase = ir::DispBase::DEC,
+                     ir::UIntFieldRoles roles = {}, ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<FixedLenUIntFc>
+createFixedLenUIntFc(unsigned int align, bt2_common::DataLen len, ir::ByteOrder byteOrder,
+                     ir::DispBase prefDispBase = ir::DispBase::DEC, ir::UIntFieldRoles roles = {},
+                     ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createFixedLenUIntFc(bt2_common::TextLoc {}, align, len, byteOrder, prefDispBase,
+                                std::move(roles), std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of fixed-length signed integer fields
@@ -669,10 +755,23 @@ std::unique_ptr<FixedLenUIntFc> createFixedLenUIntFc(unsigned int align, bt2_com
  * `byteOrder`, the preferred display base `prefDispBase`, and the user
  * attributes `userAttrs`.
  */
-std::unique_ptr<FixedLenSIntFc> createFixedLenSIntFc(unsigned int align, bt2_common::DataLen len,
+std::unique_ptr<FixedLenSIntFc> createFixedLenSIntFc(const bt2_common::TextLoc& loc,
+                                                     unsigned int align, bt2_common::DataLen len,
                                                      ir::ByteOrder byteOrder,
                                                      ir::DispBase prefDispBase = ir::DispBase::DEC,
                                                      ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<FixedLenSIntFc>
+createFixedLenSIntFc(unsigned int align, bt2_common::DataLen len, ir::ByteOrder byteOrder,
+                     ir::DispBase prefDispBase = ir::DispBase::DEC,
+                     ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createFixedLenSIntFc(bt2_common::TextLoc {}, align, len, byteOrder, prefDispBase,
+                                std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of fixed-length unsigned enumeration
@@ -682,10 +781,23 @@ std::unique_ptr<FixedLenSIntFc> createFixedLenSIntFc(unsigned int align, bt2_com
  * `userAttrs`.
  */
 std::unique_ptr<FixedLenUEnumFc>
+createFixedLenUEnumFc(const bt2_common::TextLoc& loc, unsigned int align, bt2_common::DataLen len,
+                      ir::ByteOrder byteOrder, FixedLenUEnumFc::Mappings mappings,
+                      ir::DispBase prefDispBase = ir::DispBase::DEC, ir::UIntFieldRoles roles = {},
+                      ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<FixedLenUEnumFc>
 createFixedLenUEnumFc(unsigned int align, bt2_common::DataLen len, ir::ByteOrder byteOrder,
                       FixedLenUEnumFc::Mappings mappings,
                       ir::DispBase prefDispBase = ir::DispBase::DEC, ir::UIntFieldRoles roles = {},
-                      ir::OptUserAttrs userAttrs = nonstd::nullopt);
+                      ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createFixedLenUEnumFc(bt2_common::TextLoc {}, align, len, byteOrder, std::move(mappings),
+                                 prefDispBase, std::move(roles), std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of fixed-length signed enumeration fields
@@ -694,27 +806,63 @@ createFixedLenUEnumFc(unsigned int align, bt2_common::DataLen len, ir::ByteOrder
  * `prefDispBase`, and the user attributes `userAttrs`.
  */
 std::unique_ptr<FixedLenSEnumFc>
+createFixedLenSEnumFc(const bt2_common::TextLoc& loc, unsigned int align, bt2_common::DataLen len,
+                      ir::ByteOrder byteOrder, FixedLenSEnumFc::Mappings mappings,
+                      ir::DispBase prefDispBase = ir::DispBase::DEC,
+                      ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<FixedLenSEnumFc>
 createFixedLenSEnumFc(unsigned int align, bt2_common::DataLen len, ir::ByteOrder byteOrder,
                       FixedLenSEnumFc::Mappings mappings,
                       ir::DispBase prefDispBase = ir::DispBase::DEC,
-                      ir::OptUserAttrs userAttrs = nonstd::nullopt);
+                      ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createFixedLenSEnumFc(bt2_common::TextLoc {}, align, len, byteOrder, std::move(mappings),
+                                 prefDispBase, std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of variable-length unsigned integer
  * fields having the preferred display base `prefDispBase`, the roles
  * `roles`, and the user attributes `userAttrs`.
  */
-std::unique_ptr<VarLenUIntFc> createVarLenUIntFc(ir::DispBase prefDispBase = ir::DispBase::DEC,
+std::unique_ptr<VarLenUIntFc> createVarLenUIntFc(const bt2_common::TextLoc& loc,
+                                                 ir::DispBase prefDispBase = ir::DispBase::DEC,
                                                  ir::UIntFieldRoles roles = {},
                                                  ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<VarLenUIntFc>
+createVarLenUIntFc(ir::DispBase prefDispBase = ir::DispBase::DEC, ir::UIntFieldRoles roles = {},
+                   ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createVarLenUIntFc(bt2_common::TextLoc {}, prefDispBase, std::move(roles),
+                              std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of variable-length signed integer fields
  * having the preferred display base `prefDispBase` and the user
  * attributes `userAttrs`.
  */
-std::unique_ptr<VarLenSIntFc> createVarLenSIntFc(ir::DispBase prefDispBase = ir::DispBase::DEC,
+std::unique_ptr<VarLenSIntFc> createVarLenSIntFc(const bt2_common::TextLoc& loc,
+                                                 ir::DispBase prefDispBase = ir::DispBase::DEC,
                                                  ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<VarLenSIntFc>
+createVarLenSIntFc(ir::DispBase prefDispBase = ir::DispBase::DEC,
+                   ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createVarLenSIntFc(bt2_common::TextLoc {}, prefDispBase, std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of variable-length unsigned enumeration
@@ -722,26 +870,62 @@ std::unique_ptr<VarLenSIntFc> createVarLenSIntFc(ir::DispBase prefDispBase = ir:
  * `prefDispBase`, the roles `roles`, and the user attributes
  * `userAttrs`.
  */
-std::unique_ptr<VarLenUEnumFc> createVarLenUEnumFc(FixedLenUEnumFc::Mappings mappings,
+std::unique_ptr<VarLenUEnumFc> createVarLenUEnumFc(const bt2_common::TextLoc& loc,
+                                                   FixedLenUEnumFc::Mappings mappings,
                                                    ir::DispBase prefDispBase = ir::DispBase::DEC,
                                                    ir::UIntFieldRoles roles = {},
                                                    ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<VarLenUEnumFc>
+createVarLenUEnumFc(FixedLenUEnumFc::Mappings mappings,
+                    ir::DispBase prefDispBase = ir::DispBase::DEC, ir::UIntFieldRoles roles = {},
+                    ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createVarLenUEnumFc(bt2_common::TextLoc {}, std::move(mappings), prefDispBase,
+                               std::move(roles), std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of variable-length signed enumeration
  * fields having the mapping `mapping`, the preferred display base
  * `prefDispBase`, and the user attributes `userAttrs`.
  */
-std::unique_ptr<VarLenSEnumFc> createVarLenSEnumFc(FixedLenSEnumFc::Mappings mappings,
+std::unique_ptr<VarLenSEnumFc> createVarLenSEnumFc(const bt2_common::TextLoc& loc,
+                                                   FixedLenSEnumFc::Mappings mappings,
                                                    ir::DispBase prefDispBase = ir::DispBase::DEC,
                                                    ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<VarLenSEnumFc>
+createVarLenSEnumFc(FixedLenSEnumFc::Mappings mappings,
+                    ir::DispBase prefDispBase = ir::DispBase::DEC,
+                    ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createVarLenSEnumFc(bt2_common::TextLoc {}, std::move(mappings), prefDispBase,
+                               std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of null-terminated fields having the user
  * attributes `userAttrs`.
  */
 std::unique_ptr<NullTerminatedStrFc>
-createNullTerminatedStrFc(ir::OptUserAttrs userAttrs = nonstd::nullopt);
+createNullTerminatedStrFc(const bt2_common::TextLoc& loc,
+                          ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<NullTerminatedStrFc>
+createNullTerminatedStrFc(ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createNullTerminatedStrFc(bt2_common::TextLoc {}, std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of static-length array fields having the
@@ -750,9 +934,21 @@ createNullTerminatedStrFc(ir::OptUserAttrs userAttrs = nonstd::nullopt);
  * stream UUID" role if `hasMetadataStreamUuidRole` is true.
  */
 std::unique_ptr<StaticLenArrayFc>
+createStaticLenArrayFc(const bt2_common::TextLoc& loc, std::size_t len, Fc::UP elemFc,
+                       unsigned int minAlign = 1, ir::OptUserAttrs userAttrs = nonstd::nullopt,
+                       bool hasMetadataStreamUuidRole = false);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<StaticLenArrayFc>
 createStaticLenArrayFc(std::size_t len, Fc::UP elemFc, unsigned int minAlign = 1,
                        ir::OptUserAttrs userAttrs = nonstd::nullopt,
-                       bool hasMetadataStreamUuidRole = false);
+                       bool hasMetadataStreamUuidRole = false)
+{
+    return createStaticLenArrayFc(bt2_common::TextLoc {}, len, std::move(elemFc), minAlign,
+                                  std::move(userAttrs), hasMetadataStreamUuidRole);
+}
 
 /*
  * Creates and returns a class of dynamic-length array fields having the
@@ -760,24 +956,55 @@ createStaticLenArrayFc(std::size_t len, Fc::UP elemFc, unsigned int minAlign = 1
  * `elemFc`, the minimum alignment `minAlign` bits, and the user
  * attributes `userAttrs`.
  */
-std::unique_ptr<DynLenArrayFc> createDynLenArrayFc(FieldLoc lenFieldLoc, Fc::UP elemFc,
+std::unique_ptr<DynLenArrayFc> createDynLenArrayFc(const bt2_common::TextLoc& loc,
+                                                   FieldLoc lenFieldLoc, Fc::UP elemFc,
                                                    unsigned int minAlign = 1,
                                                    ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<DynLenArrayFc>
+createDynLenArrayFc(FieldLoc lenFieldLoc, Fc::UP elemFc, unsigned int minAlign = 1,
+                    ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createDynLenArrayFc(bt2_common::TextLoc {}, std::move(lenFieldLoc), std::move(elemFc),
+                               minAlign, std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of static-length string fields having the
  * length `len` bytes and the user attributes `userAttrs`.
  */
-std::unique_ptr<StaticLenStrFc> createStaticLenStrFc(std::size_t len,
+std::unique_ptr<StaticLenStrFc> createStaticLenStrFc(const bt2_common::TextLoc& loc,
+                                                     std::size_t len,
                                                      ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<StaticLenStrFc>
+createStaticLenStrFc(std::size_t len, ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createStaticLenStrFc(bt2_common::TextLoc {}, len, std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of dynamic-length string fields having
  * the length field location `lenFieldLoc` and the user attributes
  * `userAttrs`.
  */
-std::unique_ptr<DynLenStrFc> createDynLenStrFc(FieldLoc lenFieldLoc,
+std::unique_ptr<DynLenStrFc> createDynLenStrFc(const bt2_common::TextLoc& loc, FieldLoc lenFieldLoc,
                                                ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<DynLenStrFc>
+createDynLenStrFc(FieldLoc lenFieldLoc, ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createDynLenStrFc(bt2_common::TextLoc {}, std::move(lenFieldLoc), std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of static-length BLOB fields having the
@@ -786,9 +1013,22 @@ std::unique_ptr<DynLenStrFc> createDynLenStrFc(FieldLoc lenFieldLoc,
  * attributes `userAttrs`.
  */
 std::unique_ptr<StaticLenBlobFc>
-createStaticLenBlobFc(std::size_t len, std::string mediaType = StaticLenBlobFc::defaultMediaType,
+createStaticLenBlobFc(const bt2_common::TextLoc& loc, std::size_t len,
+                      std::string mediaType = StaticLenBlobFc::defaultMediaType,
                       bool hasMetadataStreamUuidRole = false,
                       ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<StaticLenBlobFc>
+createStaticLenBlobFc(std::size_t len, std::string mediaType = StaticLenBlobFc::defaultMediaType,
+                      bool hasMetadataStreamUuidRole = false,
+                      ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createStaticLenBlobFc(bt2_common::TextLoc {}, len, std::move(mediaType),
+                                 hasMetadataStreamUuidRole, std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of dynamic-length BLOB fields having the
@@ -796,8 +1036,20 @@ createStaticLenBlobFc(std::size_t len, std::string mediaType = StaticLenBlobFc::
  * the user attributes `userAttrs`.
  */
 std::unique_ptr<DynLenBlobFc>
-createDynLenBlobFc(FieldLoc lenFieldLoc, std::string mediaType = DynLenBlobFc::defaultMediaType,
+createDynLenBlobFc(const bt2_common::TextLoc& loc, FieldLoc lenFieldLoc,
+                   std::string mediaType = DynLenBlobFc::defaultMediaType,
                    ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<DynLenBlobFc>
+createDynLenBlobFc(FieldLoc lenFieldLoc, std::string mediaType = DynLenBlobFc::defaultMediaType,
+                   ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createDynLenBlobFc(bt2_common::TextLoc {}, std::move(lenFieldLoc), std::move(mediaType),
+                              std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of structure field members having the
@@ -812,9 +1064,21 @@ StructFieldMemberCls createStructFieldMemberCls(std::string name, Fc::UP fc,
  * classes `memberClasses`, the minimum alignment `minAlign` bits, and
  * the user attributes `userAttrs`.
  */
-std::unique_ptr<StructFc> createStructFc(StructFc::MemberClasses&& memberClasses = {},
+std::unique_ptr<StructFc> createStructFc(const bt2_common::TextLoc& loc,
+                                         StructFc::MemberClasses&& memberClasses = {},
                                          unsigned int minAlign = 1,
                                          ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<StructFc> createStructFc(StructFc::MemberClasses&& memberClasses = {},
+                                                       unsigned int minAlign = 1,
+                                                       ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createStructFc(bt2_common::TextLoc {}, std::move(memberClasses), minAlign,
+                          std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of optional fields having a boolean
@@ -822,7 +1086,18 @@ std::unique_ptr<StructFc> createStructFc(StructFc::MemberClasses&& memberClasses
  * `selFieldLoc`, and the user attributes `userAttrs`.
  */
 std::unique_ptr<OptionalWithBoolSelFc>
-createOptionalFc(Fc::UP fc, FieldLoc selFieldLoc, ir::OptUserAttrs userAttrs = nonstd::nullopt);
+createOptionalFc(const bt2_common::TextLoc& loc, Fc::UP fc, FieldLoc selFieldLoc,
+                 ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<OptionalWithBoolSelFc>
+createOptionalFc(Fc::UP fc, FieldLoc selFieldLoc, ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createOptionalFc(bt2_common::TextLoc {}, std::move(fc), std::move(selFieldLoc),
+                            std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of optional fields having an unsigned
@@ -831,8 +1106,19 @@ createOptionalFc(Fc::UP fc, FieldLoc selFieldLoc, ir::OptUserAttrs userAttrs = n
  * `selFieldRanges`, and the user attributes `userAttrs`.
  */
 std::unique_ptr<OptionalWithUIntSelFc>
+createOptionalFc(const bt2_common::TextLoc& loc, Fc::UP fc, FieldLoc selFieldLoc,
+                 UIntRangeSet selFieldRanges, ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<OptionalWithUIntSelFc>
 createOptionalFc(Fc::UP fc, FieldLoc selFieldLoc, UIntRangeSet selFieldRanges,
-                 ir::OptUserAttrs userAttrs = nonstd::nullopt);
+                 ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createOptionalFc(bt2_common::TextLoc {}, std::move(fc), std::move(selFieldLoc),
+                            std::move(selFieldRanges), std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of optional fields having a signed
@@ -841,8 +1127,19 @@ createOptionalFc(Fc::UP fc, FieldLoc selFieldLoc, UIntRangeSet selFieldRanges,
  * `selFieldRanges`, and the user attributes `userAttrs`.
  */
 std::unique_ptr<OptionalWithSIntSelFc>
+createOptionalFc(const bt2_common::TextLoc& loc, Fc::UP fc, FieldLoc selFieldLoc,
+                 SIntRangeSet selFieldRanges, ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<OptionalWithSIntSelFc>
 createOptionalFc(Fc::UP fc, FieldLoc selFieldLoc, SIntRangeSet selFieldRanges,
-                 ir::OptUserAttrs userAttrs = nonstd::nullopt);
+                 ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createOptionalFc(bt2_common::TextLoc {}, std::move(fc), std::move(selFieldLoc),
+                            std::move(selFieldRanges), std::move(userAttrs));
+}
 
 /*
  * Creates and returns an option, for the class of a variant field
@@ -869,32 +1166,54 @@ VariantWithSIntSelFc::Opt createVariantFcOpt(Fc::UP fc, SIntRangeSet selFieldRan
  * integer selector, the options `opts`, the selector field location
  * `selFieldLoc`, and the user attributes `userAttrs`.
  */
-std::unique_ptr<VariantWithUIntSelFc> createVariantFc(VariantWithUIntSelFc::Opts&& opts,
+std::unique_ptr<VariantWithUIntSelFc> createVariantFc(const bt2_common::TextLoc& loc,
+                                                      VariantWithUIntSelFc::Opts&& opts,
                                                       FieldLoc selFieldLoc,
                                                       ir::OptUserAttrs userAttrs = nonstd::nullopt);
+
+/*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<VariantWithUIntSelFc>
+createVariantFc(VariantWithUIntSelFc::Opts&& opts, FieldLoc selFieldLoc,
+                ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createVariantFc(bt2_common::TextLoc {}, std::move(opts), std::move(selFieldLoc),
+                           std::move(userAttrs));
+}
 
 /*
  * Creates and returns a class of variant fields having a signed integer
  * selector, the options `opts`, the selector field location
  * `selFieldLoc`, and the user attributes `userAttrs`.
  */
-std::unique_ptr<VariantWithSIntSelFc> createVariantFc(VariantWithSIntSelFc::Opts&& opts,
+std::unique_ptr<VariantWithSIntSelFc> createVariantFc(const bt2_common::TextLoc& loc,
+                                                      VariantWithSIntSelFc::Opts&& opts,
                                                       FieldLoc selFieldLoc,
                                                       ir::OptUserAttrs userAttrs = nonstd::nullopt);
 
 /*
+ * Overload without a text location.
+ */
+static inline std::unique_ptr<VariantWithSIntSelFc>
+createVariantFc(VariantWithSIntSelFc::Opts&& opts, FieldLoc selFieldLoc,
+                ir::OptUserAttrs userAttrs = nonstd::nullopt)
+{
+    return createVariantFc(bt2_common::TextLoc {}, std::move(opts), std::move(selFieldLoc),
+                           std::move(userAttrs));
+}
+
+/*
  * Creates and returns a class of a clocks havin the name `name`, the
- * frequency `freq` Hz, the offset from origin `offset`, its origin
- * being the Unix epoch if `originIsUnixEpoch` is true, the description
- * `descr`, the precision `precision` cycles, the UUID `uuid`, and the
- * user attributes `userAttrs`.
+ * frequency `freq` Hz, the offset from origin `offsetFromOrigin`, the
+ * origin `origin`, the description `descr`, the precision `precision`
+ * cycles, and the user attributes `userAttrs`.
  */
 ClkCls::SP createClkCls(std::string name, unsigned long long freq,
                         const ir::ClkOffset& offset = ir::ClkOffset {},
-                        bool originIsUnixEpoch = true,
+                        nonstd::optional<ir::ClkOrigin> origin = ir::ClkOrigin {},
                         nonstd::optional<std::string> descr = nonstd::nullopt,
                         unsigned long long precision = 0,
-                        nonstd::optional<bt2_common::Uuid> uuid = nonstd::nullopt,
                         ir::OptUserAttrs userAttrs = nonstd::nullopt);
 
 /*
@@ -914,22 +1233,22 @@ createEventRecordCls(unsigned long long id, nonstd::optional<std::string> ns = n
  * having the namespace `ns`, the name `name`, the packet context field
  * class `pktCtxFc`, the event record header field class
  * `eventRecordHeaderFc`, the common event record context field class
- * `eventRecordCommonCtxFc`, the default clock class `defClkCls`, and
+ * `commonEventRecordCtxFc`, the default clock class `defClkCls`, and
  * the user attributes `userAttrs`.
  */
 std::unique_ptr<DataStreamCls>
 createDataStreamCls(unsigned long long id, nonstd::optional<std::string> ns = nonstd::nullopt,
                     nonstd::optional<std::string> name = nonstd::nullopt, Fc::UP pktCtxFc = nullptr,
-                    Fc::UP eventRecordHeaderFc = nullptr, Fc::UP eventRecordCommonCtxFc = nullptr,
+                    Fc::UP eventRecordHeaderFc = nullptr, Fc::UP commonEventRecordCtxFc = nullptr,
                     ClkCls::SP defClkCls = nullptr, ir::OptUserAttrs userAttrs = nonstd::nullopt);
 
 /*
- * Creates and returns a class of traces having the UUID `uuid`, the
+ * Creates and returns a class of traces having the unique ID `uid`, the
  * environment `env`, the packet header field class `pktHeaderFc`, and
  * the user attributes `userAttrs`.
  */
 std::unique_ptr<TraceCls>
-createTraceCls(nonstd::optional<bt2_common::Uuid> uuid = nonstd::nullopt,
+createTraceCls(nonstd::optional<std::string> uid = nonstd::nullopt,
                nonstd::optional<bt2::ConstMapValue::Shared> env = nonstd::nullopt,
                Fc::UP pktHeaderFc = nullptr, ir::OptUserAttrs userAttrs = nonstd::nullopt);
 

@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2022 EfficiOS, inc.
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #ifndef SRC_CPP_COMMON_VECTOR_HPP
 #define SRC_CPP_COMMON_VECTOR_HPP
 

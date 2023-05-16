@@ -422,12 +422,12 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadEventRecordHeader
     return this->_handleCommonEndReadScopeState(ir::FieldLocScope::EVENT_RECORD_HEADER);
 }
 
-void ItemSeqIter::_handleCommonAfterEventRecordCommonCtxScopeState()
+void ItemSeqIter::_handleCommonAfterCommonEventRecordCtxScopeState()
 {
     if (_mItems.eventRecordInfo._mCls) {
         /* Next: try reading specific context field */
-        this->_prepareToTryReadScope(_State::TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE,
-                                     _State::END_READ_EVENT_RECORD_SPEC_CTX_SCOPE,
+        this->_prepareToTryReadScope(_State::TRY_BEGIN_READ_SPEC_EVENT_RECORD_CTX_SCOPE,
+                                     _State::END_READ_SPEC_EVENT_RECORD_CTX_SCOPE,
                                      ir::FieldLocScope::EVENT_RECORD_SPEC_CTX,
                                      _mItems.eventRecordInfo._mCls->specCtxFc());
     } else {
@@ -436,24 +436,24 @@ void ItemSeqIter::_handleCommonAfterEventRecordCommonCtxScopeState()
     }
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadEventRecordCommonCtxScopeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadCommonEventRecordCtxScopeState()
 {
     if (!_mCurScope.fc) {
         /* No common event record context field */
-        this->_handleCommonAfterEventRecordCommonCtxScopeState();
+        this->_handleCommonAfterCommonEventRecordCtxScopeState();
         return _StateHandlingReaction::CONTINUE;
     }
 
     return this->_handleCommonBeginReadScopeState(ir::FieldLocScope::EVENT_RECORD_COMMON_CTX);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadEventRecordCommonCtxScopeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadCommonEventRecordCtxScopeState()
 {
-    this->_handleCommonAfterEventRecordCommonCtxScopeState();
+    this->_handleCommonAfterCommonEventRecordCtxScopeState();
     return this->_handleCommonEndReadScopeState(ir::FieldLocScope::EVENT_RECORD_COMMON_CTX);
 }
 
-void ItemSeqIter::_handleCommonAfterEventRecordSpecCtxScopeState()
+void ItemSeqIter::_handleCommonAfterSpecEventRecordCtxScopeState()
 {
     BT_ASSERT_DBG(_mItems.eventRecordInfo._mCls);
 
@@ -464,20 +464,20 @@ void ItemSeqIter::_handleCommonAfterEventRecordSpecCtxScopeState()
                                  _mItems.eventRecordInfo._mCls->payloadFc());
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadEventRecordSpecCtxScopeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadSpecEventRecordCtxScopeState()
 {
     if (!_mCurScope.fc) {
         /* No specific event record context field */
-        this->_handleCommonAfterEventRecordSpecCtxScopeState();
+        this->_handleCommonAfterSpecEventRecordCtxScopeState();
         return _StateHandlingReaction::CONTINUE;
     }
 
     return this->_handleCommonBeginReadScopeState(ir::FieldLocScope::EVENT_RECORD_SPEC_CTX);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadEventRecordSpecCtxScopeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadSpecEventRecordCtxScopeState()
 {
-    this->_handleCommonAfterEventRecordSpecCtxScopeState();
+    this->_handleCommonAfterSpecEventRecordCtxScopeState();
     return this->_handleCommonEndReadScopeState(ir::FieldLocScope::EVENT_RECORD_SPEC_CTX);
 }
 
@@ -634,10 +634,10 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetEventRecordInfoItemSt
     this->_updateForUser(_mItems.eventRecordInfo);
 
     /* Next: try reading common event record context field */
-    this->_prepareToTryReadScope(_State::TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE,
-                                 _State::END_READ_EVENT_RECORD_COMMON_CTX_SCOPE,
+    this->_prepareToTryReadScope(_State::TRY_BEGIN_READ_COMMON_EVENT_RECORD_CTX_SCOPE,
+                                 _State::END_READ_COMMON_EVENT_RECORD_CTX_SCOPE,
                                  ir::FieldLocScope::EVENT_RECORD_COMMON_CTX,
-                                 dataStreamCls.eventRecordCommonCtxFc());
+                                 dataStreamCls.commonEventRecordCtxFc());
     return _StateHandlingReaction::STOP;
 }
 

@@ -11,6 +11,7 @@
 #include "cpp-common/data-len.hpp"
 #include "../../../metadata/ctf-ir.hpp"
 #include "cpp-common/log-cfg.hpp"
+#include "cpp-common/uuid.hpp"
 
 namespace ctf {
 namespace src {

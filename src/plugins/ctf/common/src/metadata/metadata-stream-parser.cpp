@@ -6,6 +6,7 @@
 
 #include "metadata-stream-parser.hpp"
 #include "normalize-clk-offset.hpp"
+#include "cpp-common/uuid.hpp"
 
 namespace ctf {
 namespace src {
@@ -19,25 +20,27 @@ using namespace bt2c::literals::datalen;
  * option.
  *
  * This is used to provide a visiting context to an `FcFinder` instance.
- * For example, consider this scope field class:
  *
- * Root: Structure FC                                       [0]
- *   `len`: Fixed-length unsigned integer FC                [1]
- *   `meow`: Dynamic-length array FC                        [2]
- *     Element FC: Structure FC                             [3]
- *       `tag`: Fixed-length signed integer FC              [4]
- *       `val`: Variant FC                                  [5]
- *         `boss`: Null-terminated string FC                [6]
- *         `zoom`: Structure FC                             [7]
- *           `len`: Variable-length unsigned integer FC     [8]
- *           `data`: Dynamic-length BLOB FC                 [9]
- *         `line6`: Structure FC                            [10]
- *           `len`: Fixed-length unsigned integer FC        [11]
+ * For example:
  *
- * If we're currently visiting [9] to find its dependencies, then the
- * current dynamic indexes would be:
+ *     Root: Structure FC                                       [0]
+ *       `len`: Fixed-length unsigned integer FC                [1]
+ *       `meow`: Dynamic-length array FC                        [2]
+ *         Element FC: Structure FC                             [3]
+ *           `tag`: Fixed-length signed integer FC              [4]
+ *           `val`: Variant FC                                  [5]
+ *             `boss`: Null-terminated string FC                [6]
+ *             `zoom`: Structure FC                             [7]
+ *               `len`: Variable-length unsigned integer FC     [8]
+ *               `data`: Dynamic-length BLOB FC                 [9]
+ *             `line6`: Structure FC                            [10]
+ *               `len`: Fixed-length unsigned integer FC        [11]
  *
- *     [5] -> 1     (visiting second option (`zoom`) of `/meow/val`)
+ * If _findDeps() is currently visiting [9] to find its dependencies,
+ * then the map would contain:
+ *
+ *     [2] → 0     (visiting current element of `/meow`)
+ *     [5] → 1     (visiting second option (`zoom`) of `/meow/val`)
  *
  * This means that, if the length field location of [9] is
  * `/meow/val/len`, then we must only consider the `zoom` option, not
@@ -125,7 +128,7 @@ public:
     {
         BT_ASSERT(_mPathIter != _mPath->end());
 
-        const auto memberCls = structFc[*_mPathIter];
+        const auto memberCls = structFc[**_mPathIter];
 
         BT_ASSERT(memberCls);
 
@@ -230,8 +233,8 @@ Fc& scopeFc(TraceCls& traceCls, DataStreamCls * const dataStreamCls,
         return *dataStreamCls->eventRecordHeaderFc();
     case ir::FieldLocScope::EVENT_RECORD_COMMON_CTX:
         BT_ASSERT(dataStreamCls);
-        BT_ASSERT(dataStreamCls->eventRecordCommonCtxFc());
-        return *dataStreamCls->eventRecordCommonCtxFc();
+        BT_ASSERT(dataStreamCls->commonEventRecordCtxFc());
+        return *dataStreamCls->commonEventRecordCtxFc();
     case ir::FieldLocScope::EVENT_RECORD_SPEC_CTX:
         BT_ASSERT(eventRecordCls);
         BT_ASSERT(eventRecordCls->specCtxFc());
@@ -324,7 +327,7 @@ private:
         /* Find the dependencies */
         FcFinder finder {fieldLoc.items(), _mCurVariantOptIndexes};
 
-        scopeFc(*_mTraceCls, _mCurDataStreamCls, _mCurEventRecordCls, fieldLoc.scope())
+        scopeFc(*_mTraceCls, _mCurDataStreamCls, _mCurEventRecordCls, *fieldLoc.scope())
             .accept(finder);
 
         /* Value saving index to use */
@@ -464,7 +467,7 @@ private:
                                       ir::FieldLocScope::EVENT_RECORD_HEADER);
 
             /* Process common event record context field class */
-            this->_setSavedValIndexes(dataStreamCls.eventRecordCommonCtxFc(),
+            this->_setSavedValIndexes(dataStreamCls.commonEventRecordCtxFc(),
                                       ir::FieldLocScope::EVENT_RECORD_COMMON_CTX);
         }
 
@@ -955,7 +958,7 @@ private:
         }
 
         const auto scope = [&fieldLoc] {
-            switch (fieldLoc.scope()) {
+            switch (*fieldLoc.scope()) {
             case ir::FieldLocScope::EVENT_RECORD_COMMON_CTX:
                 return bt2::ConstFieldLocation::Scope::EVENT_COMMON_CONTEXT;
             case ir::FieldLocScope::EVENT_RECORD_SPEC_CTX:
@@ -967,7 +970,13 @@ private:
             }
         }();
 
-        return _mTraceCls->libCls()->createFieldLocation(scope, fieldLoc.items());
+        std::vector<std::string> items;
+
+        std::transform(fieldLoc.items().begin(), fieldLoc.items().end(), std::back_inserter(items),
+                       [](const nonstd::optional<std::string>& item) {
+                           return *item;
+                       });
+        return _mTraceCls->libCls()->createFieldLocation(scope, items);
     }
 
     /*
@@ -1754,14 +1763,25 @@ private:
         clkCls.libCls()->frequency(clkCls.freq());
 
         /* Set offset from origin */
-        clkCls.libCls()->offset(
-            bt2::ClockClassOffset {clkCls.offset().seconds(), clkCls.offset().cycles()});
+        clkCls.libCls()->offsetFromOrigin(bt2::ClockOffset {clkCls.offsetFromOrigin().seconds(),
+                                                            clkCls.offsetFromOrigin().cycles()});
 
         /* Set precision */
         clkCls.libCls()->precision(clkCls.precision());
 
-        /* Set origin is Unix epoch flag */
-        clkCls.libCls()->originIsUnixEpoch(clkCls.originIsUnixEpoch());
+        /* Set origin */
+        if (_mMipVersion == 0) {
+            clkCls.libCls()->originIsUnixEpoch(clkCls.origin() && clkCls.origin()->isUnixEpoch());
+        } else {
+            if (clkCls.origin()) {
+                clkCls.libCls()->setOriginIsUnknown();
+            } else if (clkCls.origin()->isUnixEpoch()) {
+                clkCls.libCls()->setOriginIsUnixEpoch();
+            } else {
+                clkCls.libCls()->origin(clkCls.origin()->ns(), clkCls.origin()->name(),
+                                        clkCls.origin()->uid());
+            }
+        }
 
         /* Set name */
         clkCls.libCls()->name(clkCls.name());
@@ -1772,8 +1792,8 @@ private:
         }
 
         /* Set UUID */
-        if (clkCls.uuid()) {
-            clkCls.libCls()->uuid(clkCls.uuid()->data());
+        if (_mMipVersion == 0 && clkCls.origin()) {
+            clkCls.libCls()->uuid(bt2c::Uuid {clkCls.origin()->uid()}.data());
         }
 
         /* Set user attributes */
@@ -1846,9 +1866,9 @@ private:
             }
 
             /* Translate common event record context field class, if any */
-            if (dataStreamCls.eventRecordCommonCtxFc()) {
+            if (dataStreamCls.commonEventRecordCtxFc()) {
                 libDataStreamCls->eventCommonContextFieldClass(
-                    *this->_translate(*dataStreamCls.eventRecordCommonCtxFc()));
+                    *this->_translate(*dataStreamCls.commonEventRecordCtxFc()));
             }
         }
 
@@ -1917,10 +1937,10 @@ unsigned long long cyclesFromNs(const unsigned long long freq, const unsigned lo
  */
 void normalizeClkClsOffset(ClkCls& clkCls) noexcept
 {
-    const auto offsetParts =
-        normalizeClkOffset(clkCls.offset().seconds(), clkCls.offset().cycles(), clkCls.freq());
+    const auto offsetParts = normalizeClkOffset(clkCls.offsetFromOrigin().seconds(),
+                                                clkCls.offsetFromOrigin().cycles(), clkCls.freq());
 
-    clkCls.offset(ir::ClkOffset {offsetParts.first, offsetParts.second});
+    clkCls.offsetFromOrigin(ir::ClkOffset {offsetParts.first, offsetParts.second});
 }
 
 } /* namespace */
@@ -1932,13 +1952,14 @@ MetadataStreamParser::MetadataStreamParser(const ClkClsCfg& clkClsCfg,
 {
 }
 
-void MetadataStreamParser::parseSection(const uint8_t * const begin, const uint8_t * const end)
+void MetadataStreamParser::parseSection(const std::uint8_t * const begin,
+                                        const std::uint8_t * const end)
 {
     this->_parseSection(begin, end);
     this->_finalizeTraceCls();
 }
 
-void MetadataStreamParser::_adjustClkClsOffset(ClkCls& clkCls) noexcept
+void MetadataStreamParser::_adjustClkClsOffsetFromOrigin(ClkCls& clkCls) noexcept
 {
     auto offsetSeconds = static_cast<long long>(_mClkClsCfg.offsetSec);
     auto offsetNs = static_cast<long long>(_mClkClsCfg.offsetNanoSec);
@@ -1966,24 +1987,24 @@ void MetadataStreamParser::_adjustClkClsOffset(ClkCls& clkCls) noexcept
         offsetSeconds += extraSeconds;
     }
 
-    auto curOffsetSeconds = clkCls.offset().seconds();
-    auto curOffsetCycles = clkCls.offset().cycles();
+    auto curOffsetSeconds = clkCls.offsetFromOrigin().seconds();
+    auto curOffsetCycles = clkCls.offsetFromOrigin().cycles();
 
     /* Apply offsets */
     curOffsetSeconds += offsetSeconds;
     curOffsetCycles += cyclesFromNs(clkCls.freq(), offsetNs);
 
     /* Set final offsets */
-    clkCls.offset(ir::ClkOffset {curOffsetSeconds, curOffsetCycles});
+    clkCls.offsetFromOrigin(ir::ClkOffset {curOffsetSeconds, curOffsetCycles});
 }
 
 void MetadataStreamParser::_adjustClkCls(ClkCls& clkCls) noexcept
 {
     if (_mClkClsCfg.forceOriginIsUnixEpoch) {
-        clkCls.originIsUnixEpoch(true);
+        clkCls.origin(ir::ClkOrigin {});
     }
 
-    this->_adjustClkClsOffset(clkCls);
+    this->_adjustClkClsOffsetFromOrigin(clkCls);
 }
 
 void MetadataStreamParser::_finalizeTraceCls()
