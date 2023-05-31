@@ -412,6 +412,9 @@ extern const bt_value *bt_trace_class_borrow_user_attributes_const(
 
 /*! @} */
 
+extern uint64_t bt_trace_class_get_graph_mip_version(
+		const bt_trace_class *trace_class);
+
 /*!
 @name Listeners
 @{
