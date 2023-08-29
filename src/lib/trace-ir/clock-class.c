@@ -69,10 +69,22 @@ void destroy_clock_class(struct bt_object *obj)
 	BT_LIB_LOGD("Destroying clock class: %!+K", clock_class);
 	BT_OBJECT_PUT_REF_AND_RESET(clock_class->user_attributes);
 
+	if (clock_class->ns.str) {
+		g_string_free(clock_class->ns.str, TRUE);
+		clock_class->ns.str = NULL;
+		clock_class->ns.value = NULL;
+	}
+
 	if (clock_class->name.str) {
 		g_string_free(clock_class->name.str, TRUE);
 		clock_class->name.str = NULL;
 		clock_class->name.value = NULL;
+	}
+
+	if (clock_class->uid.str) {
+		g_string_free(clock_class->uid.str, TRUE);
+		clock_class->uid.str = NULL;
+		clock_class->uid.value = NULL;
 	}
 
 	if (clock_class->description.str) {
@@ -149,8 +161,20 @@ struct bt_clock_class *bt_clock_class_create(bt_self_component *self_comp)
 		goto error;
 	}
 
+	clock_class->ns.str = g_string_new(NULL);
+	if (!clock_class->ns.str) {
+		BT_LIB_LOGE_APPEND_CAUSE("Failed to allocate a GString.");
+		goto error;
+	}
+
 	clock_class->name.str = g_string_new(NULL);
 	if (!clock_class->name.str) {
+		BT_LIB_LOGE_APPEND_CAUSE("Failed to allocate a GString.");
+		goto error;
+	}
+
+	clock_class->uid.str = g_string_new(NULL);
+	if (!clock_class->uid.str) {
 		BT_LIB_LOGE_APPEND_CAUSE("Failed to allocate a GString.");
 		goto error;
 	}
@@ -187,6 +211,30 @@ end:
 }
 
 BT_EXPORT
+const char *bt_clock_class_get_namespace(
+		const struct bt_clock_class *clock_class)
+{
+	BT_ASSERT_PRE_DEV_CLK_CLS_NON_NULL(clock_class);
+	BT_ASSERT_PRE_CC_MIP_VERSION_GE(clock_class, 1);
+	return clock_class->ns.value;
+}
+
+BT_EXPORT
+enum bt_clock_class_set_namespace_status bt_clock_class_set_namespace(
+		struct bt_clock_class *clock_class, const char *ns)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_CLK_CLS_NON_NULL(clock_class);
+	BT_ASSERT_PRE_NAME_NON_NULL(ns);
+	BT_ASSERT_PRE_DEV_CLOCK_CLASS_HOT(clock_class);
+	BT_ASSERT_PRE_CC_MIP_VERSION_GE(clock_class, 1);
+	g_string_assign(clock_class->ns.str, ns);
+	clock_class->ns.value = clock_class->ns.str->str;
+	BT_LIB_LOGD("Set clock class's namespace: %!+K", clock_class);
+	return BT_FUNC_STATUS_OK;
+}
+
+BT_EXPORT
 const char *bt_clock_class_get_name(const struct bt_clock_class *clock_class)
 {
 	BT_ASSERT_PRE_NO_ERROR();
@@ -205,6 +253,30 @@ enum bt_clock_class_set_name_status bt_clock_class_set_name(
 	g_string_assign(clock_class->name.str, name);
 	clock_class->name.value = clock_class->name.str->str;
 	BT_LIB_LOGD("Set clock class's name: %!+K", clock_class);
+	return BT_FUNC_STATUS_OK;
+}
+
+BT_EXPORT
+const char *bt_clock_class_get_uid(const struct bt_clock_class *clock_class)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_DEV_CLK_CLS_NON_NULL(clock_class);
+	BT_ASSERT_PRE_CC_MIP_VERSION_GE(clock_class, 1);
+	return clock_class->uid.value;
+}
+
+BT_EXPORT
+enum bt_clock_class_set_uid_status bt_clock_class_set_uid(
+		struct bt_clock_class *clock_class, const char *uid)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_CLK_CLS_NON_NULL(clock_class);
+	BT_ASSERT_PRE_NAME_NON_NULL(uid);
+	BT_ASSERT_PRE_DEV_CLOCK_CLASS_HOT(clock_class);
+	BT_ASSERT_PRE_CC_MIP_VERSION_GE(clock_class, 1);
+	g_string_assign(clock_class->uid.str, uid);
+	clock_class->uid.value = clock_class->uid.str->str;
+	BT_LIB_LOGD("Set clock class's UID: %!+K", clock_class);
 	return BT_FUNC_STATUS_OK;
 }
 

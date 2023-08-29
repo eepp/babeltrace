@@ -569,6 +569,30 @@ extern const char *bt_clock_class_get_origin_uid(
 
 /*!
 @brief
+    Status codes for bt_clock_class_set_namespace().
+*/
+typedef enum bt_clock_class_set_namespace_status {
+	/*!
+	@brief
+	    Success.
+	*/
+	BT_CLOCK_CLASS_SET_NAMESPACE_STATUS_OK			= __BT_FUNC_STATUS_OK,
+
+	/*!
+	@brief
+	    Out of memory.
+	*/
+	BT_CLOCK_CLASS_SET_NAMESPACE_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_clock_class_set_namespace_status;
+
+extern bt_clock_class_set_namespace_status bt_clock_class_set_namespace(
+		bt_clock_class *clock_class, const char *ns);
+
+extern const char *bt_clock_class_get_namespace(
+		const bt_clock_class *clock_class);
+
+/*!
+@brief
     Status codes for bt_clock_class_set_name().
 */
 typedef enum bt_clock_class_set_name_status {
@@ -638,6 +662,30 @@ If \bt_p{clock_class} has no name, this function returns \c NULL.
 */
 extern const char *bt_clock_class_get_name(
 		const bt_clock_class *clock_class) __BT_NOEXCEPT;
+
+/*!
+@brief
+    Status codes for bt_clock_class_set_uid().
+*/
+typedef enum bt_clock_class_set_uid_status {
+	/*!
+	@brief
+	    Success.
+	*/
+	BT_CLOCK_CLASS_SET_UID_STATUS_OK		= __BT_FUNC_STATUS_OK,
+
+	/*!
+	@brief
+	    Out of memory.
+	*/
+	BT_CLOCK_CLASS_SET_UID_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_clock_class_set_uid_status;
+
+extern bt_clock_class_set_uid_status bt_clock_class_set_uid(
+		bt_clock_class *clock_class, const char *uid);
+
+extern const char *bt_clock_class_get_uid(
+		const bt_clock_class *clock_class);
 
 /*!
 @brief

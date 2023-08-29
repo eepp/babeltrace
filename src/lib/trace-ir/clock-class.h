@@ -35,7 +35,21 @@ struct bt_clock_class {
 
 		/* NULL or `str->str` above */
 		const char *value;
+	} ns;
+
+	struct {
+		GString *str;
+
+		/* NULL or `str->str` above */
+		const char *value;
 	} name;
+
+	struct {
+		GString *str;
+
+		/* NULL or `str->str` above */
+		const char *value;
+	} uid;
 
 	struct {
 		GString *str;

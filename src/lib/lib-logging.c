@@ -888,8 +888,17 @@ static inline void format_clock_class(char **buf_ch, bool extended,
 {
 	char tmp_prefix[TMP_PREFIX_LEN];
 
+	if (clock_class->ns.value) {
+		BUF_APPEND(", %snamepace=\"%s\"",
+			PRFIELD(clock_class->ns.value));
+	}
+
 	if (clock_class->name.value) {
 		BUF_APPEND(", %sname=\"%s\"", PRFIELD(clock_class->name.value));
+	}
+
+	if (clock_class->uid.value) {
+		BUF_APPEND(", %suid=\"%s\"", PRFIELD(clock_class->uid.value));
 	}
 
 	BUF_APPEND(", %sfreq=%" PRIu64, PRFIELD(clock_class->frequency));
