@@ -649,6 +649,11 @@ static inline void format_stream_class(char **buf_ch, bool extended,
 			PRFIELD(stream_class->name.value));
 	}
 
+	if (stream_class->uid.value) {
+		BUF_APPEND(", %suid=\"%s\"",
+			PRFIELD(stream_class->uid.value));
+	}
+
 	if (!extended) {
 		return;
 	}

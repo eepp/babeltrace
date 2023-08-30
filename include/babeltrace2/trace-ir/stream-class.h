@@ -922,6 +922,18 @@ If \bt_p{stream_class} has no name, this function returns \c NULL.
 extern const char *bt_stream_class_get_name(
 		const bt_stream_class *stream_class) __BT_NOEXCEPT;
 
+typedef enum bt_stream_class_set_uid_status {
+	BT_STREAM_CLASS_SET_UID_STATUS_OK			= __BT_FUNC_STATUS_OK,
+
+	BT_STREAM_CLASS_SET_UID_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_stream_class_set_uid_status;
+
+extern bt_stream_class_set_uid_status bt_stream_class_set_uid(
+		bt_stream_class *stream_class, const char *uid);
+
+extern const char *bt_stream_class_get_uid(
+		const bt_stream_class *stream_class);
+
 /*!
 @brief
     Status codes for bt_stream_class_set_default_clock_class().

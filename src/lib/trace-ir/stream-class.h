@@ -37,6 +37,13 @@ struct bt_stream_class {
 		const char *value;
 	} name;
 
+	struct {
+		GString *str;
+
+		/* NULL or `str->str` above */
+		const char *value;
+	} uid;
+
 	uint64_t id;
 	bool assigns_automatic_event_class_id;
 	bool assigns_automatic_stream_id;
