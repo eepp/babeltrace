@@ -454,6 +454,17 @@ See the \ref api-tir-ev-cls-prop-name "name" property.
 extern bt_event_class_set_name_status bt_event_class_set_name(
 		bt_event_class *event_class, const char *name) __BT_NOEXCEPT;
 
+typedef enum bt_event_class_set_uid_status {
+	BT_EVENT_CLASS_SET_UID_STATUS_OK		= __BT_FUNC_STATUS_OK,
+
+	BT_EVENT_CLASS_SET_UID_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_event_class_set_uid_status;
+
+extern bt_event_class_set_uid_status bt_event_class_set_uid(
+		bt_event_class *event_class, const char *uid);
+
+extern const char *bt_event_class_get_uid(const bt_event_class *event_class);
+
 /*!
 @brief
     Returns the name of the event class \bt_p{event_class}.

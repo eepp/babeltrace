@@ -51,6 +51,11 @@ void destroy_event_class(struct bt_object *obj)
 		event_class->name.str = NULL;
 	}
 
+	if (event_class->uid.str) {
+		g_string_free(event_class->uid.str, TRUE);
+		event_class->uid.str = NULL;
+	}
+
 	if (event_class->emf_uri.str) {
 		g_string_free(event_class->emf_uri.str, TRUE);
 		event_class->emf_uri.str = NULL;
@@ -133,6 +138,12 @@ struct bt_event_class *create_event_class_with_id(
 
 	event_class->name.str = g_string_new(NULL);
 	if (!event_class->name.str) {
+		BT_LIB_LOGE_APPEND_CAUSE("Failed to allocate a GString.");
+		goto error;
+	}
+
+	event_class->uid.str = g_string_new(NULL);
+	if (!event_class->uid.str) {
 		BT_LIB_LOGE_APPEND_CAUSE("Failed to allocate a GString.");
 		goto error;
 	}
@@ -236,6 +247,29 @@ enum bt_event_class_set_name_status bt_event_class_set_name(
 	g_string_assign(event_class->name.str, name);
 	event_class->name.value = event_class->name.str->str;
 	BT_LIB_LOGD("Set event class's name: %!+E", event_class);
+	return BT_FUNC_STATUS_OK;
+}
+
+BT_EXPORT
+const char *bt_event_class_get_uid(const struct bt_event_class *event_class)
+{
+	BT_ASSERT_PRE_DEV_EC_NON_NULL(event_class);
+	BT_ASSERT_PRE_EC_MIP_VERSION_GE(event_class, 1);
+	return event_class->uid.value;
+}
+
+BT_EXPORT
+enum bt_event_class_set_uid_status bt_event_class_set_uid(
+		struct bt_event_class *event_class, const char *uid)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_EC_NON_NULL(event_class);
+	BT_ASSERT_PRE_EC_MIP_VERSION_GE(event_class, 1);
+	BT_ASSERT_PRE_NAME_NON_NULL(uid);
+	BT_ASSERT_PRE_DEV_EVENT_CLASS_HOT(event_class);
+	g_string_assign(event_class->uid.str, uid);
+	event_class->uid.value = event_class->uid.str->str;
+	BT_LIB_LOGD("Set event class's UID: %!+E", event_class);
 	return BT_FUNC_STATUS_OK;
 }
 
