@@ -105,6 +105,12 @@ void destroy_trace(struct bt_object *obj)
 		}
 	}
 
+	if (trace->ns.str) {
+		g_string_free(trace->ns.str, TRUE);
+		trace->ns.str = NULL;
+		trace->ns.value = NULL;
+	}
+
 	if (trace->name.str) {
 		g_string_free(trace->name.str, TRUE);
 		trace->name.str = NULL;
@@ -175,6 +181,12 @@ struct bt_trace *bt_trace_create(struct bt_trace_class *tc)
 		goto error;
 	}
 
+	trace->ns.str = g_string_new(NULL);
+	if (!trace->ns.str) {
+		BT_LIB_LOGE_APPEND_CAUSE("Failed to allocate one GString.");
+		goto error;
+	}
+
 	trace->name.str = g_string_new(NULL);
 	if (!trace->name.str) {
 		BT_LIB_LOGE_APPEND_CAUSE("Failed to allocate one GString.");
@@ -204,6 +216,29 @@ error:
 
 end:
 	return trace;
+}
+
+BT_EXPORT
+const char *bt_trace_get_namespace(const struct bt_trace *trace)
+{
+	BT_ASSERT_PRE_DEV_TRACE_NON_NULL(trace);
+	BT_ASSERT_PRE_TRACE_MIP_VERSION_GE(trace, 1);
+	return trace->ns.value;
+}
+
+BT_EXPORT
+enum bt_trace_set_namespace_status bt_trace_set_namespace(
+		struct bt_trace *trace, const char *ns)
+{
+	BT_ASSERT_PRE_NO_ERROR();
+	BT_ASSERT_PRE_TRACE_NON_NULL(trace);
+	BT_ASSERT_PRE_NAME_NON_NULL(ns);
+	BT_ASSERT_PRE_DEV_TRACE_HOT(trace);
+	BT_ASSERT_PRE_TRACE_MIP_VERSION_GE(trace, 1);
+	g_string_assign(trace->ns.str, ns);
+	trace->ns.value = trace->ns.str->str;
+	BT_LIB_LOGD("Set trace's namespace: %!+t", trace);
+	return BT_FUNC_STATUS_OK;
 }
 
 BT_EXPORT

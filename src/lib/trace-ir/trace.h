@@ -36,6 +36,13 @@ struct bt_trace {
 
 		/* NULL or `str->str` above */
 		const char *value;
+	} ns;
+
+	struct {
+		GString *str;
+
+		/* NULL or `str->str` above */
+		const char *value;
 	} name;
 
 	union {

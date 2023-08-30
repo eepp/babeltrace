@@ -342,6 +342,29 @@ extern const bt_stream *bt_trace_borrow_stream_by_id_const(
 
 /*!
 @brief
+    Status codes for bt_trace_set_namespace().
+*/
+typedef enum bt_trace_set_namespace_status {
+	/*!
+	@brief
+	    Success.
+	*/
+	BT_TRACE_SET_NAMESPACE_STATUS_OK		= __BT_FUNC_STATUS_OK,
+
+	/*!
+	@brief
+	    Out of memory.
+	*/
+	BT_TRACE_SET_NAMESPACE_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_trace_set_namespace_status;
+
+extern bt_trace_set_namespace_status bt_trace_set_namespace(bt_trace *trace,
+		const char *ns);
+
+extern const char *bt_trace_get_namespace(const bt_trace *trace);
+
+/*!
+@brief
     Status codes for bt_trace_set_name().
 */
 typedef enum bt_trace_set_name_status {
