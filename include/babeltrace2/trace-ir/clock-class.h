@@ -481,6 +481,9 @@ See the \ref api-tir-clock-cls-prop-precision "precision" property.
 extern uint64_t bt_clock_class_get_precision(
 		const bt_clock_class *clock_class) __BT_NOEXCEPT;
 
+extern bt_property_availability bt_clock_class_get_opt_precision(
+		const struct bt_clock_class *clock_class, uint64_t *precision);
+
 /*!
 @brief
     Sets whether or not the \ref api-tir-clock-cls-origin "origin"
