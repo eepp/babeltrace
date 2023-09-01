@@ -484,6 +484,12 @@ extern uint64_t bt_clock_class_get_precision(
 extern bt_property_availability bt_clock_class_get_opt_precision(
 		const struct bt_clock_class *clock_class, uint64_t *precision);
 
+extern void bt_clock_class_set_accuracy(bt_clock_class *clock_class,
+		uint64_t accuracy);
+
+extern bt_property_availability bt_clock_class_get_accuracy(
+		const struct bt_clock_class *clock_class, uint64_t *accuracy);
+
 /*!
 @brief
     Sets whether or not the \ref api-tir-clock-cls-origin "origin"
