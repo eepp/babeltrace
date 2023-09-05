@@ -969,6 +969,10 @@ bt_clock_class_cycles_to_ns_from_origin(
 		const bt_clock_class *clock_class,
 		uint64_t value, int64_t *ns_from_origin) __BT_NOEXCEPT;
 
+extern bt_bool bt_clock_class_has_same_identity(
+		const bt_clock_class *clock_class_a,
+		const bt_clock_class *clock_class_b);
+
 /*! @} */
 
 /*!

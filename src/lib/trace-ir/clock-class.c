@@ -610,6 +610,35 @@ bt_clock_class_cycles_to_ns_from_origin(
 }
 
 BT_EXPORT
+bt_bool bt_clock_class_has_same_identity(
+		const bt_clock_class *cc_a,
+		const bt_clock_class *cc_b)
+{
+	bt_bool is_same = BT_FALSE;
+	const char *name_a = cc_a->name.value;
+	const char *name_b = cc_b->name.value;
+	const char *uid_a = cc_a->uid.value;
+	const char *uid_b = cc_b->uid.value;
+
+	if (g_strcmp0(cc_a->ns.value, cc_b->ns.value) != 0) {
+		goto end;
+	}
+
+	if (!name_a || !name_b || strcmp(name_a, name_b) != 0) {
+		goto end;
+	}
+
+	if (!uid_a || !uid_b || strcmp(uid_a, uid_b) != 0) {
+		goto end;
+	}
+
+	is_same = BT_TRUE;
+
+end:
+	return is_same;
+}
+
+BT_EXPORT
 const struct bt_value *bt_clock_class_borrow_user_attributes_const(
 		const struct bt_clock_class *clock_class)
 {
