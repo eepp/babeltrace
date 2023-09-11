@@ -12,7 +12,7 @@
 #include <babeltrace2/babeltrace.h>
 #include "common/macros.h"
 #include "common/assert.h"
-#include "dummy.h"
+#include "dummy.hpp"
 #include "plugins/common/param-validation/param-validation.h"
 
 static
@@ -31,8 +31,8 @@ void dummy_finalize(bt_self_component_sink *comp)
 	struct dummy *dummy;
 
 	BT_ASSERT(comp);
-	dummy = bt_self_component_get_data(
-			bt_self_component_sink_as_self_component(comp));
+	dummy = static_cast<struct dummy *>(bt_self_component_get_data(
+			bt_self_component_sink_as_self_component(comp)));
 	BT_ASSERT(dummy);
 	destroy_private_dummy_data(dummy);
 }
@@ -77,7 +77,7 @@ bt_component_class_initialize_method_status dummy_init(
 	add_port_status = bt_self_component_sink_add_input_port(self_comp_sink,
 		"in", NULL, NULL);
 	if (add_port_status != BT_SELF_COMPONENT_ADD_PORT_STATUS_OK) {
-		status = (int) add_port_status;
+		status = static_cast<bt_component_class_initialize_method_status>(add_port_status);
 		goto error;
 	}
 
@@ -104,14 +104,14 @@ bt_component_class_sink_graph_is_configured_method_status dummy_graph_is_configu
 	struct dummy *dummy;
 	bt_message_iterator *iterator;
 
-	dummy = bt_self_component_get_data(
-		bt_self_component_sink_as_self_component(comp));
+	dummy = static_cast<struct dummy *>(bt_self_component_get_data(
+		bt_self_component_sink_as_self_component(comp)));
 	BT_ASSERT(dummy);
 	msg_iter_status = bt_message_iterator_create_from_sink_component(
 		comp, bt_self_component_sink_borrow_input_port_by_name(comp,
 			in_port_name), &iterator);
 	if (msg_iter_status != BT_MESSAGE_ITERATOR_CREATE_FROM_SINK_COMPONENT_STATUS_OK) {
-		status = (int) msg_iter_status;
+		status = static_cast<bt_component_class_sink_graph_is_configured_method_status>(msg_iter_status);
 		goto end;
 	}
 
@@ -135,8 +135,8 @@ bt_component_class_sink_consume_method_status dummy_consume(
 	bt_message_iterator_next_status next_status;
 	uint64_t i;
 
-	dummy = bt_self_component_get_data(
-		bt_self_component_sink_as_self_component(component));
+	dummy = static_cast<struct dummy *>(bt_self_component_get_data(
+		bt_self_component_sink_as_self_component(component)));
 	BT_ASSERT_DBG(dummy);
 
 	if (G_UNLIKELY(!dummy->msg_iter)) {
