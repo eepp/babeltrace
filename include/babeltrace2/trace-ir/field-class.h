@@ -2883,6 +2883,15 @@ extern bt_field_class *bt_field_class_array_dynamic_create(
 		bt_field_class *element_field_class,
 		bt_field_class *length_field_class) __BT_NOEXCEPT;
 
+extern bt_field_class *bt_field_class_array_dynamic_without_length_field_location_create(
+		bt_trace_class *trace_class,
+		bt_field_class *element_field_class);
+
+extern bt_field_class *bt_field_class_array_dynamic_with_length_field_location_create(
+		bt_trace_class *trace_class,
+		bt_field_class *element_field_class,
+		const bt_field_location *length_field_location);
+
 /*! @} */
 
 /*!
@@ -2920,6 +2929,10 @@ In the meantime, this function returns \c NULL.
 extern const bt_field_path *
 bt_field_class_array_dynamic_with_length_field_borrow_length_field_path_const(
 		const bt_field_class *field_class) __BT_NOEXCEPT;
+
+extern const bt_field_location *
+bt_field_class_array_dynamic_with_length_field_borrow_length_field_location_const(
+		const bt_field_class *field_class);
 
 /*! @} */
 
@@ -3361,6 +3374,10 @@ extern bt_field_class *bt_field_class_option_without_selector_create(
 		bt_trace_class *trace_class,
 		bt_field_class *optional_field_class) __BT_NOEXCEPT;
 
+extern bt_field_class *bt_field_class_option_without_selector_field_location_create(
+		bt_trace_class *trace_class,
+		bt_field_class *optional_field_class);
+
 /*! @} */
 
 /*!
@@ -3397,6 +3414,10 @@ In the meantime, this function returns \c NULL.
 extern const bt_field_path *
 bt_field_class_option_with_selector_field_borrow_selector_field_path_const(
 		const bt_field_class *field_class) __BT_NOEXCEPT;
+
+extern const bt_field_location *
+bt_field_class_option_with_selector_field_borrow_selector_field_location_const(
+		const bt_field_class *field_class);
 
 /*! @} */
 
@@ -3459,6 +3480,11 @@ extern bt_field_class *bt_field_class_option_with_selector_field_bool_create(
 		bt_trace_class *trace_class,
 		bt_field_class *optional_field_class,
 		bt_field_class *selector_field_class) __BT_NOEXCEPT;
+
+extern bt_field_class *bt_field_class_option_with_selector_field_location_bool_create(
+		bt_trace_class *trace_class,
+		bt_field_class *optional_field_class,
+		const bt_field_location *selector_field_location);
 
 /*!
 @brief
@@ -3585,6 +3611,13 @@ bt_field_class_option_with_selector_field_integer_unsigned_create(
 		const bt_integer_range_set_unsigned *ranges)
 		__BT_NOEXCEPT;
 
+extern bt_field_class *
+bt_field_class_option_with_selector_field_location_integer_unsigned_create(
+		bt_trace_class *trace_class,
+		bt_field_class *optional_field_class,
+		const bt_field_location *selector_field_location,
+		const bt_integer_range_set_unsigned *ranges);
+
 /*!
 @brief
     Borrows the \bt_p_uint_rg from the \bt_opt_fc (with an unsigned
@@ -3678,6 +3711,13 @@ bt_field_class_option_with_selector_field_integer_signed_create(
 		bt_field_class *selector_field_class,
 		const bt_integer_range_set_signed *ranges) __BT_NOEXCEPT;
 
+extern bt_field_class *
+bt_field_class_option_with_selector_field_location_integer_signed_create(
+		bt_trace_class *trace_class,
+		bt_field_class *optional_field_class,
+		const bt_field_location *selector_field_class,
+		const bt_integer_range_set_signed *ranges);
+
 /*!
 @brief
     Borrows the \bt_p_sint_rg from the \bt_opt_fc (with a signed
@@ -3761,6 +3801,17 @@ property values:
 extern bt_field_class *bt_field_class_variant_create(
 		bt_trace_class *trace_class,
 		bt_field_class *selector_field_class) __BT_NOEXCEPT;
+
+extern bt_field_class *bt_field_class_variant_without_selector_field_location_create(
+		bt_trace_class *trace_class);
+
+extern bt_field_class *bt_field_class_variant_with_selector_field_location_integer_unsigned_create(
+		bt_trace_class *trace_class,
+		const bt_field_location *selector_field_location);
+
+extern bt_field_class *bt_field_class_variant_with_selector_field_location_integer_signed_create(
+		bt_trace_class *trace_class,
+		const bt_field_location *selector_field_location);
 
 /*!
 @brief
@@ -4145,6 +4196,10 @@ In the meantime, this function returns \c NULL.
 extern const bt_field_path *
 bt_field_class_variant_with_selector_field_borrow_selector_field_path_const(
 		const bt_field_class *field_class) __BT_NOEXCEPT;
+
+extern const bt_field_location *
+bt_field_class_variant_with_selector_field_borrow_selector_field_location_const(
+		const bt_field_class *field_class);
 
 /*! @} */
 
