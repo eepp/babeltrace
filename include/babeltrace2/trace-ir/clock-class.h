@@ -506,6 +506,31 @@ property.
 extern void bt_clock_class_set_origin_is_unix_epoch(bt_clock_class *clock_class,
 		bt_bool origin_is_unix_epoch) __BT_NOEXCEPT;
 
+extern void bt_clock_class_set_origin_unknown(bt_clock_class *clock_class);
+
+extern void bt_clock_class_set_origin_unix_epoch(bt_clock_class *clock_class);
+
+/*!
+@brief
+    Status codes for bt_clock_class_set_origin().
+*/
+typedef enum bt_clock_class_set_origin_status {
+	/*!
+	@brief
+	    Success.
+	*/
+	BT_CLOCK_CLASS_SET_ORIGIN_STATUS_OK		= __BT_FUNC_STATUS_OK,
+
+	/*!
+	@brief
+	    Out of memory.
+	*/
+	BT_CLOCK_CLASS_SET_ORIGIN_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_clock_class_set_origin_status;
+
+extern bt_clock_class_set_origin_status bt_clock_class_set_origin(bt_clock_class *clock_class,
+		const char *ns, const char *name, const char *uid);
+
 /*!
 @brief
     Returns whether or not the \ref api-tir-clock-cls-origin "origin"
@@ -529,6 +554,18 @@ property.
 */
 extern bt_bool bt_clock_class_origin_is_unix_epoch(
 		const bt_clock_class *clock_class) __BT_NOEXCEPT;
+
+extern bt_bool bt_clock_class_origin_is_unknown(
+		const bt_clock_class *clock_class) __BT_NOEXCEPT;
+
+extern const char *bt_clock_class_get_origin_namespace(
+	const bt_clock_class *clock_class);
+
+extern const char *bt_clock_class_get_origin_name(
+	const bt_clock_class *clock_class);
+
+extern const char *bt_clock_class_get_origin_uid(
+	const bt_clock_class *clock_class);
 
 /*!
 @brief
