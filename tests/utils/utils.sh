@@ -500,3 +500,15 @@ bt_gen_mctf_trace() {
 diag_file() {
 	diag "$(cat "$1")"
 }
+
+# On MinGW, print `$1` passed through `cygpath -m`. Otherwise, print `$1`
+# unmodified.
+maybe_cygpath_m() {
+	local path=$1
+
+	if [ "$BT_TESTS_OS_TYPE" = "mingw" ]; then
+		path=$(cygpath -m "$path")
+	fi
+
+	echo "$path"
+}
