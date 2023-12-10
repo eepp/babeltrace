@@ -121,6 +121,7 @@ cpp_common_libcpp_common_la_SOURCES = \
 	cpp-common/bt2/borrowed-object-iterator.hpp \
 	cpp-common/bt2/borrowed-object-proxy.hpp \
 	cpp-common/bt2/borrowed-object.hpp \
+	cpp-common/bt2/borrowed-object-proxy.hpp \
 	cpp-common/bt2/clock-class.hpp \
 	cpp-common/bt2/clock-snapshot.hpp \
 	cpp-common/bt2/component-class-dev.hpp \
@@ -703,6 +704,8 @@ plugins_ctf_babeltrace_plugin_ctf_la_SOURCES = \
 	plugins/ctf/common/src/metadata/metadata-stream-parser.hpp \
 	plugins/ctf/common/src/metadata/normalize-clk-offset.cpp \
 	plugins/ctf/common/src/metadata/normalize-clk-offset.hpp \
+	plugins/ctf/common/src/metadata/tsdl/ctf-1-metadata-stream-parser.cpp \
+	plugins/ctf/common/src/metadata/tsdl/ctf-1-metadata-stream-parser.hpp \
 	plugins/ctf/common/src/metadata/tsdl/metadata-stream-decoder.cpp \
 	plugins/ctf/common/src/metadata/tsdl/metadata-stream-decoder.hpp \
 	plugins/ctf/common/src/msg-iter/msg-iter.cpp \
