@@ -1714,6 +1714,67 @@ See the \ref api-tir-fc-ba-prop-len "length" property.
 extern uint64_t bt_field_class_bit_array_get_length(
 		const bt_field_class *field_class) __BT_NOEXCEPT;
 
+typedef char const * const *bt_field_class_bit_array_flag_label_array;
+
+extern uint64_t bt_field_class_bit_array_get_flag_count(
+	const bt_field_class *field_class);
+
+typedef enum bt_field_class_bit_array_add_flag_status {
+	/*!
+	@brief
+	    Success.
+	*/
+	BT_FIELD_CLASS_BIT_ARRAY_ADD_FLAG_STATUS_OK		= __BT_FUNC_STATUS_OK,
+
+	/*!
+	@brief
+	    Out of memory.
+	*/
+	BT_FIELD_CLASS_BIT_ARRAY_ADD_FLAG_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+
+} bt_field_class_bit_array_add_flag_status;
+
+/* Precondition: no upper range value ≥ length of bit array */
+extern bt_field_class_bit_array_add_flag_status
+bt_field_class_bit_array_add_flag(
+	bt_field_class *field_class, const char *label,
+	const bt_integer_range_set_unsigned *index_ranges);
+
+extern const bt_field_class_bit_array_flag *
+bt_field_class_bit_array_borrow_flag_by_index_const(
+	const bt_field_class *field_class, uint64_t index);
+
+extern const bt_field_class_bit_array_flag *
+bt_field_class_bit_array_borrow_flag_by_label_const(
+	const bt_field_class *field_class, const char *label);
+
+typedef enum bt_field_class_bit_array_get_active_flag_labels_for_value_as_integer_status {
+	/*!
+	@brief
+	    Success.
+	*/
+	BT_FIELD_CLASS_BIT_ARRAY_GET_ACTIVE_FLAG_LABELS_FOR_VALUE_AS_INTEGER_STATUS_OK			= __BT_FUNC_STATUS_OK,
+
+	/*!
+	@brief
+	    Out of memory.
+	*/
+	BT_FIELD_CLASS_BIT_ARRAY_GET_ACTIVE_FLAG_LABELS_FOR_VALUE_AS_INTEGER_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_field_class_bit_array_get_active_flag_labels_for_value_as_integer_status;
+
+extern bt_field_class_bit_array_get_active_flag_labels_for_value_as_integer_status
+bt_field_class_bit_array_get_active_flag_labels_for_value_as_integer(
+	const bt_field_class *field_class, uint64_t value_as_integer,
+	bt_field_class_bit_array_flag_label_array *label_array,
+	uint64_t *count);
+
+extern const char *bt_field_class_bit_array_flag_get_label(
+	const bt_field_class_bit_array_flag *flag);
+
+extern const bt_integer_range_set_unsigned *
+bt_field_class_bit_array_flag_borrow_index_ranges_const(
+	const bt_field_class_bit_array_flag *flag);
+
 /*!
 @}
 */

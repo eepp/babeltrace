@@ -580,6 +580,25 @@ See \bt_c_ba_field to learn more.
 extern uint64_t bt_field_bit_array_get_value_as_integer(
 		const bt_field *field) __BT_NOEXCEPT;
 
+typedef enum bt_field_bit_array_get_active_flag_labels_status {
+	/*!
+	@brief
+	    Success.
+	*/
+	BT_FIELD_BIT_ARRAY_GET_ACTIVE_FLAG_LABELS_STATUS_OK		= __BT_FUNC_STATUS_OK,
+
+	/*!
+	@brief
+	    Out of memory.
+	*/
+	BT_FIELD_BIT_ARRAY_GET_ACTIVE_FLAG_LABELS_STATUS_MEMORY_ERROR	= __BT_FUNC_STATUS_MEMORY_ERROR,
+} bt_field_bit_array_get_active_flag_labels_status;
+
+extern bt_field_bit_array_get_active_flag_labels_status
+bt_field_bit_array_get_active_flag_labels(const bt_field *field,
+	bt_field_class_bit_array_flag_label_array *label_array,
+	uint64_t *count);
+
 /*! @} */
 
 /*!
