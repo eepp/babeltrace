@@ -698,6 +698,14 @@ plugins_ctf_babeltrace_plugin_ctf_la_SOURCES = \
 	plugins/ctf/common/src/item-seq/medium.hpp \
 	plugins/ctf/common/src/metadata/ctf-ir.cpp \
 	plugins/ctf/common/src/metadata/ctf-ir.hpp \
+	plugins/ctf/common/src/metadata/json/ctf-2-metadata-stream-parser.cpp \
+	plugins/ctf/common/src/metadata/json/ctf-2-metadata-stream-parser.hpp \
+	plugins/ctf/common/src/metadata/json/json-fcs-with-role.cpp \
+	plugins/ctf/common/src/metadata/json/json-fcs-with-role.hpp \
+	plugins/ctf/common/src/metadata/json/scope-fc-from-json-val.cpp \
+	plugins/ctf/common/src/metadata/json/scope-fc-from-json-val.hpp \
+	plugins/ctf/common/src/metadata/json/utils.cpp \
+	plugins/ctf/common/src/metadata/json/utils.hpp \
 	plugins/ctf/common/src/metadata/json/val-req.cpp \
 	plugins/ctf/common/src/metadata/json/val-req.hpp \
 	plugins/ctf/common/src/metadata/metadata-stream-parser.cpp \
