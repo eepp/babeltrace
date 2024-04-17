@@ -21,7 +21,6 @@
 #include "cpp-common/bt2c/data-len.hpp"
 #include "cpp-common/bt2c/uuid.hpp"
 #include "cpp-common/bt2s/make-unique.hpp"
-#include "cpp-common/bt2s/optional.hpp"
 
 #include "int-range-set.hpp"
 
@@ -991,7 +990,7 @@ public:
     /*
      * Length of instances of this field class.
      */
-    const bt2c::DataLen len() const noexcept
+    bt2c::DataLen len() const noexcept
     {
         return _mLen;
     }
