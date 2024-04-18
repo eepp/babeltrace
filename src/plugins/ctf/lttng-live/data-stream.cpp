@@ -7,10 +7,6 @@
  * Copyright 2010-2011 EfficiOS Inc. and Linux Foundation
  */
 
-#include <sstream>
-
-#include <glib.h>
-
 #include <babeltrace2/babeltrace.h>
 
 #include "common/assert.h"
