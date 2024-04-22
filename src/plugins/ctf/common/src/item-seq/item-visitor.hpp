@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef _CTF_SRC_ITEM_SEQ_ITEM_VISITOR_HPP
-#define _CTF_SRC_ITEM_SEQ_ITEM_VISITOR_HPP
+#ifndef CTF_COMMON_SRC_ITEM_SEQ_ITEM_VISITOR_HPP
+#define CTF_COMMON_SRC_ITEM_SEQ_ITEM_VISITOR_HPP
 
 namespace ctf {
 namespace src {
@@ -15,7 +15,6 @@ class ArrayFieldEndItem;
 class BeginItem;
 class BlobFieldBeginItem;
 class BlobFieldEndItem;
-class BlobFieldSectionItem;
 class DataStreamInfoItem;
 class DefClkValItem;
 class DynLenArrayFieldBeginItem;
@@ -29,11 +28,10 @@ class EventRecordBeginItem;
 class EventRecordEndItem;
 class EventRecordInfoItem;
 class FixedLenBitArrayFieldItem;
+class FixedLenBitMapFieldItem;
 class FixedLenBoolFieldItem;
 class FixedLenFloatFieldItem;
-class FixedLenSEnumFieldItem;
 class FixedLenSIntFieldItem;
-class FixedLenUEnumFieldItem;
 class FixedLenUIntFieldItem;
 class Item;
 class MetadataStreamUuidItem;
@@ -55,6 +53,7 @@ class PktContentEndItem;
 class PktEndItem;
 class PktInfoItem;
 class PktMagicNumberItem;
+class RawDataItem;
 class ScopeBeginItem;
 class ScopeEndItem;
 class StaticLenArrayFieldBeginItem;
@@ -63,7 +62,6 @@ class StaticLenBlobFieldBeginItem;
 class StaticLenBlobFieldEndItem;
 class StaticLenStrFieldBeginItem;
 class StaticLenStrFieldEndItem;
-class StrFieldSubstrItem;
 class StructFieldBeginItem;
 class StructFieldEndItem;
 class VariantFieldBeginItem;
@@ -73,9 +71,7 @@ class VariantFieldWithSIntSelEndItem;
 class VariantFieldWithUIntSelBeginItem;
 class VariantFieldWithUIntSelEndItem;
 class VarLenIntFieldItem;
-class VarLenSEnumFieldItem;
 class VarLenSIntFieldItem;
-class VarLenUEnumFieldItem;
 class VarLenUIntFieldItem;
 
 /*
@@ -90,7 +86,6 @@ public:
     virtual void visit(const BeginItem&);
     virtual void visit(const BlobFieldBeginItem&);
     virtual void visit(const BlobFieldEndItem&);
-    virtual void visit(const BlobFieldSectionItem&);
     virtual void visit(const DataStreamInfoItem&);
     virtual void visit(const DefClkValItem&);
     virtual void visit(const DynLenArrayFieldBeginItem&);
@@ -104,11 +99,10 @@ public:
     virtual void visit(const EventRecordEndItem&);
     virtual void visit(const EventRecordInfoItem&);
     virtual void visit(const FixedLenBitArrayFieldItem&);
+    virtual void visit(const FixedLenBitMapFieldItem&);
     virtual void visit(const FixedLenBoolFieldItem&);
     virtual void visit(const FixedLenFloatFieldItem&);
-    virtual void visit(const FixedLenSEnumFieldItem&);
     virtual void visit(const FixedLenSIntFieldItem&);
-    virtual void visit(const FixedLenUEnumFieldItem&);
     virtual void visit(const FixedLenUIntFieldItem&);
     virtual void visit(const Item&);
     virtual void visit(const MetadataStreamUuidItem&);
@@ -130,6 +124,7 @@ public:
     virtual void visit(const PktEndItem&);
     virtual void visit(const PktInfoItem&);
     virtual void visit(const PktMagicNumberItem&);
+    virtual void visit(const RawDataItem&);
     virtual void visit(const ScopeBeginItem&);
     virtual void visit(const ScopeEndItem&);
     virtual void visit(const StaticLenArrayFieldBeginItem&);
@@ -138,7 +133,6 @@ public:
     virtual void visit(const StaticLenBlobFieldEndItem&);
     virtual void visit(const StaticLenStrFieldBeginItem&);
     virtual void visit(const StaticLenStrFieldEndItem&);
-    virtual void visit(const StrFieldSubstrItem&);
     virtual void visit(const StructFieldBeginItem&);
     virtual void visit(const StructFieldEndItem&);
     virtual void visit(const VariantFieldBeginItem&);
@@ -148,13 +142,11 @@ public:
     virtual void visit(const VariantFieldWithUIntSelBeginItem&);
     virtual void visit(const VariantFieldWithUIntSelEndItem&);
     virtual void visit(const VarLenIntFieldItem&);
-    virtual void visit(const VarLenSEnumFieldItem&);
     virtual void visit(const VarLenSIntFieldItem&);
-    virtual void visit(const VarLenUEnumFieldItem&);
     virtual void visit(const VarLenUIntFieldItem&);
 };
 
 } /* namespace src */
 } /* namespace ctf */
 
-#endif /* _CTF_SRC_ITEM_SEQ_ITEM_VISITOR_HPP */
+#endif /* CTF_COMMON_SRC_ITEM_SEQ_ITEM_VISITOR_HPP */

@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2022-2024 Philippe Proulx <pproulx@efficios.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef BABELTRACE_CPP_COMMON_VAL_REQ_HPP
-#define BABELTRACE_CPP_COMMON_VAL_REQ_HPP
+#ifndef BABELTRACE_CPP_COMMON_BT2C_VAL_REQ_HPP
+#define BABELTRACE_CPP_COMMON_BT2C_VAL_REQ_HPP
 
 #include <limits>
 #include <memory>
@@ -18,7 +18,6 @@
 #include "logging.hpp"
 
 #include "exc.hpp"
-#include "text-loc-str.hpp"
 #include "text-loc.hpp"
 
 namespace bt2c {
@@ -111,40 +110,6 @@ namespace bt2c {
  */
 
 /*
- * Value requirement logging configuration.
- */
-class ValReqLogCfg
-{
-public:
-    /*
-     * Builds a value requirement logging configuration.
-     *
-     * Not explicit to allow passing a Logger instead of this object as a
-     * function parameter.
-     */
-    ValReqLogCfg(const Logger& parentLogger,
-                 const TextLocStrFmt textLocStrFmt = TextLocStrFmt::LineColNosAndOffset) :
-        _mLogger {parentLogger, "VAL-REQ"},
-        _mTextLocStrFmt {textLocStrFmt}
-    {
-    }
-
-    const Logger& logger() const noexcept
-    {
-        return _mLogger;
-    }
-
-    TextLocStrFmt textLocStrFmt() const noexcept
-    {
-        return _mTextLocStrFmt;
-    }
-
-private:
-    Logger _mLogger;
-    TextLocStrFmt _mTextLocStrFmt;
-};
-
-/*
  * Value requirement abstract base class.
  */
 template <typename ValT, typename ValOpsT>
@@ -157,12 +122,8 @@ public:
 protected:
     /*
      * Builds a value requirement.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit ValReq(const ValReqLogCfg& logCfg) noexcept : _mLogCfg {logCfg}
+    explicit ValReq(const Logger& parentLogger) noexcept : _mLogger {parentLogger, "VAL-REQ"}
     {
     }
 
@@ -184,19 +145,14 @@ public:
     }
 
 protected:
-    std::string _locStr(const TextLoc& loc) const
+    static const TextLoc& _loc(const ValT& val) noexcept
     {
-        return textLocStr(loc, _mLogCfg.textLocStrFmt());
-    }
-
-    std::string _locStr(const ValT& val) const
-    {
-        return ValReq::_locStr(ValOpsT::valLoc(val));
+        return ValOpsT::valLoc(val);
     }
 
     const Logger& _logger() const noexcept
     {
-        return _mLogCfg.logger();
+        return _mLogger;
     }
 
 private:
@@ -207,8 +163,8 @@ private:
     {
     }
 
-    /* Logging configuration */
-    ValReqLogCfg _mLogCfg;
+protected:
+    Logger _mLogger;
 };
 
 /*
@@ -216,14 +172,14 @@ private:
  */
 enum class ValType
 {
-    NUL,
-    BOOL,
-    SINT,
-    UINT,
-    REAL,
-    STR,
-    ARRAY,
-    OBJ,
+    Null,
+    Bool,
+    SInt,
+    UInt,
+    Real,
+    Str,
+    Array,
+    Obj,
 };
 
 /*
@@ -238,13 +194,9 @@ public:
     /*
      * Builds a "value has type" requirement: _validate() validates that
      * the type of the value is `type`.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit ValHasTypeReq(const ValType type, const ValReqLogCfg& logCfg) noexcept :
-        ValReq<ValT, ValOpsT> {logCfg}, _mType {type}
+    explicit ValHasTypeReq(const ValType type, const Logger& parentLogger) noexcept :
+        ValReq<ValT, ValOpsT> {parentLogger}, _mType {type}
     {
     }
 
@@ -252,18 +204,18 @@ public:
      * Returns a shared pointer to "value has type" requirement,
      * forwarding the parameters to the constructor.
      */
-    static typename ValReq<ValT, ValOpsT>::SP shared(const ValType type, const ValReqLogCfg& logCfg)
+    static typename ValReq<ValT, ValOpsT>::SP shared(const ValType type, const Logger& parentLogger)
     {
-        return std::make_shared<ValHasTypeReq>(type, logCfg);
+        return std::make_shared<ValHasTypeReq>(type, parentLogger);
     }
 
 protected:
     void _validate(const ValT& val) const override
     {
         if (ValOpsT::valType(val) != _mType) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), Error, "[{}] Expecting {} {}.",
-                                                   this->_locStr(val), ValOpsT::typeDetStr(_mType),
-                                                   ValOpsT::typeStr(_mType));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                this->_logger(), Error, this->_loc(val), "Expecting {} {}.",
+                ValOpsT::typeDetStr(_mType), ValOpsT::typeStr(_mType));
         }
     }
 
@@ -282,7 +234,8 @@ template <typename ValT, typename ValOpsT>
 class AnyIntValReq : public ValReq<ValT, ValOpsT>
 {
 public:
-    explicit AnyIntValReq(const ValReqLogCfg& logCfg) noexcept : ValReq<ValT, ValOpsT> {logCfg}
+    explicit AnyIntValReq(const Logger& parentLogger) noexcept :
+        ValReq<ValT, ValOpsT> {parentLogger}
     {
     }
 
@@ -290,17 +243,17 @@ public:
      * Returns a shared pointer to any integer value requirement,
      * forwarding the parameters to the constructor.
      */
-    static typename ValReq<ValT, ValOpsT>::SP shared(const ValReqLogCfg& logCfg)
+    static typename ValReq<ValT, ValOpsT>::SP shared(const Logger& parentLogger)
     {
-        return std::make_shared<AnyIntValReq>(logCfg);
+        return std::make_shared<AnyIntValReq>(parentLogger);
     }
 
 protected:
     void _validate(const ValT& val) const override
     {
         if (!val.isUInt() && !val.isSInt()) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), Error, "[{}] Expecting an integer.", this->_locStr(val));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), Error, this->_loc(val),
+                                                            "Expecting an integer.");
         }
     }
 };
@@ -318,13 +271,9 @@ public:
     /*
      * Builds an unsigned integer value: _validate() validates that the
      * integer value is an unsigned integer type.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit UIntValReq(const ValReqLogCfg& logCfg) noexcept :
-        ValHasTypeReq<ValT, ValOpsT> {ValType::UINT, logCfg}
+    explicit UIntValReq(const Logger& parentLogger) noexcept :
+        ValHasTypeReq<ValT, ValOpsT> {ValType::UInt, parentLogger}
     {
     }
 
@@ -332,9 +281,9 @@ public:
      * Returns a shared pointer to unsigned integer value requirement,
      * forwarding the parameters to the constructor.
      */
-    static typename ValReq<ValT, ValOpsT>::SP shared(const ValReqLogCfg& logCfg)
+    static typename ValReq<ValT, ValOpsT>::SP shared(const Logger& parentLogger)
     {
-        return std::make_shared<UIntValReq>(logCfg);
+        return std::make_shared<UIntValReq>(parentLogger);
     }
 };
 
@@ -349,7 +298,8 @@ template <typename ValT, typename ValOpsT>
 class SIntValReq : public AnyIntValReq<ValT, ValOpsT>
 {
 public:
-    explicit SIntValReq(const ValReqLogCfg& logCfg) noexcept : AnyIntValReq<ValT, ValOpsT> {logCfg}
+    explicit SIntValReq(const Logger& parentLogger) noexcept :
+        AnyIntValReq<ValT, ValOpsT> {parentLogger}
     {
     }
 
@@ -357,9 +307,9 @@ public:
      * Returns a shared pointer to signed value requirement, forwarding
      * the parameters to the constructor.
      */
-    static typename ValReq<ValT, ValOpsT>::SP shared(const ValReqLogCfg& logCfg)
+    static typename ValReq<ValT, ValOpsT>::SP shared(const Logger& parentLogger)
     {
-        return std::make_shared<SIntValReq>(logCfg);
+        return std::make_shared<SIntValReq>(parentLogger);
     }
 
 protected:
@@ -368,7 +318,7 @@ protected:
         /* Validate that it's an integer value */
         AnyIntValReq<ValT, ValOpsT>::_validate(val);
 
-        if (ValOpsT::valType(val) == ValType::SINT) {
+        if (ValOpsT::valType(val) == ValType::SInt) {
             /* Always correct */
             return;
         }
@@ -380,9 +330,9 @@ protected:
         const auto rawVal = ValOpsT::scalarValRawVal(ValOpsT::asUInt(val));
 
         if (rawVal > llMaxAsUll) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), Error, "[{}] Expecting a signed integer: {} is greater than {}.",
-                this->_locStr(val), rawVal, llMaxAsUll);
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                this->_logger(), Error, this->_loc(val),
+                "Expecting a signed integer: {} is greater than {}.", rawVal, llMaxAsUll);
         }
     }
 };
@@ -410,15 +360,11 @@ public:
      *
      * • If `minVal` is set: greater than or equal to `*minVal`.
      * • If `maxVal` is set: less than or equal to `*maxVal`.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
     explicit IntValInRangeReq(const bt2s::optional<_RawVal>& minVal,
                               const bt2s::optional<_RawVal>& maxVal,
-                              const ValReqLogCfg& logCfg) noexcept :
-        ValHasTypeReq<ValT, ValOpsT> {TypeV, logCfg},
+                              const Logger& parentLogger) noexcept :
+        ValHasTypeReq<ValT, ValOpsT> {TypeV, parentLogger},
         _mMinVal {minVal ? *minVal : std::numeric_limits<_RawVal>::min()},
         _mMaxVal {maxVal ? *maxVal : std::numeric_limits<_RawVal>::max()}
     {
@@ -428,13 +374,9 @@ public:
      * Builds an "integer value in range" requirement: _validate()
      * validates that the raw value of the integer value is exactly
      * `exactVal`.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit IntValInRangeReq(const _RawVal exactVal, const ValReqLogCfg& logCfg) noexcept :
-        IntValInRangeReq {exactVal, exactVal, logCfg}
+    explicit IntValInRangeReq(const _RawVal exactVal, const Logger& parentLogger) noexcept :
+        IntValInRangeReq {exactVal, exactVal, parentLogger}
     {
     }
 
@@ -444,9 +386,9 @@ public:
      */
     static typename ValReq<ValT, ValOpsT>::SP shared(const bt2s::optional<_RawVal>& minVal,
                                                      const bt2s::optional<_RawVal>& maxVal,
-                                                     const ValReqLogCfg& logCfg)
+                                                     const Logger& parentLogger)
     {
-        return std::make_shared<IntValInRangeReq>(minVal, maxVal, logCfg);
+        return std::make_shared<IntValInRangeReq>(minVal, maxVal, parentLogger);
     }
 
     /*
@@ -454,9 +396,9 @@ public:
      * forwarding the parameters to the constructor.
      */
     static typename ValReq<ValT, ValOpsT>::SP shared(const _RawVal exactVal,
-                                                     const ValReqLogCfg& logCfg)
+                                                     const Logger& parentLogger)
     {
-        return std::make_shared<IntValInRangeReq>(exactVal, logCfg);
+        return std::make_shared<IntValInRangeReq>(exactVal, parentLogger);
     }
 
 protected:
@@ -468,15 +410,15 @@ protected:
         const auto rawVal = ValOpsT::scalarValRawVal(intVal);
 
         if (rawVal < _mMinVal) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), Error, "[{}] Integer {} is too small: expecting at least {}.",
-                this->_locStr(intVal), rawVal, _mMinVal);
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                this->_logger(), Error, this->_loc(intVal),
+                "Integer {} is too small: expecting at least {}.", rawVal, _mMinVal);
         }
 
         if (rawVal > _mMaxVal) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), Error, "[{}] Integer {} is too large: expecting at most {}.",
-                this->_locStr(intVal), rawVal, _mMaxVal);
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                this->_logger(), Error, this->_loc(intVal),
+                "Integer {} is too large: expecting at most {}.", rawVal, _mMaxVal);
         }
     }
 
@@ -491,21 +433,21 @@ private:
 namespace internal {
 
 template <typename RawValT>
-void writeRawVal(std::ostringstream& ss, const RawValT& rawVal)
+std::string rawValStr(const RawValT& rawVal)
 {
-    ss << rawVal;
+    return fmt::to_string(rawVal);
 }
 
 template <>
-inline void writeRawVal<std::string>(std::ostringstream& ss, const std::string& val)
+inline std::string rawValStr<std::string>(const std::string& val)
 {
-    ss << '`' << val << '`';
+    return fmt::format("`{}`", val);
 }
 
 template <>
-inline void writeRawVal<bool>(std::ostringstream& ss, const bool& val)
+inline std::string rawValStr<bool>(const bool& val)
 {
-    writeRawVal(ss, std::string {val ? "true" : "false"});
+    return val ? "true" : "false";
 }
 
 } /* namespace internal */
@@ -538,26 +480,18 @@ public:
     /*
      * Builds a "scalar value in set" requirement: _validate() validates
      * that the raw value of the scalar value is an element of `set`.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit ScalarValInSetReq(Set set, const ValReqLogCfg& logCfg) :
-        ValHasTypeReq<ValT, ValOpsT> {TypeV, logCfg}, _mSet {std::move(set)}
+    explicit ScalarValInSetReq(Set set, const Logger& parentLogger) :
+        ValHasTypeReq<ValT, ValOpsT> {TypeV, parentLogger}, _mSet {std::move(set)}
     {
     }
 
     /*
      * Builds a "scalar value in set" requirement: _validate() validates
      * that the raw value of the scalar value is exactly `rawVal`.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit ScalarValInSetReq(_RawVal rawVal, const ValReqLogCfg& logCfg) :
-        ScalarValInSetReq {Set {std::move(rawVal)}, logCfg}
+    explicit ScalarValInSetReq(_RawVal rawVal, const Logger& parentLogger) :
+        ScalarValInSetReq {Set {std::move(rawVal)}, parentLogger}
     {
     }
 
@@ -565,18 +499,18 @@ public:
      * Returns a shared pointer to "scalar value in set" requirement,
      * forwarding the parameters to the constructor.
      */
-    static typename ValReq<ValT, ValOpsT>::SP shared(Set set, const ValReqLogCfg& logCfg)
+    static typename ValReq<ValT, ValOpsT>::SP shared(Set set, const Logger& parentLogger)
     {
-        return std::make_shared<ScalarValInSetReq>(std::move(set), logCfg);
+        return std::make_shared<ScalarValInSetReq>(std::move(set), parentLogger);
     }
 
     /*
      * Returns a shared pointer to "scalar value in set" requirement,
      * forwarding the parameters to the constructor.
      */
-    static typename ValReq<ValT, ValOpsT>::SP shared(_RawVal rawVal, const ValReqLogCfg& logCfg)
+    static typename ValReq<ValT, ValOpsT>::SP shared(_RawVal rawVal, const Logger& parentLogger)
     {
-        return std::make_shared<ScalarValInSetReq>(std::move(rawVal), logCfg);
+        return std::make_shared<ScalarValInSetReq>(std::move(rawVal), parentLogger);
     }
 
 protected:
@@ -588,12 +522,9 @@ protected:
         const auto rawVal = ValOpsT::scalarValRawVal(scalarVal);
 
         if (_mSet.find(rawVal) == _mSet.end()) {
-            std::ostringstream ss;
-
-            internal::writeRawVal(ss, rawVal);
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), Error,
-                                                   "[{}] Unexpected value {}: expecting {}.",
-                                                   this->_locStr(val), ss.str(), this->_setStr());
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                this->_logger(), Error, this->_loc(val), "Unexpected value {}: expecting {}.",
+                internal::rawValStr(rawVal), this->_setStr());
         }
     }
 
@@ -604,30 +535,28 @@ private:
      */
     std::string _setStr() const
     {
-        std::ostringstream ss;
-
         if (_mSet.size() == 1) {
             /* Special case: direct value */
-            internal::writeRawVal(ss, *_mSet.begin());
-            return ss.str();
+            return internal::rawValStr(*_mSet.begin());
         } else if (_mSet.size() == 2) {
             /* Special case: "or" word without any comma */
-            internal::writeRawVal(ss, *_mSet.begin());
-            ss << " or ";
-            internal::writeRawVal(ss, *std::next(_mSet.begin()));
-            return ss.str();
+            return fmt::format("{} or {}", internal::rawValStr(*_mSet.begin()),
+                               internal::rawValStr(*std::next(_mSet.begin())));
         }
 
         /* Enumeration with at least one comma */
-        const auto lastIt = std::prev(_mSet.end());
+        std::ostringstream ss;
 
-        for (auto it = _mSet.begin(); it != lastIt; ++it) {
-            internal::writeRawVal(ss, *it);
-            ss << ", ";
+        {
+            const auto lastIt = std::prev(_mSet.end());
+
+            for (auto it = _mSet.begin(); it != lastIt; ++it) {
+                ss << internal::rawValStr(*it) << ", ";
+            }
+
+            ss << "or " << internal::rawValStr(*lastIt);
         }
 
-        ss << "or ";
-        internal::writeRawVal(ss, *lastIt);
         return ss.str();
     }
 
@@ -651,13 +580,9 @@ public:
      * Builds a "string value matches regular expression" requirement:
      * _validate() validates that the raw value of the string value
      * matches the regular expression `regex`.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit StrValMatchesRegexReq(std::regex regex, const ValReqLogCfg& logCfg) :
-        ValHasTypeReq<ValT, ValOpsT> {ValType::STR, logCfg}, _mRegex {std::move(regex)}
+    explicit StrValMatchesRegexReq(std::regex regex, const Logger& parentLogger) :
+        ValHasTypeReq<ValT, ValOpsT> {ValType::Str, parentLogger}, _mRegex {std::move(regex)}
     {
     }
 
@@ -665,15 +590,10 @@ public:
      * Builds a "string value matches regular expression" requirement:
      * _validate() validates that the raw value of the string value
      * matches the regular expression `regex` (ECMAScript engine).
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit StrValMatchesRegexReq(const char * const regex, const ValReqLogCfg& logCfg) :
-        ValHasTypeReq<ValT, ValOpsT> {ValType::STR, logCfg}, _mRegex {regex,
-                                                                      std::regex::ECMAScript |
-                                                                          std::regex::optimize}
+    explicit StrValMatchesRegexReq(const char * const regex, const Logger& parentLogger) :
+        ValHasTypeReq<ValT, ValOpsT> {ValType::Str, parentLogger},
+        _mRegex {regex, std::regex::ECMAScript | std::regex::optimize}
     {
     }
 
@@ -682,9 +602,9 @@ public:
      * expression" requirement, forwarding the parameters to the
      * constructor.
      */
-    static typename ValReq<ValT, ValOpsT>::SP shared(std::regex regex, const ValReqLogCfg& logCfg)
+    static typename ValReq<ValT, ValOpsT>::SP shared(std::regex regex, const Logger& parentLogger)
     {
-        return std::make_shared<StrValMatchesRegexReq>(std::move(regex), logCfg);
+        return std::make_shared<StrValMatchesRegexReq>(std::move(regex), parentLogger);
     }
 
     /*
@@ -693,9 +613,9 @@ public:
      * constructor.
      */
     static typename ValReq<ValT, ValOpsT>::SP shared(const char * const regex,
-                                                     const ValReqLogCfg& logCfg)
+                                                     const Logger& parentLogger)
     {
-        std::make_shared<StrValMatchesRegexReq>(regex, logCfg);
+        std::make_shared<StrValMatchesRegexReq>(regex, parentLogger);
     }
 
 protected:
@@ -706,8 +626,8 @@ protected:
         const auto& rawVal = ValOpsT::scalarValRawVal(ValOpsT::asStr(val));
 
         if (!std::regex_match(rawVal, _mRegex)) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), Error, "{} Invalid string `{}`.", this->_locStr(val), rawVal);
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), Error, this->_loc(val),
+                                                            "Invalid string `{}`.", rawVal);
         }
     }
 
@@ -742,15 +662,11 @@ public:
      *
      * • If `elemValReq` is set: all the elements of V satisfy
      *   `*elemValReq`.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
     explicit ArrayValReq(const bt2s::optional<std::size_t>& minSize,
                          const bt2s::optional<std::size_t>& maxSize, SP elemValReq,
-                         const ValReqLogCfg& logCfg) :
-        ValHasTypeReq<ValT, ValOpsT> {ValType::ARRAY, logCfg},
+                         const Logger& parentLogger) :
+        ValHasTypeReq<ValT, ValOpsT> {ValType::Array, parentLogger},
         _mMinSize {minSize ? *minSize : std::numeric_limits<std::size_t>::min()},
         _mMaxSize {maxSize ? *maxSize : std::numeric_limits<std::size_t>::max()},
         _mElemValReq {std::move(elemValReq)}
@@ -766,14 +682,10 @@ public:
      *
      * • If `maxSize` is set: the size of V is less than or equal to
      *   `*maxSize`.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
     explicit ArrayValReq(const bt2s::optional<std::size_t>& minSize,
-                         const bt2s::optional<std::size_t>& maxSize, const ValReqLogCfg& logCfg) :
-        ArrayValReq {minSize, maxSize, nullptr, logCfg}
+                         const bt2s::optional<std::size_t>& maxSize, const Logger& parentLogger) :
+        ArrayValReq {minSize, maxSize, nullptr, parentLogger}
     {
     }
 
@@ -785,13 +697,9 @@ public:
      *
      * • If `elemValReq` is set: all the elements of V satisfy
      *   `*elemValReq`.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit ArrayValReq(const std::size_t exactSize, SP elemValReq, const ValReqLogCfg& logCfg) :
-        ArrayValReq {exactSize, exactSize, std::move(elemValReq), logCfg}
+    explicit ArrayValReq(const std::size_t exactSize, SP elemValReq, const Logger& parentLogger) :
+        ArrayValReq {exactSize, exactSize, std::move(elemValReq), parentLogger}
     {
     }
 
@@ -800,13 +708,9 @@ public:
      * for a given array value V:
      *
      * • The size of V is exactly `exactSize`.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit ArrayValReq(const std::size_t exactSize, const ValReqLogCfg& logCfg) :
-        ArrayValReq {exactSize, exactSize, nullptr, logCfg}
+    explicit ArrayValReq(const std::size_t exactSize, const Logger& parentLogger) :
+        ArrayValReq {exactSize, exactSize, nullptr, parentLogger}
     {
     }
 
@@ -814,26 +718,18 @@ public:
      * Builds an array value requirement: _validate() validates that all
      * the elements of a given array value satisfy `*elemValReq`, if
      * set.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit ArrayValReq(SP elemValReq, const ValReqLogCfg& logCfg) :
-        ArrayValReq {bt2s::nullopt, bt2s::nullopt, std::move(elemValReq), logCfg}
+    explicit ArrayValReq(SP elemValReq, const Logger& parentLogger) :
+        ArrayValReq {bt2s::nullopt, bt2s::nullopt, std::move(elemValReq), parentLogger}
     {
     }
 
     /*
      * Builds an array value requirement: _validate() validates that
      * a given value is an array value.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit ArrayValReq(const ValReqLogCfg& logCfg) :
-        ArrayValReq {bt2s::nullopt, bt2s::nullopt, logCfg}
+    explicit ArrayValReq(const Logger& parentLogger) :
+        ArrayValReq {bt2s::nullopt, bt2s::nullopt, parentLogger}
     {
     }
 
@@ -843,9 +739,9 @@ public:
      */
     static SP shared(const bt2s::optional<std::size_t>& minSize,
                      const bt2s::optional<std::size_t>& maxSize, SP elemValReq,
-                     const ValReqLogCfg& logCfg)
+                     const Logger& parentLogger)
     {
-        return std::make_shared<ArrayValReq>(minSize, maxSize, std::move(elemValReq), logCfg);
+        return std::make_shared<ArrayValReq>(minSize, maxSize, std::move(elemValReq), parentLogger);
     }
 
     /*
@@ -853,45 +749,45 @@ public:
      * the parameters to the constructor.
      */
     static SP shared(const bt2s::optional<std::size_t>& minSize,
-                     const bt2s::optional<std::size_t>& maxSize, const ValReqLogCfg& logCfg)
+                     const bt2s::optional<std::size_t>& maxSize, const Logger& parentLogger)
     {
-        return std::make_shared<ArrayValReq>(minSize, maxSize, logCfg);
+        return std::make_shared<ArrayValReq>(minSize, maxSize, parentLogger);
     }
 
     /*
      * Returns a shared pointer to array value requirement, forwarding
      * the parameters to the constructor.
      */
-    static SP shared(const std::size_t exactSize, SP elemValReq, const ValReqLogCfg& logCfg)
+    static SP shared(const std::size_t exactSize, SP elemValReq, const Logger& parentLogger)
     {
-        return std::make_shared<ArrayValReq>(exactSize, std::move(elemValReq), logCfg);
+        return std::make_shared<ArrayValReq>(exactSize, std::move(elemValReq), parentLogger);
     }
 
     /*
      * Returns a shared pointer to array value requirement, forwarding
      * the parameters to the constructor.
      */
-    static SP shared(const std::size_t exactSize, const ValReqLogCfg& logCfg)
+    static SP shared(const std::size_t exactSize, const Logger& parentLogger)
     {
-        return std::make_shared<ArrayValReq>(exactSize, logCfg);
+        return std::make_shared<ArrayValReq>(exactSize, parentLogger);
     }
 
     /*
      * Returns a shared pointer to array value requirement, forwarding
      * the parameters to the constructor.
      */
-    static SP shared(SP elemValReq, const ValReqLogCfg& logCfg)
+    static SP shared(SP elemValReq, const Logger& parentLogger)
     {
-        return std::make_shared<ArrayValReq>(std::move(elemValReq), logCfg);
+        return std::make_shared<ArrayValReq>(std::move(elemValReq), parentLogger);
     }
 
     /*
      * Returns a shared pointer to array value requirement, forwarding
      * the parameter to the constructor.
      */
-    static SP shared(const ValReqLogCfg& logCfg)
+    static SP shared(const Logger& parentLogger)
     {
-        return std::make_shared<ArrayValReq>(logCfg);
+        return std::make_shared<ArrayValReq>(parentLogger);
     }
 
 protected:
@@ -903,17 +799,16 @@ protected:
         const auto size = ValOpsT::arrayValSize(arrayVal);
 
         if (size < _mMinSize) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), Error,
-                "{} Size of array ({}) is too small: expecting at least {} elements.",
-                this->_locStr(val), size, _mMinSize);
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                this->_logger(), Error, this->_loc(val),
+                "Size of array ({}) is too small: expecting at least {} elements.", size,
+                _mMinSize);
         }
 
         if (size > _mMaxSize) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), Error,
-                "{} Size of array ({}) is too large: expecting at most {} elements.",
-                this->_locStr(val), size, _mMaxSize);
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                this->_logger(), Error, this->_loc(val),
+                "Size of array ({}) is too large: expecting at most {} elements.", size, _mMaxSize);
         }
 
         if (_mElemValReq) {
@@ -923,9 +818,8 @@ protected:
                 try {
                     _mElemValReq->validate(elemVal);
                 } catch (const Error&) {
-                    BT_CPPLOGE_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(),
-                                                             "{} Invalid array element #{}.",
-                                                             this->_locStr(elemVal), i + 1);
+                    BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                        this->_logger(), this->_loc(elemVal), "Invalid array element #{}.", i + 1);
                 }
             }
         }
@@ -963,12 +857,6 @@ public:
         _mValReq {std::move(valReq)}
     {
     }
-
-    /* Default copy/move operations */
-    ObjValPropReq(const ObjValPropReq&) = default;
-    ObjValPropReq(ObjValPropReq&&) = default;
-    ObjValPropReq& operator=(const ObjValPropReq&) = default;
-    ObjValPropReq& operator=(ObjValPropReq&&) = default;
 
     /*
      * Whether or not the property is required.
@@ -1030,14 +918,10 @@ public:
      *
      * • For each value VV having the key K in V: VV satisfies the value
      *   requirement, if any, of `propReqs[K]`.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
     explicit ObjValReq(PropReqs propReqs, const bool allowUnknownProps,
-                       const ValReqLogCfg& logCfg) :
-        ValHasTypeReq<ValT, ValOpsT> {ValType::OBJ, logCfg},
+                       const Logger& parentLogger) :
+        ValHasTypeReq<ValT, ValOpsT> {ValType::Obj, parentLogger},
         _mPropReqs {std::move(propReqs)}, _mAllowUnknownProps {allowUnknownProps}
     {
     }
@@ -1055,13 +939,9 @@ public:
      *
      * • For each value VV having the key K in V: VV satisfies the value
      *   requirement, if any, of `propReqs[K]`.
-     *
-     * When the value requirement logs or appends a cause to the error
-     * of the current thread, it uses `logCfg` to format the text
-     * location part of the message.
      */
-    explicit ObjValReq(PropReqs propReqs, const ValReqLogCfg& logCfg) :
-        ObjValReq {std::move(propReqs), false, logCfg}
+    explicit ObjValReq(PropReqs propReqs, const Logger& parentLogger) :
+        ObjValReq {std::move(propReqs), false, parentLogger}
     {
     }
 
@@ -1070,18 +950,18 @@ public:
      * the parameters to the constructor.
      */
     static typename ValReq<ValT, ValOpsT>::SP
-    shared(PropReqs propReqs, const bool allowUnknownProps, const ValReqLogCfg& logCfg)
+    shared(PropReqs propReqs, const bool allowUnknownProps, const Logger& parentLogger)
     {
-        return std::make_shared<ObjValReq>(std::move(propReqs), allowUnknownProps, logCfg);
+        return std::make_shared<ObjValReq>(std::move(propReqs), allowUnknownProps, parentLogger);
     }
 
     /*
      * Returns a shared pointer to object value requirement, forwarding
      * the parameters to the constructor.
      */
-    static typename ValReq<ValT, ValOpsT>::SP shared(PropReqs propReqs, const ValReqLogCfg& logCfg)
+    static typename ValReq<ValT, ValOpsT>::SP shared(PropReqs propReqs, const Logger& parentLogger)
     {
-        return std::make_shared<ObjValReq>(std::move(propReqs), logCfg);
+        return std::make_shared<ObjValReq>(std::move(propReqs), parentLogger);
     }
 
 protected:
@@ -1090,15 +970,15 @@ protected:
         ValHasTypeReq<ValT, ValOpsT>::_validate(val);
 
         auto& objVal = ValOpsT::asObj(val);
-        const auto objValTypeStr = ValOpsT::typeStr(ValType::OBJ);
+        const auto objValTypeStr = ValOpsT::typeStr(ValType::Obj);
 
         for (auto& keyPropReqPair : _mPropReqs) {
             auto& key = keyPropReqPair.first;
 
             if (keyPropReqPair.second.isRequired() && !ValOpsT::objValVal(objVal, key)) {
-                BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                    this->_logger(), Error, "{} Missing mandatory {} {} `{}`.",
-                    this->_locStr(objVal), objValTypeStr, ValOpsT::objValPropName, key);
+                BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                    this->_logger(), Error, this->_loc(objVal), "Missing mandatory {} {} `{}`.",
+                    objValTypeStr, ValOpsT::objValPropName, key);
             }
         }
 
@@ -1112,8 +992,8 @@ protected:
                 if (_mAllowUnknownProps) {
                     continue;
                 } else {
-                    BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                        this->_logger(), Error, "{} Unknown {} {} `{}`.", this->_locStr(propVal),
+                    BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                        this->_logger(), Error, this->_loc(propVal), "Unknown {} {} `{}`.",
                         objValTypeStr, ValOpsT::objValPropName, key);
                 }
             }
@@ -1121,9 +1001,9 @@ protected:
             try {
                 keyPropReqPairIt->second.validate(propVal);
             } catch (const Error&) {
-                BT_CPPLOGE_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), "{} Invalid {} {} `{}`.",
-                                                         this->_locStr(propVal), objValTypeStr,
-                                                         ValOpsT::objValPropName, key);
+                BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                    this->_logger(), this->_loc(propVal), "Invalid {} {} `{}`.", objValTypeStr,
+                    ValOpsT::objValPropName, key);
             }
         }
     }
@@ -1135,4 +1015,4 @@ private:
 
 } /* namespace bt2c */
 
-#endif /* BABELTRACE_CPP_COMMON_VAL_REQ_HPP */
+#endif /* BABELTRACE_CPP_COMMON_BT2C_VAL_REQ_HPP */

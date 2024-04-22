@@ -2,59 +2,74 @@
  * SPDX-License-Identifier: MIT
  *
  * Copyright 2022 Francis Deslauriers <francis.deslauriers@efficios.com>
+ * Copyright 2024 Philippe Proulx <pproulx@efficios.com>
  */
 
+#include <babeltrace2/babeltrace.h>
+
+#include "common/common.h"
 #include "compat/memstream.h"
+#include "cpp-common/bt2c/aliases.hpp"
 
 #include "ctf-1-metadata-stream-parser.hpp"
+#include "plugins/ctf/common/src/metadata/ctf-ir.hpp"
 
 namespace ctf {
 namespace src {
-
 namespace {
 
-ir::DispBase
+DispBase
 dispBaseFromIrDispBase(const bt_field_class_integer_preferred_display_base dispBase) noexcept
 {
-    return static_cast<ir::DispBase>(dispBase);
-}
-
-ir::ByteOrder byteOrderFromOrigByteOrder(const ctf_byte_order origByteOrder)
-{
-    switch (origByteOrder) {
-    case CTF_BYTE_ORDER_LITTLE:
-        return ir::ByteOrder::LITTLE;
-    case CTF_BYTE_ORDER_BIG:
-        return ir::ByteOrder::BIG;
+    switch (dispBase) {
+    case BT_FIELD_CLASS_INTEGER_PREFERRED_DISPLAY_BASE_BINARY:
+        return DispBase::Bin;
+    case BT_FIELD_CLASS_INTEGER_PREFERRED_DISPLAY_BASE_OCTAL:
+        return DispBase::Oct;
+    case BT_FIELD_CLASS_INTEGER_PREFERRED_DISPLAY_BASE_DECIMAL:
+        return DispBase::Dec;
+    case BT_FIELD_CLASS_INTEGER_PREFERRED_DISPLAY_BASE_HEXADECIMAL:
+        return DispBase::Hex;
     default:
         bt_common_abort();
     }
 }
 
-bt2s::optional<ir::UIntFieldRole>
-roleFromOrigMeaning(const ctf_field_class_meaning meaning) noexcept
+ByteOrder byteOrderFromOrigByteOrder(const ctf_byte_order origByteOrder)
+{
+    switch (origByteOrder) {
+    case CTF_BYTE_ORDER_LITTLE:
+        return ByteOrder::Little;
+    case CTF_BYTE_ORDER_BIG:
+        return ByteOrder::Big;
+    default:
+        bt_common_abort();
+    }
+}
+
+bt2s::optional<UIntFieldRole> roleFromOrigMeaning(const ctf_field_class_meaning meaning) noexcept
 {
     switch (meaning) {
     case CTF_FIELD_CLASS_MEANING_PACKET_BEGINNING_TIME:
-        return {ir::UIntFieldRole::DEF_CLK_TS};
+        return {UIntFieldRole::DefClkTs};
     case CTF_FIELD_CLASS_MEANING_PACKET_END_TIME:
-        return {ir::UIntFieldRole::PKT_END_DEF_CLK_TS};
+        return {UIntFieldRole::PktEndDefClkTs};
     case CTF_FIELD_CLASS_MEANING_EVENT_CLASS_ID:
-        return {ir::UIntFieldRole::EVENT_RECORD_CLS_ID};
+        return {UIntFieldRole::EventRecordClsId};
     case CTF_FIELD_CLASS_MEANING_STREAM_CLASS_ID:
-        return {ir::UIntFieldRole::DATA_STREAM_CLS_ID};
+        return {UIntFieldRole::DataStreamClsId};
     case CTF_FIELD_CLASS_MEANING_DATA_STREAM_ID:
-        return {ir::UIntFieldRole::DATA_STREAM_ID};
+        return {UIntFieldRole::DataStreamId};
     case CTF_FIELD_CLASS_MEANING_MAGIC:
-        return {ir::UIntFieldRole::PKT_MAGIC_NUMBER};
+        return {UIntFieldRole::PktMagicNumber};
     case CTF_FIELD_CLASS_MEANING_PACKET_COUNTER_SNAPSHOT:
-        return {ir::UIntFieldRole::PKT_SEQ_NUM};
+        return {UIntFieldRole::PktSeqNum};
     case CTF_FIELD_CLASS_MEANING_DISC_EV_REC_COUNTER_SNAPSHOT:
-        return {ir::UIntFieldRole::DISC_EVENT_RECORD_COUNTER_SNAP};
+        return {UIntFieldRole::DiscEventRecordCounterSnap};
     case CTF_FIELD_CLASS_MEANING_EXP_PACKET_TOTAL_SIZE:
-        return {ir::UIntFieldRole::PKT_TOTAL_LEN};
+        return {UIntFieldRole::PktTotalLen};
     case CTF_FIELD_CLASS_MEANING_EXP_PACKET_CONTENT_SIZE:
-        return {ir::UIntFieldRole::PKT_CONTENT_LEN};
+        return {UIntFieldRole::PktContentLen};
     case CTF_FIELD_CLASS_MEANING_UUID:
     case CTF_FIELD_CLASS_MEANING_NONE:
         return bt2s::nullopt;
@@ -67,9 +82,9 @@ roleFromOrigMeaning(const ctf_field_class_meaning meaning) noexcept
  * Returns the integer field class roles which correspond to the meaning
  * of the original CTF IR integer field class `origIntFc`.
  */
-ir::UIntFieldRoles rolesFromOrigIntFc(const ctf_field_class_int& origIntFc)
+UIntFieldRoles rolesFromOrigIntFc(const ctf_field_class_int& origIntFc)
 {
-    ir::UIntFieldRoles roles;
+    UIntFieldRoles roles;
 
     const auto role = roleFromOrigMeaning(origIntFc.meaning);
 
@@ -77,10 +92,12 @@ ir::UIntFieldRoles rolesFromOrigIntFc(const ctf_field_class_int& origIntFc)
         roles.insert(*role);
     }
 
-    const auto hasPktEndDefClkTsRole = role && *role == ir::UIntFieldRole::PKT_END_DEF_CLK_TS;
+    {
+        const auto hasPktEndDefClkTsRole = role && *role == UIntFieldRole::PktEndDefClkTs;
 
-    if (!hasPktEndDefClkTsRole && origIntFc.mapped_clock_class) {
-        roles.insert(ir::UIntFieldRole::DEF_CLK_TS);
+        if (!hasPktEndDefClkTsRole && origIntFc.mapped_clock_class) {
+            roles.insert(UIntFieldRole::DefClkTs);
+        }
     }
 
     return roles;
@@ -96,14 +113,12 @@ Fc::UP fcFromOrigFc(const ctf_field_class_int& oldFc)
         return createFixedLenSIntFc(oldFc.base.base.alignment,
                                     bt2c::DataLen::fromBits(oldFc.base.size),
                                     byteOrderFromOrigByteOrder(oldFc.base.byte_order),
-                                    dispBaseFromIrDispBase(oldFc.disp_base));
+                                    bt2s::nullopt, dispBaseFromIrDispBase(oldFc.disp_base));
     } else {
-        auto roles = rolesFromOrigIntFc(oldFc);
-
-        return createFixedLenUIntFc(oldFc.base.base.alignment,
-                                    bt2c::DataLen::fromBits(oldFc.base.size),
-                                    byteOrderFromOrigByteOrder(oldFc.base.byte_order),
-                                    dispBaseFromIrDispBase(oldFc.disp_base), std::move(roles));
+        return createFixedLenUIntFc(
+            oldFc.base.base.alignment, bt2c::DataLen::fromBits(oldFc.base.size),
+            byteOrderFromOrigByteOrder(oldFc.base.byte_order), bt2s::nullopt,
+            dispBaseFromIrDispBase(oldFc.disp_base), {}, rolesFromOrigIntFc(oldFc));
     }
 }
 
@@ -111,10 +126,10 @@ Fc::UP fcFromOrigFc(const ctf_field_class_int& oldFc)
  * Translates the mappings of the original CTF IR enumeration field
  * class `origFc` and returns the translated objects.
  */
-template <typename EnumT>
-static typename EnumT::Mappings enumFcMappingsFromOrigEnumFc(const ctf_field_class_enum& origFc)
+template <typename IntFcT>
+static typename IntFcT::Mappings intFcMappingsFromOrigEnumFc(const ctf_field_class_enum& origFc)
 {
-    using Mappings = typename EnumT::Mappings;
+    using Mappings = typename IntFcT::Mappings;
     using RangeSet = typename Mappings::mapped_type;
 
     Mappings mappings;
@@ -129,11 +144,9 @@ static typename EnumT::Mappings enumFcMappingsFromOrigEnumFc(const ctf_field_cla
             auto& origRange =
                 *ctf_field_class_enum_mapping_borrow_range_by_index_const(&origMapping, rangeIdx);
 
-            ranges.emplace(static_cast<typename EnumT::Val>(origRange.lower.u),
-                           static_cast<typename EnumT::Val>(origRange.upper.u));
+            ranges.emplace(static_cast<typename IntFcT::Val>(origRange.lower.u),
+                           static_cast<typename IntFcT::Val>(origRange.upper.u));
         }
-
-        typename Mappings::mapped_type rangeSet {ranges};
 
         mappings.emplace(std::make_pair(origMapping.label->str, RangeSet {ranges}));
     }
@@ -151,14 +164,15 @@ Fc::UP fcFromOrigFc(const ctf_field_class_enum& origFc)
     const auto dispBase = dispBaseFromIrDispBase(origFc.base.disp_base);
 
     if (origFc.base.is_signed) {
-        return createFixedLenSEnumFc(
-            origFc.base.base.base.alignment, bt2c::DataLen::fromBits(origFc.base.base.size),
-            byteOrder, enumFcMappingsFromOrigEnumFc<FixedLenSEnumFc>(origFc), dispBase);
+        return createFixedLenSIntFc(origFc.base.base.base.alignment,
+                                    bt2c::DataLen::fromBits(origFc.base.base.size), byteOrder,
+                                    bt2s::nullopt, dispBase,
+                                    intFcMappingsFromOrigEnumFc<FixedLenSIntFc>(origFc));
     } else {
-        return createFixedLenUEnumFc(origFc.base.base.base.alignment,
-                                     bt2c::DataLen::fromBits(origFc.base.base.size), byteOrder,
-                                     enumFcMappingsFromOrigEnumFc<FixedLenUEnumFc>(origFc),
-                                     dispBase, rolesFromOrigIntFc(origFc.base));
+        return createFixedLenUIntFc(
+            origFc.base.base.base.alignment, bt2c::DataLen::fromBits(origFc.base.base.size),
+            byteOrder, bt2s::nullopt, dispBase, intFcMappingsFromOrigEnumFc<FixedLenUIntFc>(origFc),
+            rolesFromOrigIntFc(origFc.base));
     }
 }
 
@@ -181,68 +195,67 @@ const char *eventRecordClsLogLevelNameFromOrigLogLevel(const bt_event_class_log_
 {
     switch (origLogLevel) {
     case BT_EVENT_CLASS_LOG_LEVEL_EMERGENCY:
-        return "emergency";
+        return MetadataStreamParser::logLevelEmergencyName;
     case BT_EVENT_CLASS_LOG_LEVEL_ALERT:
-        return "alert";
+        return MetadataStreamParser::logLevelAlertName;
     case BT_EVENT_CLASS_LOG_LEVEL_CRITICAL:
-        return "critical";
+        return MetadataStreamParser::logLevelCriticalName;
     case BT_EVENT_CLASS_LOG_LEVEL_ERROR:
-        return "error";
+        return MetadataStreamParser::logLevelErrorName;
     case BT_EVENT_CLASS_LOG_LEVEL_WARNING:
-        return "warning";
+        return MetadataStreamParser::logLevelWarningName;
     case BT_EVENT_CLASS_LOG_LEVEL_NOTICE:
-        return "notice";
+        return MetadataStreamParser::logLevelNoticeName;
     case BT_EVENT_CLASS_LOG_LEVEL_INFO:
-        return "info";
+        return MetadataStreamParser::logLevelInfoName;
     case BT_EVENT_CLASS_LOG_LEVEL_DEBUG_SYSTEM:
-        return "debug:system";
+        return MetadataStreamParser::logLevelDebugSystemName;
     case BT_EVENT_CLASS_LOG_LEVEL_DEBUG_PROGRAM:
-        return "debug:program";
+        return MetadataStreamParser::logLevelDebugProgramName;
     case BT_EVENT_CLASS_LOG_LEVEL_DEBUG_PROCESS:
-        return "debug:process";
+        return MetadataStreamParser::logLevelDebugProcessName;
     case BT_EVENT_CLASS_LOG_LEVEL_DEBUG_MODULE:
-        return "debug:module";
+        return MetadataStreamParser::logLevelDebugModuleName;
     case BT_EVENT_CLASS_LOG_LEVEL_DEBUG_UNIT:
-        return "debug:unit";
+        return MetadataStreamParser::logLevelDebugUnitName;
     case BT_EVENT_CLASS_LOG_LEVEL_DEBUG_FUNCTION:
-        return "debug:function";
+        return MetadataStreamParser::logLevelDebugFunctionName;
     case BT_EVENT_CLASS_LOG_LEVEL_DEBUG_LINE:
-        return "debug:line";
+        return MetadataStreamParser::logLevelDebugLineName;
     case BT_EVENT_CLASS_LOG_LEVEL_DEBUG:
-        return "debug";
+        return MetadataStreamParser::logLevelDebugName;
     default:
         bt_common_abort();
     }
 }
 
 /*
- * Returns the event record class user attributes which correspond to
- * the log level and EMF URI properties of the original CTF IR event
- * record class `origEventRecordCls`.
+ * Returns the event record class attributes which correspond to the log
+ * level and EMF URI properties of the original CTF IR event record
+ * class `origEventRecordCls`.
  */
-ir::OptUserAttrs
-eventRecordClsBtUserAttrsFromOrigEventRecordCls(const ctf_event_class& origEventRecordCls)
+OptAttrs eventRecordClsBtAttrsFromOrigEventRecordCls(const ctf_event_class& origEventRecordCls)
 {
     if (origEventRecordCls.emf_uri->len == 0 && !origEventRecordCls.is_log_level_set) {
-        /* No log level and no EMF URI: no user attributes */
-        return ir::OptUserAttrs {};
+        /* No log level and no EMF URI: no attributes */
+        return OptAttrs {};
     }
 
-    auto userAttrs = bt2::MapValue::create();
-    auto nsMapVal = userAttrs->insertEmptyMap("babeltrace.org,2020");
+    auto attrs = bt2::MapValue::create();
+    auto nsMapVal = attrs->insertEmptyMap("babeltrace.org,2020");
 
     if (origEventRecordCls.emf_uri->len) {
-        /* Set EMF URI user attribute */
+        /* Set EMF URI attribute */
         nsMapVal.insert("emf-uri", origEventRecordCls.emf_uri->str);
     }
 
     if (origEventRecordCls.is_log_level_set) {
-        /* Set log level user attribute */
+        /* Set log level attribute */
         nsMapVal.insert("log-level",
                         eventRecordClsLogLevelNameFromOrigLogLevel(origEventRecordCls.log_level));
     }
 
-    return userAttrs;
+    return attrs;
 }
 
 /*
@@ -291,37 +304,37 @@ Fc::UP Ctf1MetadataStreamParser::_fcFromOrigFc(const ctf_field_class_array& orig
     }
 
     return createStaticLenArrayFc(origFc.length, this->_fcFromOrigFc(*origFc.base.elem_fc),
-                                  origFc.base.base.alignment, ir::OptUserAttrs {},
-                                  origFc.meaning == CTF_FIELD_CLASS_MEANING_UUID);
+                                  origFc.base.base.alignment,
+                                  origFc.meaning == CTF_FIELD_CLASS_MEANING_UUID, OptAttrs {});
 }
 
 FieldLoc Ctf1MetadataStreamParser::_fieldLocFromOrigFieldPath(const ctf_field_path& origFieldPath)
 {
     /* Get original CTF IR root field class and CTF IR scope */
-    const auto origFcAndScope = [this, &origFieldPath] {
+    const auto origFcAndScope = bt2c::call([this, &origFieldPath] {
         switch (origFieldPath.root) {
         case CTF_SCOPE_PACKET_HEADER:
             return std::make_pair(_mFcTranslationCtx.origTraceCls->packet_header_fc,
-                                  ir::FieldLocScope::PKT_HEADER);
+                                  Scope::PktHeader);
         case CTF_SCOPE_PACKET_CONTEXT:
             return std::make_pair(_mFcTranslationCtx.origDataStreamCls->packet_context_fc,
-                                  ir::FieldLocScope::PKT_CTX);
+                                  Scope::PktCtx);
         case CTF_SCOPE_EVENT_HEADER:
             return std::make_pair(_mFcTranslationCtx.origDataStreamCls->event_header_fc,
-                                  ir::FieldLocScope::EVENT_RECORD_HEADER);
+                                  Scope::EventRecordHeader);
         case CTF_SCOPE_EVENT_COMMON_CONTEXT:
             return std::make_pair(_mFcTranslationCtx.origDataStreamCls->event_common_context_fc,
-                                  ir::FieldLocScope::EVENT_RECORD_COMMON_CTX);
+                                  Scope::CommonEventRecordCtx);
         case CTF_SCOPE_EVENT_SPECIFIC_CONTEXT:
             return std::make_pair(_mFcTranslationCtx.origEventRecordCls->spec_context_fc,
-                                  ir::FieldLocScope::EVENT_RECORD_SPEC_CTX);
+                                  Scope::SpecEventRecordCtx);
         case CTF_SCOPE_EVENT_PAYLOAD:
             return std::make_pair(_mFcTranslationCtx.origEventRecordCls->payload_fc,
-                                  ir::FieldLocScope::EVENT_RECORD_PAYLOAD);
+                                  Scope::EventRecordPayload);
         default:
             bt_common_abort();
         }
-    }();
+    });
 
     /* Translate field path to field scope */
     FieldLoc::Items items;
@@ -332,17 +345,14 @@ FieldLoc Ctf1MetadataStreamParser::_fieldLocFromOrigFieldPath(const ctf_field_pa
         case CTF_FIELD_CLASS_TYPE_SEQUENCE:
         case CTF_FIELD_CLASS_TYPE_ARRAY:
         {
-            const auto childIndex = ctf_field_path_borrow_index_by_index(&origFieldPath, i);
-
-            BT_ASSERT(childIndex == -1);
+            BT_ASSERT(ctf_field_path_borrow_index_by_index(&origFieldPath, i) == -1);
             origFc = ctf_field_class_as_array_base(origFc)->elem_fc;
             break;
         }
         case CTF_FIELD_CLASS_TYPE_STRUCT:
         {
-            const auto childIndex = ctf_field_path_borrow_index_by_index(&origFieldPath, i);
-            const auto origChildFc =
-                ctf_field_class_compound_borrow_named_field_class_by_index(origFc, childIndex);
+            const auto origChildFc = ctf_field_class_compound_borrow_named_field_class_by_index(
+                origFc, ctf_field_path_borrow_index_by_index(&origFieldPath, i));
 
             BT_ASSERT(origChildFc);
             items.emplace_back(origChildFc->name->str);
@@ -351,9 +361,8 @@ FieldLoc Ctf1MetadataStreamParser::_fieldLocFromOrigFieldPath(const ctf_field_pa
         }
         case CTF_FIELD_CLASS_TYPE_VARIANT:
         {
-            const auto childIndex = ctf_field_path_borrow_index_by_index(&origFieldPath, i);
-            const auto origChildFc =
-                ctf_field_class_compound_borrow_named_field_class_by_index(origFc, childIndex);
+            const auto origChildFc = ctf_field_class_compound_borrow_named_field_class_by_index(
+                origFc, ctf_field_path_borrow_index_by_index(&origFieldPath, i));
 
             BT_ASSERT_DBG(origChildFc);
 
@@ -430,38 +439,30 @@ Fc::UP Ctf1MetadataStreamParser::_fcFromOrigFc(const ctf_field_class& origFc)
 
 bt2c::FileUP Ctf1MetadataStreamParser::_fileUpFromStr(const std::string& str)
 {
-    const auto fp = bt_fmemopen(const_cast<char *>(str.data()), str.size(), "rb");
-
-    if (!fp) {
-        BT_CPPLOGE_APPEND_CAUSE_AND_THROW(bt2c::Error, "bt_fmemopen() failed.");
+    if (const auto fp = bt_fmemopen(const_cast<char *>(str.data()), str.size(), "rb")) {
+        return bt2c::FileUP {fp};
     }
 
-    return bt2c::FileUP {fp};
+    BT_CPPLOGE_APPEND_CAUSE_AND_THROW(bt2c::Error, "bt_fmemopen() failed.");
 }
 
-void Ctf1MetadataStreamParser::_parseSection(const bt2s::span<const std::uint8_t> buffer)
+void Ctf1MetadataStreamParser::_parseSection(const bt2c::ConstBytes buffer)
 {
-    const auto plaintextMetadata = _mStreamDecoder.decode(buffer);
-    auto plaintextFile = this->_fileUpFromStr(plaintextMetadata);
-
-    /* Append the metadata text content to the TSDL scanner */
     {
-        const auto ret = ctf_scanner_append_ast(_mScanner.get(), plaintextFile.get());
+        const auto metadataStr = _mStreamDecoder.decode(buffer);
+        const auto plaintextFile = this->_fileUpFromStr(metadataStr);
 
-        if (ret) {
+        /* Append the metadata text content to the TSDL scanner */
+        if (const auto ret = ctf_scanner_append_ast(_mScanner.get(), plaintextFile.get())) {
             BT_CPPLOGE_APPEND_CAUSE_AND_THROW(
                 bt2c::Error, "Cannot create the metadata stream AST from TSDL text: ret={}", ret);
         }
     }
 
     /* Make some basic AST node validation */
-    {
-        const auto ret = ctf_visitor_semantic_check(0, &_mScanner.get()->ast->root, _mLogger);
-
-        if (ret) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW(
-                bt2c::Error, "Failed to validate metadata stream AST nodes: ret={}", ret);
-        }
+    if (const auto ret = ctf_visitor_semantic_check(0, &_mScanner.get()->ast->root, _mLogger)) {
+        BT_CPPLOGE_APPEND_CAUSE_AND_THROW(
+            bt2c::Error, "Failed to validate metadata stream AST nodes: ret={}", ret);
     }
 
     /* Convert AST nodes to original CTF IR objects */
@@ -529,16 +530,22 @@ Ctf1MetadataStreamParser::_translateTraceCls(ctf_trace_class& origTraceCls)
         pktHeaderFc = this->_fcFromOrigFc(*origTraceCls.packet_header_fc);
     }
 
-    /* UUID */
-    bt2s::optional<bt2c::Uuid> uuid;
+    /* UID */
+    bt2s::optional<std::string> uid;
 
     if (origTraceCls.is_uuid_set) {
-        uuid = origTraceCls.uuid;
+        uid = bt2c::UuidView {origTraceCls.uuid}.str();
+
+        /*
+         * For CTF 1, the trace class UUID is also the metadata
+         * stream UUID.
+         */
+        _mMetadataStreamUuid = origTraceCls.uuid;
     }
 
     /* Create trace class */
-    auto traceCls = createTraceCls(std::move(uuid), envMapValFromOrigTraceCls(origTraceCls),
-                                   std::move(pktHeaderFc));
+    auto traceCls = createTraceCls(bt2s::nullopt, bt2s::nullopt, std::move(uid),
+                                   envMapValFromOrigTraceCls(origTraceCls), std::move(pktHeaderFc));
 
     /* Mark original CTF IR trace class as translated */
     origTraceCls.is_translated = true;
@@ -566,18 +573,26 @@ ClkCls::SP Ctf1MetadataStreamParser::_clkClsFromOrigClkCls(const ctf_clock_class
             descr = origClkCls.description->str;
         }
 
-        /* UUID */
-        bt2s::optional<bt2c::Uuid> uuid;
+        /* UID from UUID */
+        bt2s::optional<std::string> uid;
 
         if (origClkCls.has_uuid) {
-            uuid = origClkCls.uuid;
+            uid = bt2c::UuidView {origClkCls.uuid}.str();
+        }
+
+        /* Clock origin */
+        bt2s::optional<ClkOrigin> origin;
+
+        if (origClkCls.is_absolute) {
+            /* Unix epoch */
+            origin = ClkOrigin {};
         }
 
         /* Create clock class */
-        auto clkCls = createClkCls(
-            origClkCls.name->str, origClkCls.frequency,
-            ir::ClkOffset {origClkCls.offset_seconds, origClkCls.offset_cycles},
-            origClkCls.is_absolute, std::move(descr), origClkCls.precision, std::move(uuid));
+        auto clkCls = createClkCls(origClkCls.name->str, origClkCls.frequency, bt2s::nullopt,
+                                   origClkCls.name->str, std::move(uid),
+                                   ClkOffset {origClkCls.offset_seconds, origClkCls.offset_cycles},
+                                   std::move(origin), std::move(descr), origClkCls.precision);
 
         /* Add to map of translated clock classes */
         _mClkClsMap.emplace(&origClkCls, clkCls);
@@ -625,7 +640,7 @@ Ctf1MetadataStreamParser::_tryTranslateDataStreamCls(ctf_stream_class& origDataS
 
     /* Create data stream class */
     auto dataStreamClsSp = createDataStreamCls(
-        origDataStreamCls.id, bt2s::nullopt, bt2s::nullopt, std::move(pktCtxFc),
+        origDataStreamCls.id, bt2s::nullopt, bt2s::nullopt, bt2s::nullopt, std::move(pktCtxFc),
         std::move(eventRecordHeaderFc), std::move(commonEventRecordCtxFc), std::move(defClkCls));
     auto& dataStreamCls = *dataStreamClsSp;
 
@@ -661,9 +676,10 @@ void Ctf1MetadataStreamParser::_tryTranslateEventRecordCls(ctf_event_class& orig
     }
 
     /* Create event record class */
-    auto eventRecordCls = createEventRecordCls(
-        origEventRecordCls.id, bt2s::nullopt, origEventRecordCls.name->str, std::move(specCtxFc),
-        std::move(payloadFc), eventRecordClsBtUserAttrsFromOrigEventRecordCls(origEventRecordCls));
+    auto eventRecordCls =
+        createEventRecordCls(origEventRecordCls.id, bt2s::nullopt, origEventRecordCls.name->str,
+                             bt2s::nullopt, std::move(specCtxFc), std::move(payloadFc),
+                             eventRecordClsBtAttrsFromOrigEventRecordCls(origEventRecordCls));
 
     /* Add to data stream class */
     BT_ASSERT(_mFcTranslationCtx.dataStreamCls);
@@ -674,20 +690,21 @@ void Ctf1MetadataStreamParser::_tryTranslateEventRecordCls(ctf_event_class& orig
 }
 
 Ctf1MetadataStreamParser::Ctf1MetadataStreamParser(
-    const ClkClsCfg& clkClsCfg, const bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp,
+    const bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp, const ClkClsCfg& clkClsCfg,
     const bt2c::Logger& parentLogger) :
-    MetadataStreamParser {clkClsCfg, selfComp},
+    MetadataStreamParser {selfComp, clkClsCfg},
     _mLogger {parentLogger, "PLUGIN/CTF/CTF-1-META-STREAM-PARSER"},
     _mOrigCtfIrGenerator {ctf_visitor_generate_ir_create(_mLogger)},
     _mScanner {ctf_scanner_alloc(_mLogger)}, _mStreamDecoder {_mLogger}
 {
 }
 
-MetadataStreamParser::ParseRet Ctf1MetadataStreamParser::parse(
-    const ClkClsCfg& clkClsCfg, const bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp,
-    const bt2s::span<const std::uint8_t> buffer, const bt2c::Logger& parentLogger)
+MetadataStreamParser::ParseRet
+Ctf1MetadataStreamParser::parse(const bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp,
+                                const ClkClsCfg& clkClsCfg, const bt2c::ConstBytes buffer,
+                                const bt2c::Logger& parentLogger)
 {
-    Ctf1MetadataStreamParser parser {clkClsCfg, selfComp, parentLogger};
+    Ctf1MetadataStreamParser parser {selfComp, clkClsCfg, parentLogger};
 
     parser.parseSection(buffer);
     return {parser.releaseTraceCls(), parser.metadataStreamUuid()};

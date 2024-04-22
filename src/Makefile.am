@@ -121,7 +121,6 @@ cpp_common_libcpp_common_la_SOURCES = \
 	cpp-common/bt2/borrowed-object-iterator.hpp \
 	cpp-common/bt2/borrowed-object-proxy.hpp \
 	cpp-common/bt2/borrowed-object.hpp \
-	cpp-common/bt2/borrowed-object-proxy.hpp \
 	cpp-common/bt2/clock-class.hpp \
 	cpp-common/bt2/clock-snapshot.hpp \
 	cpp-common/bt2/component-class-dev.hpp \
@@ -173,10 +172,11 @@ cpp_common_libcpp_common_la_SOURCES = \
 	cpp-common/bt2c/file-utils.hpp \
 	cpp-common/bt2c/fmt.hpp \
 	cpp-common/bt2c/glib-up.hpp \
-	cpp-common/bt2c/json-val.cpp \
-	cpp-common/bt2c/json-val.hpp \
+	cpp-common/bt2c/join.hpp \
 	cpp-common/bt2c/json-val-req.cpp \
 	cpp-common/bt2c/json-val-req.hpp \
+	cpp-common/bt2c/json-val.cpp \
+	cpp-common/bt2c/json-val.hpp \
 	cpp-common/bt2c/libc-up.hpp \
 	cpp-common/bt2c/logging.hpp \
 	cpp-common/bt2c/make-span.hpp \
@@ -186,6 +186,7 @@ cpp_common_libcpp_common_la_SOURCES = \
 	cpp-common/bt2c/parse-json-as-val.hpp \
 	cpp-common/bt2c/prio-heap.hpp \
 	cpp-common/bt2c/read-fixed-len-int.hpp \
+	cpp-common/bt2c/reverse-fixed-len-int-bits.hpp \
 	cpp-common/bt2c/safe-ops.hpp \
 	cpp-common/bt2c/std-int.hpp \
 	cpp-common/bt2c/str-scanner.cpp \
@@ -675,9 +676,9 @@ endif
 # ctf plugin
 plugins_ctf_babeltrace_plugin_ctf_la_SOURCES = \
 	plugins/ctf/common/metadata/ctf-ir.hpp \
+	plugins/ctf/common/metadata/ctf-ir.cpp \
 	plugins/ctf/common/metadata/int-range.hpp \
 	plugins/ctf/common/metadata/int-range-set.hpp \
-	plugins/ctf/common/metadata/json/strings.hpp \
 	plugins/ctf/common/src/clk-cls-cfg.hpp \
 	plugins/ctf/common/src/item-seq/item.cpp \
 	plugins/ctf/common/src/item-seq/item.hpp \
@@ -691,16 +692,26 @@ plugins_ctf_babeltrace_plugin_ctf_la_SOURCES = \
 	plugins/ctf/common/src/item-seq/medium.hpp \
 	plugins/ctf/common/src/metadata/ctf-ir.cpp \
 	plugins/ctf/common/src/metadata/ctf-ir.hpp \
+	plugins/ctf/common/src/metadata/json/ctf-2-fc-builder.cpp \
+	plugins/ctf/common/src/metadata/json/ctf-2-fc-builder.hpp \
 	plugins/ctf/common/src/metadata/json/ctf-2-metadata-stream-parser.cpp \
 	plugins/ctf/common/src/metadata/json/ctf-2-metadata-stream-parser.hpp \
-	plugins/ctf/common/src/metadata/json/json-fcs-with-role.cpp \
-	plugins/ctf/common/src/metadata/json/json-fcs-with-role.hpp \
-	plugins/ctf/common/src/metadata/json/scope-fc-from-json-val.cpp \
-	plugins/ctf/common/src/metadata/json/scope-fc-from-json-val.hpp \
+	plugins/ctf/common/src/metadata/json/fcs-with-role.cpp \
+	plugins/ctf/common/src/metadata/json/fcs-with-role.hpp \
+	plugins/ctf/common/src/metadata/json/key-fc-types.cpp \
+	plugins/ctf/common/src/metadata/json/key-fc-types.hpp \
+	plugins/ctf/common/src/metadata/json/normalize-field-locs.cpp \
+	plugins/ctf/common/src/metadata/json/normalize-field-locs.hpp \
+	plugins/ctf/common/src/metadata/json/resolve-fcs-with-int-sel.cpp \
+	plugins/ctf/common/src/metadata/json/resolve-fcs-with-int-sel.hpp \
+	plugins/ctf/common/src/metadata/json/strings.cpp \
+	plugins/ctf/common/src/metadata/json/strings.hpp \
 	plugins/ctf/common/src/metadata/json/utils.cpp \
 	plugins/ctf/common/src/metadata/json/utils.hpp \
 	plugins/ctf/common/src/metadata/json/val-req.cpp \
 	plugins/ctf/common/src/metadata/json/val-req.hpp \
+	plugins/ctf/common/src/metadata/json/validate-scope-fc-roles.cpp \
+	plugins/ctf/common/src/metadata/json/validate-scope-fc-roles.hpp \
 	plugins/ctf/common/src/metadata/metadata-stream-parser.cpp \
 	plugins/ctf/common/src/metadata/metadata-stream-parser.hpp \
 	plugins/ctf/common/src/metadata/metadata-stream-parser-utils.cpp \
@@ -713,6 +724,7 @@ plugins_ctf_babeltrace_plugin_ctf_la_SOURCES = \
 	plugins/ctf/common/src/metadata/tsdl/metadata-stream-decoder.hpp \
 	plugins/ctf/common/src/msg-iter.cpp \
 	plugins/ctf/common/src/msg-iter.hpp \
+	plugins/ctf/common/src/null-cp-finder.hpp \
 	plugins/ctf/common/src/pkt-props.cpp \
 	plugins/ctf/common/src/pkt-props.hpp \
 	plugins/ctf/fs-sink/fs-sink.cpp \

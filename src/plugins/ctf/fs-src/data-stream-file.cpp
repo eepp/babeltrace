@@ -150,8 +150,9 @@ void ctf_fs_ds_index::updateOffsetsInStream()
 
 static int convert_cycles_to_ns(const ctf::src::ClkCls& clockClass, uint64_t cycles, int64_t *ns)
 {
-    return bt_util_clock_cycles_to_ns_from_origin(
-        cycles, clockClass.freq(), clockClass.offset().seconds(), clockClass.offset().cycles(), ns);
+    return bt_util_clock_cycles_to_ns_from_origin(cycles, clockClass.freq(),
+                                                  clockClass.offsetFromOrigin().seconds(),
+                                                  clockClass.offsetFromOrigin().cycles(), ns);
 }
 
 static bt2s::optional<ctf_fs_ds_index>

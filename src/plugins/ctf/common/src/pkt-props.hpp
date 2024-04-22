@@ -4,8 +4,8 @@
  * Copyright (c) 2022 EfficiOS Inc. and Linux Foundation
  */
 
-#ifndef _CTF_SRC_PKT_PROPS_HPP
-#define _CTF_SRC_PKT_PROPS_HPP
+#ifndef CTF_COMMON_SRC_PKT_PROPS_HPP
+#define CTF_COMMON_SRC_PKT_PROPS_HPP
 
 #include "cpp-common/bt2c/data-len.hpp"
 #include "cpp-common/bt2c/logging.hpp"
@@ -41,4 +41,4 @@ PktProps readPktProps(const TraceCls& traceCls, Medium::UP medium, bt2c::DataLen
 } /* namespace src */
 } /* namespace ctf */
 
-#endif /* _CTF_SRC_PKT_PROPS_HPP */
+#endif /* CTF_COMMON_SRC_PKT_PROPS_HPP */

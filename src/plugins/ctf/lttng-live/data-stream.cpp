@@ -7,10 +7,13 @@
  * Copyright 2010-2011 EfficiOS Inc. and Linux Foundation
  */
 
+#include <sstream>
+
 #include <babeltrace2/babeltrace.h>
 
 #include "common/assert.h"
 #include "compat/mman.h" /* IWYU pragma: keep  */
+#include "cpp-common/bt2/wrap.hpp"
 #include "cpp-common/bt2s/make-unique.hpp"
 #include "cpp-common/vendor/fmt/format.h"
 
@@ -136,7 +139,7 @@ lttng_live_stream_iterator_create_msg_iter(lttng_live_stream_iterator *liveStrea
     liveStreamIter->stream->name(liveStreamIter->name);
 
     auto medium = bt2s::make_unique<ctf::src::live::CtfLiveMedium>(*liveStreamIter);
-    liveStreamIter->msg_iter.emplace(liveMsgIter->self_msg_iter, *ctfTc,
+    liveStreamIter->msg_iter.emplace(bt2::wrap(liveMsgIter->self_msg_iter), *ctfTc,
                                      liveStreamIter->trace->metadata->metadataStreamUuid(),
                                      *liveStreamIter->stream, std::move(medium),
                                      ctf::src::MsgIterQuirks {}, liveStreamIter->logger);

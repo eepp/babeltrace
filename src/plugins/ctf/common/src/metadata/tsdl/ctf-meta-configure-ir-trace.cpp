@@ -40,11 +40,22 @@ void ctf_trace_class_configure_ir_trace(struct ctf_trace_class *tc, const bt2::T
 }
 
 void ctf_trace_class_configure_ir_trace(const ctf::src::TraceCls& tc, bt2::Trace irTrace,
+                                        bt_self_component *selfComp,
                                         const bt2c::Logger& parentLogger)
 {
     bt2c::Logger logger {parentLogger, "PLUGIN/CTF/META/CONFIG-IR-TRACE"};
-    if (tc.uuid()) {
-        irTrace.uuid(*tc.uuid());
+
+    if (tc.uid()) {
+        if (bt_self_component_get_graph_mip_version(selfComp) == 0) {
+            /*
+             * CTF 2 isn't supported under MIP 0, therefore `tc.uid()`
+             * must be a UUID string.
+             */
+            irTrace.uuid(bt2c::Uuid {*tc.uid()});
+        } else {
+            /* MIP ≥ 1: always a UID */
+            irTrace.uid(*tc.uid());
+        }
     }
 
     if (tc.env()) {

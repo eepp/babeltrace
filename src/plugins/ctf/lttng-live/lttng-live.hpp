@@ -182,14 +182,19 @@ struct lttng_live_metadata
         return _mMetadataStreamParser->metadataStreamUuid();
     }
 
-    void parseSection(const bt2s::span<const std::uint8_t> data)
+    void parseSection(const bt2c::ConstBytes data)
     {
         if (!_mMetadataStreamParser) {
             _mMetadataStreamParser =
-                ctf::src::createMetadataStreamParser(data, {}, _mSelfComp, logger);
+                ctf::src::createMetadataStreamParser(data, _mSelfComp, {}, logger);
         }
 
         _mMetadataStreamParser->parseSection(data);
+    }
+
+    bt2::SelfComponent selfComp() const noexcept
+    {
+        return _mSelfComp;
     }
 
     bt2c::Logger logger;

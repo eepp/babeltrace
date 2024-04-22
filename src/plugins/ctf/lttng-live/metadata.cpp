@@ -160,7 +160,8 @@ enum lttng_live_iterator_status lttng_live_metadata_update(struct lttng_live_tra
         if (irTraceCls) {
             trace->trace = irTraceCls->instantiate();
 
-            ctf_trace_class_configure_ir_trace(*ctfTraceCls, *trace->trace, metadata->logger);
+            ctf_trace_class_configure_ir_trace(*ctfTraceCls, *trace->trace,
+                                               metadata->selfComp().libObjPtr(), metadata->logger);
 
             if (!stream_classes_all_have_default_clock_class(trace->trace->cls(),
                                                              metadata->logger)) {

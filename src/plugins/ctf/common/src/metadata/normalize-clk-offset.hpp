@@ -4,8 +4,8 @@
  * Copyright 2022 EfficiOS, Inc.
  */
 
-#ifndef _CTF_SRC_NORMALIZE_CLK_OFFSET_HPP
-#define _CTF_SRC_NORMALIZE_CLK_OFFSET_HPP
+#ifndef CTF_COMMON_SRC_METADATA_SRC_NORMALIZE_CLK_OFFSET_HPP
+#define CTF_COMMON_SRC_METADATA_SRC_NORMALIZE_CLK_OFFSET_HPP
 
 #include <utility>
 
@@ -23,4 +23,4 @@ std::pair<long long, unsigned long long> normalizeClkOffset(long long offsetSeco
 } /* namespace src */
 } /* namespace ctf */
 
-#endif /* _CTF_SRC_NORMALIZE_CLK_OFFSET_HPP */
+#endif /* CTF_COMMON_SRC_METADATA_SRC_NORMALIZE_CLK_OFFSET_HPP */

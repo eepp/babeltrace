@@ -99,6 +99,11 @@ void ItemVisitor::visit(const FixedLenBitArrayFieldItem& item)
     this->visit(static_cast<const Item&>(item));
 }
 
+void ItemVisitor::visit(const FixedLenBitMapFieldItem& item)
+{
+    this->visit(static_cast<const FixedLenBitArrayFieldItem&>(item));
+}
+
 void ItemVisitor::visit(const FixedLenBoolFieldItem& item)
 {
     this->visit(static_cast<const FixedLenBitArrayFieldItem&>(item));
@@ -112,16 +117,6 @@ void ItemVisitor::visit(const FixedLenSIntFieldItem& item)
 void ItemVisitor::visit(const FixedLenUIntFieldItem& item)
 {
     this->visit(static_cast<const FixedLenBitArrayFieldItem&>(item));
-}
-
-void ItemVisitor::visit(const FixedLenSEnumFieldItem& item)
-{
-    this->visit(static_cast<const FixedLenSIntFieldItem&>(item));
-}
-
-void ItemVisitor::visit(const FixedLenUEnumFieldItem& item)
-{
-    this->visit(static_cast<const FixedLenUIntFieldItem&>(item));
 }
 
 void ItemVisitor::visit(const FixedLenFloatFieldItem& item)
@@ -144,16 +139,6 @@ void ItemVisitor::visit(const VarLenUIntFieldItem& item)
     this->visit(static_cast<const VarLenIntFieldItem&>(item));
 }
 
-void ItemVisitor::visit(const VarLenSEnumFieldItem& item)
-{
-    this->visit(static_cast<const VarLenSIntFieldItem&>(item));
-}
-
-void ItemVisitor::visit(const VarLenUEnumFieldItem& item)
-{
-    this->visit(static_cast<const VarLenUIntFieldItem&>(item));
-}
-
 void ItemVisitor::visit(const NullTerminatedStrFieldBeginItem& item)
 {
     this->visit(static_cast<const BeginItem&>(item));
@@ -164,12 +149,7 @@ void ItemVisitor::visit(const NullTerminatedStrFieldEndItem& item)
     this->visit(static_cast<const EndItem&>(item));
 }
 
-void ItemVisitor::visit(const StrFieldSubstrItem& item)
-{
-    this->visit(static_cast<const Item&>(item));
-}
-
-void ItemVisitor::visit(const BlobFieldSectionItem& item)
+void ItemVisitor::visit(const RawDataItem& item)
 {
     this->visit(static_cast<const Item&>(item));
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2022-2024 Philippe Proulx <pproulx@efficios.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -8,15 +8,17 @@
 #include <unordered_set>
 
 #include "common/assert.h"
+#include "cpp-common/bt2c/contains.hpp"
+#include "cpp-common/bt2c/exc.hpp"
+#include "cpp-common/bt2c/json-val-req.hpp"
+#include "cpp-common/bt2c/logging.hpp"
 
-#include "../../../metadata/json/strings.hpp"
+#include "strings.hpp"
 #include "val-req.hpp"
 
 namespace ctf {
 namespace src {
 namespace {
-
-namespace strings = ctf::json_strings;
 
 /*
  * CTF 2 JSON alignment value requirement.
@@ -24,14 +26,14 @@ namespace strings = ctf::json_strings;
 class AlignValReq final : public bt2c::JsonValHasTypeReq
 {
 public:
-    explicit AlignValReq(const bt2c::ValReqLogCfg& logCfg) noexcept :
-        bt2c::JsonValHasTypeReq {bt2c::ValType::UINT, logCfg}
+    explicit AlignValReq(const bt2c::Logger& parentLogger) noexcept :
+        bt2c::JsonValHasTypeReq {bt2c::ValType::UInt, parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<AlignValReq>(logCfg);
+        return std::make_shared<AlignValReq>(parentLogger);
     }
 
 protected:
@@ -45,9 +47,8 @@ protected:
         const auto val = *jsonVal.asUInt();
 
         if (!this->_isPowOfTwo(val)) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] {} is not a power of two.",
-                                                   this->_locStr(jsonVal), val);
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                this->_logger(), bt2c::Error, jsonVal.loc(), "{} is not a power of two.", val);
         }
     }
 };
@@ -58,15 +59,15 @@ protected:
 class ByteOrderValReq final : public bt2c::JsonStrValInSetReq
 {
 public:
-    explicit ByteOrderValReq(const bt2c::ValReqLogCfg& logCfg) :
+    explicit ByteOrderValReq(const bt2c::Logger& parentLogger) :
         bt2c::JsonStrValInSetReq {
-            bt2c::JsonStrValInSetReq::Set {strings::bigEndian, strings::littleEndian}, logCfg}
+            bt2c::JsonStrValInSetReq::Set {jsonstr::bigEndian, jsonstr::littleEndian}, parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<ByteOrderValReq>(logCfg);
+        return std::make_shared<ByteOrderValReq>(parentLogger);
     }
 
 private:
@@ -75,8 +76,37 @@ private:
         try {
             bt2c::JsonStrValInSetReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2::Error, "[{}] Invalid byte order.", this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid byte order.");
+        }
+    }
+};
+
+/*
+ * CTF 2 JSON bit order value requirement.
+ */
+class BitOrderValReq final : public bt2c::JsonStrValInSetReq
+{
+public:
+    explicit BitOrderValReq(const bt2c::Logger& parentLogger) :
+        bt2c::JsonStrValInSetReq {bt2c::JsonStrValInSetReq::Set {jsonstr::ftl, jsonstr::ltf},
+                                  parentLogger}
+    {
+    }
+
+    static SP shared(const bt2c::Logger& parentLogger)
+    {
+        return std::make_shared<BitOrderValReq>(parentLogger);
+    }
+
+private:
+    void _validate(const bt2c::JsonVal& jsonVal) const override
+    {
+        try {
+            bt2c::JsonStrValInSetReq::_validate(jsonVal);
+        } catch (const bt2c::Error&) {
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid bit order.");
         }
     }
 };
@@ -87,14 +117,15 @@ private:
 class UuidValReq final : public bt2c::JsonArrayValReq
 {
 public:
-    explicit UuidValReq(const bt2c::ValReqLogCfg& logCfg) :
-        bt2c::JsonArrayValReq {16, bt2c::JsonUIntValInRangeReq::shared(0, 255, logCfg), logCfg}
+    explicit UuidValReq(const bt2c::Logger& parentLogger) :
+        bt2c::JsonArrayValReq {16, bt2c::JsonUIntValInRangeReq::shared(0, 255, parentLogger),
+                               parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<UuidValReq>(logCfg);
+        return std::make_shared<UuidValReq>(parentLogger);
     }
 
 private:
@@ -103,61 +134,97 @@ private:
         try {
             bt2c::JsonArrayValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2::Error,
-                                                   "[{}] Invalid UUID.", this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid UUID.");
         }
+    }
+};
+
+/*
+ * CTF 2 JSON field location path element value requirement.
+ */
+class FieldLocPathElemValReq final : public bt2c::JsonValReq
+{
+public:
+    explicit FieldLocPathElemValReq(const bt2c::Logger& parentLogger) :
+        bt2c::JsonValReq {parentLogger}
+    {
+    }
+
+    static SP shared(const bt2c::Logger& parentLogger)
+    {
+        return std::make_shared<FieldLocPathElemValReq>(parentLogger);
+    }
+
+private:
+    void _validate(const bt2c::JsonVal& jsonVal) const override
+    {
+        if (jsonVal.isNull() || jsonVal.isStr()) {
+            /* Valid */
+            return;
+        }
+
+        BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error, jsonVal.loc(),
+                                                        "Expecting a string or `null`.");
     }
 };
 
 /*
  * CTF 2 JSON field location value requirement.
  */
-class FieldLocValReq final : public bt2c::JsonArrayValReq
+class FieldLocValReq final : public bt2c::JsonObjValReq
 {
 public:
-    explicit FieldLocValReq(const bt2c::ValReqLogCfg& logCfg) :
-        bt2c::JsonArrayValReq {2, bt2s::nullopt,
-                               bt2c::JsonValHasTypeReq::shared(bt2c::ValType::STR, logCfg), logCfg},
-        _mScopeValReq {{
-                           strings::pktHeader,
-                           strings::pktCtx,
-                           strings::eventRecordHeader,
-                           strings::eventRecordCommonCtx,
-                           strings::eventRecordSpecCtx,
-                           strings::eventRecordPayload,
-                       },
-                       logCfg}
+    explicit FieldLocValReq(const bt2c::Logger& parentLogger) :
+        /* clang-format off */
+        bt2c::JsonObjValReq {{
+            {jsonstr::origin, {
+                bt2c::JsonStrValInSetReq::shared({
+                    jsonstr::pktHeader,
+                    jsonstr::pktCtx,
+                    jsonstr::eventRecordHeader,
+                    jsonstr::eventRecordCommonCtx,
+                    jsonstr::eventRecordSpecCtx,
+                    jsonstr::eventRecordPayload,
+                }, parentLogger)
+            }},
+            {jsonstr::path, {
+                bt2c::JsonArrayValReq::shared(1, bt2s::nullopt,
+                                              FieldLocPathElemValReq::shared(parentLogger), parentLogger),
+                true
+            }},
+        }, parentLogger}
+    /* clang-format on */
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<FieldLocValReq>(logCfg);
+        return std::make_shared<FieldLocValReq>(parentLogger);
     }
 
 private:
     void _validate(const bt2c::JsonVal& jsonVal) const override
     {
         try {
-            bt2c::JsonArrayValReq::_validate(jsonVal);
+            bt2c::JsonObjValReq::_validate(jsonVal);
 
-            auto& firstJsonItem = jsonVal.asArray()[0];
+            /* Validate that the last path element is not `null` */
+            {
+                const auto& jsonLastPathElem =
+                    **(jsonVal.asObj()[jsonstr::path]->asArray().end() - 1);
 
-            try {
-                _mScopeValReq.validate(firstJsonItem);
-            } catch (const bt2c::Error&) {
-                BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2::Error,
-                                                       "[{}] Invalid scope name.",
-                                                       this->_locStr(firstJsonItem));
+                if (jsonLastPathElem.isNull()) {
+                    BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
+                                                                    jsonLastPathElem.loc(),
+                                                                    "Path ends with `null`.");
+                }
             }
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2::Error,
-                                                   "[{}] Invalid field location.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid field location.");
         }
     }
-
-    bt2c::JsonStrValInSetReq _mScopeValReq;
 };
 
 /*
@@ -166,14 +233,14 @@ private:
 class UserAttrsValReq final : public bt2c::JsonObjValReq
 {
 public:
-    explicit UserAttrsValReq(const bt2c::ValReqLogCfg& logCfg) :
-        bt2c::JsonObjValReq {{}, true, logCfg}
+    explicit UserAttrsValReq(const bt2c::Logger& parentLogger) :
+        bt2c::JsonObjValReq {{}, true, parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<UserAttrsValReq>(logCfg);
+        return std::make_shared<UserAttrsValReq>(parentLogger);
     }
 
 private:
@@ -182,9 +249,8 @@ private:
         try {
             bt2c::JsonObjValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2::Error,
-                                                   "[{}] Invalid user attributes.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid user attributes.");
         }
     }
 };
@@ -195,14 +261,14 @@ private:
 class TraceEnvValReq final : public bt2c::JsonObjValReq
 {
 public:
-    explicit TraceEnvValReq(const bt2c::ValReqLogCfg& logCfg) :
-        bt2c::JsonObjValReq {{}, true, logCfg}
+    explicit TraceEnvValReq(const bt2c::Logger& parentLogger) :
+        bt2c::JsonObjValReq {{}, true, parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<TraceEnvValReq>(logCfg);
+        return std::make_shared<TraceEnvValReq>(parentLogger);
     }
 
 private:
@@ -216,16 +282,14 @@ private:
                 auto& jsonEntry = keyJsonValPair.second;
 
                 if (!jsonEntry->isUInt() && !jsonEntry->isSInt() && !jsonEntry->isStr()) {
-                    BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                        this->_logger(), bt2::Error,
-                        "[{}] Entry `{}`: expecting an integer or a string.",
-                        this->_locStr(*jsonEntry), keyJsonValPair.first);
+                    BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                        this->_logger(), bt2c::Error, jsonEntry->loc(),
+                        "Entry `{}`: expecting an integer or a string.", keyJsonValPair.first);
                 }
             }
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2::Error,
-                                                   "[{}] Invalid trace environment.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid trace environment.");
         }
     }
 };
@@ -236,13 +300,14 @@ private:
 class ExtValReq final : public bt2c::JsonObjValReq
 {
 public:
-    explicit ExtValReq(const bt2c::ValReqLogCfg& logCfg) : bt2c::JsonObjValReq {{}, true, logCfg}
+    explicit ExtValReq(const bt2c::Logger& parentLogger) :
+        bt2c::JsonObjValReq {{}, true, parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<ExtValReq>(logCfg);
+        return std::make_shared<ExtValReq>(parentLogger);
     }
 
 private:
@@ -251,16 +316,15 @@ private:
         try {
             bt2c::JsonObjValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2::Error, "[{}] Invalid extensions.", this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid extensions.");
         }
 
         if (jsonVal.asObj().size() > 0) {
             /* Never valid */
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2::Error,
-                "[{}] This version of the `ctf` plugin doesn't support any CTF 2 extension.",
-                this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                this->_logger(), bt2c::Error, jsonVal.loc(),
+                "This version of the `ctf` plugin doesn't support any CTF 2 extension.");
         }
     }
 };
@@ -277,15 +341,15 @@ public:
      * `validRoles`.
      */
     explicit RolesValReq(bt2c::JsonStrValInSetReq::Set validRoles,
-                         const bt2c::ValReqLogCfg& logCfg) :
-        bt2c::JsonArrayValReq {bt2c::JsonStrValInSetReq::shared(std::move(validRoles), logCfg),
-                               logCfg}
+                         const bt2c::Logger& parentLogger) :
+        bt2c::JsonArrayValReq {
+            bt2c::JsonStrValInSetReq::shared(std::move(validRoles), parentLogger), parentLogger}
     {
     }
 
-    static SP shared(bt2c::JsonStrValInSetReq::Set validRoles, const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(bt2c::JsonStrValInSetReq::Set validRoles, const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<RolesValReq>(std::move(validRoles), logCfg);
+        return std::make_shared<RolesValReq>(std::move(validRoles), parentLogger);
     }
 
 private:
@@ -294,16 +358,15 @@ private:
         try {
             bt2c::JsonArrayValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid roles.", this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid roles.");
         }
     }
 };
 
 /*
- * Adds a JSON object value property requirement having the key
- * `key` to `propReqs`, passing `valReq` and `isRequired` to its
- * constructor.
+ * Adds a JSON object value property requirement having the key `key` to
+ * `propReqs`, passing `valReq` and `isRequired` to its constructor.
  */
 void addToPropReqs(bt2c::JsonObjValReq::PropReqs& propReqs, std::string&& key,
                    bt2c::JsonValReq::SP valReq, const bool isRequired = false)
@@ -314,23 +377,23 @@ void addToPropReqs(bt2c::JsonObjValReq::PropReqs& propReqs, std::string&& key,
 
 /*
  * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 object type
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 JSON type
  * object property requirement.
  */
 bt2c::JsonObjValReq::PropReqsEntry objTypePropReqEntry(std::string&& type,
-                                                       const bt2c::ValReqLogCfg& logCfg)
+                                                       const bt2c::Logger& parentLogger)
 {
-    return {strings::type, {bt2c::JsonStrValInSetReq::shared(std::move(type), logCfg), true}};
+    return {jsonstr::type, {bt2c::JsonStrValInSetReq::shared(std::move(type), parentLogger), true}};
 }
 
 /*
  * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 user
- * attributes object property requirement.
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 attributes
+ * object property requirement.
  */
-bt2c::JsonObjValReq::PropReqsEntry userAttrsPropReqEntry(const bt2c::ValReqLogCfg& logCfg)
+bt2c::JsonObjValReq::PropReqsEntry attrsPropReqEntry(const bt2c::Logger& parentLogger)
 {
-    return {strings::userAttrs, {UserAttrsValReq::shared(logCfg)}};
+    return {jsonstr::attrs, {UserAttrsValReq::shared(parentLogger)}};
 }
 
 /*
@@ -338,9 +401,9 @@ bt2c::JsonObjValReq::PropReqsEntry userAttrsPropReqEntry(const bt2c::ValReqLogCf
  * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 extensions object
  * property requirement.
  */
-bt2c::JsonObjValReq::PropReqsEntry extPropReqEntry(const bt2c::ValReqLogCfg& logCfg)
+bt2c::JsonObjValReq::PropReqsEntry extPropReqEntry(const bt2c::Logger& parentLogger)
 {
-    return {strings::extensions, {ExtValReq::shared(logCfg)}};
+    return {jsonstr::extensions, {ExtValReq::shared(parentLogger)}};
 }
 
 /*
@@ -357,27 +420,27 @@ protected:
      * adding `propReqs` to the base JSON object value property
      * requirements.
      */
-    explicit FcValReq(std::string&& type, PropReqs&& propReqs, const bt2c::ValReqLogCfg& logCfg) :
-        bt2c::JsonObjValReq {this->_buildPropReqs(std::move(type), std::move(propReqs), logCfg),
-                             logCfg}
+    explicit FcValReq(std::string&& type, PropReqs&& propReqs, const bt2c::Logger& parentLogger) :
+        bt2c::JsonObjValReq {
+            this->_buildPropReqs(std::move(type), std::move(propReqs), parentLogger), parentLogger}
     {
     }
 
     /*
      * Builds a CTF 2 JSON field class value requirement of type `type`.
      */
-    explicit FcValReq(std::string&& type, const bt2c::ValReqLogCfg& logCfg) :
-        FcValReq {std::move(type), {}, logCfg}
+    explicit FcValReq(std::string&& type, const bt2c::Logger& parentLogger) :
+        FcValReq {std::move(type), {}, parentLogger}
     {
     }
 
 private:
     static PropReqs _buildPropReqs(std::string&& type, PropReqs&& propReqs,
-                                   const bt2c::ValReqLogCfg& logCfg)
+                                   const bt2c::Logger& parentLogger)
     {
-        propReqs.insert(objTypePropReqEntry(std::move(type), logCfg));
-        propReqs.insert(userAttrsPropReqEntry(logCfg));
-        propReqs.insert(extPropReqEntry(logCfg));
+        propReqs.insert(objTypePropReqEntry(std::move(type), parentLogger));
+        propReqs.insert(attrsPropReqEntry(parentLogger));
+        propReqs.insert(extPropReqEntry(parentLogger));
         return std::move(propReqs);
     }
 };
@@ -394,8 +457,9 @@ protected:
      * object value property requirements.
      */
     explicit FixedLenBitArrayFcValReq(std::string&& type, PropReqs&& propReqs,
-                                      const bt2c::ValReqLogCfg& logCfg) :
-        FcValReq {std::move(type), this->_buildPropReqs(std::move(propReqs), logCfg), logCfg}
+                                      const bt2c::Logger& parentLogger) :
+        FcValReq {std::move(type), this->_buildPropReqs(std::move(propReqs), parentLogger),
+                  parentLogger}
     {
     }
 
@@ -403,25 +467,25 @@ protected:
      * Builds a CTF 2 JSON fixed-length bit array field class value
      * requirement of type `type`.
      */
-    explicit FixedLenBitArrayFcValReq(std::string&& type, const bt2c::ValReqLogCfg& logCfg) :
-        FixedLenBitArrayFcValReq {std::move(type), {}, logCfg}
+    explicit FixedLenBitArrayFcValReq(std::string&& type, const bt2c::Logger& parentLogger) :
+        FixedLenBitArrayFcValReq {std::move(type), {}, parentLogger}
     {
     }
 
 public:
-    explicit FixedLenBitArrayFcValReq(const bt2c::ValReqLogCfg& logCfg) :
-        FixedLenBitArrayFcValReq {this->typeStr(), logCfg}
+    explicit FixedLenBitArrayFcValReq(const bt2c::Logger& parentLogger) :
+        FixedLenBitArrayFcValReq {this->typeStr(), parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<FixedLenBitArrayFcValReq>(logCfg);
+        return std::make_shared<FixedLenBitArrayFcValReq>(parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::fixedLenBitArray;
+        return jsonstr::fixedLenBitArray;
     }
 
 private:
@@ -430,19 +494,125 @@ private:
         try {
             FcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error, "[{}] Invalid fixed-length bit array field class.",
-                this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid fixed-length bit array field class.");
         }
     }
 
-    static PropReqs _buildPropReqs(PropReqs&& propReqs, const bt2c::ValReqLogCfg& logCfg)
+    static PropReqs _buildPropReqs(PropReqs&& propReqs, const bt2c::Logger& parentLogger)
     {
-        addToPropReqs(propReqs, strings::len, bt2c::JsonUIntValInRangeReq::shared(1, 64, logCfg),
-                      true);
-        addToPropReqs(propReqs, strings::byteOrder, ByteOrderValReq::shared(logCfg), true);
-        addToPropReqs(propReqs, strings::align, AlignValReq::shared(logCfg));
+        addToPropReqs(propReqs, jsonstr::len,
+                      bt2c::JsonUIntValInRangeReq::shared(1, 64, parentLogger), true);
+        addToPropReqs(propReqs, jsonstr::byteOrder, ByteOrderValReq::shared(parentLogger), true);
+        addToPropReqs(propReqs, jsonstr::bitOrder, BitOrderValReq::shared(parentLogger));
+        addToPropReqs(propReqs, jsonstr::align, AlignValReq::shared(parentLogger));
         return std::move(propReqs);
+    }
+};
+
+/*
+ * CTF 2 JSON fixed-length bit map field class flags value requirement.
+ *
+ * An instance of this class validates that a given JSON value is a CTF
+ * 2 fixed-length bit map field class flags object.
+ */
+class FixedLenBitMapFcFlagsValReq final : public bt2c::JsonObjValReq
+{
+public:
+    explicit FixedLenBitMapFcFlagsValReq(const bt2c::Logger& parentLogger) :
+        bt2c::JsonObjValReq {{}, true, parentLogger}, _mRangeSetReq {parentLogger}
+    {
+    }
+
+    static SP shared(const bt2c::Logger& parentLogger)
+    {
+        return std::make_shared<FixedLenBitMapFcFlagsValReq>(parentLogger);
+    }
+
+private:
+    void _validate(const bt2c::JsonVal& jsonVal) const override
+    {
+        try {
+            bt2c::JsonObjValReq::_validate(jsonVal);
+
+            /* Require at least one flag */
+            if (jsonVal.asObj().size() < 1) {
+                BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                    this->_logger(), bt2c::Error, jsonVal.loc(), "Expecting at least one flag.");
+            }
+
+            /* Validate range sets */
+            for (auto& keyJsonValPair : jsonVal.asObj()) {
+                try {
+                    _mRangeSetReq.validate(*keyJsonValPair.second);
+                } catch (const bt2c::Error&) {
+                    BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                        this->_logger(), jsonVal.loc(), "Invalid flag `{}`.", keyJsonValPair.first);
+                }
+            }
+        } catch (const bt2c::Error&) {
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid enumeration field class mappings.");
+        }
+    }
+
+    Ctf2JsonIntRangeSetValReqBase<bt2c::JsonUIntValReq> _mRangeSetReq;
+};
+
+/*
+ * CTF 2 JSON fixed-length bit map field class value requirement.
+ */
+class FixedLenBitMapFcValReq final : public FixedLenBitArrayFcValReq
+{
+public:
+    explicit FixedLenBitMapFcValReq(const bt2c::Logger& parentLogger) :
+        /* clang-format off */
+        FixedLenBitArrayFcValReq {this->typeStr(), {
+            {jsonstr::flags, {FixedLenBitMapFcFlagsValReq::shared(parentLogger), true}},
+        }, parentLogger}
+    /* clang-format on */
+    {
+    }
+
+    static SP shared(const bt2c::Logger& parentLogger)
+    {
+        return std::make_shared<FixedLenBitMapFcValReq>(parentLogger);
+    }
+
+    static const char *typeStr() noexcept
+    {
+        return jsonstr::fixedLenBitMap;
+    }
+
+private:
+    void _validate(const bt2c::JsonVal& jsonVal) const override
+    {
+        try {
+            FcValReq::_validate(jsonVal);
+
+            /*
+             * Validate that the upper value of each flag bit range is
+             * less than the length of instances.
+             */
+            const auto len = jsonVal.asObj().rawUIntVal(jsonstr::len);
+
+            for (auto& keyJsonValPair : jsonVal.asObj()[jsonstr::flags]->asObj()) {
+                for (auto& jsonRange : keyJsonValPair.second->asArray()) {
+                    auto& jsonRangeUpper = jsonRange->asArray()[1].asUInt();
+
+                    if (*jsonRangeUpper >= len) {
+                        BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                            this->_logger(), bt2c::Error, jsonRangeUpper.loc(),
+                            "Flag `{}`: bit index {} is greater than or equal to "
+                            "the value of the `{}` property ({} bits).",
+                            keyJsonValPair.first, *jsonRangeUpper, jsonstr::len, len);
+                    }
+                }
+            }
+        } catch (const bt2c::Error&) {
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid fixed-length bit map field class.");
+        }
     }
 };
 
@@ -452,19 +622,19 @@ private:
 class FixedLenBoolFcValReq final : public FixedLenBitArrayFcValReq
 {
 public:
-    explicit FixedLenBoolFcValReq(const bt2c::ValReqLogCfg& logCfg) :
-        FixedLenBitArrayFcValReq {this->typeStr(), logCfg}
+    explicit FixedLenBoolFcValReq(const bt2c::Logger& parentLogger) :
+        FixedLenBitArrayFcValReq {this->typeStr(), parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<FixedLenBoolFcValReq>(logCfg);
+        return std::make_shared<FixedLenBoolFcValReq>(parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::fixedLenBool;
+        return jsonstr::fixedLenBool;
     }
 
 private:
@@ -473,21 +643,21 @@ private:
         try {
             FcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid fixed-length boolean field class.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid fixed-length boolean field class.");
         }
     }
 };
 
 /*
  * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 integer field class
- * preferred display base object property requirement.
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 integer field
+ * class preferred display base object property requirement.
  */
-bt2c::JsonObjValReq::PropReqsEntry intFcPrefDispBasePropReqEntry(const bt2c::ValReqLogCfg& logCfg)
+bt2c::JsonObjValReq::PropReqsEntry intFcPrefDispBasePropReqEntry(const bt2c::Logger& parentLogger)
 {
-    return {strings::prefDispBase, {bt2c::JsonUIntValInSetReq::shared({2, 8, 10, 16}, logCfg)}};
+    return {jsonstr::prefDispBase,
+            {bt2c::JsonUIntValInSetReq::shared({2, 8, 10, 16}, parentLogger)}};
 }
 
 /*
@@ -503,25 +673,16 @@ protected:
      * object value property requirements.
      */
     explicit FixedLenIntFcValReq(std::string&& type, PropReqs&& propReqs,
-                                 const bt2c::ValReqLogCfg& logCfg) :
-        FixedLenBitArrayFcValReq {std::move(type),
-                                  this->_buildPropReqs(std::move(propReqs), logCfg), logCfg}
-    {
-    }
-
-    /*
-     * Builds a CTF 2 JSON fixed-length integer field class value
-     * requirement of type `type`.
-     */
-    explicit FixedLenIntFcValReq(std::string&& type, const bt2c::ValReqLogCfg& logCfg) :
-        FixedLenIntFcValReq {std::move(type), {}, logCfg}
+                                 const bt2c::Logger& parentLogger) :
+        FixedLenBitArrayFcValReq {
+            std::move(type), this->_buildPropReqs(std::move(propReqs), parentLogger), parentLogger}
     {
     }
 
 private:
-    static PropReqs _buildPropReqs(PropReqs&& propReqs, const bt2c::ValReqLogCfg& logCfg)
+    static PropReqs _buildPropReqs(PropReqs&& propReqs, const bt2c::Logger& parentLogger)
     {
-        propReqs.insert(intFcPrefDispBasePropReqEntry(logCfg));
+        propReqs.insert(intFcPrefDispBasePropReqEntry(parentLogger));
         return std::move(propReqs);
     }
 };
@@ -531,157 +692,45 @@ private:
  * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 unsigned
  * integer field class roles object property requirement.
  */
-bt2c::JsonObjValReq::PropReqsEntry
-uIntFcRolesPropReqEntry(const bt2c::JsonStrValInSetReq::Set& roles,
-                        const bt2c::ValReqLogCfg& logCfg)
+bt2c::JsonObjValReq::PropReqsEntry uIntFcRolesPropReqEntry(const bt2c::Logger& parentLogger)
 {
-    return {strings::roles, {RolesValReq::shared(roles, logCfg)}};
+    /* clang-format off */
+    return {jsonstr::roles, {
+        RolesValReq::shared({
+            jsonstr::dataStreamClsId,
+            jsonstr::dataStreamId,
+            jsonstr::defClkTs,
+            jsonstr::discEventRecordCounterSnap,
+            jsonstr::eventRecordClsId,
+            jsonstr::pktContentLen,
+            jsonstr::pktEndDefClkTs,
+            jsonstr::pktMagicNumber,
+            jsonstr::pktSeqNum,
+            jsonstr::pktTotalLen,
+        }, parentLogger)
+    }};
+    /* clang-format on */
 }
 
 /*
- * CTF 2 JSON fixed-length unsigned integer field class value
- * requirement.
- */
-class FixedLenUIntFcValReq : public FixedLenIntFcValReq
-{
-protected:
-    /*
-     * Builds a CTF 2 JSON fixed-length unsigned integer field class
-     * value requirement of type `type`, adding `propReqs` to the base
-     * JSON object value property requirements.
-     */
-    explicit FixedLenUIntFcValReq(std::string&& type, const bt2c::JsonStrValInSetReq::Set& roles,
-                                  PropReqs&& propReqs, const bt2c::ValReqLogCfg& logCfg) :
-        FixedLenIntFcValReq {std::move(type),
-                             this->_buildPropReqs(roles, std::move(propReqs), logCfg), logCfg}
-    {
-    }
-
-    /*
-     * Builds a CTF 2 JSON fixed-length unsigned integer field class
-     * value requirement of type `type`.
-     */
-    explicit FixedLenUIntFcValReq(std::string&& type, const bt2c::JsonStrValInSetReq::Set& roles,
-                                  const bt2c::ValReqLogCfg& logCfg) :
-        FixedLenUIntFcValReq {std::move(type), roles, {}, logCfg}
-    {
-    }
-
-public:
-    explicit FixedLenUIntFcValReq(const bt2c::JsonStrValInSetReq::Set& roles,
-                                  const bt2c::ValReqLogCfg& logCfg) :
-        FixedLenUIntFcValReq {this->typeStr(), roles, logCfg}
-    {
-    }
-
-    static SP shared(const bt2c::JsonStrValInSetReq::Set& roles, const bt2c::ValReqLogCfg& logCfg)
-    {
-        return std::make_shared<FixedLenUIntFcValReq>(roles, logCfg);
-    }
-
-    static constexpr const char *typeStr() noexcept
-    {
-        return strings::fixedLenUInt;
-    }
-
-private:
-    static PropReqs _buildPropReqs(const bt2c::JsonStrValInSetReq::Set& roles, PropReqs&& propReqs,
-                                   const bt2c::ValReqLogCfg& logCfg)
-    {
-        if (!roles.empty()) {
-            propReqs.insert(uIntFcRolesPropReqEntry(roles, logCfg));
-        }
-
-        return std::move(propReqs);
-    }
-
-    void _validate(const bt2c::JsonVal& jsonVal) const override
-    {
-        try {
-            FcValReq::_validate(jsonVal);
-        } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error,
-                "[{}] Invalid fixed-length unsigned integer field class.", this->_locStr(jsonVal));
-        }
-    }
-};
-
-/*
- * CTF 2 JSON fixed-length signed integer field class value requirement.
- */
-class FixedLenSIntFcValReq : public FixedLenIntFcValReq
-{
-protected:
-    /*
-     * Builds a CTF 2 JSON fixed-length signed integer field class value
-     * requirement of type `type`, adding `propReqs` to the base JSON
-     * object value property requirements.
-     */
-    explicit FixedLenSIntFcValReq(std::string&& type, PropReqs&& propReqs,
-                                  const bt2c::ValReqLogCfg& logCfg) :
-        FixedLenIntFcValReq {std::move(type), std::move(propReqs), logCfg}
-    {
-    }
-
-    /*
-     * Builds a CTF 2 JSON fixed-length signed integer field class value
-     * requirement of type `type`.
-     */
-    explicit FixedLenSIntFcValReq(std::string&& type, const bt2c::ValReqLogCfg& logCfg) :
-        FixedLenSIntFcValReq {std::move(type), {}, logCfg}
-    {
-    }
-
-public:
-    explicit FixedLenSIntFcValReq(const bt2c::ValReqLogCfg& logCfg) :
-        FixedLenIntFcValReq {this->typeStr(), logCfg}
-    {
-    }
-
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
-    {
-        return std::make_shared<FixedLenSIntFcValReq>(logCfg);
-    }
-
-    static constexpr const char *typeStr() noexcept
-    {
-        return strings::fixedLenSInt;
-    }
-
-private:
-    void _validate(const bt2c::JsonVal& jsonVal) const override
-    {
-        try {
-            FcValReq::_validate(jsonVal);
-        } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error,
-                "[{}] Invalid fixed-length signed integer field class.", this->_locStr(jsonVal));
-        }
-    }
-};
-
-/*
- * CTF 2 JSON enumeration field class mappings value requirement,
+ * CTF 2 JSON integer field class mappings value requirement.
  *
  * An instance of this class validates that a given JSON value is
- * a CTF 2 enumeration field class mappings object, each integer value
- * within the integer ranges satisfying an instance of
- * `JsonIntValReqT`.
+ * a CTF 2 integer field class mappings object, each integer value
+ * within the integer ranges satisfying an instance of `JsonIntValReqT`.
  */
 template <typename JsonIntValReqT>
-class EnumFcMappingsValReq final : public bt2c::JsonObjValReq
+class IntFcMappingsValReq final : public bt2c::JsonObjValReq
 {
 public:
-    explicit EnumFcMappingsValReq(const bt2c::ValReqLogCfg& logCfg) :
-        bt2c::JsonObjValReq {{}, true, logCfg}, _mRangeSetReq {logCfg}
+    explicit IntFcMappingsValReq(const bt2c::Logger& parentLogger) :
+        bt2c::JsonObjValReq {{}, true, parentLogger}, _mRangeSetReq {parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<EnumFcMappingsValReq>(logCfg);
+        return std::make_shared<IntFcMappingsValReq>(parentLogger);
     }
 
 private:
@@ -690,109 +739,111 @@ private:
         try {
             bt2c::JsonObjValReq::_validate(jsonVal);
 
-            /* Require at least one mapping */
-            if (jsonVal.asObj().size() < 1) {
-                BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                       "[{}] Expecting at least one mapping.",
-                                                       this->_locStr(jsonVal));
-            }
-
             /* Validate range sets */
             for (auto& keyJsonValPair : jsonVal.asObj()) {
                 try {
                     _mRangeSetReq.validate(*keyJsonValPair.second);
                 } catch (const bt2c::Error&) {
-                    BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                        this->_logger(), bt2c::Error, "[{}] Invalid mapping `{}`.",
-                        this->_locStr(jsonVal), keyJsonValPair.first);
+                    BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                        this->_logger(), jsonVal.loc(), "Invalid mapping `{}`.",
+                        keyJsonValPair.first);
                 }
             }
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid enumeration field class mappings.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid enumeration field class mappings.");
         }
     }
 
-    ctf::src::Ctf2JsonIntRangeSetValReqBase<JsonIntValReqT> _mRangeSetReq;
+    Ctf2JsonIntRangeSetValReqBase<JsonIntValReqT> _mRangeSetReq;
 };
 
 /*
  * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 enumeration
- * field class mappings object property requirement.
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 integer field
+ * class mappings object property requirement.
  */
 template <typename JsonIntValReqT>
-bt2c::JsonObjValReq::PropReqsEntry enumFcMappingsPropReqEntry(const bt2c::ValReqLogCfg& logCfg)
+bt2c::JsonObjValReq::PropReqsEntry intFcMappingsPropReqEntry(const bt2c::Logger& parentLogger)
 {
-    return {strings::mappings, {EnumFcMappingsValReq<JsonIntValReqT>::shared(logCfg), true}};
+    return {jsonstr::mappings, {IntFcMappingsValReq<JsonIntValReqT>::shared(parentLogger)}};
 }
 
 /*
- * CTF 2 JSON fixed-length unsigned enumeration field class value
+ * CTF 2 JSON fixed-length unsigned integer field class value
  * requirement.
  */
-class FixedLenUEnumFcValReq final : public FixedLenUIntFcValReq
+class FixedLenUIntFcValReq final : public FixedLenIntFcValReq
 {
 public:
-    explicit FixedLenUEnumFcValReq(const bt2c::JsonStrValInSetReq::Set& roles,
-                                   const bt2c::ValReqLogCfg& logCfg) :
-        /* clang-format off */
-        FixedLenUIntFcValReq {this->typeStr(), roles, {
-            enumFcMappingsPropReqEntry<bt2c::JsonUIntValReq>(logCfg)
-        }, logCfg}
-    /* clang-format on */
+    /*
+     * Builds a CTF 2 JSON fixed-length unsigned integer field class
+     * value requirement.
+     */
+    explicit FixedLenUIntFcValReq(const bt2c::Logger& parentLogger) :
+        FixedLenIntFcValReq {this->typeStr(), this->_buildPropReqs(parentLogger), parentLogger}
     {
     }
 
-    static SP shared(const bt2c::JsonStrValInSetReq::Set& roles, const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<FixedLenUEnumFcValReq>(roles, logCfg);
+        return std::make_shared<FixedLenUIntFcValReq>(parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::fixedLenUEnum;
+        return jsonstr::fixedLenUInt;
     }
 
 private:
+    static PropReqs _buildPropReqs(const bt2c::Logger& parentLogger)
+    {
+        PropReqs propReqs;
+
+        propReqs.insert(intFcMappingsPropReqEntry<bt2c::JsonUIntValReq>(parentLogger));
+        propReqs.insert(uIntFcRolesPropReqEntry(parentLogger));
+        return propReqs;
+    }
+
     void _validate(const bt2c::JsonVal& jsonVal) const override
     {
         try {
             FcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error,
-                "[{}] Invalid fixed-length unsigned enumeration field class.",
-                this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(),
+                "Invalid fixed-length unsigned integer field class.");
         }
     }
 };
 
 /*
- * CTF 2 JSON fixed-length signed enumeration field class value
- * requirement.
+ * CTF 2 JSON fixed-length signed integer field class value requirement.
  */
-class FixedLenSEnumFcValReq final : public FixedLenSIntFcValReq
+class FixedLenSIntFcValReq final : public FixedLenIntFcValReq
 {
 public:
-    explicit FixedLenSEnumFcValReq(const bt2c::ValReqLogCfg& logCfg) :
-        /* clang-format off */
-        FixedLenSIntFcValReq {this->typeStr(), {
-            enumFcMappingsPropReqEntry<bt2c::JsonSIntValReq>(logCfg)
-        }, logCfg}
-    /* clang-format on */
+    /*
+     * Builds a CTF 2 JSON fixed-length signed integer field class
+     * value requirement.
+     */
+    explicit FixedLenSIntFcValReq(const bt2c::Logger& parentLogger) :
+        FixedLenIntFcValReq {this->typeStr(),
+                             {
+                                 intFcMappingsPropReqEntry<bt2c::JsonSIntValReq>(parentLogger),
+                             },
+                             parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<FixedLenSEnumFcValReq>(logCfg);
+        return std::make_shared<FixedLenSIntFcValReq>(parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::fixedLenSEnum;
+        return jsonstr::fixedLenSInt;
     }
 
 private:
@@ -801,10 +852,8 @@ private:
         try {
             FcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error,
-                "[{}] Invalid fixed-length signed enumeration field class.",
-                this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid fixed-length signed integer field class.");
         }
     }
 };
@@ -816,19 +865,19 @@ private:
 class FixedLenFloatFcValReq final : public FixedLenBitArrayFcValReq
 {
 public:
-    explicit FixedLenFloatFcValReq(const bt2c::ValReqLogCfg& logCfg) :
-        FixedLenBitArrayFcValReq {this->typeStr(), logCfg}
+    explicit FixedLenFloatFcValReq(const bt2c::Logger& parentLogger) :
+        FixedLenBitArrayFcValReq {this->typeStr(), parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<FixedLenFloatFcValReq>(logCfg);
+        return std::make_shared<FixedLenFloatFcValReq>(parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::fixedLenFloat;
+        return jsonstr::fixedLenFloat;
     }
 
 private:
@@ -837,10 +886,9 @@ private:
         try {
             FcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error,
-                "[{}] Invalid fixed-length floating-point number field class.",
-                this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(),
+                "Invalid fixed-length floating-point number field class.");
         }
     }
 };
@@ -858,24 +906,16 @@ protected:
      * object value property requirements.
      */
     explicit VarLenIntFcValReq(std::string&& type, PropReqs&& propReqs,
-                               const bt2c::ValReqLogCfg& logCfg) :
-        FcValReq {std::move(type), this->_buildPropReqs(std::move(propReqs), logCfg), logCfg}
-    {
-    }
-
-    /*
-     * Builds a CTF 2 JSON variable-length integer field class value
-     * requirement of type `type`.
-     */
-    explicit VarLenIntFcValReq(std::string&& type, const bt2c::ValReqLogCfg& logCfg) :
-        VarLenIntFcValReq {std::move(type), {}, logCfg}
+                               const bt2c::Logger& parentLogger) :
+        FcValReq {std::move(type), this->_buildPropReqs(std::move(propReqs), parentLogger),
+                  parentLogger}
     {
     }
 
 private:
-    static PropReqs _buildPropReqs(PropReqs&& propReqs, const bt2c::ValReqLogCfg& logCfg)
+    static PropReqs _buildPropReqs(PropReqs&& propReqs, const bt2c::Logger& parentLogger)
     {
-        propReqs.insert(intFcPrefDispBasePropReqEntry(logCfg));
+        propReqs.insert(intFcPrefDispBasePropReqEntry(parentLogger));
         return std::move(propReqs);
     }
 };
@@ -886,55 +926,34 @@ private:
  */
 class VarLenUIntFcValReq : public VarLenIntFcValReq
 {
-protected:
-    /*
-     * Builds a CTF 2 JSON variable-length unsigned integer field class
-     * value requirement of type `type`, adding `propReqs` to the base
-     * JSON object value property requirements.
-     */
-    explicit VarLenUIntFcValReq(std::string&& type, const bt2c::JsonStrValInSetReq::Set& roles,
-                                PropReqs&& propReqs, const bt2c::ValReqLogCfg& logCfg) :
-        VarLenIntFcValReq {std::move(type),
-                           this->_buildPropReqs(roles, std::move(propReqs), logCfg), logCfg}
-    {
-    }
-
-    /*
-     * Builds a CTF 2 JSON variable-length unsigned integer field class
-     * value requirement of type `type`.
-     */
-    explicit VarLenUIntFcValReq(std::string&& type, const bt2c::JsonStrValInSetReq::Set& roles,
-                                const bt2c::ValReqLogCfg& logCfg) :
-        VarLenUIntFcValReq {std::move(type), roles, {}, logCfg}
-    {
-    }
-
 public:
-    explicit VarLenUIntFcValReq(const bt2c::JsonStrValInSetReq::Set& roles,
-                                const bt2c::ValReqLogCfg& logCfg) :
-        VarLenUIntFcValReq {this->typeStr(), roles, logCfg}
+    /*
+     * Builds a CTF 2 JSON variable-length unsigned integer field class
+     * value requirement.
+     */
+    explicit VarLenUIntFcValReq(const bt2c::Logger& parentLogger) :
+        VarLenIntFcValReq {this->typeStr(), this->_buildPropReqs(parentLogger), parentLogger}
     {
     }
 
-    static SP shared(const bt2c::JsonStrValInSetReq::Set& roles, const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<VarLenUIntFcValReq>(roles, logCfg);
+        return std::make_shared<VarLenUIntFcValReq>(parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::varLenUInt;
+        return jsonstr::varLenUInt;
     }
 
 private:
-    static PropReqs _buildPropReqs(const bt2c::JsonStrValInSetReq::Set& roles, PropReqs&& propReqs,
-                                   const bt2c::ValReqLogCfg& logCfg)
+    static PropReqs _buildPropReqs(const bt2c::Logger& parentLogger)
     {
-        if (!roles.empty()) {
-            propReqs.insert(uIntFcRolesPropReqEntry(roles, logCfg));
-        }
+        PropReqs propReqs;
 
-        return std::move(propReqs);
+        propReqs.insert(intFcMappingsPropReqEntry<bt2c::JsonUIntValReq>(parentLogger));
+        propReqs.insert(uIntFcRolesPropReqEntry(parentLogger));
+        return propReqs;
     }
 
     void _validate(const bt2c::JsonVal& jsonVal) const override
@@ -942,168 +961,141 @@ private:
         try {
             FcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error,
-                "[{}] Invalid variable-length unsigned integer field class.",
-                this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(),
+                "Invalid variable-length unsigned integer field class.");
         }
     }
 };
 
 /*
- * CTF 2 JSON variable-length signed integer field class value
- * requirement.
+ * CTF 2 JSON variable-length signed integer field class
+ * value requirement.
  */
 class VarLenSIntFcValReq : public VarLenIntFcValReq
 {
+public:
+    /*
+     * Builds a CTF 2 JSON variable-length unsigned integer field class
+     * value requirement.
+     */
+    explicit VarLenSIntFcValReq(const bt2c::Logger& parentLogger) :
+        VarLenIntFcValReq {this->typeStr(),
+                           {
+                               intFcMappingsPropReqEntry<bt2c::JsonSIntValReq>(parentLogger),
+                           },
+                           parentLogger}
+    {
+    }
+
+    static SP shared(const bt2c::Logger& parentLogger)
+    {
+        return std::make_shared<VarLenSIntFcValReq>(parentLogger);
+    }
+
+    static const char *typeStr() noexcept
+    {
+        return jsonstr::varLenSInt;
+    }
+
+private:
+    void _validate(const bt2c::JsonVal& jsonVal) const override
+    {
+        try {
+            FcValReq::_validate(jsonVal);
+        } catch (const bt2c::Error&) {
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(),
+                "Invalid variable-length signed integer field class.");
+        }
+    }
+};
+
+/*
+ * CTF 2 JSON string encoding value requirement.
+ */
+class StrEncodingValReq final : public bt2c::JsonStrValInSetReq
+{
+public:
+    explicit StrEncodingValReq(const bt2c::Logger& parentLogger) :
+        bt2c::JsonStrValInSetReq {bt2c::JsonStrValInSetReq::Set {
+                                      jsonstr::utf8,
+                                      jsonstr::utf16Be,
+                                      jsonstr::utf16Le,
+                                      jsonstr::utf32Be,
+                                      jsonstr::utf32Le,
+                                  },
+                                  parentLogger}
+    {
+    }
+
+    static SP shared(const bt2c::Logger& parentLogger)
+    {
+        return std::make_shared<StrEncodingValReq>(parentLogger);
+    }
+
+private:
+    void _validate(const bt2c::JsonVal& jsonVal) const override
+    {
+        try {
+            bt2c::JsonStrValInSetReq::_validate(jsonVal);
+        } catch (const bt2c::Error&) {
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid string encoding.");
+        }
+    }
+};
+
+/*
+ * CTF 2 JSON string field class value requirement.
+ */
+class StrFcValReq : public FcValReq
+{
 protected:
-    /*
-     * Builds a CTF 2 JSON variable-length unsigned integer field class
-     * value requirement of type `type`, adding `propReqs` to the base
-     * JSON object value property requirements.
-     */
-    explicit VarLenSIntFcValReq(std::string&& type, PropReqs&& propReqs,
-                                const bt2c::ValReqLogCfg& logCfg) :
-        VarLenIntFcValReq {std::move(type), std::move(propReqs), logCfg}
+    explicit StrFcValReq(std::string&& type, PropReqs&& propReqs,
+                         const bt2c::Logger& parentLogger) :
+        FcValReq {std::move(type), this->_buildPropReqs(std::move(propReqs), parentLogger),
+                  parentLogger}
     {
     }
 
-    /*
-     * Builds a CTF 2 JSON variable-length unsigned integer field class
-     * value requirement of type `type`.
-     */
-    explicit VarLenSIntFcValReq(std::string&& type, const bt2c::ValReqLogCfg& logCfg) :
-        VarLenSIntFcValReq {std::move(type), {}, logCfg}
-    {
-    }
-
-public:
-    explicit VarLenSIntFcValReq(const bt2c::ValReqLogCfg& logCfg) :
-        VarLenSIntFcValReq {this->typeStr(), logCfg}
-    {
-    }
-
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
-    {
-        return std::make_shared<VarLenSIntFcValReq>(logCfg);
-    }
-
-    static constexpr const char *typeStr() noexcept
-    {
-        return strings::varLenSInt;
-    }
-
-private:
     void _validate(const bt2c::JsonVal& jsonVal) const override
     {
         try {
             FcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error,
-                "[{}] Invalid variable-length signed integer field class.", this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid string field class.");
         }
-    }
-};
-
-/*
- * CTF 2 JSON variable-length unsigned enumeration field class value
- * requirement.
- */
-class VarLenUEnumFcValReq final : public VarLenUIntFcValReq
-{
-public:
-    explicit VarLenUEnumFcValReq(const bt2c::JsonStrValInSetReq::Set& roles,
-                                 const bt2c::ValReqLogCfg& logCfg) :
-        /* clang-format off */
-        VarLenUIntFcValReq {this->typeStr(), roles, {
-            enumFcMappingsPropReqEntry<bt2c::JsonUIntValReq>(logCfg)
-        }, logCfg}
-    /* clang-format on */
-    {
-    }
-
-    static SP shared(const bt2c::JsonStrValInSetReq::Set& roles, const bt2c::ValReqLogCfg& logCfg)
-    {
-        return std::make_shared<VarLenUEnumFcValReq>(roles, logCfg);
-    }
-
-    static constexpr const char *typeStr() noexcept
-    {
-        return strings::varLenUEnum;
     }
 
 private:
-    void _validate(const bt2c::JsonVal& jsonVal) const override
+    static PropReqs _buildPropReqs(PropReqs&& propReqs, const bt2c::Logger& parentLogger)
     {
-        try {
-            FcValReq::_validate(jsonVal);
-        } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error,
-                "[{}] Invalid variable-length unsigned enumeration field class.",
-                this->_locStr(jsonVal));
-        }
-    }
-};
-
-/*
- * CTF 2 JSON variable-length signed enumeration field class value
- * requirement.
- */
-class VarLenSEnumFcValReq final : public VarLenSIntFcValReq
-{
-public:
-    explicit VarLenSEnumFcValReq(const bt2c::ValReqLogCfg& logCfg) :
-        VarLenSIntFcValReq {this->typeStr(),
-                            {enumFcMappingsPropReqEntry<bt2c::JsonSIntValReq>(logCfg)},
-                            logCfg}
-    {
-    }
-
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
-    {
-        return std::make_shared<VarLenSEnumFcValReq>(logCfg);
-    }
-
-    static constexpr const char *typeStr() noexcept
-    {
-        return strings::varLenSEnum;
-    }
-
-private:
-    void _validate(const bt2c::JsonVal& jsonVal) const override
-    {
-        try {
-            FcValReq::_validate(jsonVal);
-        } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error,
-                "[{}] Invalid variable-length signed enumeration field class.",
-                this->_locStr(jsonVal));
-        }
+        addToPropReqs(propReqs, jsonstr::encoding, StrEncodingValReq::shared(parentLogger));
+        return std::move(propReqs);
     }
 };
 
 /*
  * CTF 2 JSON null-terminated string field class value requirement.
  */
-class NullTerminatedStrFcValReq final : public FcValReq
+class NullTerminatedStrFcValReq final : public StrFcValReq
 {
 public:
-    explicit NullTerminatedStrFcValReq(const bt2c::ValReqLogCfg& logCfg) :
-        FcValReq {this->typeStr(), logCfg}
+    explicit NullTerminatedStrFcValReq(const bt2c::Logger& parentLogger) :
+        StrFcValReq {this->typeStr(), {}, parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<NullTerminatedStrFcValReq>(logCfg);
+        return std::make_shared<NullTerminatedStrFcValReq>(parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::nullTerminatedStr;
+        return jsonstr::nullTerminatedStr;
     }
 
 private:
@@ -1112,63 +1104,63 @@ private:
         try {
             FcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error, "[{}] Invalid null-terminated string field class.",
-                this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid null-terminated string field class.");
         }
     }
 };
 
 /*
  * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 static-length field
- * class length object property requirement.
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 static-length
+ * field class length object property requirement.
  */
-bt2c::JsonObjValReq::PropReqsEntry staticLenFcLenPropReqEntry(const bt2c::ValReqLogCfg& logCfg)
+bt2c::JsonObjValReq::PropReqsEntry staticLenFcLenPropReqEntry(const bt2c::Logger& parentLogger)
 {
-    return {strings::len, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::UINT, logCfg), true}};
+    return {jsonstr::len,
+            {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::UInt, parentLogger), true}};
 }
 
 /*
  * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 dynamic-length
- * field class length field location object property requirement.
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2
+ * dynamic-length field class length field location object
+ * property requirement.
  */
-bt2c::JsonObjValReq::PropReqsEntry dynLenFcLenFieldLocPropReqEntry(const bt2c::ValReqLogCfg& logCfg)
+bt2c::JsonObjValReq::PropReqsEntry dynLenFcLenFieldLocPropReqEntry(const bt2c::Logger& parentLogger)
 {
-    return {strings::lenFieldLoc, {FieldLocValReq::shared(logCfg), true}};
+    return {jsonstr::lenFieldLoc, {FieldLocValReq::shared(parentLogger), true}};
 }
 
 /*
  * CTF 2 JSON static-length string field class value requirement.
  */
-class StaticLenStrFcValReq final : public FcValReq
+class StaticLenStrFcValReq final : public StrFcValReq
 {
 public:
-    explicit StaticLenStrFcValReq(const bt2c::ValReqLogCfg& logCfg) :
-        FcValReq {this->typeStr(), {staticLenFcLenPropReqEntry(logCfg)}, logCfg}
+    explicit StaticLenStrFcValReq(const bt2c::Logger& parentLogger) :
+        StrFcValReq {this->typeStr(), {staticLenFcLenPropReqEntry(parentLogger)}, parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<StaticLenStrFcValReq>(logCfg);
+        return std::make_shared<StaticLenStrFcValReq>(parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::staticLenStr;
+        return jsonstr::staticLenStr;
     }
 
 private:
     void _validate(const bt2c::JsonVal& jsonVal) const override
     {
         try {
-            FcValReq::_validate(jsonVal);
+            StrFcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid static-length string field class.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid static-length string field class.");
         }
     }
 };
@@ -1176,33 +1168,32 @@ private:
 /*
  * CTF 2 JSON dynamic-length string field class value requirement.
  */
-class DynLenStrFcValReq final : public FcValReq
+class DynLenStrFcValReq final : public StrFcValReq
 {
 public:
-    explicit DynLenStrFcValReq(const bt2c::ValReqLogCfg& logCfg) :
-        FcValReq {this->typeStr(), {dynLenFcLenFieldLocPropReqEntry(logCfg)}, logCfg}
+    explicit DynLenStrFcValReq(const bt2c::Logger& parentLogger) :
+        StrFcValReq {this->typeStr(), {dynLenFcLenFieldLocPropReqEntry(parentLogger)}, parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<DynLenStrFcValReq>(logCfg);
+        return std::make_shared<DynLenStrFcValReq>(parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::dynLenStr;
+        return jsonstr::dynLenStr;
     }
 
 private:
     void _validate(const bt2c::JsonVal& jsonVal) const override
     {
         try {
-            FcValReq::_validate(jsonVal);
+            StrFcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error, "[{}] Invalid dynamic-length string field class.",
-                this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid dynamic-length string field class.");
         }
     }
 };
@@ -1219,8 +1210,9 @@ protected:
      * requirements.
      */
     explicit BlobFcValReq(std::string&& type, PropReqs&& propReqs,
-                          const bt2c::ValReqLogCfg& logCfg) :
-        FcValReq {std::move(type), this->_buildPropReqs(std::move(propReqs), logCfg), logCfg}
+                          const bt2c::Logger& parentLogger) :
+        FcValReq {std::move(type), this->_buildPropReqs(std::move(propReqs), parentLogger),
+                  parentLogger}
     {
     }
 
@@ -1228,16 +1220,16 @@ protected:
      * Builds a CTF 2 JSON BLOB field class value requirement of type
      * `type`.
      */
-    explicit BlobFcValReq(std::string&& type, const bt2c::ValReqLogCfg& logCfg) :
-        BlobFcValReq {std::move(type), {}, logCfg}
+    explicit BlobFcValReq(std::string&& type, const bt2c::Logger& parentLogger) :
+        BlobFcValReq {std::move(type), {}, parentLogger}
     {
     }
 
 private:
-    static PropReqs _buildPropReqs(PropReqs&& propReqs, const bt2c::ValReqLogCfg& logCfg)
+    static PropReqs _buildPropReqs(PropReqs&& propReqs, const bt2c::Logger& parentLogger)
     {
-        addToPropReqs(propReqs, strings::mediaType,
-                      bt2c::JsonValHasTypeReq::shared(bt2c::ValType::STR, logCfg));
+        addToPropReqs(propReqs, jsonstr::mediaType,
+                      bt2c::JsonValHasTypeReq::shared(bt2c::ValType::Str, parentLogger));
         return std::move(propReqs);
     }
 };
@@ -1248,36 +1240,29 @@ private:
 class StaticLenBlobFcValReq final : public BlobFcValReq
 {
 public:
-    explicit StaticLenBlobFcValReq(const bool acceptMetadataStreamUuidRole,
-                                   const bt2c::ValReqLogCfg& logCfg) :
-        BlobFcValReq {this->typeStr(), this->_buildPropReqs(acceptMetadataStreamUuidRole, logCfg),
-                      logCfg}
+    explicit StaticLenBlobFcValReq(const bt2c::Logger& parentLogger) :
+        BlobFcValReq {this->typeStr(), this->_buildPropReqs(parentLogger), parentLogger}
     {
     }
 
-    static SP shared(const bool acceptMetadataStreamUuidRole, const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<StaticLenBlobFcValReq>(acceptMetadataStreamUuidRole, logCfg);
+        return std::make_shared<StaticLenBlobFcValReq>(parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::staticLenBlob;
+        return jsonstr::staticLenBlob;
     }
 
 private:
-    static PropReqs _buildPropReqs(const bool acceptMetadataStreamUuidRole,
-                                   const bt2c::ValReqLogCfg& logCfg)
+    static PropReqs _buildPropReqs(const bt2c::Logger& parentLogger)
     {
         PropReqs propReqs;
 
-        propReqs.insert(staticLenFcLenPropReqEntry(logCfg));
-
-        if (acceptMetadataStreamUuidRole) {
-            propReqs.insert(
-                {strings::roles, RolesValReq::shared({strings::metadataStreamUuid}, logCfg)});
-        }
-
+        propReqs.insert(staticLenFcLenPropReqEntry(parentLogger));
+        propReqs.insert(
+            {jsonstr::roles, RolesValReq::shared({jsonstr::metadataStreamUuid}, parentLogger)});
         return propReqs;
     }
 
@@ -1286,24 +1271,22 @@ private:
         try {
             FcValReq::_validate(jsonVal);
 
-            const auto jsonRoles = jsonVal.asObj()[strings::roles];
+            const auto jsonRoles = jsonVal.asObj()[jsonstr::roles];
 
             if (jsonRoles && !jsonRoles->asArray().isEmpty()) {
                 /* The only valid role is the metadata stream UUID */
-                auto& jsonLen = jsonVal.asObj()[strings::len]->asUInt();
+                auto& jsonLen = jsonVal.asObj()[jsonstr::len]->asUInt();
 
                 if (*jsonLen != 16) {
-                    BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                        this->_logger(), bt2c::Error,
-                        "[{}] `{}` property: expecting 16, not {}, because the field class has the `{}` role.",
-                        this->_locStr(jsonLen), strings::len, *jsonLen,
-                        strings::metadataStreamUuid);
+                    BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                        this->_logger(), bt2c::Error, jsonLen.loc(),
+                        "`{}` property: expecting 16, not {}, because the field class has the `{}` role.",
+                        jsonstr::len, *jsonLen, jsonstr::metadataStreamUuid);
                 }
             }
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid static-length BLOB field class.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid static-length BLOB field class.");
         }
     }
 };
@@ -1314,19 +1297,21 @@ private:
 class DynLenBlobFcValReq final : public BlobFcValReq
 {
 public:
-    explicit DynLenBlobFcValReq(const bt2c::ValReqLogCfg& logCfg) :
-        BlobFcValReq {this->typeStr(), {dynLenFcLenFieldLocPropReqEntry(logCfg)}, logCfg}
+    explicit DynLenBlobFcValReq(const bt2c::Logger& parentLogger) :
+        BlobFcValReq {this->typeStr(),
+                      {dynLenFcLenFieldLocPropReqEntry(parentLogger)},
+                      parentLogger}
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<DynLenBlobFcValReq>(logCfg);
+        return std::make_shared<DynLenBlobFcValReq>(parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::dynLenBlob;
+        return jsonstr::dynLenBlob;
     }
 
 private:
@@ -1335,72 +1320,86 @@ private:
         try {
             FcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid dynamic-length BLOB field class.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid dynamic-length BLOB field class.");
         }
     }
 };
 
-class AnyFcValReq;
+class AnyFullBlownFcValReq;
 
 /*
  * CTF 2 field classes are recursive, in that some field classes may
  * contain other field classes.
  *
- * To make it possible to build a `AnyFcValReq` instance without a
- * shared pointer, the constructor of compound field class requirements
- * accepts a `const AnyFcValReq&` (raw reference) parameter. The raw
- * reference must therefore remain valid as long as the compound field
- * class using it exists.
+ * To make it possible to build a `AnyFullBlownFcValReq` instance
+ * without a shared pointer, the constructor of compound field class
+ * requirements accepts a `const AnyFullBlownFcValReq&` (raw reference)
+ * parameter. The raw reference must therefore remain valid as long as
+ * the compound field class using it exists.
  *
- * Because JSON value requirements work with shared pointers to `const
- * Ctf2JsonValReq` (`bt2c::JsonValReq::SP`), this `JsonAnyFcValReqWrapper`
- * class simply wraps such a `const AnyFcValReq *` value: its
- * _validate() method forwards the call. A `AnyFcValReqWrapper` instance
- * doesn't own the raw pointer.
+ * Because JSON value requirements work with shared pointers to
+ * `const Ctf2JsonValReq` (`bt2c::JsonValReq::SP`), this
+ * `AnyFcValReqWrapper` class simply wraps such a
+ * `const AnyFullBlownFcValReq *` value: its _validate() method forwards
+ * the call. An `AnyFcValReqWrapper` instance doesn't own the
+ * raw pointer.
  */
 class AnyFcValReqWrapper final : public bt2c::JsonValReq
 {
 public:
-    explicit AnyFcValReqWrapper(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg) :
-        bt2c::JsonValReq {logCfg}, _mAnyFcValReq {&anyFcValReq}
+    explicit AnyFcValReqWrapper(const AnyFullBlownFcValReq& anyFcValReq,
+                                const bt2c::Logger& parentLogger) :
+        bt2c::JsonValReq {parentLogger},
+        _mAnyFullBlownFcValReq {&anyFcValReq}
     {
     }
 
-    static SP shared(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                     const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<AnyFcValReqWrapper>(anyFcValReq, logCfg);
+        return std::make_shared<AnyFcValReqWrapper>(anyFullBlownFcValReq, parentLogger);
     }
 
 private:
     void _validate(const bt2c::JsonVal& jsonVal) const override;
 
-    const AnyFcValReq *_mAnyFcValReq;
+    const AnyFullBlownFcValReq *_mAnyFullBlownFcValReq;
 };
 
 /*
  * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 field class object
- * property requirement having the key `key`.
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 field class
+ * object property requirement having the key `key`.
  */
-bt2c::JsonObjValReq::PropReqsEntry anyFcPropReqEntry(std::string&& key,
-                                                     const AnyFcValReq& anyFcValReq,
-                                                     const bt2c::ValReqLogCfg& logCfg)
+bt2c::JsonObjValReq::PropReqsEntry
+anyFcPropReqEntry(std::string key, const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                  const bool isRequired, const bt2c::Logger& parentLogger)
 {
-    return {std::move(key), {AnyFcValReqWrapper::shared(anyFcValReq, logCfg), true}};
+    return {std::move(key),
+            {AnyFcValReqWrapper::shared(anyFullBlownFcValReq, parentLogger), isRequired}};
+}
+
+/*
+ * Calls the other anyFcPropReqEntry() with `isRequired` set to `false`.
+ */
+bt2c::JsonObjValReq::PropReqsEntry
+anyFcPropReqEntry(std::string key, const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                  const bt2c::Logger& parentLogger)
+{
+    return anyFcPropReqEntry(std::move(key), anyFullBlownFcValReq, false, parentLogger);
 }
 
 /*
  * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 object name object
- * property requirement.
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 object name
+ * object property requirement.
  */
 bt2c::JsonObjValReq::PropReqsEntry namePropReqEntry(const bool isRequired,
-                                                    const bt2c::ValReqLogCfg& logCfg)
+                                                    const bt2c::Logger& parentLogger)
 {
-    return {strings::name,
-            {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::STR, logCfg), isRequired}};
+    return {jsonstr::name,
+            {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::Str, parentLogger), isRequired}};
 }
 
 /*
@@ -1409,22 +1408,23 @@ bt2c::JsonObjValReq::PropReqsEntry namePropReqEntry(const bool isRequired,
 class StructFieldMemberClsValReq final : public bt2c::JsonObjValReq
 {
 public:
-    explicit StructFieldMemberClsValReq(const AnyFcValReq& anyFcValReq,
-                                        const bt2c::ValReqLogCfg& logCfg) :
+    explicit StructFieldMemberClsValReq(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                                        const bt2c::Logger& parentLogger) :
         /* clang-format off */
         bt2c::JsonObjValReq {{
-            namePropReqEntry(true, logCfg),
-            anyFcPropReqEntry(strings::fc, anyFcValReq, logCfg),
-            userAttrsPropReqEntry(logCfg),
-            extPropReqEntry(logCfg),
-        }, logCfg}
+            namePropReqEntry(true, parentLogger),
+            anyFcPropReqEntry(jsonstr::fc, anyFullBlownFcValReq, parentLogger),
+            attrsPropReqEntry(parentLogger),
+            extPropReqEntry(parentLogger),
+        }, parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                     const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<StructFieldMemberClsValReq>(anyFcValReq, logCfg);
+        return std::make_shared<StructFieldMemberClsValReq>(anyFullBlownFcValReq, parentLogger);
     }
 
 private:
@@ -1433,34 +1433,34 @@ private:
         try {
             bt2c::JsonObjValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid structure field member class.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid structure field member class.");
         }
     }
 };
 
 /*
  * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 minimum alignment
- * object property requirement.
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 minimum
+ * alignment object property requirement.
  */
-bt2c::JsonObjValReq::PropReqsEntry minAlignPropReqEntry(const bt2c::ValReqLogCfg& logCfg)
+bt2c::JsonObjValReq::PropReqsEntry minAlignPropReqEntry(const bt2c::Logger& parentLogger)
 {
-    return {strings::minAlign, AlignValReq::shared(logCfg)};
+    return {jsonstr::minAlign, AlignValReq::shared(parentLogger)};
 }
 
 class UniqueEntryNamesValidator final
 {
 public:
-    explicit UniqueEntryNamesValidator(const bt2c::ValReqLogCfg& logCfg) : _mLogCfg {logCfg}
+    explicit UniqueEntryNamesValidator(const bt2c::Logger& parentLogger) : _mLogger {parentLogger}
     {
     }
 
     /*
-     * Validates that, within the JSON array value having the key `propName`
-     * within the JSON object value `jsonVal`, the `name` property of each
-     * (JSON object value) element, if it exists, is unique.
+     * Validates that, within the JSON array value having the key
+     * `propName` within the JSON object value `jsonVal`, the `name`
+     * property of each (JSON object value) element, if it exists,
+     * is unique.
      *
      * Throws `TextParseError` on failure, using `elemName` to name the
      * element having a duplicate name.
@@ -1479,7 +1479,7 @@ public:
         std::unordered_set<std::string> names;
 
         for (auto& jsonEntry : jsonEntries->asArray()) {
-            const auto jsonName = jsonEntry->asObj()[strings::name];
+            const auto jsonName = jsonEntry->asObj()[jsonstr::name];
 
             if (!jsonName) {
                 /* No `name` property */
@@ -1488,12 +1488,11 @@ public:
 
             auto& jsonNameStr = jsonName->asStr();
 
-            if (names.count(*jsonNameStr) != 0) {
+            if (bt2c::contains(names, *jsonNameStr)) {
                 /* Already in set */
-                BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                    this->_logger(), bt2c::Error, "[{}] Duplicate {} name `{}`.",
-                    bt2c::textLocStr(jsonName->loc(), _mLogCfg.textLocStrFmt()), elemName,
-                    (*jsonNameStr));
+                BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW(bt2c::Error, jsonName->loc(),
+                                                           "Duplicate {} name `{}`.", elemName,
+                                                           (*jsonNameStr));
             }
 
             /* Add to set */
@@ -1502,13 +1501,7 @@ public:
     }
 
 private:
-    const bt2c::Logger& _logger() const noexcept
-    {
-        return _mLogCfg.logger();
-    }
-
-    /* Logging configuration */
-    bt2c::ValReqLogCfg _mLogCfg;
+    bt2c::Logger _mLogger;
 };
 
 /*
@@ -1517,30 +1510,32 @@ private:
 class StructFcValReq final : public FcValReq
 {
 public:
-    explicit StructFcValReq(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg) :
+    explicit StructFcValReq(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                            const bt2c::Logger& parentLogger) :
         /* clang-format off */
         FcValReq {this->typeStr(), {
-            {strings::memberClasses, {
+            {jsonstr::memberClasses, {
                 bt2c::JsonArrayValReq::shared(
-                    StructFieldMemberClsValReq::shared(anyFcValReq, logCfg),
-                    logCfg
+                    StructFieldMemberClsValReq::shared(anyFullBlownFcValReq, parentLogger),
+                    parentLogger
                 )
             }},
-            minAlignPropReqEntry(logCfg),
-        }, logCfg},
-        _mUniqueEntryNamesValidator {logCfg}
+            minAlignPropReqEntry(parentLogger),
+        }, parentLogger},
+        _mUniqueEntryNamesValidator {parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                     const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<StructFcValReq>(anyFcValReq, logCfg);
+        return std::make_shared<StructFcValReq>(anyFullBlownFcValReq, parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::structure;
+        return jsonstr::structure;
     }
 
 private:
@@ -1550,12 +1545,11 @@ private:
             FcValReq::_validate(jsonVal);
 
             /* Validate that member class names are unique */
-            _mUniqueEntryNamesValidator.validate(jsonVal, strings::memberClasses,
+            _mUniqueEntryNamesValidator.validate(jsonVal, jsonstr::memberClasses,
                                                  "structure field member class");
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid structure field class.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid structure field class.");
         }
     }
 
@@ -1573,10 +1567,11 @@ protected:
      * `type`, adding `propReqs` to the base JSON object value property
      * requirements.
      */
-    explicit ArrayFcValReq(std::string&& type, const AnyFcValReq& anyFcValReq, PropReqs&& propReqs,
-                           const bt2c::ValReqLogCfg& logCfg) :
-        FcValReq {std::move(type), this->_buildPropReqs(anyFcValReq, std::move(propReqs), logCfg),
-                  logCfg}
+    explicit ArrayFcValReq(std::string&& type, const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                           PropReqs&& propReqs, const bt2c::Logger& parentLogger) :
+        FcValReq {std::move(type),
+                  this->_buildPropReqs(anyFullBlownFcValReq, std::move(propReqs), parentLogger),
+                  parentLogger}
     {
     }
 
@@ -1584,18 +1579,18 @@ protected:
      * Builds a CTF 2 JSON array field class value requirement of type
      * `type`.
      */
-    explicit ArrayFcValReq(std::string&& type, const AnyFcValReq& anyFcValReq,
-                           const bt2c::ValReqLogCfg& logCfg) :
-        ArrayFcValReq {std::move(type), anyFcValReq, {}, logCfg}
+    explicit ArrayFcValReq(std::string&& type, const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                           const bt2c::Logger& parentLogger) :
+        ArrayFcValReq {std::move(type), anyFullBlownFcValReq, {}, parentLogger}
     {
     }
 
 private:
-    static PropReqs _buildPropReqs(const AnyFcValReq& anyFcValReq, PropReqs&& propReqs,
-                                   const bt2c::ValReqLogCfg& logCfg)
+    static PropReqs _buildPropReqs(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                                   PropReqs&& propReqs, const bt2c::Logger& parentLogger)
     {
-        propReqs.insert(anyFcPropReqEntry(strings::elemFc, anyFcValReq, logCfg));
-        propReqs.insert(minAlignPropReqEntry(logCfg));
+        propReqs.insert(anyFcPropReqEntry(jsonstr::elemFc, anyFullBlownFcValReq, parentLogger));
+        propReqs.insert(minAlignPropReqEntry(parentLogger));
         return std::move(propReqs);
     }
 };
@@ -1606,24 +1601,25 @@ private:
 class StaticLenArrayFcValReq final : public ArrayFcValReq
 {
 public:
-    explicit StaticLenArrayFcValReq(const AnyFcValReq& anyFcValReq,
-                                    const bt2c::ValReqLogCfg& logCfg) :
+    explicit StaticLenArrayFcValReq(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                                    const bt2c::Logger& parentLogger) :
         /* clang-format off */
-        ArrayFcValReq {this->typeStr(), anyFcValReq, {
-            staticLenFcLenPropReqEntry(logCfg)
-        }, logCfg}
+        ArrayFcValReq {this->typeStr(), anyFullBlownFcValReq, {
+            staticLenFcLenPropReqEntry(parentLogger)
+        }, parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                     const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<StaticLenArrayFcValReq>(anyFcValReq, logCfg);
+        return std::make_shared<StaticLenArrayFcValReq>(anyFullBlownFcValReq, parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::staticLenArray;
+        return jsonstr::staticLenArray;
     }
 
 private:
@@ -1632,9 +1628,8 @@ private:
         try {
             FcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid static-length array field class.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid static-length array field class.");
         }
     }
 };
@@ -1645,23 +1640,25 @@ private:
 class DynLenArrayFcValReq final : public ArrayFcValReq
 {
 public:
-    explicit DynLenArrayFcValReq(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg) :
+    explicit DynLenArrayFcValReq(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                                 const bt2c::Logger& parentLogger) :
         /* clang-format off */
-        ArrayFcValReq {this->typeStr(), anyFcValReq, {
-            dynLenFcLenFieldLocPropReqEntry(logCfg)
-        }, logCfg}
+        ArrayFcValReq {this->typeStr(), anyFullBlownFcValReq, {
+            dynLenFcLenFieldLocPropReqEntry(parentLogger)
+        }, parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                     const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<DynLenArrayFcValReq>(anyFcValReq, logCfg);
+        return std::make_shared<DynLenArrayFcValReq>(anyFullBlownFcValReq, parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::dynLenArray;
+        return jsonstr::dynLenArray;
     }
 
 private:
@@ -1670,33 +1667,32 @@ private:
         try {
             FcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid dynamic-length array field class.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid dynamic-length array field class.");
         }
     }
 };
 
 /*
  * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 selector field
- * location object property requirement.
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 selector
+ * field location object property requirement.
  */
-bt2c::JsonObjValReq::PropReqsEntry selFieldLocPropReqEntry(const bt2c::ValReqLogCfg& logCfg)
+bt2c::JsonObjValReq::PropReqsEntry selFieldLocPropReqEntry(const bt2c::Logger& parentLogger)
 {
-    return {strings::selFieldLoc, {FieldLocValReq::shared(logCfg), true}};
+    return {jsonstr::selFieldLoc, {FieldLocValReq::shared(parentLogger), true}};
 }
 
 /*
  * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 selector field
- * ranges object property requirement.
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 selector
+ * field ranges object property requirement.
  */
 bt2c::JsonObjValReq::PropReqsEntry selFieldRangesPropReqEntry(const bool isRequired,
-                                                              const bt2c::ValReqLogCfg& logCfg)
+                                                              const bt2c::Logger& parentLogger)
 {
-    return {strings::selFieldRanges,
-            {ctf::src::Ctf2JsonIntRangeSetValReq::shared(logCfg), isRequired}};
+    return {jsonstr::selFieldRanges,
+            {ctf::src::Ctf2JsonIntRangeSetValReq::shared(parentLogger), isRequired}};
 }
 
 /*
@@ -1705,25 +1701,27 @@ bt2c::JsonObjValReq::PropReqsEntry selFieldRangesPropReqEntry(const bool isRequi
 class OptionalFcValReq final : public FcValReq
 {
 public:
-    explicit OptionalFcValReq(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg) :
+    explicit OptionalFcValReq(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                              const bt2c::Logger& parentLogger) :
         /* clang-format off */
         FcValReq {this->typeStr(), {
-            anyFcPropReqEntry(strings::fc, anyFcValReq, logCfg),
-            selFieldLocPropReqEntry(logCfg),
-            selFieldRangesPropReqEntry(false, logCfg),
-        }, logCfg}
+            anyFcPropReqEntry(jsonstr::fc, anyFullBlownFcValReq, parentLogger),
+            selFieldLocPropReqEntry(parentLogger),
+            selFieldRangesPropReqEntry(false, parentLogger),
+        }, parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                     const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<OptionalFcValReq>(anyFcValReq, logCfg);
+        return std::make_shared<OptionalFcValReq>(anyFullBlownFcValReq, parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::optional;
+        return jsonstr::optional;
     }
 
 private:
@@ -1732,9 +1730,8 @@ private:
         try {
             FcValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid optional field class.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid optional field class.");
         }
     }
 };
@@ -1745,22 +1742,24 @@ private:
 class VariantFcOptValReq final : public bt2c::JsonObjValReq
 {
 public:
-    explicit VariantFcOptValReq(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg) :
+    explicit VariantFcOptValReq(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                                const bt2c::Logger& parentLogger) :
         /* clang-format off */
         bt2c::JsonObjValReq {{
-            namePropReqEntry(false, logCfg),
-            anyFcPropReqEntry(strings::fc, anyFcValReq, logCfg),
-            selFieldRangesPropReqEntry(true, logCfg),
-            userAttrsPropReqEntry(logCfg),
-            extPropReqEntry(logCfg),
-        }, logCfg}
+            namePropReqEntry(false, parentLogger),
+            anyFcPropReqEntry(jsonstr::fc, anyFullBlownFcValReq, parentLogger),
+            selFieldRangesPropReqEntry(true, parentLogger),
+            attrsPropReqEntry(parentLogger),
+            extPropReqEntry(parentLogger),
+        }, parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                     const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<VariantFcOptValReq>(anyFcValReq, logCfg);
+        return std::make_shared<VariantFcOptValReq>(anyFullBlownFcValReq, parentLogger);
     }
 
 private:
@@ -1777,9 +1776,8 @@ private:
         try {
             bt2c::JsonObjValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid variant field class option.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid variant field class option.");
         }
     }
 };
@@ -1790,30 +1788,32 @@ private:
 class VariantFcValReq final : public FcValReq
 {
 public:
-    explicit VariantFcValReq(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg) :
+    explicit VariantFcValReq(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                             const bt2c::Logger& parentLogger) :
         /* clang-format off */
         FcValReq {this->typeStr(), {
-            {strings::opts, {
+            {jsonstr::opts, {
                 bt2c::JsonArrayValReq::shared(1, bt2s::nullopt,
-                                              VariantFcOptValReq::shared(anyFcValReq, logCfg),
-                                              logCfg),
+                                              VariantFcOptValReq::shared(anyFullBlownFcValReq, parentLogger),
+                                              parentLogger),
                 true
             }},
-            selFieldLocPropReqEntry(logCfg),
-        }, logCfg},
-        _mUniqueEntryNamesValidator {logCfg}
+            selFieldLocPropReqEntry(parentLogger),
+        }, parentLogger},
+        _mUniqueEntryNamesValidator {parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const AnyFcValReq& anyFcValReq, const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                     const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<VariantFcValReq>(anyFcValReq, logCfg);
+        return std::make_shared<VariantFcValReq>(anyFullBlownFcValReq, parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::variant;
+        return jsonstr::variant;
     }
 
 private:
@@ -1823,12 +1823,11 @@ private:
             FcValReq::_validate(jsonVal);
 
             /* Validate that option names are unique */
-            _mUniqueEntryNamesValidator.validate(jsonVal, strings::opts,
+            _mUniqueEntryNamesValidator.validate(jsonVal, jsonstr::opts,
                                                  "variant field class option");
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid variant field class.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid variant field class.");
         }
     }
 
@@ -1836,31 +1835,26 @@ private:
 };
 
 /*
- * CTF 2 JSON (any) field class value requirement.
+ * CTF 2 JSON (any) full-blown field class value requirement.
  */
-class AnyFcValReq final : public bt2c::JsonObjValReq
+class AnyFullBlownFcValReq final : public bt2c::JsonObjValReq
 {
 public:
-    explicit AnyFcValReq(const bt2c::JsonStrValInSetReq::Set& uIntFcRoles,
-                         const bool staticLenBlobHasTraceTypeUuidRole,
-                         const bt2c::ValReqLogCfg& logCfg) :
+    explicit AnyFullBlownFcValReq(const bt2c::Logger& parentLogger) :
         /* clang-format off */
         bt2c::JsonObjValReq {{
             {
-                strings::type,
+                jsonstr::type,
                 {
                     bt2c::JsonStrValInSetReq::shared({
                         FixedLenBitArrayFcValReq::typeStr(),
                         FixedLenBoolFcValReq::typeStr(),
+                        FixedLenBitMapFcValReq::typeStr(),
                         FixedLenUIntFcValReq::typeStr(),
                         FixedLenSIntFcValReq::typeStr(),
-                        FixedLenUEnumFcValReq::typeStr(),
-                        FixedLenSEnumFcValReq::typeStr(),
                         FixedLenFloatFcValReq::typeStr(),
                         VarLenUIntFcValReq::typeStr(),
                         VarLenSIntFcValReq::typeStr(),
-                        VarLenUEnumFcValReq::typeStr(),
-                        VarLenSEnumFcValReq::typeStr(),
                         NullTerminatedStrFcValReq::typeStr(),
                         StaticLenStrFcValReq::typeStr(),
                         DynLenStrFcValReq::typeStr(),
@@ -1871,44 +1865,38 @@ public:
                         DynLenArrayFcValReq::typeStr(),
                         OptionalFcValReq::typeStr(),
                         VariantFcValReq::typeStr(),
-                    }, logCfg), true
+                    }, parentLogger), true
                 }
             }
-        }, true, logCfg},
-        _mFlBitArrayFcValReq {logCfg},
-        _mFlBoolFcValReq {logCfg},
-        _mFlUIntFcValReq {uIntFcRoles, logCfg},
-        _mFlSIntFcValReq {logCfg},
-        _mFlUEnumFcValReq {uIntFcRoles, logCfg},
-        _mFlSEnumFcValReq {logCfg},
-        _mFlFloatFcValReq {logCfg},
-        _mVlUIntFcValReq {uIntFcRoles, logCfg},
-        _mVlSIntFcValReq {logCfg},
-        _mVlUEnumFcValReq {uIntFcRoles, logCfg},
-        _mVlSEnumFcValReq {logCfg},
-        _mNtStrFcValReq {logCfg},
-        _mStaticLenStrFcValReq {logCfg},
-        _mDynLenStrFcValReq {logCfg},
-        _mStaticLenBlobFcValReq {staticLenBlobHasTraceTypeUuidRole, logCfg},
-        _mDynLenBlobFcValReq {logCfg},
-        _mStructFcValReq {*this, logCfg},
-        _mStaticLenArrayFcValReq {*this, logCfg},
-        _mDynLenArrayFcValReq {*this, logCfg},
-        _mOptionalFcValReq {*this, logCfg},
-        _mVariantFcValReq {*this, logCfg}
+        }, true, parentLogger},
+        _mFlBitArrayFcValReq {parentLogger},
+        _mFlBoolFcValReq {parentLogger},
+        _mFlBitMapFcValReq {parentLogger},
+        _mFlUIntFcValReq {parentLogger},
+        _mFlSIntFcValReq {parentLogger},
+        _mFlFloatFcValReq {parentLogger},
+        _mVlUIntFcValReq {parentLogger},
+        _mVlSIntFcValReq {parentLogger},
+        _mNtStrFcValReq {parentLogger},
+        _mStaticLenStrFcValReq {parentLogger},
+        _mDynLenStrFcValReq {parentLogger},
+        _mStaticLenBlobFcValReq {parentLogger},
+        _mDynLenBlobFcValReq {parentLogger},
+        _mStructFcValReq {*this, parentLogger},
+        _mStaticLenArrayFcValReq {*this, parentLogger},
+        _mDynLenArrayFcValReq {*this, parentLogger},
+        _mOptionalFcValReq {*this, parentLogger},
+        _mVariantFcValReq {*this, parentLogger}
     /* clang-format on */
     {
         this->_addToFcValReqs(_mFlBitArrayFcValReq);
         this->_addToFcValReqs(_mFlBoolFcValReq);
+        this->_addToFcValReqs(_mFlBitMapFcValReq);
         this->_addToFcValReqs(_mFlUIntFcValReq);
         this->_addToFcValReqs(_mFlSIntFcValReq);
-        this->_addToFcValReqs(_mFlUEnumFcValReq);
-        this->_addToFcValReqs(_mFlSEnumFcValReq);
         this->_addToFcValReqs(_mFlFloatFcValReq);
         this->_addToFcValReqs(_mVlUIntFcValReq);
         this->_addToFcValReqs(_mVlSIntFcValReq);
-        this->_addToFcValReqs(_mVlUEnumFcValReq);
-        this->_addToFcValReqs(_mVlSEnumFcValReq);
         this->_addToFcValReqs(_mNtStrFcValReq);
         this->_addToFcValReqs(_mStaticLenStrFcValReq);
         this->_addToFcValReqs(_mDynLenStrFcValReq);
@@ -1921,29 +1909,13 @@ public:
         this->_addToFcValReqs(_mVariantFcValReq);
     }
 
-    explicit AnyFcValReq(const bool staticLenBlobHasTraceTypeUuidRole,
-                         const bt2c::ValReqLogCfg& logCfg) :
-        AnyFcValReq {{}, staticLenBlobHasTraceTypeUuidRole, logCfg}
-    {
-    }
-
-    explicit AnyFcValReq(const bt2c::JsonStrValInSetReq::Set& uIntFcRoles,
-                         const bt2c::ValReqLogCfg& logCfg) :
-        AnyFcValReq {uIntFcRoles, false, logCfg}
-    {
-    }
-
-    explicit AnyFcValReq(const bt2c::ValReqLogCfg& logCfg) : AnyFcValReq {{}, false, logCfg}
-    {
-    }
-
 private:
     template <typename JsonValReqT>
     void _addToFcValReqs(const JsonValReqT& valReq)
     {
         const auto typeStr = JsonValReqT::typeStr();
 
-        BT_ASSERT(_mFcValReqs.find(typeStr) == _mFcValReqs.end());
+        BT_ASSERT(!bt2c::contains(_mFcValReqs, typeStr));
         _mFcValReqs.insert(std::make_pair(typeStr, &valReq));
     }
 
@@ -1952,16 +1924,16 @@ private:
         try {
             bt2c::JsonObjValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error, "[{}] Invalid field class.", this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid field class.");
         }
 
         /*
          * This part doesn't need to be catched because the specific
-         * _validate() method already appends a message like
-         * "Invalid xyz field class:" to the exception.
+         * _validate() method already appends a message like "Invalid
+         * xyz field class:" to the exception.
          */
-        const auto it = _mFcValReqs.find(*jsonVal.asObj()[strings::type]->asStr());
+        const auto it = _mFcValReqs.find(*jsonVal.asObj()[jsonstr::type]->asStr());
 
         BT_ASSERT(it != _mFcValReqs.end());
         it->second->validate(jsonVal);
@@ -1970,15 +1942,12 @@ private:
     /* Subrequirements */
     FixedLenBitArrayFcValReq _mFlBitArrayFcValReq;
     FixedLenBoolFcValReq _mFlBoolFcValReq;
+    FixedLenBitMapFcValReq _mFlBitMapFcValReq;
     FixedLenUIntFcValReq _mFlUIntFcValReq;
     FixedLenSIntFcValReq _mFlSIntFcValReq;
-    FixedLenUEnumFcValReq _mFlUEnumFcValReq;
-    FixedLenSEnumFcValReq _mFlSEnumFcValReq;
     FixedLenFloatFcValReq _mFlFloatFcValReq;
     VarLenUIntFcValReq _mVlUIntFcValReq;
     VarLenSIntFcValReq _mVlSIntFcValReq;
-    VarLenUEnumFcValReq _mVlUEnumFcValReq;
-    VarLenSEnumFcValReq _mVlSEnumFcValReq;
     NullTerminatedStrFcValReq _mNtStrFcValReq;
     StaticLenStrFcValReq _mStaticLenStrFcValReq;
     DynLenStrFcValReq _mDynLenStrFcValReq;
@@ -2000,96 +1969,18 @@ private:
 
 void AnyFcValReqWrapper::_validate(const bt2c::JsonVal& jsonVal) const
 {
-    /* Delegate */
-    _mAnyFcValReq->validate(jsonVal);
+    /* Check for field class alias name first (JSON string) */
+    if (jsonVal.isStr()) {
+        /*
+         * Always valid: Ctf2FcBuilder::buildFcFromJsonVal() will
+         * validate that the field class alias exists.
+         */
+        return;
+    }
+
+    /* Delegate to AnyFullBlownFcValReq::validate() */
+    _mAnyFullBlownFcValReq->validate(jsonVal);
 }
-
-/*
- * CTF 2 JSON scope field class value requirement.
- *
- * This is like `StructFcValReq`, but provides its own
- * `AnyFcValReq` instance.
- */
-class ScopeFcValReq final : public bt2c::JsonValReq
-{
-public:
-    /*
-     * `uIntFcRoles` and `staticLenBlobHasTraceTypeUuidRole` are
-     * forwarded to the constructor of the underlying `AnyFcValReq`
-     * instance.
-     */
-    explicit ScopeFcValReq(const bt2c::JsonStrValInSetReq::Set& uIntFcRoles,
-                           const bool staticLenBlobHasTraceTypeUuidRole,
-                           const bt2c::ValReqLogCfg& logCfg) :
-        bt2c::JsonValReq {logCfg},
-        _mAnyFcValReq {uIntFcRoles, staticLenBlobHasTraceTypeUuidRole, logCfg}, _mStructFcValReq {
-                                                                                    _mAnyFcValReq,
-                                                                                    logCfg}
-    {
-    }
-
-    /*
-     * `uIntFcRoles` is forwarded to the constructor of the underlying
-     * `AnyFcValReq` instance.
-     */
-    explicit ScopeFcValReq(const bt2c::JsonStrValInSetReq::Set& uIntFcRoles,
-                           const bt2c::ValReqLogCfg& logCfg) :
-        ScopeFcValReq {uIntFcRoles, false, logCfg}
-    {
-    }
-
-    /*
-     * `staticLenBlobHasTraceTypeUuidRole` is forwarded to the constructor of the underlying
-     * `AnyFcValReq` instance.
-     */
-    explicit ScopeFcValReq(const bool staticLenBlobHasTraceTypeUuidRole,
-                           const bt2c::ValReqLogCfg& logCfg) :
-        ScopeFcValReq {{}, staticLenBlobHasTraceTypeUuidRole, logCfg}
-    {
-    }
-
-    explicit ScopeFcValReq(const bt2c::ValReqLogCfg& logCfg) : ScopeFcValReq {{}, false, logCfg}
-    {
-    }
-
-    static SP shared(const bt2c::JsonStrValInSetReq::Set& uIntFcRoles,
-                     const bool staticLenBlobHasTraceTypeUuidRole, const bt2c::ValReqLogCfg& logCfg)
-    {
-        return std::make_shared<ScopeFcValReq>(uIntFcRoles, staticLenBlobHasTraceTypeUuidRole,
-                                               logCfg);
-    }
-
-    static SP shared(const bt2c::JsonStrValInSetReq::Set& uIntFcRoles,
-                     const bt2c::ValReqLogCfg& logCfg)
-    {
-        return std::make_shared<ScopeFcValReq>(uIntFcRoles, logCfg);
-    }
-
-    static SP shared(const bool staticLenBlobHasTraceTypeUuidRole, const bt2c::ValReqLogCfg& logCfg)
-    {
-        return std::make_shared<ScopeFcValReq>(staticLenBlobHasTraceTypeUuidRole, logCfg);
-    }
-
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
-    {
-        return std::make_shared<ScopeFcValReq>(logCfg);
-    }
-
-private:
-    void _validate(const bt2c::JsonVal& jsonVal) const override
-    {
-        try {
-            _mStructFcValReq.validate(jsonVal);
-        } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid scope field class.",
-                                                   this->_locStr(jsonVal));
-        }
-    }
-
-    AnyFcValReq _mAnyFcValReq;
-    StructFcValReq _mStructFcValReq;
-};
 
 /*
  * CTF 2 JSON fragment value abstract requirement.
@@ -2103,27 +1994,27 @@ protected:
      * requirements.
      */
     explicit FragmentValReq(std::string&& type, PropReqs&& propReqs,
-                            const bt2c::ValReqLogCfg& logCfg) :
-        bt2c::JsonObjValReq {this->_buildPropReqs(std::move(type), std::move(propReqs), logCfg),
-                             logCfg}
+                            const bt2c::Logger& parentLogger) :
+        bt2c::JsonObjValReq {
+            this->_buildPropReqs(std::move(type), std::move(propReqs), parentLogger), parentLogger}
     {
     }
 
     /*
      * Builds a CTF 2 JSON fragment value requirement of type `type`.
      */
-    explicit FragmentValReq(std::string&& type, const bt2c::ValReqLogCfg& logCfg) :
-        FragmentValReq {std::move(type), {}, logCfg}
+    explicit FragmentValReq(std::string&& type, const bt2c::Logger& parentLogger) :
+        FragmentValReq {std::move(type), {}, parentLogger}
     {
     }
 
 private:
     static PropReqs _buildPropReqs(std::string&& type, PropReqs&& propReqs,
-                                   const bt2c::ValReqLogCfg& logCfg)
+                                   const bt2c::Logger& parentLogger)
     {
-        propReqs.insert(objTypePropReqEntry(std::move(type), logCfg));
-        propReqs.insert(userAttrsPropReqEntry(logCfg));
-        propReqs.insert(extPropReqEntry(logCfg));
+        propReqs.insert(objTypePropReqEntry(std::move(type), parentLogger));
+        propReqs.insert(attrsPropReqEntry(parentLogger));
+        propReqs.insert(extPropReqEntry(parentLogger));
         return std::move(propReqs);
     }
 };
@@ -2134,24 +2025,24 @@ private:
 class PreambleFragmentValReq final : public FragmentValReq
 {
 public:
-    explicit PreambleFragmentValReq(const bt2c::ValReqLogCfg& logCfg) :
+    explicit PreambleFragmentValReq(const bt2c::Logger& parentLogger) :
         /* clang-format off */
         FragmentValReq {this->typeStr(), {
-            {strings::version, {bt2c::JsonUIntValInSetReq::shared(2, logCfg), true}},
-            {strings::uuid, {UuidValReq::shared(logCfg)}},
-        }, logCfg}
+            {jsonstr::version, {bt2c::JsonUIntValInSetReq::shared(2, parentLogger), true}},
+            {jsonstr::uuid, {UuidValReq::shared(parentLogger)}},
+        }, parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<PreambleFragmentValReq>(logCfg);
+        return std::make_shared<PreambleFragmentValReq>(parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::preamble;
+        return jsonstr::preamble;
     }
 
 private:
@@ -2160,11 +2051,52 @@ private:
         try {
             FragmentValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid preamble fragment.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid preamble fragment.");
         }
     }
+};
+
+/*
+ * CTF 2 field class alias fragment value requirement.
+ */
+class FcAliasFragmentValReq final : public FragmentValReq
+{
+public:
+    explicit FcAliasFragmentValReq(const bt2c::Logger& parentLogger) :
+        /* clang-format off */
+        FragmentValReq {this->typeStr(), {
+            namePropReqEntry(true, parentLogger),
+            anyFcPropReqEntry(jsonstr::fc, _mAnyFullBlownFcValReq, true, parentLogger),
+        }, parentLogger},
+        _mAnyFullBlownFcValReq {parentLogger}
+    /* clang-format on */
+    {
+    }
+
+    static SP shared(const bt2c::Logger& parentLogger)
+    {
+        return std::make_shared<FcAliasFragmentValReq>(parentLogger);
+    }
+
+    static const char *typeStr() noexcept
+    {
+        return jsonstr::fcAlias;
+    }
+
+private:
+    void _validate(const bt2c::JsonVal& jsonVal) const override
+    {
+        try {
+            FragmentValReq::_validate(jsonVal);
+        } catch (const bt2c::Error&) {
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid field class alias fragment.");
+        }
+    }
+
+private:
+    AnyFullBlownFcValReq _mAnyFullBlownFcValReq;
 };
 
 /*
@@ -2173,19 +2105,19 @@ private:
 class ClkOffsetValReq final : public bt2c::JsonObjValReq
 {
 public:
-    explicit ClkOffsetValReq(const bt2c::ValReqLogCfg& logCfg) :
+    explicit ClkOffsetValReq(const bt2c::Logger& parentLogger) :
         /* clang-format off */
         bt2c::JsonObjValReq {{
-            {strings::seconds, {bt2c::JsonAnyIntValReq::shared(logCfg)}},
-            {strings::cycles, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::UINT, logCfg)}},
-        }, logCfg}
+            {jsonstr::seconds, {bt2c::JsonAnyIntValReq::shared(parentLogger)}},
+            {jsonstr::cycles, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::UInt, parentLogger)}},
+        }, parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<ClkOffsetValReq>(logCfg);
+        return std::make_shared<ClkOffsetValReq>(parentLogger);
     }
 
 private:
@@ -2194,41 +2126,138 @@ private:
         try {
             bt2c::JsonObjValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error, "[{}] Invalid clock offset.", this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid clock offset.");
         }
     }
 };
 
 /*
- * CTF 2 clock class fragment value requirement.
+ * Returns the pair (suitable for insertion into a
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 object
+ * namespace object property requirement.
  */
-class ClkClsFragmentValReq final : public FragmentValReq
+bt2c::JsonObjValReq::PropReqsEntry nsPropReqEntry(const bt2c::Logger& parentLogger)
+{
+    return {jsonstr::ns, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::Str, parentLogger)}};
+}
+
+/*
+ * Returns the pair (suitable for insertion into a
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 object UID
+ * object property requirement.
+ */
+bt2c::JsonObjValReq::PropReqsEntry uidPropReqEntry(const bool isRequired,
+                                                   const bt2c::Logger& parentLogger)
+{
+    return {jsonstr::uid,
+            {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::Str, parentLogger), isRequired}};
+}
+
+/*
+ * CTF 2 JSON clock origin value requirement.
+ */
+class ClkOriginValReq final : public bt2c::JsonObjValReq
 {
 public:
-    explicit ClkClsFragmentValReq(const bt2c::ValReqLogCfg& logCfg) :
+    explicit ClkOriginValReq(const bt2c::Logger& parentLogger) :
         /* clang-format off */
-        FragmentValReq {this->typeStr(), {
-            namePropReqEntry(true, logCfg),
-            {strings::freq, {bt2c::JsonUIntValInRangeReq::shared(1, bt2s::nullopt, logCfg), true}},
-            {strings::descr, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::STR, logCfg)}},
-            {strings::uuid, {UuidValReq::shared(logCfg)}},
-            {strings::originIsUnixEpoch, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::BOOL, logCfg)}},
-            {strings::offset, {ClkOffsetValReq::shared(logCfg)}},
-            {strings::precision, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::UINT, logCfg)}},
-        }, logCfg}
+        bt2c::JsonObjValReq {{
+            nsPropReqEntry(parentLogger),
+            namePropReqEntry(true, parentLogger),
+            uidPropReqEntry(true, parentLogger),
+        }, parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<ClkClsFragmentValReq>(logCfg);
+        return std::make_shared<ClkOffsetValReq>(parentLogger);
+    }
+};
+
+/*
+ * CTF 2 JSON clock class origin property requirement.
+ */
+class ClkClsOriginPropValReq final : public bt2c::JsonValReq
+{
+public:
+    explicit ClkClsOriginPropValReq(const bt2c::Logger& parentLogger) :
+        bt2c::JsonValReq {parentLogger}, _mObjReq {parentLogger}
+    {
     }
 
-    static constexpr const char *typeStr() noexcept
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return strings::clkCls;
+        return std::make_shared<ClkClsOriginPropValReq>(parentLogger);
+    }
+
+private:
+    void _validate(const bt2c::JsonVal& jsonVal) const override
+    {
+        try {
+            /* Check for `unix-epoch` string */
+            if (jsonVal.isStr()) {
+                if (*jsonVal.asStr() != jsonstr::unixEpoch) {
+                    BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                        this->_logger(), bt2c::Error, jsonVal.loc(), "Expecting `{}`.",
+                        jsonstr::unixEpoch);
+                }
+            } else {
+                /* Must be a valid clock origin object */
+                if (!jsonVal.isObj()) {
+                    /* Make a clear message about the expected type */
+                    BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                        this->_logger(), bt2c::Error, jsonVal.loc(),
+                        "Expecting a string or an object.");
+                }
+
+                /* Delegate to ClkOriginValReq::validate() */
+                _mObjReq.validate(jsonVal);
+            }
+        } catch (const bt2c::Error&) {
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid clock origin.");
+        }
+    }
+
+private:
+    ClkOriginValReq _mObjReq;
+};
+
+/*
+ * CTF 2 JSON clock class fragment value requirement.
+ */
+class ClkClsFragmentValReq final : public FragmentValReq
+{
+public:
+    explicit ClkClsFragmentValReq(const bt2c::Logger& parentLogger) :
+        /* clang-format off */
+        FragmentValReq {this->typeStr(), {
+            {jsonstr::id, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::Str, parentLogger), true}},
+            nsPropReqEntry(parentLogger),
+            namePropReqEntry(false, parentLogger),
+            uidPropReqEntry(false, parentLogger),
+            {jsonstr::freq, {bt2c::JsonUIntValInRangeReq::shared(1, bt2s::nullopt, parentLogger), true}},
+            {jsonstr::descr, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::Str, parentLogger)}},
+            {jsonstr::origin, {ClkOriginValReq::shared(parentLogger)}},
+            {jsonstr::offsetFromOrigin, {ClkOffsetValReq::shared(parentLogger)}},
+            {jsonstr::precision, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::UInt, parentLogger)}},
+            {jsonstr::accuracy, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::UInt, parentLogger)}},
+        }, parentLogger}
+    /* clang-format on */
+    {
+    }
+
+    static SP shared(const bt2c::Logger& parentLogger)
+    {
+        return std::make_shared<ClkClsFragmentValReq>(parentLogger);
+    }
+
+    static const char *typeStr() noexcept
+    {
+        return jsonstr::clkCls;
     }
 
 private:
@@ -2238,68 +2267,62 @@ private:
             FragmentValReq::_validate(jsonVal);
 
             /*
-             * Validate that `seconds` within `offset`, if it exists, is
-             * less than `frequency`.
+             * Validate that `seconds` within `offset-from-origin`, if
+             * it exists, is less than `frequency`.
              */
             auto& jsonObj = jsonVal.asObj();
-            const auto jsonOffset = jsonObj[strings::offset];
 
-            if (jsonOffset) {
-                const auto jsonCycles = jsonOffset->asObj()[strings::cycles];
-
-                if (jsonCycles) {
+            if (const auto jsonOffset = jsonObj[jsonstr::offsetFromOrigin]) {
+                if (const auto jsonCycles = jsonOffset->asObj()[jsonstr::cycles]) {
                     const auto cycles = *jsonCycles->asUInt();
-                    const auto freq = *jsonObj[strings::freq]->asUInt();
+                    const auto freq = *jsonObj[jsonstr::freq]->asUInt();
 
                     if (cycles >= freq) {
-                        BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                            this->_logger(), bt2c::Error,
-                            "[{}] Invalid `{}` property of `{}` property: "
+                        BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(
+                            this->_logger(), bt2c::Error, jsonCycles->loc(),
+                            "Invalid `{}` property of `{}` property: "
                             "value {} is greater than the value of the `{}` property ({}).",
-                            this->_locStr(*jsonCycles), strings::cycles, strings::offset, cycles,
-                            strings::freq, freq);
+                            jsonstr::cycles, jsonstr::offsetFromOrigin, cycles, jsonstr::freq,
+                            freq);
                     }
                 }
             }
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid clock class fragment.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid clock class fragment.");
         }
     }
 };
 
 /*
- * CTF 2 trace class fragment value requirement.
+ * CTF 2 JSON trace class fragment value requirement.
  */
 class TraceClsFragmentValReq final : public FragmentValReq
 {
 public:
-    explicit TraceClsFragmentValReq(const bt2c::ValReqLogCfg& logCfg) :
+    explicit TraceClsFragmentValReq(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                                    const bt2c::Logger& parentLogger) :
         /* clang-format off */
         FragmentValReq {this->typeStr(), {
-            {strings::uuid, {UuidValReq::shared(logCfg)}},
-            {strings::env, {TraceEnvValReq::shared(logCfg)}},
-            {strings::pktHeaderFc, {
-                ScopeFcValReq::shared({
-                    strings::dataStreamClsId,
-                    strings::dataStreamId,
-                    strings::pktMagicNumber,
-                }, true, logCfg)
-            }},
-        }, logCfg}
+            nsPropReqEntry(parentLogger),
+            namePropReqEntry(false, parentLogger),
+            uidPropReqEntry(false, parentLogger),
+            {jsonstr::env, {TraceEnvValReq::shared(parentLogger)}},
+            anyFcPropReqEntry(jsonstr::pktHeaderFc, anyFullBlownFcValReq, parentLogger),
+        }, parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                     const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<TraceClsFragmentValReq>(logCfg);
+        return std::make_shared<TraceClsFragmentValReq>(anyFullBlownFcValReq, parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::traceCls;
+        return jsonstr::traceCls;
     }
 
 private:
@@ -2308,72 +2331,54 @@ private:
         try {
             FragmentValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid trace class fragment.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid trace class fragment.");
         }
     }
 };
 
 /*
  * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 object namespace
- * object property requirement.
+ * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 object
+ * numeric ID object property requirement.
  */
-bt2c::JsonObjValReq::PropReqsEntry nsPropReqEntry(const bt2c::ValReqLogCfg& logCfg)
+bt2c::JsonObjValReq::PropReqsEntry idPropReqEntry(const bt2c::Logger& parentLogger)
 {
-    return {strings::ns, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::STR, logCfg)}};
+    return {jsonstr::id, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::UInt, parentLogger)}};
 }
 
 /*
- * Returns the pair (suitable for insertion into a
- * `bt2c::JsonObjValReq::PropReqs` instance) for the CTF 2 object numeric ID
- * object property requirement.
- */
-bt2c::JsonObjValReq::PropReqsEntry idPropReqEntry(const bt2c::ValReqLogCfg& logCfg)
-{
-    return {strings::id, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::UINT, logCfg)}};
-}
-
-/*
- * CTF 2 data stream class fragment value requirement.
+ * CTF 2 JSON data stream class fragment value requirement.
  */
 class DataStreamClsFragmentValReq final : public FragmentValReq
 {
 public:
-    explicit DataStreamClsFragmentValReq(const bt2c::ValReqLogCfg& logCfg) :
+    explicit DataStreamClsFragmentValReq(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                                         const bt2c::Logger& parentLogger) :
         /* clang-format off */
         FragmentValReq {this->typeStr(), {
-            namePropReqEntry(false, logCfg),
-            nsPropReqEntry(logCfg),
-            idPropReqEntry(logCfg),
-            {strings::defClkClsName, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::STR, logCfg)}},
-            {strings::pktCtxFc, {ScopeFcValReq::shared({
-                strings::defClkTs,
-                strings::discEventRecordCounterSnap,
-                strings::pktContentLen,
-                strings::pktEndDefClkTs,
-                strings::pktSeqNum,
-                strings::pktTotalLen,
-            }, logCfg)}},
-            {strings::eventRecordHeaderFc, {ScopeFcValReq::shared({
-                strings::defClkTs,
-                strings::eventRecordClsId,
-            }, logCfg)}},
-            {strings::eventRecordCommonCtxFc, {ScopeFcValReq::shared(logCfg)}},
-        }, logCfg}
+            idPropReqEntry(parentLogger),
+            nsPropReqEntry(parentLogger),
+            namePropReqEntry(false, parentLogger),
+            uidPropReqEntry(false, parentLogger),
+            {jsonstr::defClkClsId, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::Str, parentLogger)}},
+            anyFcPropReqEntry(jsonstr::pktCtxFc, anyFullBlownFcValReq, parentLogger),
+            anyFcPropReqEntry(jsonstr::eventRecordHeaderFc, anyFullBlownFcValReq, parentLogger),
+            anyFcPropReqEntry(jsonstr::eventRecordCommonCtxFc, anyFullBlownFcValReq, parentLogger),
+        }, parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                     const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<DataStreamClsFragmentValReq>(logCfg);
+        return std::make_shared<DataStreamClsFragmentValReq>(anyFullBlownFcValReq, parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::dataStreamCls;
+        return jsonstr::dataStreamCls;
     }
 
 private:
@@ -2382,41 +2387,43 @@ private:
         try {
             FragmentValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid data stream class fragment.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid data stream class fragment.");
         }
     }
 };
 
 /*
- * CTF 2 event record class fragment value requirement.
+ * CTF 2 JSON event record class fragment value requirement.
  */
 class EventRecordClsFragmentValReq final : public FragmentValReq
 {
 public:
-    explicit EventRecordClsFragmentValReq(const bt2c::ValReqLogCfg& logCfg) :
+    explicit EventRecordClsFragmentValReq(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                                          const bt2c::Logger& parentLogger) :
         /* clang-format off */
         FragmentValReq {this->typeStr(), {
-            namePropReqEntry(false, logCfg),
-            nsPropReqEntry(logCfg),
-            idPropReqEntry(logCfg),
-            {strings::dataStreamClsId, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::UINT, logCfg)}},
-            {strings::specCtxFc, {ScopeFcValReq::shared(logCfg)}},
-            {strings::payloadFc, {ScopeFcValReq::shared(logCfg)}},
-        }, logCfg}
+            idPropReqEntry(parentLogger),
+            nsPropReqEntry(parentLogger),
+            namePropReqEntry(false, parentLogger),
+            uidPropReqEntry(false, parentLogger),
+            {jsonstr::dataStreamClsId, {bt2c::JsonValHasTypeReq::shared(bt2c::ValType::UInt, parentLogger)}},
+            anyFcPropReqEntry(jsonstr::specCtxFc, anyFullBlownFcValReq, parentLogger),
+            anyFcPropReqEntry(jsonstr::payloadFc, anyFullBlownFcValReq, parentLogger),
+        }, parentLogger}
     /* clang-format on */
     {
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const AnyFullBlownFcValReq& anyFullBlownFcValReq,
+                     const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<EventRecordClsFragmentValReq>(logCfg);
+        return std::make_shared<EventRecordClsFragmentValReq>(anyFullBlownFcValReq, parentLogger);
     }
 
-    static constexpr const char *typeStr() noexcept
+    static const char *typeStr() noexcept
     {
-        return strings::eventRecordCls;
+        return jsonstr::eventRecordCls;
     }
 
 private:
@@ -2425,9 +2432,8 @@ private:
         try {
             FragmentValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                                   "[{}] Invalid event record class fragment.",
-                                                   this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(
+                this->_logger(), jsonVal.loc(), "Invalid event record class fragment.");
         }
     }
 };
@@ -2442,38 +2448,42 @@ namespace internal {
 class Ctf2JsonAnyFragmentValReqImpl final : public bt2c::JsonObjValReq
 {
 public:
-    explicit Ctf2JsonAnyFragmentValReqImpl(const bt2c::ValReqLogCfg& logCfg) :
+    explicit Ctf2JsonAnyFragmentValReqImpl(const bt2c::Logger& parentLogger) :
         /* clang-format off */
         bt2c::JsonObjValReq {{
             {
-                strings::type, {
+                jsonstr::type, {
                     bt2c::JsonStrValInSetReq::shared({
                         PreambleFragmentValReq::typeStr(),
+                        FcAliasFragmentValReq::typeStr(),
                         TraceClsFragmentValReq::typeStr(),
                         ClkClsFragmentValReq::typeStr(),
                         DataStreamClsFragmentValReq::typeStr(),
                         EventRecordClsFragmentValReq::typeStr(),
-                    }, logCfg), true
+                    }, parentLogger), true
                 }
             }
-        }, true, logCfg},
-        _preambleFragmentValReq {logCfg},
-        _traceClsFragmentValReq {logCfg},
-        _clkClsFragmentValReq {logCfg},
-        _dataStreamClsFragmentValReq {logCfg},
-        _eventRecordClsFragmentValReq {logCfg}
+        }, true, parentLogger},
+        _mAnyFullBlownFcValReq {parentLogger},
+        _preambleFragmentValReq {parentLogger},
+        _fcAliasFragmentValReq {parentLogger},
+        _traceClsFragmentValReq {_mAnyFullBlownFcValReq, parentLogger},
+        _clkClsFragmentValReq {parentLogger},
+        _dataStreamClsFragmentValReq {_mAnyFullBlownFcValReq, parentLogger},
+        _eventRecordClsFragmentValReq {_mAnyFullBlownFcValReq, parentLogger}
     /* clang-format on */
     {
         this->_addToFcValReqs(_preambleFragmentValReq);
+        this->_addToFcValReqs(_fcAliasFragmentValReq);
         this->_addToFcValReqs(_traceClsFragmentValReq);
         this->_addToFcValReqs(_clkClsFragmentValReq);
         this->_addToFcValReqs(_dataStreamClsFragmentValReq);
         this->_addToFcValReqs(_eventRecordClsFragmentValReq);
     }
 
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-        return std::make_shared<Ctf2JsonAnyFragmentValReqImpl>(logCfg);
+        return std::make_shared<Ctf2JsonAnyFragmentValReqImpl>(parentLogger);
     }
 
 private:
@@ -2482,7 +2492,7 @@ private:
     {
         const auto typeStr = JsonValReqT::typeStr();
 
-        BT_ASSERT(_fragValReqs.find(typeStr) == _fragValReqs.end());
+        BT_ASSERT(!bt2c::contains(_fragValReqs, typeStr));
         _fragValReqs.insert(std::make_pair(typeStr, &valReq));
     }
 
@@ -2491,8 +2501,8 @@ private:
         try {
             bt2c::JsonObjValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(
-                this->_logger(), bt2c::Error, "[{}] Invalid fragment.", this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid fragment.");
         }
 
         /*
@@ -2500,14 +2510,18 @@ private:
          * _validate() method already appends a message like
          * "Invalid xyz fragment:" to the exception.
          */
-        const auto it = _fragValReqs.find(*jsonVal.asObj()[strings::type]->asStr());
+        const auto it = _fragValReqs.find(*jsonVal.asObj()[jsonstr::type]->asStr());
 
         BT_ASSERT(it != _fragValReqs.end());
         it->second->validate(jsonVal);
     }
 
+    /* Single any full-blown field class value requirement instance */
+    AnyFullBlownFcValReq _mAnyFullBlownFcValReq;
+
     /* Subrequirements */
     PreambleFragmentValReq _preambleFragmentValReq;
+    FcAliasFragmentValReq _fcAliasFragmentValReq;
     TraceClsFragmentValReq _traceClsFragmentValReq;
     ClkClsFragmentValReq _clkClsFragmentValReq;
     DataStreamClsFragmentValReq _dataStreamClsFragmentValReq;
@@ -2523,11 +2537,9 @@ private:
 
 } /* namespace internal */
 
-Ctf2JsonAnyFragmentValReq::Ctf2JsonAnyFragmentValReq(const bt2c::Logger& parentLogger,
-                                                     const bt2c::TextLocStrFmt textLocStrFmt) :
-    bt2c::JsonValReq {bt2c::ValReqLogCfg {parentLogger, textLocStrFmt}},
-    _mImpl {new internal::Ctf2JsonAnyFragmentValReqImpl {
-        bt2c::ValReqLogCfg {parentLogger, textLocStrFmt}}}
+Ctf2JsonAnyFragmentValReq::Ctf2JsonAnyFragmentValReq(const bt2c::Logger& parentLogger) :
+    bt2c::JsonValReq {parentLogger}, _mImpl {
+                                         new internal::Ctf2JsonAnyFragmentValReqImpl {parentLogger}}
 {
 }
 

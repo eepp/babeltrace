@@ -23,12 +23,6 @@ public:
     explicit TextLoc(unsigned long long offset = 0, unsigned long long lineNo = 0,
                      unsigned long long colNo = 0) noexcept;
 
-    /* Default move/copy constructor/assignment operator */
-    TextLoc(const TextLoc&) = default;
-    TextLoc(TextLoc&&) = default;
-    TextLoc& operator=(const TextLoc&) = default;
-    TextLoc& operator=(TextLoc&&) = default;
-
     /*
      * Offset (bytes).
      */

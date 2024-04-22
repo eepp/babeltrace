@@ -2,10 +2,12 @@
  * SPDX-License-Identifier: MIT
  *
  * Copyright 2022 Francis Deslauriers <francis.deslauriers@efficios.com>
+ * Copyright 2024 Philippe Proulx <pproulx@efficios.com>
  */
 
 #include <cstdint>
 
+#include "cpp-common/bt2c/aliases.hpp"
 #include "cpp-common/bt2c/read-fixed-len-int.hpp"
 #include "cpp-common/vendor/fmt/format.h"
 
@@ -13,6 +15,8 @@
 
 namespace ctf {
 namespace src {
+
+const bt2c::DataLen MetadataStreamDecoder::_PktHeader::len = bt2c::DataLen::fromBytes(37);
 
 MetadataStreamDecoder::_PktHeader::_PktHeader(
     const std::uint32_t magicParam, const bt2c::Uuid& uuidParam, const std::uint32_t checksumParam,
@@ -27,8 +31,6 @@ MetadataStreamDecoder::_PktHeader::_PktHeader(
     majorVersion {majorVersionParam}, minorVersion {minorVersionParam}
 {
 }
-
-constexpr bt2c::DataLen MetadataStreamDecoder::_PktHeader::len;
 
 void MetadataStreamDecoder::_validatePktHeader(const _PktHeader& header) const
 {
@@ -96,15 +98,15 @@ void MetadataStreamDecoder::_validatePktHeader(const _PktHeader& header) const
     }
 }
 
-bt2s::optional<ir::ByteOrder>
-MetadataStreamDecoder::_getByteOrder(const bt2s::span<const std::uint8_t> buffer) const noexcept
+bt2s::optional<ByteOrder>
+MetadataStreamDecoder::_getByteOrder(const bt2c::ConstBytes buffer) const noexcept
 {
     /* We need to read a 32-bit magic number */
     BT_ASSERT(buffer.size() >= sizeof(std::uint32_t));
 
     static constexpr std::uint32_t expectedMagic = 0x75d11d57U;
     static constexpr auto nativeByteOrder =
-        BYTE_ORDER == BIG_ENDIAN ? ir::ByteOrder::BIG : ir::ByteOrder::LITTLE;
+        BYTE_ORDER == BIG_ENDIAN ? ByteOrder::Big : ByteOrder::Little;
 
     /* Read magic number */
     const auto magic = bt2c::readFixedLenInt<std::uint32_t>(buffer.data());
@@ -113,12 +115,14 @@ MetadataStreamDecoder::_getByteOrder(const bt2s::span<const std::uint8_t> buffer
     if (magic == expectedMagic) {
         return nativeByteOrder;
     } else if (magic == GUINT32_SWAP_LE_BE(expectedMagic)) {
-        return nativeByteOrder == ir::ByteOrder::BIG ? ir::ByteOrder::LITTLE : ir::ByteOrder::BIG;
+        return nativeByteOrder == ByteOrder::Big ? ByteOrder::Little : ByteOrder::Big;
     } else {
         /* Doesn't look like a metadata stream packet */
         return bt2s::nullopt;
     }
 }
+
+namespace {
 
 /*
  * Stateful reader of packet header fields.
@@ -126,7 +130,7 @@ MetadataStreamDecoder::_getByteOrder(const bt2s::span<const std::uint8_t> buffer
 class PktHeaderReader final
 {
 public:
-    explicit PktHeaderReader(const ir::ByteOrder byteOrder, const std::uint8_t * const buf) :
+    explicit PktHeaderReader(const ByteOrder byteOrder, const std::uint8_t * const buf) :
         _mByteOrder {byteOrder}, _mBuf {buf}
     {
     }
@@ -153,10 +157,10 @@ private:
     template <typename IntT>
     IntT _readNextInt() const noexcept
     {
-        if (_mByteOrder == ir::ByteOrder::BIG) {
+        if (_mByteOrder == ByteOrder::Big) {
             return bt2c::readFixedLenIntBe<IntT>(_mBuf);
         } else {
-            BT_ASSERT(_mByteOrder == ir::ByteOrder::LITTLE);
+            BT_ASSERT(_mByteOrder == ByteOrder::Little);
             return bt2c::readFixedLenIntLe<IntT>(_mBuf);
         }
     }
@@ -170,12 +174,14 @@ private:
         return res;
     }
 
-    ir::ByteOrder _mByteOrder;
+    ByteOrder _mByteOrder;
     const std::uint8_t *_mBuf;
 };
 
+} /* namespace */
+
 MetadataStreamDecoder::_PktHeader
-MetadataStreamDecoder::_readPktHeader(const std::uint8_t * const buf, const ir::ByteOrder byteOrder,
+MetadataStreamDecoder::_readPktHeader(const std::uint8_t * const buf, const ByteOrder byteOrder,
                                       const bt2c::DataLen curOffset) const
 {
     BT_ASSERT(!curOffset.hasExtraBits());
@@ -220,8 +226,7 @@ MetadataStreamDecoder::MetadataStreamDecoder(const bt2c::Logger& parentLogger) n
     BT_CPPLOGD("Creating TSDL metadata stream decoder.");
 }
 
-std::string
-MetadataStreamDecoder::_textFromPacketizedMetadata(const bt2s::span<const std::uint8_t> buffer)
+std::string MetadataStreamDecoder::_textFromPacketizedMetadata(const bt2c::ConstBytes buffer)
 {
     const auto byteOrder = this->_getByteOrder(buffer);
 
@@ -230,13 +235,12 @@ MetadataStreamDecoder::_textFromPacketizedMetadata(const bt2s::span<const std::u
 
     std::string plainTextMetadata;
     auto curOffset = bt2c::DataLen::fromBits(0);
-    const auto bufferLen = bt2c::DataLen::fromBytes(buffer.size());
 
-    while (curOffset < bufferLen) {
+    while (curOffset.bytes() < buffer.size()) {
         try {
             const auto pktData = buffer.data() + curOffset.bytes();
 
-            if (curOffset + _PktHeader::len > bufferLen) {
+            if (curOffset + _PktHeader::len > bt2c::DataLen::fromBytes(buffer.size())) {
                 BT_CPPLOGE_APPEND_CAUSE_AND_THROW(
                     bt2c::Error, "Remaining buffer isn't large enough to hold a packet header.");
             }
@@ -276,36 +280,35 @@ MetadataStreamDecoder::_textFromPacketizedMetadata(const bt2s::span<const std::u
     return plainTextMetadata;
 }
 
-void MetadataStreamDecoder::_maybeSetMetadataStreamType(const bt2s::span<const std::uint8_t> buffer)
+void MetadataStreamDecoder::_maybeSetMetadataStreamType(const bt2c::ConstBytes buffer)
 {
     if (this->_getByteOrder(buffer)) {
         if (!_mStreamType) {
-            _mStreamType = _MetadataStreamType::PACKETIZED;
-        } else if (*_mStreamType != _MetadataStreamType::PACKETIZED) {
+            _mStreamType = _MetadataStreamType::Packetized;
+        } else if (*_mStreamType != _MetadataStreamType::Packetized) {
             BT_CPPLOGE_APPEND_CAUSE_AND_THROW(bt2c::Error,
                                               "Expecting a packetized metadata stream section.");
         }
     } else {
         if (!_mStreamType) {
-            _mStreamType = _MetadataStreamType::PLAIN_TEXT;
-        } else if (*_mStreamType != _MetadataStreamType::PLAIN_TEXT) {
+            _mStreamType = _MetadataStreamType::PlainText;
+        } else if (*_mStreamType != _MetadataStreamType::PlainText) {
             BT_CPPLOGE_APPEND_CAUSE_AND_THROW(bt2c::Error,
                                               "Expecting a plain text metadata stream section.");
         }
     }
 }
 
-std::string MetadataStreamDecoder::decode(const bt2s::span<const std::uint8_t> buffer)
+std::string MetadataStreamDecoder::decode(const bt2c::ConstBytes buffer)
 {
     this->_maybeSetMetadataStreamType(buffer);
 
     try {
-        if (*_mStreamType == _MetadataStreamType::PACKETIZED) {
+        if (*_mStreamType == _MetadataStreamType::Packetized) {
             return this->_textFromPacketizedMetadata(buffer);
         } else {
-            BT_ASSERT(*_mStreamType == _MetadataStreamType::PLAIN_TEXT);
-            return std::string {reinterpret_cast<const char *>(buffer.data()),
-                                static_cast<std::string::size_type>(buffer.size())};
+            BT_ASSERT(*_mStreamType == _MetadataStreamType::PlainText);
+            return std::string {reinterpret_cast<const char *>(buffer.data()), buffer.size()};
         }
     } catch (const bt2c::Error&) {
         BT_CPPLOGE_APPEND_CAUSE_AND_RETHROW(

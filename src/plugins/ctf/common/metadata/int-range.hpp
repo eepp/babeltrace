@@ -1,13 +1,11 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Copyright 2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright 2022-2024 Philippe Proulx <pproulx@efficios.com>
  */
 
-#ifndef _CTF_INT_RANGE_HPP
-#define _CTF_INT_RANGE_HPP
-
-#include <set>
+#ifndef CTF_COMMON_METADATA_INT_RANGE_HPP
+#define CTF_COMMON_METADATA_INT_RANGE_HPP
 
 #include "common/assert.h"
 
@@ -34,10 +32,6 @@ public:
     {
         BT_ASSERT_DBG(lower <= upper);
     }
-
-    /* Default copy operations */
-    IntRange(const IntRange&) noexcept = default;
-    IntRange& operator=(const IntRange&) noexcept = default;
 
     /*
      * Lower bound of this integer range.
@@ -112,4 +106,4 @@ using SIntRange = IntRange<long long>;
 
 } /* namespace ctf */
 
-#endif /* _CTF_INT_RANGE_HPP */
+#endif /* CTF_COMMON_METADATA_INT_RANGE_HPP */

@@ -54,9 +54,9 @@ ValT reverseFixedLenIntBits(const ValT val, const DataLen len)
     auto uVal = static_cast<std::uint64_t>(val);
 
     uVal = ((uVal >> 1) & m0) | (uVal & m0) << 1;
-    uVal = swapBits<std::uint64_t, 0x0300c0303030c303ULL, 4>(uVal);
-    uVal = swapBits<std::uint64_t, 0x00c0300c03f0003fULL, 8>(uVal);
-    uVal = swapBits<std::uint64_t, 0x00000ffc00003fffULL, 20>(uVal);
+    uVal = internal::swapBits<std::uint64_t, 0x0300c0303030c303ULL, 4>(uVal);
+    uVal = internal::swapBits<std::uint64_t, 0x00c0300c03f0003fULL, 8>(uVal);
+    uVal = internal::swapBits<std::uint64_t, 0x00000ffc00003fffULL, 20>(uVal);
     uVal = (uVal >> 34) | (uVal << 30);
 
     /*

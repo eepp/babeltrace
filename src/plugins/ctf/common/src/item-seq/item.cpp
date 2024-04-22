@@ -21,7 +21,7 @@ EndItem::EndItem(const Type type) noexcept : Item {type}
 {
 }
 
-PktBeginItem::PktBeginItem() noexcept : BeginItem {Type::PKT_BEGIN}
+PktBeginItem::PktBeginItem() noexcept : BeginItem {Type::PktBegin}
 {
 }
 
@@ -30,7 +30,7 @@ void PktBeginItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-PktEndItem::PktEndItem() noexcept : EndItem {Type::PKT_END}
+PktEndItem::PktEndItem() noexcept : EndItem {Type::PktEnd}
 {
 }
 
@@ -39,7 +39,7 @@ void PktEndItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-ScopeBeginItem::ScopeBeginItem() noexcept : BeginItem {Type::SCOPE_BEGIN}
+ScopeBeginItem::ScopeBeginItem() noexcept : BeginItem {Type::ScopeBegin}
 {
 }
 
@@ -48,7 +48,7 @@ void ScopeBeginItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-ScopeEndItem::ScopeEndItem() noexcept : EndItem {Type::SCOPE_END}
+ScopeEndItem::ScopeEndItem() noexcept : EndItem {Type::ScopeEnd}
 {
 }
 
@@ -57,7 +57,7 @@ void ScopeEndItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-EventRecordBeginItem::EventRecordBeginItem() noexcept : BeginItem {Type::EVENT_RECORD_BEGIN}
+EventRecordBeginItem::EventRecordBeginItem() noexcept : BeginItem {Type::EventRecordBegin}
 {
 }
 
@@ -66,7 +66,7 @@ void EventRecordBeginItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-EventRecordEndItem::EventRecordEndItem() noexcept : EndItem {Type::EVENT_RECORD_END}
+EventRecordEndItem::EventRecordEndItem() noexcept : EndItem {Type::EventRecordEnd}
 {
 }
 
@@ -75,7 +75,7 @@ void EventRecordEndItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-PktContentBeginItem::PktContentBeginItem() noexcept : BeginItem {Type::PKT_CONTENT_BEGIN}
+PktContentBeginItem::PktContentBeginItem() noexcept : BeginItem {Type::PktContentBegin}
 {
 }
 
@@ -84,7 +84,7 @@ void PktContentBeginItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-PktContentEndItem::PktContentEndItem() noexcept : EndItem {Type::PKT_CONTENT_END}
+PktContentEndItem::PktContentEndItem() noexcept : EndItem {Type::PktContentEnd}
 {
 }
 
@@ -93,7 +93,7 @@ void PktContentEndItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-PktMagicNumberItem::PktMagicNumberItem() noexcept : Item {Type::PKT_MAGIC_NUMBER}
+PktMagicNumberItem::PktMagicNumberItem() noexcept : Item {Type::PktMagicNumber}
 {
 }
 
@@ -102,7 +102,7 @@ void PktMagicNumberItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-MetadataStreamUuidItem::MetadataStreamUuidItem() noexcept : Item {Type::METADATA_STREAM_UUID}
+MetadataStreamUuidItem::MetadataStreamUuidItem() noexcept : Item {Type::MetadataStreamUuid}
 {
 }
 
@@ -111,7 +111,7 @@ void MetadataStreamUuidItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-DataStreamInfoItem::DataStreamInfoItem() noexcept : Item {Type::DATA_STREAM_INFO}
+DataStreamInfoItem::DataStreamInfoItem() noexcept : Item {Type::DataStreamInfo}
 {
 }
 
@@ -120,7 +120,7 @@ void DataStreamInfoItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-DefClkValItem::DefClkValItem() noexcept : Item {Type::DEF_CLK_VALUE}
+DefClkValItem::DefClkValItem() noexcept : Item {Type::DefClkValue}
 {
 }
 
@@ -129,7 +129,7 @@ void DefClkValItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-PktInfoItem::PktInfoItem() noexcept : Item {Type::PKT_INFO}
+PktInfoItem::PktInfoItem() noexcept : Item {Type::PktInfo}
 {
 }
 
@@ -138,7 +138,7 @@ void PktInfoItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-EventRecordInfoItem::EventRecordInfoItem() noexcept : Item {Type::EVENT_RECORD_INFO}
+EventRecordInfoItem::EventRecordInfoItem() noexcept : Item {Type::EventRecordInfo}
 {
 }
 
@@ -152,7 +152,7 @@ FixedLenBitArrayFieldItem::FixedLenBitArrayFieldItem(const Type type) noexcept :
 }
 
 FixedLenBitArrayFieldItem::FixedLenBitArrayFieldItem() noexcept :
-    FixedLenBitArrayFieldItem {Type::FIXED_LEN_BIT_ARRAY_FIELD}
+    FixedLenBitArrayFieldItem {Type::FixedLenBitArrayField}
 {
 }
 
@@ -161,8 +161,18 @@ void FixedLenBitArrayFieldItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
+FixedLenBitMapFieldItem::FixedLenBitMapFieldItem() noexcept :
+    FixedLenBitArrayFieldItem {Type::FixedLenBitMapField}
+{
+}
+
+void FixedLenBitMapFieldItem::accept(ItemVisitor& visitor) const
+{
+    visitor.visit(*this);
+}
+
 FixedLenBoolFieldItem::FixedLenBoolFieldItem() noexcept :
-    FixedLenBitArrayFieldItem {Type::FIXED_LEN_BOOL_FIELD}
+    FixedLenBitArrayFieldItem {Type::FixedLenBoolField}
 {
 }
 
@@ -177,7 +187,7 @@ FixedLenSIntFieldItem::FixedLenSIntFieldItem(const Type type) noexcept :
 }
 
 FixedLenSIntFieldItem::FixedLenSIntFieldItem() noexcept :
-    FixedLenSIntFieldItem {Type::FIXED_LEN_SINT_FIELD}
+    FixedLenSIntFieldItem {Type::FixedLenSIntField}
 {
 }
 
@@ -192,7 +202,7 @@ FixedLenUIntFieldItem::FixedLenUIntFieldItem(const Type type) noexcept :
 }
 
 FixedLenUIntFieldItem::FixedLenUIntFieldItem() noexcept :
-    FixedLenUIntFieldItem {Type::FIXED_LEN_UINT_FIELD}
+    FixedLenUIntFieldItem {Type::FixedLenUIntField}
 {
 }
 
@@ -201,28 +211,8 @@ void FixedLenUIntFieldItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-FixedLenSEnumFieldItem::FixedLenSEnumFieldItem() noexcept :
-    FixedLenSIntFieldItem {Type::FIXED_LEN_SENUM_FIELD}
-{
-}
-
-void FixedLenSEnumFieldItem::accept(ItemVisitor& visitor) const
-{
-    visitor.visit(*this);
-}
-
-FixedLenUEnumFieldItem::FixedLenUEnumFieldItem() noexcept :
-    FixedLenUIntFieldItem {Type::FIXED_LEN_UENUM_FIELD}
-{
-}
-
-void FixedLenUEnumFieldItem::accept(ItemVisitor& visitor) const
-{
-    visitor.visit(*this);
-}
-
 FixedLenFloatFieldItem::FixedLenFloatFieldItem() noexcept :
-    FixedLenBitArrayFieldItem {Type::FIXED_LEN_FLOAT_FIELD}
+    FixedLenBitArrayFieldItem {Type::FixedLenFloatField}
 {
 }
 
@@ -240,7 +230,7 @@ VarLenSIntFieldItem::VarLenSIntFieldItem(const Type type) noexcept : VarLenIntFi
 {
 }
 
-VarLenSIntFieldItem::VarLenSIntFieldItem() noexcept : VarLenSIntFieldItem {Type::VAR_LEN_SINT_FIELD}
+VarLenSIntFieldItem::VarLenSIntFieldItem() noexcept : VarLenSIntFieldItem {Type::VarLenSIntField}
 {
 }
 
@@ -253,7 +243,7 @@ VarLenUIntFieldItem::VarLenUIntFieldItem(const Type type) noexcept : VarLenIntFi
 {
 }
 
-VarLenUIntFieldItem::VarLenUIntFieldItem() noexcept : VarLenUIntFieldItem {Type::VAR_LEN_UINT_FIELD}
+VarLenUIntFieldItem::VarLenUIntFieldItem() noexcept : VarLenUIntFieldItem {Type::VarLenUIntField}
 {
 }
 
@@ -262,28 +252,8 @@ void VarLenUIntFieldItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-VarLenSEnumFieldItem::VarLenSEnumFieldItem() noexcept :
-    VarLenSIntFieldItem {Type::VAR_LEN_SENUM_FIELD}
-{
-}
-
-void VarLenSEnumFieldItem::accept(ItemVisitor& visitor) const
-{
-    visitor.visit(*this);
-}
-
-VarLenUEnumFieldItem::VarLenUEnumFieldItem() noexcept :
-    VarLenUIntFieldItem {Type::VAR_LEN_UENUM_FIELD}
-{
-}
-
-void VarLenUEnumFieldItem::accept(ItemVisitor& visitor) const
-{
-    visitor.visit(*this);
-}
-
 NullTerminatedStrFieldBeginItem::NullTerminatedStrFieldBeginItem() noexcept :
-    BeginItem {Type::NULL_TERMINATED_STR_FIELD_BEGIN}
+    BeginItem {Type::NullTerminatedStrFieldBegin}
 {
 }
 
@@ -293,7 +263,7 @@ void NullTerminatedStrFieldBeginItem::accept(ItemVisitor& visitor) const
 }
 
 NullTerminatedStrFieldEndItem::NullTerminatedStrFieldEndItem() noexcept :
-    EndItem {Type::NULL_TERMINATED_STR_FIELD_END}
+    EndItem {Type::NullTerminatedStrFieldEnd}
 {
 }
 
@@ -302,20 +272,11 @@ void NullTerminatedStrFieldEndItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-StrFieldSubstrItem::StrFieldSubstrItem() noexcept : Item {Type::STR_FIELD_SUBSTR}
+RawDataItem::RawDataItem() noexcept : Item {Type::RawData}
 {
 }
 
-void StrFieldSubstrItem::accept(ItemVisitor& visitor) const
-{
-    visitor.visit(*this);
-}
-
-BlobFieldSectionItem::BlobFieldSectionItem() noexcept : Item {Type::BLOB_FIELD_SECTION}
-{
-}
-
-void BlobFieldSectionItem::accept(ItemVisitor& visitor) const
+void RawDataItem::accept(ItemVisitor& visitor) const
 {
     visitor.visit(*this);
 }
@@ -329,7 +290,7 @@ ArrayFieldEndItem::ArrayFieldEndItem(const Type type) noexcept : EndItem {type}
 }
 
 StaticLenArrayFieldBeginItem::StaticLenArrayFieldBeginItem() noexcept :
-    ArrayFieldBeginItem {Type::STATIC_LEN_ARRAY_FIELD_BEGIN}
+    ArrayFieldBeginItem {Type::StaticLenArrayFieldBegin}
 {
 }
 
@@ -339,7 +300,7 @@ void StaticLenArrayFieldBeginItem::accept(ItemVisitor& visitor) const
 }
 
 StaticLenArrayFieldEndItem::StaticLenArrayFieldEndItem() noexcept :
-    ArrayFieldEndItem {Type::STATIC_LEN_ARRAY_FIELD_END}
+    ArrayFieldEndItem {Type::StaticLenArrayFieldEnd}
 {
 }
 
@@ -349,7 +310,7 @@ void StaticLenArrayFieldEndItem::accept(ItemVisitor& visitor) const
 }
 
 DynLenArrayFieldBeginItem::DynLenArrayFieldBeginItem() noexcept :
-    ArrayFieldBeginItem {Type::DYN_LEN_ARRAY_FIELD_BEGIN}
+    ArrayFieldBeginItem {Type::DynLenArrayFieldBegin}
 {
 }
 
@@ -359,7 +320,7 @@ void DynLenArrayFieldBeginItem::accept(ItemVisitor& visitor) const
 }
 
 DynLenArrayFieldEndItem::DynLenArrayFieldEndItem() noexcept :
-    ArrayFieldEndItem {Type::DYN_LEN_ARRAY_FIELD_END}
+    ArrayFieldEndItem {Type::DynLenArrayFieldEnd}
 {
 }
 
@@ -369,7 +330,7 @@ void DynLenArrayFieldEndItem::accept(ItemVisitor& visitor) const
 }
 
 StaticLenStrFieldBeginItem::StaticLenStrFieldBeginItem() noexcept :
-    NonNullTerminatedStrFieldBeginItem {Type::STATIC_LEN_STR_FIELD_BEGIN}
+    NonNullTerminatedStrFieldBeginItem {Type::StaticLenStrFieldBegin}
 {
 }
 
@@ -379,7 +340,7 @@ void StaticLenStrFieldBeginItem::accept(ItemVisitor& visitor) const
 }
 
 StaticLenStrFieldEndItem::StaticLenStrFieldEndItem() noexcept :
-    NonNullTerminatedStrFieldEndItem {Type::STATIC_LEN_STR_FIELD_END}
+    NonNullTerminatedStrFieldEndItem {Type::StaticLenStrFieldEnd}
 {
 }
 
@@ -389,7 +350,7 @@ void StaticLenStrFieldEndItem::accept(ItemVisitor& visitor) const
 }
 
 DynLenStrFieldBeginItem::DynLenStrFieldBeginItem() noexcept :
-    NonNullTerminatedStrFieldBeginItem {Type::DYN_LEN_STR_FIELD_BEGIN}
+    NonNullTerminatedStrFieldBeginItem {Type::DynLenStrFieldBegin}
 {
 }
 
@@ -399,7 +360,7 @@ void DynLenStrFieldBeginItem::accept(ItemVisitor& visitor) const
 }
 
 DynLenStrFieldEndItem::DynLenStrFieldEndItem() noexcept :
-    NonNullTerminatedStrFieldEndItem {Type::DYN_LEN_STR_FIELD_END}
+    NonNullTerminatedStrFieldEndItem {Type::DynLenStrFieldEnd}
 {
 }
 
@@ -409,7 +370,7 @@ void DynLenStrFieldEndItem::accept(ItemVisitor& visitor) const
 }
 
 StaticLenBlobFieldBeginItem::StaticLenBlobFieldBeginItem() noexcept :
-    BlobFieldBeginItem {Type::STATIC_LEN_BLOB_FIELD_BEGIN}
+    BlobFieldBeginItem {Type::StaticLenBlobFieldBegin}
 {
 }
 
@@ -419,7 +380,7 @@ void StaticLenBlobFieldBeginItem::accept(ItemVisitor& visitor) const
 }
 
 StaticLenBlobFieldEndItem::StaticLenBlobFieldEndItem() noexcept :
-    BlobFieldEndItem {Type::STATIC_LEN_BLOB_FIELD_END}
+    BlobFieldEndItem {Type::StaticLenBlobFieldEnd}
 {
 }
 
@@ -429,7 +390,7 @@ void StaticLenBlobFieldEndItem::accept(ItemVisitor& visitor) const
 }
 
 DynLenBlobFieldBeginItem::DynLenBlobFieldBeginItem() noexcept :
-    BlobFieldBeginItem {Type::DYN_LEN_BLOB_FIELD_BEGIN}
+    BlobFieldBeginItem {Type::DynLenBlobFieldBegin}
 {
 }
 
@@ -439,7 +400,7 @@ void DynLenBlobFieldBeginItem::accept(ItemVisitor& visitor) const
 }
 
 DynLenBlobFieldEndItem::DynLenBlobFieldEndItem() noexcept :
-    BlobFieldEndItem {Type::DYN_LEN_BLOB_FIELD_END}
+    BlobFieldEndItem {Type::DynLenBlobFieldEnd}
 {
 }
 
@@ -448,7 +409,7 @@ void DynLenBlobFieldEndItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-StructFieldBeginItem::StructFieldBeginItem() noexcept : BeginItem {Type::STRUCT_FIELD_BEGIN}
+StructFieldBeginItem::StructFieldBeginItem() noexcept : BeginItem {Type::StructFieldBegin}
 {
 }
 
@@ -457,7 +418,7 @@ void StructFieldBeginItem::accept(ItemVisitor& visitor) const
     visitor.visit(*this);
 }
 
-StructFieldEndItem::StructFieldEndItem() noexcept : EndItem {Type::STRUCT_FIELD_END}
+StructFieldEndItem::StructFieldEndItem() noexcept : EndItem {Type::StructFieldEnd}
 {
 }
 
@@ -503,7 +464,7 @@ OptionalFieldEndItem::OptionalFieldEndItem(const Type type) noexcept : EndItem {
 }
 
 OptionalFieldWithBoolSelBeginItem::OptionalFieldWithBoolSelBeginItem() noexcept :
-    OptionalFieldBeginItem {Item::Type::OPTIONAL_FIELD_WITH_BOOL_SEL_BEGIN}
+    OptionalFieldBeginItem {Item::Type::OptionalFieldWithBoolSelBegin}
 {
 }
 
@@ -513,7 +474,7 @@ void OptionalFieldWithBoolSelBeginItem::accept(ItemVisitor& visitor) const
 }
 
 OptionalFieldWithBoolSelEndItem::OptionalFieldWithBoolSelEndItem() noexcept :
-    OptionalFieldEndItem {Item::Type::OPTIONAL_FIELD_WITH_BOOL_SEL_END}
+    OptionalFieldEndItem {Item::Type::OptionalFieldWithBoolSelEnd}
 {
 }
 

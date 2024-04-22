@@ -1,11 +1,11 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Copyright 2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright 2022-2024 Philippe Proulx <pproulx@efficios.com>
  */
 
-#ifndef _CTF_CTF_IR_HPP
-#define _CTF_CTF_IR_HPP
+#ifndef CTF_COMMON_METADATA_CTF_IR_HPP
+#define CTF_COMMON_METADATA_CTF_IR_HPP
 
 #include <algorithm>
 #include <memory>
@@ -21,6 +21,7 @@
 #include "cpp-common/bt2c/data-len.hpp"
 #include "cpp-common/bt2c/uuid.hpp"
 #include "cpp-common/bt2s/make-unique.hpp"
+#include "cpp-common/vendor/wise-enum/wise_enum.h"
 
 #include "int-range-set.hpp"
 
@@ -31,88 +32,87 @@ namespace ir {
  * This is the common CTF IR API, that is, the intermediate
  * representation of CTF metadata objects for the whole `ctf` plugin.
  *
- * Class hierarchy
- * ═══════════════
+ * CLASS HIERARCHY
+ * ━━━━━━━━━━━━━━━
  * The class hierarchy (omitting template parameters) is as such:
  *
- *    TraceCls
- *    DataStreamCls
- *    EventRecordCls
- *    ClkCls
- *    FieldLoc
- *    StructFieldMemberCls
- *    VariantFcOpt
- *    Fc
- *      FixedLengthBitArrayFc
- *        FixedLengthBoolFc
- *        FixedLengthFloatFc
- *        FixedLengthIntFc
- *          FixedLengthUIntFc
- *            FixedLengthUEnumFc
- *          FixedLengthSIntFc
- *            FixedLengthSEnumFc
- *      VarLengthIntFc
- *        VarLengthUIntFc
- *          VarLengthUEnumFc
- *        VarLengthSIntFc
- *          FixedLengthSEnumFc
- *      NullTerminatedStrFc
- *      NonNullTerminatedStrFc
- *        StaticLenStrFc
- *        DynLenStrFc
- *      BlobFc
- *        StaticLenBlobFc
- *        DynLenBlobFc
- *      ArrayFc
- *        StaticLenArrayFc
- *        DynLenArrayFc
- *      StructFc
- *      OptionalFc
- *        OptionalWithBoolSelFc
- *        OptionalWithIntSelFc
- *          OptionalWithUIntSelFc
- *          OptionalWithSIntSelFc
- *      VariantFc
- *        VariantWithUIntSelFc
- *        VariantWithSIntSelFc
+ *     TraceCls
+ *     DataStreamCls
+ *     EventRecordCls
+ *     ClkCls
+ *     FieldLoc
+ *     StructFieldMemberCls
+ *     VariantFcOpt
+ *     Fc
+ *       FixedLengthBitArrayFc
+ *         FixedLengthBitMapFc
+ *         FixedLengthBoolFc
+ *         FixedLengthFloatFc
+ *         FixedLengthIntFc
+ *           FixedLengthUIntFc
+ *           FixedLengthSIntFc
+ *       VarLengthIntFc
+ *         VarLengthUIntFc
+ *         VarLengthSIntFc
+ *       StrFc
+ *         NullTerminatedStrFc
+ *         NonNullTerminatedStrFc
+ *           StaticLenStrFc
+ *           DynLenStrFc
+ *       BlobFc
+ *         StaticLenBlobFc
+ *         DynLenBlobFc
+ *       ArrayFc
+ *         StaticLenArrayFc
+ *         DynLenArrayFc
+ *       StructFc
+ *       OptionalFc
+ *         OptionalWithBoolSelFc
+ *         OptionalWithIntSelFc
+ *           OptionalWithUIntSelFc
+ *           OptionalWithSIntSelFc
+ *       VariantFc
+ *         VariantWithUIntSelFc
+ *         VariantWithSIntSelFc
  *
  * The `FcVisitor` and `ConstFcVisitor` base classes are available to
  * visit field classes through the virtual Fc::accept() methods.
  *
  * Each class template has the `UserMixinsT` template parameter.
  *
- * User mixins
- * ═══════════
+ * USER MIXINS
+ * ━━━━━━━━━━━
  * `UserMixinsT` is expected to be a user mixin container, a type which
  * defines the following nested types (user mixins):
  *
- * • `FieldLoc`
+ * • `ClkCls`
+ * • `DataStreamCls`
+ * • `DynLenArrayFc`
+ * • `DynLenBlobFc`
+ * • `DynLenStrFc`
+ * • `EventRecordCls`
  * • `Fc`
+ * • `FieldLoc`
  * • `FixedLenBitArrayFc`
+ * • `FixedLenBitMapFc`
  * • `FixedLenBoolFc`
  * • `FixedLenIntFc`
  * • `FixedLenUIntFc`
- * • `VarLenIntFc`
- * • `VarLenUIntFc`
- * • `StaticLenStrFc`
- * • `DynLenStrFc`
- * • `StaticLenBlobFc`
- * • `DynLenBlobFc`
- * • `StaticLenArrayFc`
- * • `DynLenArrayFc`
- * • `StructFieldMemberCls`
- * • `StructFc`
  * • `OptionalFc`
  * • `OptionalWithBoolSelFc`
- * • `OptionalWithUIntSelFc`
  * • `OptionalWithSIntSelFc`
- * • `VariantFcOpt`
- * • `VariantWithUIntSelFc`
- * • `VariantWithSIntSelFc`
- * • `ClkCls`
- * • `EventRecordCls`
- * • `DataStreamCls`
+ * • `OptionalWithUIntSelFc`
+ * • `StaticLenArrayFc`
+ * • `StaticLenBlobFc`
+ * • `StaticLenStrFc`
+ * • `StructFc`
+ * • `StructFieldMemberCls`
  * • `TraceCls`
+ * • `VariantFcOpt`
+ * • `VariantWithSIntSelFc`
+ * • `VariantWithUIntSelFc`
+ * • `VarLenIntFc`
+ * • `VarLenUIntFc`
  *
  * Most class templates inherit a given user mixin. For example,
  * `FixedLenBoolFc` inherits `UserMixinsT::FixedLenBoolFc`. This makes
@@ -126,35 +126,38 @@ namespace ir {
  * If a class template C which inherits a user mixin also inherits
  * another class template inheriting another user mixin, then the
  * constructor of C accepts both mixins. For example,
- * FixedLenUEnumFc::FixedLenUEnumFc() accepts four mixins: field class,
- * fixed-length bit array field class, fixed-length integer field class,
- * and fixed-length unsigned integer field class.
+ * FixedLenUIntFc::FixedLenUIntFc() accepts three mixins: field class,
+ * fixed-length bit array field class, and fixed-length integer
+ * field class.
  *
- * A mixin must be copy-constructible to make the Fc::clone() method
- * work.
+ * A mixin must be copy-constructible to make the Fc::clone()
+ * method work.
  *
  * The API offers `DefUserMixins` which defines empty user mixins to act
  * as a base user mixin container structure.
  *
- * Usage
- * ═════
+ * USAGE
+ * ━━━━━
  * This is how you would use this API:
  *
  * • Define your own user mixin container structure which inherits
  *   `DefUserMixins`, defining the user mixins you need to add data and
  *   methods to specific common classes.
  *
- * • Define aliases for each `ctf::ir` class template you need, using
- *   your user mixin container structure as the `UserMixinsT` template
- *   parameter.
+ * • Define aliases for each `ctf::ir` type you need, using your user
+ *   mixin container structure as the `UserMixinsT` template parameter
+ *   when needed.
  *
  * • Create convenient object creation functions to construct specific
- *   CTF IR objects from parameters, hiding the internal user mixin
- *   details.
+ *   CTF IR objects from parameters, hiding the internal user
+ *   mixin details.
  */
 
 template <typename UserMixinsT>
 class FixedLenBitArrayFc;
+
+template <typename UserMixinsT>
+class FixedLenBitMapFc;
 
 template <typename UserMixinsT>
 class FixedLenBoolFc;
@@ -172,12 +175,6 @@ template <typename UserMixinsT>
 class FixedLenSIntFc;
 
 template <typename UserMixinsT>
-class FixedLenSEnumFc;
-
-template <typename UserMixinsT>
-class FixedLenUEnumFc;
-
-template <typename UserMixinsT>
 class VarLenIntFc;
 
 template <typename UserMixinsT>
@@ -187,10 +184,7 @@ template <typename UserMixinsT>
 class VarLenUIntFc;
 
 template <typename UserMixinsT>
-class VarLenSEnumFc;
-
-template <typename UserMixinsT>
-class VarLenUEnumFc;
+class StrFc;
 
 template <typename UserMixinsT>
 class NullTerminatedStrFc;
@@ -261,6 +255,10 @@ public:
     {
     }
 
+    virtual void visit(FixedLenBitMapFc<UserMixinsT>&)
+    {
+    }
+
     virtual void visit(FixedLenBoolFc<UserMixinsT>&)
     {
     }
@@ -277,27 +275,11 @@ public:
     {
     }
 
-    virtual void visit(FixedLenSEnumFc<UserMixinsT>&)
-    {
-    }
-
-    virtual void visit(FixedLenUEnumFc<UserMixinsT>&)
-    {
-    }
-
     virtual void visit(VarLenSIntFc<UserMixinsT>&)
     {
     }
 
     virtual void visit(VarLenUIntFc<UserMixinsT>&)
-    {
-    }
-
-    virtual void visit(VarLenSEnumFc<UserMixinsT>&)
-    {
-    }
-
-    virtual void visit(VarLenUEnumFc<UserMixinsT>&)
     {
     }
 
@@ -372,6 +354,10 @@ public:
     {
     }
 
+    virtual void visit(const FixedLenBitMapFc<UserMixinsT>&)
+    {
+    }
+
     virtual void visit(const FixedLenBoolFc<UserMixinsT>&)
     {
     }
@@ -388,27 +374,11 @@ public:
     {
     }
 
-    virtual void visit(const FixedLenSEnumFc<UserMixinsT>&)
-    {
-    }
-
-    virtual void visit(const FixedLenUEnumFc<UserMixinsT>&)
-    {
-    }
-
     virtual void visit(const VarLenSIntFc<UserMixinsT>&)
     {
     }
 
     virtual void visit(const VarLenUIntFc<UserMixinsT>&)
-    {
-    }
-
-    virtual void visit(const VarLenSEnumFc<UserMixinsT>&)
-    {
-    }
-
-    virtual void visit(const VarLenUEnumFc<UserMixinsT>&)
     {
     }
 
@@ -465,6 +435,8 @@ public:
     }
 };
 
+namespace internal {
+
 /* clang-format off */
 
 /*
@@ -473,68 +445,119 @@ public:
  * (traits/features). The isXyz() methods only check if specific bits of
  * the field class type are set.
  */
-struct FcTypeTraits
+struct FcTypeTraits final
 {
     enum {
-        FIXED_OR_STATIC_LEN = 1 << 0,
-        VAR_OR_DYN_LEN      = 1 << 1,
-        BIT_ARRAY           = 1 << 2,
-        BOOL                = 1 << 3,
-        INT                 = 1 << 4,
-        UINT                = (1 << 5) | INT,
-        SINT                = (1 << 6) | INT,
-        ENUM                = (1 << 7) | INT,
-        FLOAT               = 1 << 8,
-        NULL_TERMINATED     = 1 << 9,
-        NON_NULL_TERMINATED = 1 << 10,
-        BLOB                = 1 << 11,
-        ARRAY               = 1 << 12,
-        STRUCT              = 1 << 13,
-        BOOL_SEL            = 1 << 14,
-        INT_SEL             = 1 << 15,
-        UINT_SEL            = (1 << 16) | INT_SEL,
-        SINT_SEL            = (1 << 17) | INT_SEL,
-        OPTION              = 1 << 18,
-        VARIANT             = 1 << 19
+        FixedOrStaticLen    = 1 << 0,
+        VarOrDynLen         = 1 << 1,
+        BitArray            = 1 << 2,
+        BitMap              = 1 << 3,
+        Bool                = 1 << 4,
+        Int                 = 1 << 5,
+        UInt                = (1 << 6) | Int,
+        SInt                = (1 << 7) | Int,
+        Float               = 1 << 8,
+        Str                 = 1 << 9,
+        NullTerminated      = 1 << 10,
+        NonNullTerminated   = 1 << 11,
+        Blob                = 1 << 12,
+        Array               = 1 << 13,
+        Struct              = 1 << 14,
+        BoolSel             = 1 << 15,
+        IntSel              = 1 << 16,
+        UIntSel             = (1 << 17) | IntSel,
+        SIntSel             = (1 << 18) | IntSel,
+        Optional            = 1 << 19,
+        Variant             = 1 << 20,
     };
 };
+
+/* clang-format on */
+
+} /* namespace internal */
+
+/* clang-format off */
 
 /*
  * Field class type.
  */
-enum class FcType
-{
-    FIXED_LEN_BIT_ARRAY     = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY,
-    FIXED_LEN_BOOL          = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::BOOL,
-    FIXED_LEN_UINT          = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::UINT,
-    FIXED_LEN_SINT          = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::SINT,
-    FIXED_LEN_UENUM         = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::ENUM | FcTypeTraits::UINT,
-    FIXED_LEN_SENUM         = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::ENUM | FcTypeTraits::SINT,
-    FIXED_LEN_FLOAT         = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY | FcTypeTraits::FLOAT,
-    VAR_LEN_UINT            = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::UINT,
-    VAR_LEN_SINT            = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::SINT,
-    VAR_LEN_UENUM           = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::ENUM | FcTypeTraits::UINT,
-    VAR_LEN_SENUM           = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::ENUM | FcTypeTraits::SINT,
-    NULL_TERMINATED_STR     = FcTypeTraits::NULL_TERMINATED,
-    STATIC_LEN_STR          = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::NON_NULL_TERMINATED,
-    DYN_LEN_STR             = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::NON_NULL_TERMINATED,
-    STATIC_LEN_BLOB         = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BLOB,
-    DYN_LEN_BLOB            = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::BLOB,
-    STATIC_LEN_ARRAY        = FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::ARRAY,
-    DYN_LEN_ARRAY           = FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::ARRAY,
-    STRUCT                  = FcTypeTraits::STRUCT,
-    OPTIONAL_WITH_BOOL_SEL  = FcTypeTraits::OPTION | FcTypeTraits::BOOL_SEL,
-    OPTIONAL_WITH_UINT_SEL  = FcTypeTraits::OPTION | FcTypeTraits::UINT_SEL,
-    OPTIONAL_WITH_SINT_SEL  = FcTypeTraits::OPTION | FcTypeTraits::SINT_SEL,
-    VARIANT_WITH_UINT_SEL   = FcTypeTraits::VARIANT | FcTypeTraits::UINT_SEL,
-    VARIANT_WITH_SINT_SEL   = FcTypeTraits::VARIANT | FcTypeTraits::SINT_SEL,
-};
+WISE_ENUM_CLASS(FcType,
+    (FixedLenBitArray,      internal::FcTypeTraits::FixedOrStaticLen |
+                            internal::FcTypeTraits::BitArray),
+
+    (FixedLenBitMap,        internal::FcTypeTraits::FixedOrStaticLen |
+                            internal::FcTypeTraits::BitArray |
+                            internal::FcTypeTraits::BitMap),
+
+    (FixedLenBool,          internal::FcTypeTraits::FixedOrStaticLen |
+                            internal::FcTypeTraits::BitArray |
+                            internal::FcTypeTraits::Bool),
+
+    (FixedLenUInt,          internal::FcTypeTraits::FixedOrStaticLen |
+                            internal::FcTypeTraits::BitArray |
+                            internal::FcTypeTraits::UInt),
+
+    (FixedLenSInt,          internal::FcTypeTraits::FixedOrStaticLen |
+                            internal::FcTypeTraits::BitArray |
+                            internal::FcTypeTraits::SInt),
+
+    (FixedLenFloat,         internal::FcTypeTraits::FixedOrStaticLen |
+                            internal::FcTypeTraits::BitArray |
+                            internal::FcTypeTraits::Float),
+
+    (VarLenUInt,            internal::FcTypeTraits::VarOrDynLen |
+                            internal::FcTypeTraits::UInt),
+
+    (VarLenSInt,            internal::FcTypeTraits::VarOrDynLen |
+                            internal::FcTypeTraits::SInt),
+
+    (NullTerminatedStr,     internal::FcTypeTraits::NullTerminated |
+                            internal::FcTypeTraits::Str),
+
+    (StaticLenStr,          internal::FcTypeTraits::FixedOrStaticLen |
+                            internal::FcTypeTraits::NonNullTerminated |
+                            internal::FcTypeTraits::Str),
+
+    (DynLenStr,             internal::FcTypeTraits::VarOrDynLen |
+                            internal::FcTypeTraits::NonNullTerminated |
+                            internal::FcTypeTraits::Str),
+
+    (StaticLenBlob,         internal::FcTypeTraits::FixedOrStaticLen |
+                            internal::FcTypeTraits::Blob),
+
+    (DynLenBlob,            internal::FcTypeTraits::VarOrDynLen |
+                            internal::FcTypeTraits::Blob),
+
+    (StaticLenArray,        internal::FcTypeTraits::FixedOrStaticLen |
+                            internal::FcTypeTraits::Array),
+
+    (DynLenArray,           internal::FcTypeTraits::VarOrDynLen |
+                            internal::FcTypeTraits::Array),
+
+    (Struct,                internal::FcTypeTraits::Struct),
+
+    (OptionalWithBoolSel,   internal::FcTypeTraits::Optional |
+                            internal::FcTypeTraits::BoolSel),
+
+    (OptionalWithUIntSel,   internal::FcTypeTraits::Optional |
+                            internal::FcTypeTraits::UIntSel),
+
+    (OptionalWithSIntSel,   internal::FcTypeTraits::Optional |
+                            internal::FcTypeTraits::SIntSel),
+
+    (VariantWithUIntSel,    internal::FcTypeTraits::Variant |
+                            internal::FcTypeTraits::UIntSel),
+
+    (VariantWithSIntSel,    internal::FcTypeTraits::Variant |
+                            internal::FcTypeTraits::SIntSel)
+)
+
 /* clang-format on */
 
 /*
- * Optional user attributes.
+ * Optional attributes.
  */
-using OptUserAttrs = bt2::ConstMapValue::Shared;
+using OptAttrs = bt2::ConstMapValue::Shared;
 
 namespace internal {
 
@@ -549,7 +572,7 @@ public:
     /*
      * Equivalent libbabeltrace2 class (borrowed).
      */
-    const bt2::OptionalBorrowedObject<ClsT>& libCls() const noexcept
+    const bt2::OptionalBorrowedObject<ClsT> libCls() const noexcept
     {
         return _mLibCls;
     }
@@ -557,7 +580,7 @@ public:
     /*
      * Equivalent libbabeltrace2 class (borrowed).
      */
-    bt2::OptionalBorrowedObject<ClsT>& libCls() noexcept
+    bt2::OptionalBorrowedObject<ClsT> libCls() noexcept
     {
         return _mLibCls;
     }
@@ -576,27 +599,36 @@ private:
 };
 
 /*
- * Internal mixin for classes with user attributes.
+ * Internal mixin for classes with attributes.
  */
-class WithUserAttrsMixin
+class WithAttrsMixin
 {
 protected:
-    explicit WithUserAttrsMixin(OptUserAttrs userAttrs) : _mUserAttrs {std::move(userAttrs)}
+    explicit WithAttrsMixin(OptAttrs attrs) : _mAttrs {std::move(attrs)}
     {
     }
 
 public:
     /*
-     * User attributes of this object.
+     * Attributes of this object.
      */
-    const OptUserAttrs& userAttrs() const noexcept
+    const OptAttrs& attrs() const noexcept
     {
-        return _mUserAttrs;
+        return _mAttrs;
+    }
+
+protected:
+    /*
+     * Moves the attributes to the caller.
+     */
+    OptAttrs _takeAttrs() noexcept
+    {
+        return std::move(_mAttrs);
     }
 
 private:
-    /* User attributes of this object */
-    OptUserAttrs _mUserAttrs;
+    /* Attributes of this object */
+    OptAttrs _mAttrs;
 };
 
 } /* namespace internal */
@@ -606,12 +638,12 @@ private:
  *
  * Specific properties:
  *
- * • Alignment of field class instances.
- * • User attributes.
+ * • Alignment of instances.
+ * • Attributes.
  */
 template <typename UserMixinsT>
 class Fc :
-    public internal::WithUserAttrsMixin,
+    public internal::WithAttrsMixin,
     public internal::WithLibCls<bt2::FieldClass>,
     public UserMixinsT::Fc
 {
@@ -621,8 +653,8 @@ public:
 
 protected:
     explicit Fc(const FcType type, typename UserMixinsT::Fc mixin, const unsigned int align,
-                OptUserAttrs&& userAttrs) :
-        internal::WithUserAttrsMixin {std::move(userAttrs)},
+                OptAttrs&& attrs) :
+        internal::WithAttrsMixin {std::move(attrs)},
         UserMixinsT::Fc {std::move(mixin)}, _mType {type}, _mAlign {align}
     {
     }
@@ -650,6 +682,14 @@ public:
     }
 
     /*
+     * Moves the attributes of this field class to the caller.
+     */
+    OptAttrs takeAttrs() noexcept
+    {
+        return this->_takeAttrs();
+    }
+
+    /*
      * Clones this field class and returns the clone.
      */
     virtual UP clone() const = 0;
@@ -667,6 +707,8 @@ public:
     /* Casting methods below */
     FixedLenBitArrayFc<UserMixinsT>& asFixedLenBitArray() noexcept;
     const FixedLenBitArrayFc<UserMixinsT>& asFixedLenBitArray() const noexcept;
+    FixedLenBitMapFc<UserMixinsT>& asFixedLenBitMap() noexcept;
+    const FixedLenBitMapFc<UserMixinsT>& asFixedLenBitMap() const noexcept;
     FixedLenBoolFc<UserMixinsT>& asFixedLenBool() noexcept;
     const FixedLenBoolFc<UserMixinsT>& asFixedLenBool() const noexcept;
     FixedLenFloatFc<UserMixinsT>& asFixedLenFloat() noexcept;
@@ -677,20 +719,14 @@ public:
     const FixedLenSIntFc<UserMixinsT>& asFixedLenSInt() const noexcept;
     FixedLenUIntFc<UserMixinsT>& asFixedLenUInt() noexcept;
     const FixedLenUIntFc<UserMixinsT>& asFixedLenUInt() const noexcept;
-    FixedLenSEnumFc<UserMixinsT>& asFixedLenSEnum() noexcept;
-    const FixedLenSEnumFc<UserMixinsT>& asFixedLenSEnum() const noexcept;
-    FixedLenUEnumFc<UserMixinsT>& asFixedLenUEnum() noexcept;
-    const FixedLenUEnumFc<UserMixinsT>& asFixedLenUEnum() const noexcept;
     VarLenIntFc<UserMixinsT>& asVarLenInt() noexcept;
     const VarLenIntFc<UserMixinsT>& asVarLenInt() const noexcept;
     VarLenUIntFc<UserMixinsT>& asVarLenUInt() noexcept;
     const VarLenUIntFc<UserMixinsT>& asVarLenUInt() const noexcept;
     VarLenSIntFc<UserMixinsT>& asVarLenSInt() noexcept;
     const VarLenSIntFc<UserMixinsT>& asVarLenSInt() const noexcept;
-    VarLenUEnumFc<UserMixinsT>& asVarLenUEnum() noexcept;
-    const VarLenUEnumFc<UserMixinsT>& asVarLenUEnum() const noexcept;
-    VarLenSEnumFc<UserMixinsT>& asVarLenSEnum() noexcept;
-    const VarLenSEnumFc<UserMixinsT>& asVarLenSEnum() const noexcept;
+    StrFc<UserMixinsT>& asStr() noexcept;
+    const StrFc<UserMixinsT>& asStr() const noexcept;
     NullTerminatedStrFc<UserMixinsT>& asNullTerminatedStr() noexcept;
     const NullTerminatedStrFc<UserMixinsT>& asNullTerminatedStr() const noexcept;
     NonNullTerminatedStrFc<UserMixinsT>& asNonNullTerminatedStr() noexcept;
@@ -728,192 +764,171 @@ public:
 
     bool isFixedLenBitArray() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::BIT_ARRAY);
+        return this->_hasTypeTrait(internal::FcTypeTraits::FixedOrStaticLen |
+                                   internal::FcTypeTraits::BitArray);
+    }
+
+    bool isFixedLenBitMap() const noexcept
+    {
+        return _mType == Type::FixedLenBitMap;
     }
 
     bool isFixedLenBool() const noexcept
     {
-        return this->_mType == Type::FIXED_LEN_BOOL;
+        return _mType == Type::FixedLenBool;
     }
 
     bool isFixedLenFloat() const noexcept
     {
-        return this->_mType == Type::FIXED_LEN_FLOAT;
+        return _mType == Type::FixedLenFloat;
     }
 
     bool isInt() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::INT);
+        return this->_hasTypeTrait(internal::FcTypeTraits::Int);
     }
 
     bool isUInt() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::UINT);
+        return this->_hasTypeTrait(internal::FcTypeTraits::UInt);
     }
 
     bool isSInt() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::SINT);
+        return this->_hasTypeTrait(internal::FcTypeTraits::SInt);
     }
 
     bool isFixedLenInt() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::INT);
+        return this->_hasTypeTrait(internal::FcTypeTraits::FixedOrStaticLen |
+                                   internal::FcTypeTraits::Int);
     }
 
     bool isFixedLenUInt() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::UINT);
+        return _mType == Type::FixedLenUInt;
     }
 
     bool isFixedLenSInt() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::SINT);
-    }
-
-    bool isEnum() const noexcept
-    {
-        return this->_hasTypeTrait(FcTypeTraits::ENUM);
-    }
-
-    bool isFixedLenEnum() const noexcept
-    {
-        return this->_hasTypeTrait(FcTypeTraits::FIXED_OR_STATIC_LEN | FcTypeTraits::ENUM);
-    }
-
-    bool isFixedLenUEnum() const noexcept
-    {
-        return _mType == Type::FIXED_LEN_UENUM;
-    }
-
-    bool isFixedLenSEnum() const noexcept
-    {
-        return _mType == Type::FIXED_LEN_SENUM;
+        return _mType == Type::FixedLenSInt;
     }
 
     bool isVarLenInt() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::INT);
+        return this->_hasTypeTrait(internal::FcTypeTraits::VarOrDynLen |
+                                   internal::FcTypeTraits::Int);
     }
 
     bool isVarLenUInt() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::UINT);
+        return _mType == Type::VarLenUInt;
     }
 
     bool isVarLenSInt() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::SINT);
+        return _mType == Type::VarLenSInt;
     }
 
-    bool isVarLenEnum() const noexcept
+    bool isStr() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::VAR_OR_DYN_LEN | FcTypeTraits::ENUM);
-    }
-
-    bool isVarLenUEnum() const noexcept
-    {
-        return _mType == Type::VAR_LEN_UENUM;
-    }
-
-    bool isVarLenSEnum() const noexcept
-    {
-        return _mType == Type::VAR_LEN_SENUM;
+        return this->_hasTypeTrait(internal::FcTypeTraits::Str);
     }
 
     bool isNullTerminatedStr() const noexcept
     {
-        return _mType == Type::NULL_TERMINATED_STR;
+        return _mType == Type::NullTerminatedStr;
     }
 
     bool isNonNullTerminatedStr() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::NON_NULL_TERMINATED);
+        return this->_hasTypeTrait(internal::FcTypeTraits::NonNullTerminated);
     }
 
     bool isStaticLenStr() const noexcept
     {
-        return _mType == Type::STATIC_LEN_STR;
+        return _mType == Type::StaticLenStr;
     }
 
     bool isDynLenStr() const noexcept
     {
-        return _mType == Type::DYN_LEN_STR;
+        return _mType == Type::DynLenStr;
     }
 
     bool isBlob() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::BLOB);
+        return this->_hasTypeTrait(internal::FcTypeTraits::Blob);
     }
 
     bool isStaticLenBlob() const noexcept
     {
-        return _mType == Type::STATIC_LEN_BLOB;
+        return _mType == Type::StaticLenBlob;
     }
 
     bool isDynLenBlob() const noexcept
     {
-        return _mType == Type::DYN_LEN_BLOB;
+        return _mType == Type::DynLenBlob;
     }
 
     bool isArray() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::ARRAY);
+        return this->_hasTypeTrait(internal::FcTypeTraits::Array);
     }
 
     bool isStaticLenArray() const noexcept
     {
-        return _mType == Type::STATIC_LEN_ARRAY;
+        return _mType == Type::StaticLenArray;
     }
 
     bool isDynLenArray() const noexcept
     {
-        return _mType == Type::DYN_LEN_ARRAY;
+        return _mType == Type::DynLenArray;
     }
 
     bool isStruct() const noexcept
     {
-        return _mType == Type::STRUCT;
+        return _mType == Type::Struct;
     }
 
     bool isOptional() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::OPTION);
+        return this->_hasTypeTrait(internal::FcTypeTraits::Optional);
     }
 
     bool isOptionalWithBoolSel() const noexcept
     {
-        return _mType == Type::OPTIONAL_WITH_BOOL_SEL;
+        return _mType == Type::OptionalWithBoolSel;
     }
 
     bool isOptionalWithIntSel() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::OPTION | FcTypeTraits::INT_SEL);
+        return this->_hasTypeTrait(internal::FcTypeTraits::Optional |
+                                   internal::FcTypeTraits::IntSel);
     }
 
     bool isOptionalWithUIntSel() const noexcept
     {
-        return _mType == Type::OPTIONAL_WITH_UINT_SEL;
+        return _mType == Type::OptionalWithUIntSel;
     }
 
     bool isOptionalWithSIntSel() const noexcept
     {
-        return _mType == Type::OPTIONAL_WITH_SINT_SEL;
+        return _mType == Type::OptionalWithSIntSel;
     }
 
     bool isVariant() const noexcept
     {
-        return this->_hasTypeTrait(FcTypeTraits::VARIANT);
+        return this->_hasTypeTrait(internal::FcTypeTraits::Variant);
     }
 
     bool isVariantWithUIntSel() const noexcept
     {
-        return _mType == Type::VARIANT_WITH_UINT_SEL;
+        return _mType == Type::VariantWithUIntSel;
     }
 
     bool isVariantWithSIntSel() const noexcept
     {
-        return _mType == Type::VARIANT_WITH_SINT_SEL;
+        return _mType == Type::VariantWithSIntSel;
     }
 
 private:
@@ -934,25 +949,40 @@ private:
     unsigned int _mAlign;
 };
 
+/* clang-format off */
+
 /*
  * Byte order.
  */
-enum class ByteOrder
-{
+WISE_ENUM_CLASS(ByteOrder,
     /* Big-endian */
-    BIG,
+    Big,
 
     /* Little-endian */
-    LITTLE,
-};
+    Little
+)
+
+/*
+ * Bit order.
+ */
+WISE_ENUM_CLASS(BitOrder,
+    /* First to last */
+    FirstToLast,
+
+    /* Last to first */
+    LastToFirst
+)
+
+/* clang-format on */
 
 /*
  * Fixed-length bit array field class.
  *
  * Specific properties over `Fc<UserMixinsT>`:
  *
- * • Length of instances
- * • Byte order of instances
+ * • Length of instances.
+ * • Byte order of instances.
+ * • Bit order of instances.
  */
 template <typename UserMixinsT>
 class FixedLenBitArrayFc : public Fc<UserMixinsT>, public UserMixinsT::FixedLenBitArrayFc
@@ -961,9 +991,13 @@ protected:
     explicit FixedLenBitArrayFc(const FcType type, typename UserMixinsT::Fc fcMixin,
                                 typename UserMixinsT::FixedLenBitArrayFc mixin,
                                 const unsigned int align, const bt2c::DataLen len,
-                                const ByteOrder byteOrder, OptUserAttrs&& userAttrs) :
-        Fc<UserMixinsT> {type, std::move(fcMixin), align, std::move(userAttrs)},
-        UserMixinsT::FixedLenBitArrayFc {std::move(mixin)}, _mLen {len}, _mByteOrder {byteOrder}
+                                const ByteOrder byteOrder, const bt2s::optional<BitOrder>& bitOrder,
+                                OptAttrs&& attrs) :
+        Fc<UserMixinsT> {type, std::move(fcMixin), align, std::move(attrs)},
+        UserMixinsT::FixedLenBitArrayFc {std::move(mixin)}, _mLen {len}, _mByteOrder {byteOrder},
+        _mBitOrder {bitOrder ? *bitOrder :
+                               (byteOrder == ByteOrder::Big ? BitOrder::LastToFirst :
+                                                              BitOrder::FirstToLast)}
     {
         using namespace bt2c::literals::datalen;
 
@@ -976,14 +1010,16 @@ public:
                                 typename UserMixinsT::FixedLenBitArrayFc mixin,
                                 const unsigned int align, const bt2c::DataLen len,
                                 const ByteOrder byteOrder,
-                                OptUserAttrs userAttrs = OptUserAttrs {}) :
-        FixedLenBitArrayFc {FcType::FIXED_LEN_BIT_ARRAY,
+                                const bt2s::optional<BitOrder>& bitOrder = bt2s::nullopt,
+                                OptAttrs attrs = OptAttrs {}) :
+        FixedLenBitArrayFc {FcType::FixedLenBitArray,
                             std::move(fcMixin),
                             std::move(mixin),
                             align,
                             len,
                             byteOrder,
-                            std::move(userAttrs)}
+                            bitOrder,
+                            std::move(attrs)}
     {
     }
 
@@ -1003,10 +1039,42 @@ public:
         return _mByteOrder;
     }
 
+    /*
+     * Bit order of instances of this field class.
+     */
+    BitOrder bitOrder() const noexcept
+    {
+        return _mBitOrder;
+    }
+
+    /*
+     * Returns whether or not the bits of instances of a fixed-length
+     * bit array field class having the byte order `byteOrder` and the
+     * bit order `bitOrder` (deduced from `byteOrder` if
+     * `bt2s::nullopt`) are reversed, that is, in an unnatural way.
+     */
+    static bool isRev(const ByteOrder byteOrder, const bt2s::optional<BitOrder>& bitOrder) noexcept
+    {
+        if (!bitOrder) {
+            return false;
+        }
+
+        return (byteOrder == ByteOrder::Big && *bitOrder == BitOrder::FirstToLast) ||
+               (byteOrder == ByteOrder::Little && *bitOrder == BitOrder::LastToFirst);
+    }
+
+    /*
+     * Like isRev() above, but using the properties of this field class.
+     */
+    bool isRev() const noexcept
+    {
+        return FixedLenBitArrayFc::isRev(_mByteOrder, _mBitOrder);
+    }
+
     typename Fc<UserMixinsT>::UP clone() const override
     {
         return bt2s::make_unique<FixedLenBitArrayFc>(*this, *this, this->align(), _mLen,
-                                                     _mByteOrder, this->userAttrs());
+                                                     _mByteOrder, _mBitOrder, this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -1025,27 +1093,98 @@ private:
 
     /* Byte order of instances of this field class */
     ByteOrder _mByteOrder;
+
+    /* Bit order of instances of this field class */
+    BitOrder _mBitOrder;
+};
+
+/*
+ * Fixed-length bit map field class.
+ *
+ * Specific property over `FixedLenBitArrayFc<UserMixinsT>`:
+ *
+ * • Flags of instances.
+ */
+template <typename UserMixinsT>
+class FixedLenBitMapFc final :
+    public FixedLenBitArrayFc<UserMixinsT>,
+    public UserMixinsT::FixedLenBitMapFc
+{
+public:
+    using Flags = std::unordered_map<std::string, UIntRangeSet>;
+
+    explicit FixedLenBitMapFc(typename UserMixinsT::Fc fcMixin,
+                              typename UserMixinsT::FixedLenBitArrayFc fixedLenBitArrayFcMixin,
+                              typename UserMixinsT::FixedLenBitMapFc mixin,
+                              const unsigned int align, const bt2c::DataLen len,
+                              const ByteOrder byteOrder, Flags flags,
+                              const bt2s::optional<BitOrder>& bitOrder = bt2s::nullopt,
+                              OptAttrs attrs = OptAttrs {}) :
+        FixedLenBitArrayFc<UserMixinsT> {FcType::FixedLenBitMap,
+                                         std::move(fcMixin),
+                                         std::move(fixedLenBitArrayFcMixin),
+                                         align,
+                                         len,
+                                         byteOrder,
+                                         bitOrder,
+                                         std::move(attrs)},
+        UserMixinsT::FixedLenBitMapFc {std::move(mixin)}, _mFlags {std::move(flags)}
+    {
+        BT_ASSERT(!_mFlags.empty());
+    }
+
+    /*
+     * Flags of this fixed-length bit map field class.
+     */
+    const Flags& flags() const noexcept
+    {
+        return _mFlags;
+    }
+
+    typename Fc<UserMixinsT>::UP clone() const override
+    {
+        return bt2s::make_unique<FixedLenBitMapFc>(*this, *this, *this, this->align(), this->len(),
+                                                   this->byteOrder(), _mFlags, this->bitOrder(),
+                                                   this->attrs());
+    }
+
+    void accept(FcVisitor<UserMixinsT>& visitor) override
+    {
+        visitor.visit(*this);
+    }
+
+    void accept(ConstFcVisitor<UserMixinsT>& visitor) const override
+    {
+        visitor.visit(*this);
+    }
+
+private:
+    Flags _mFlags;
 };
 
 /*
  * Fixed-length boolean field class.
  */
 template <typename UserMixinsT>
-class FixedLenBoolFc : public FixedLenBitArrayFc<UserMixinsT>, public UserMixinsT::FixedLenBoolFc
+class FixedLenBoolFc final :
+    public FixedLenBitArrayFc<UserMixinsT>,
+    public UserMixinsT::FixedLenBoolFc
 {
 public:
     explicit FixedLenBoolFc(typename UserMixinsT::Fc fcMixin,
                             typename UserMixinsT::FixedLenBitArrayFc fixedLenBitArrayFcMixin,
                             typename UserMixinsT::FixedLenBoolFc mixin, const unsigned int align,
                             const bt2c::DataLen len, const ByteOrder byteOrder,
-                            OptUserAttrs userAttrs = OptUserAttrs {}) :
-        FixedLenBitArrayFc<UserMixinsT> {FcType::FIXED_LEN_BOOL,
+                            const bt2s::optional<BitOrder>& bitOrder = bt2s::nullopt,
+                            OptAttrs attrs = OptAttrs {}) :
+        FixedLenBitArrayFc<UserMixinsT> {FcType::FixedLenBool,
                                          std::move(fcMixin),
                                          std::move(fixedLenBitArrayFcMixin),
                                          align,
                                          len,
                                          byteOrder,
-                                         std::move(userAttrs)},
+                                         bitOrder,
+                                         std::move(attrs)},
         UserMixinsT::FixedLenBoolFc {std::move(mixin)}
     {
     }
@@ -1053,7 +1192,8 @@ public:
     typename Fc<UserMixinsT>::UP clone() const override
     {
         return bt2s::make_unique<FixedLenBoolFc>(*this, *this, *this, this->align(), this->len(),
-                                                 this->byteOrder(), this->userAttrs());
+                                                 this->byteOrder(), this->bitOrder(),
+                                                 this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -1071,20 +1211,23 @@ public:
  * Fixed-length floating-point number field class.
  */
 template <typename UserMixinsT>
-class FixedLenFloatFc : public FixedLenBitArrayFc<UserMixinsT>
+class FixedLenFloatFc final : public FixedLenBitArrayFc<UserMixinsT>
 {
 public:
     explicit FixedLenFloatFc(typename UserMixinsT::Fc fcMixin,
                              typename UserMixinsT::FixedLenBitArrayFc fixedLenBitArrayFcMixin,
                              const unsigned int align, const bt2c::DataLen len,
-                             const ByteOrder byteOrder, OptUserAttrs userAttrs = OptUserAttrs {}) :
-        FixedLenBitArrayFc<UserMixinsT> {FcType::FIXED_LEN_FLOAT,
+                             const ByteOrder byteOrder,
+                             const bt2s::optional<BitOrder>& bitOrder = bt2s::nullopt,
+                             OptAttrs attrs = OptAttrs {}) :
+        FixedLenBitArrayFc<UserMixinsT> {FcType::FixedLenFloat,
                                          std::move(fcMixin),
                                          std::move(fixedLenBitArrayFcMixin),
                                          align,
                                          len,
                                          byteOrder,
-                                         std::move(userAttrs)}
+                                         bitOrder,
+                                         std::move(attrs)}
     {
         using namespace bt2c::literals::datalen;
 
@@ -1094,7 +1237,8 @@ public:
     typename Fc<UserMixinsT>::UP clone() const override
     {
         return bt2s::make_unique<FixedLenFloatFc>(*this, *this, this->align(), this->len(),
-                                                  this->byteOrder(), this->userAttrs());
+                                                  this->byteOrder(), this->bitOrder(),
+                                                  this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -1108,36 +1252,41 @@ public:
     }
 };
 
+/* clang-format off */
+
 /*
  * Display base.
  */
-enum class DispBase
-{
+WISE_ENUM_CLASS(DispBase,
     /* Binary */
-    BIN = 2,
+    (Bin, 2),
 
     /* Octal */
-    OCT = 8,
+    (Oct, 8),
 
     /* Decimal */
-    DEC = 10,
+    (Dec, 10),
 
     /* Hexadecimal */
-    HEX = 16,
-};
+    (Hex, 16)
+)
+
+/* clang-format on */
 
 namespace internal {
 
 /*
- * Internal mixin for integer field class classes.
+ * Internal mixin for integer field classes with a preferred display
+ * base.
  */
-class IntFcMixin
+class WithPrefDispBaseMixin
 {
-public:
-    explicit IntFcMixin(const DispBase prefDispBase) : _mPrefDispBase {prefDispBase}
+protected:
+    explicit WithPrefDispBaseMixin(const DispBase prefDispBase) : _mPrefDispBase {prefDispBase}
     {
     }
 
+public:
     /*
      * Preferred display base of instances of this field class.
      */
@@ -1151,18 +1300,48 @@ private:
     DispBase _mPrefDispBase;
 };
 
+/*
+ * Internal mixin for integer field classes with mappings.
+ */
+template <typename MappingRangeSetT>
+class WithMappingsMixin
+{
+public:
+    using Mappings = std::unordered_map<std::string, MappingRangeSetT>;
+    using Val = typename MappingRangeSetT::Val;
+
+protected:
+    explicit WithMappingsMixin(Mappings&& mappings) : _mMappings {std::move(mappings)}
+    {
+    }
+
+public:
+    /*
+     * Mappings of instances of this integer field class.
+     */
+    const Mappings& mappings() const noexcept
+    {
+        return _mMappings;
+    }
+
+private:
+    /* Mappings of instances of this integer field class */
+    Mappings _mMappings;
+};
+
 } /* namespace internal */
 
 /*
  * Fixed-length integer field class base.
  *
- * The only specific property over `FixedLenBitArrayFc<UserMixinsT>` is
- * the preferred display base of field class instances.
+ * Specific property over `FixedLenBitArrayFc<UserMixinsT>`:
+ *
+ * • Preferred display base of instances.
  */
 template <typename UserMixinsT>
 class FixedLenIntFc :
     public FixedLenBitArrayFc<UserMixinsT>,
-    public internal::IntFcMixin,
+    public internal::WithPrefDispBaseMixin,
     public UserMixinsT::FixedLenIntFc
 {
 protected:
@@ -1170,11 +1349,13 @@ protected:
                            typename UserMixinsT::FixedLenBitArrayFc fixedLenBitArrayFcMixin,
                            typename UserMixinsT::FixedLenIntFc mixin, const unsigned int align,
                            const bt2c::DataLen len, const ByteOrder byteOrder,
-                           const DispBase prefDispBase, OptUserAttrs&& userAttrs) :
+                           const bt2s::optional<BitOrder>& bitOrder, const DispBase prefDispBase,
+                           OptAttrs&& attrs) :
         FixedLenBitArrayFc<UserMixinsT> {
-            type,      std::move(fcMixin),  std::move(fixedLenBitArrayFcMixin), align, len,
-            byteOrder, std::move(userAttrs)},
-        internal::IntFcMixin {prefDispBase}, UserMixinsT::FixedLenIntFc {std::move(mixin)}
+            type,     std::move(fcMixin), std::move(fixedLenBitArrayFcMixin), align, len, byteOrder,
+            bitOrder, std::move(attrs)},
+        internal::WithPrefDispBaseMixin {prefDispBase}, UserMixinsT::FixedLenIntFc {
+                                                            std::move(mixin)}
     {
     }
 };
@@ -1184,38 +1365,38 @@ protected:
 /*
  * Unsigned integer field role.
  */
-enum class UIntFieldRole
-{
+WISE_ENUM_CLASS(UIntFieldRole,
     /* Packet magic number */
-    PKT_MAGIC_NUMBER                    = 1 << 1,
+    (PktMagicNumber,                1 << 1),
 
     /* Data stream class ID */
-    DATA_STREAM_CLS_ID                  = 1 << 2,
+    (DataStreamClsId,               1 << 2),
 
     /* Data stream ID */
-    DATA_STREAM_ID                      = 1 << 3,
+    (DataStreamId,                  1 << 3),
 
     /* Total length of packet */
-    PKT_TOTAL_LEN                       = 1 << 4,
+    (PktTotalLen,                   1 << 4),
 
     /* Content length of packet */
-    PKT_CONTENT_LEN                     = 1 << 5,
+    (PktContentLen,                 1 << 5),
 
     /* Default clock timestamp */
-    DEF_CLK_TS                          = 1 << 6,
+    (DefClkTs,                      1 << 6),
 
     /* Default clock timestamp at end of packet */
-    PKT_END_DEF_CLK_TS                  = 1 << 7,
+    (PktEndDefClkTs,                1 << 7),
 
     /* Discarded event record counter snapshot */
-    DISC_EVENT_RECORD_COUNTER_SNAP      = 1 << 8,
+    (DiscEventRecordCounterSnap,    1 << 8),
 
     /* Packet sequence number */
-    PKT_SEQ_NUM                         = 1 << 9,
+    (PktSeqNum,                     1 << 9),
 
     /* Event record class ID */
-    EVENT_RECORD_CLS_ID                 = 1 << 10,
-};
+    (EventRecordClsId,              1 << 10)
+)
+
 /* clang-format on */
 
 /*
@@ -1230,27 +1411,16 @@ namespace internal {
  */
 class UIntFcMixin
 {
-private:
-    using _Roles = std::vector<UIntFieldRole>;
+protected:
+    explicit UIntFcMixin(UIntFieldRoles roles) : _mRoles {std::move(roles)}
+    {
+    }
 
 public:
-    explicit UIntFcMixin(const UIntFieldRoles& roles)
-    {
-        std::copy(roles.begin(), roles.end(), std::back_inserter(_mRoles));
-    }
-
     /*
-     * Roles of instances of this field class.
+     * Roles of instances of this unsigned integer field class.
      */
-    const _Roles& roles() const noexcept
-    {
-        return _mRoles;
-    }
-
-    /*
-     * Roles of instances of this field class.
-     */
-    _Roles& roles() noexcept
+    const UIntFieldRoles& roles() const noexcept
     {
         return _mRoles;
     }
@@ -1261,20 +1431,12 @@ public:
      */
     bool hasRole(const UIntFieldRole role) const noexcept
     {
-        return std::find(_mRoles.begin(), _mRoles.end(), role) != _mRoles.end();
-    }
-
-protected:
-    UIntFieldRoles _rolesAsSet() const
-    {
-        UIntFieldRoles roles;
-
-        std::copy(_mRoles.begin(), _mRoles.end(), std::inserter(roles, roles.end()));
-        return roles;
+        return _mRoles.count(role) == 1;
     }
 
 private:
-    _Roles _mRoles;
+    /* Roles of instances of this unsigned integer field class */
+    UIntFieldRoles _mRoles;
 };
 
 } /* namespace internal */
@@ -1282,55 +1444,41 @@ private:
 /*
  * Fixed-length unsigned integer field class.
  *
- * The only specific property over `FixedLenIntFc<UserMixinsT>` is the
- * roles of field class instances.
+ * Specific properties over `FixedLenIntFc<UserMixinsT>`:
+ *
+ * • Mappings.
+ * • Roles of instances.
  */
 template <typename UserMixinsT>
-class FixedLenUIntFc :
+class FixedLenUIntFc final :
     public FixedLenIntFc<UserMixinsT>,
+    public internal::WithMappingsMixin<UIntRangeSet>,
     public internal::UIntFcMixin,
     public UserMixinsT::FixedLenUIntFc
 {
-protected:
-    explicit FixedLenUIntFc(const FcType type, typename UserMixinsT::Fc fcMixin,
+public:
+    using typename internal::WithMappingsMixin<UIntRangeSet>::Mappings;
+
+    explicit FixedLenUIntFc(typename UserMixinsT::Fc fcMixin,
                             typename UserMixinsT::FixedLenBitArrayFc fixedLenBitArrayFcMixin,
                             typename UserMixinsT::FixedLenIntFc fixedLenIntFcMixin,
                             typename UserMixinsT::FixedLenUIntFc mixin, const unsigned int align,
                             const bt2c::DataLen len, const ByteOrder byteOrder,
-                            const DispBase prefDispBase, UIntFieldRoles&& roles,
-                            OptUserAttrs&& userAttrs) :
-        FixedLenIntFc<UserMixinsT> {type,
+                            const bt2s::optional<BitOrder>& bitOrder = bt2s::nullopt,
+                            const DispBase prefDispBase = DispBase::Dec, Mappings mappings = {},
+                            UIntFieldRoles roles = {}, OptAttrs attrs = OptAttrs {}) :
+        FixedLenIntFc<UserMixinsT> {FcType::FixedLenUInt,
                                     std::move(fcMixin),
                                     std::move(fixedLenBitArrayFcMixin),
                                     std::move(fixedLenIntFcMixin),
                                     align,
                                     len,
                                     byteOrder,
+                                    bitOrder,
                                     prefDispBase,
-                                    std::move(userAttrs)},
-        internal::UIntFcMixin {roles}, UserMixinsT::FixedLenUIntFc {std::move(mixin)}
-    {
-    }
-
-public:
-    explicit FixedLenUIntFc(typename UserMixinsT::Fc fcMixin,
-                            typename UserMixinsT::FixedLenBitArrayFc fixedLenBitArrayFcMixin,
-                            typename UserMixinsT::FixedLenIntFc fixedLenIntFcMixin,
-                            typename UserMixinsT::FixedLenUIntFc mixin, const unsigned int align,
-                            const bt2c::DataLen len, const ByteOrder byteOrder,
-                            const DispBase prefDispBase = DispBase::DEC, UIntFieldRoles roles = {},
-                            OptUserAttrs userAttrs = OptUserAttrs {}) :
-        FixedLenUIntFc {FcType::FIXED_LEN_UINT,
-                        std::move(fcMixin),
-                        std::move(fixedLenBitArrayFcMixin),
-                        std::move(fixedLenIntFcMixin),
-                        std::move(mixin),
-                        align,
-                        len,
-                        byteOrder,
-                        prefDispBase,
-                        std::move(roles),
-                        std::move(userAttrs)}
+                                    std::move(attrs)},
+        internal::WithMappingsMixin<UIntRangeSet> {std::move(mappings)},
+        internal::UIntFcMixin {std::move(roles)}, UserMixinsT::FixedLenUIntFc {std::move(mixin)}
     {
     }
 
@@ -1338,7 +1486,7 @@ public:
     {
         return bt2s::make_unique<FixedLenUIntFc>(
             *this, *this, *this, *this, this->align(), this->len(), this->byteOrder(),
-            this->prefDispBase(), this->_rolesAsSet(), this->userAttrs());
+            this->bitOrder(), this->prefDispBase(), this->mappings(), this->roles(), this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -1354,190 +1502,46 @@ public:
 
 /*
  * Fixed-length signed integer field class.
+ *
+ * Specific property over `FixedLenIntFc<UserMixinsT>`:
+ *
+ * • Mappings.
  */
 template <typename UserMixinsT>
-class FixedLenSIntFc : public FixedLenIntFc<UserMixinsT>
+class FixedLenSIntFc final :
+    public FixedLenIntFc<UserMixinsT>,
+    public internal::WithMappingsMixin<SIntRangeSet>
 {
-protected:
-    explicit FixedLenSIntFc(const FcType type, typename UserMixinsT::Fc fcMixin,
+public:
+    using typename internal::WithMappingsMixin<SIntRangeSet>::Mappings;
+
+    explicit FixedLenSIntFc(typename UserMixinsT::Fc fcMixin,
                             typename UserMixinsT::FixedLenBitArrayFc fixedLenBitArrayFcMixin,
                             typename UserMixinsT::FixedLenIntFc fixedLenIntFcMixin,
                             const unsigned int align, const bt2c::DataLen len,
-                            const ByteOrder byteOrder, const DispBase prefDispBase,
-                            OptUserAttrs&& userAttrs) :
-        FixedLenIntFc<UserMixinsT> {type,
+                            const ByteOrder byteOrder,
+                            const bt2s::optional<BitOrder>& bitOrder = bt2s::nullopt,
+                            const DispBase prefDispBase = DispBase::Dec, Mappings mappings = {},
+                            OptAttrs attrs = OptAttrs {}) :
+        FixedLenIntFc<UserMixinsT> {FcType::FixedLenSInt,
                                     std::move(fcMixin),
                                     std::move(fixedLenBitArrayFcMixin),
                                     std::move(fixedLenIntFcMixin),
                                     align,
                                     len,
                                     byteOrder,
+                                    bitOrder,
                                     prefDispBase,
-                                    std::move(userAttrs)}
-    {
-    }
-
-public:
-    explicit FixedLenSIntFc(typename UserMixinsT::Fc fcMixin,
-                            typename UserMixinsT::FixedLenBitArrayFc fixedLenBitArrayFcMixin,
-                            typename UserMixinsT::FixedLenIntFc fixedLenIntFcMixin,
-                            const unsigned int align, const bt2c::DataLen len,
-                            const ByteOrder byteOrder, const DispBase prefDispBase = DispBase::DEC,
-                            OptUserAttrs userAttrs = OptUserAttrs {}) :
-        FixedLenSIntFc {FcType::FIXED_LEN_SINT,
-                        std::move(fcMixin),
-                        std::move(fixedLenBitArrayFcMixin),
-                        std::move(fixedLenIntFcMixin),
-                        align,
-                        len,
-                        byteOrder,
-                        prefDispBase,
-                        std::move(userAttrs)}
+                                    std::move(attrs)},
+        internal::WithMappingsMixin<SIntRangeSet> {std::move(mappings)}
     {
     }
 
     typename Fc<UserMixinsT>::UP clone() const override
     {
-        return bt2s::make_unique<FixedLenSIntFc>(*this, *this, *this, this->align(), this->len(),
-                                                 this->byteOrder(), this->prefDispBase(),
-                                                 this->userAttrs());
-    }
-
-    void accept(FcVisitor<UserMixinsT>& visitor) override
-    {
-        visitor.visit(*this);
-    }
-
-    void accept(ConstFcVisitor<UserMixinsT>& visitor) const override
-    {
-        visitor.visit(*this);
-    }
-};
-
-namespace internal {
-
-/*
- * Internal mixin for enumeration field class classes having
- * `IntRangeSetT` as their integer range set type.
- */
-template <typename IntRangeSetT>
-class EnumFcMixin
-{
-public:
-    using Mappings = std::unordered_map<std::string, IntRangeSetT>;
-    using Val = typename IntRangeSetT::Val;
-
-protected:
-    explicit EnumFcMixin(Mappings&& mappings) : _mMappings {std::move(mappings)}
-    {
-        BT_ASSERT(!_mMappings.empty());
-    }
-
-public:
-    /*
-     * Mappings of this enumeration field class.
-     */
-    const Mappings& mappings() const noexcept
-    {
-        return _mMappings;
-    }
-
-private:
-    Mappings _mMappings;
-};
-
-} /* namespace internal */
-
-/*
- * Fixed-length unsigned enumeration field class.
- *
- * The only specific property over `FixedLenUIntFc<UserMixinsT>` is the
- * mappings of the field class.
- */
-template <typename UserMixinsT>
-class FixedLenUEnumFc :
-    public FixedLenUIntFc<UserMixinsT>,
-    public internal::EnumFcMixin<UIntRangeSet>
-{
-public:
-    explicit FixedLenUEnumFc(typename UserMixinsT::Fc fcMixin,
-                             typename UserMixinsT::FixedLenBitArrayFc fixedLenBitArrayFcMixin,
-                             typename UserMixinsT::FixedLenIntFc fixedLenIntFcMixin,
-                             typename UserMixinsT::FixedLenUIntFc fixedLenUIntFcMixin,
-                             const unsigned int align, const bt2c::DataLen len,
-                             const ByteOrder byteOrder, Mappings mappings,
-                             const DispBase prefDispBase = DispBase::DEC, UIntFieldRoles roles = {},
-                             OptUserAttrs userAttrs = OptUserAttrs {}) :
-        FixedLenUIntFc<UserMixinsT> {FcType::FIXED_LEN_UENUM,
-                                     std::move(fcMixin),
-                                     std::move(fixedLenBitArrayFcMixin),
-                                     std::move(fixedLenIntFcMixin),
-                                     std::move(fixedLenUIntFcMixin),
-                                     align,
-                                     len,
-                                     byteOrder,
-                                     prefDispBase,
-                                     std::move(roles),
-                                     std::move(userAttrs)},
-        internal::EnumFcMixin<UIntRangeSet> {std::move(mappings)}
-    {
-    }
-
-    typename Fc<UserMixinsT>::UP clone() const override
-    {
-        return bt2s::make_unique<FixedLenUEnumFc>(
-            *this, *this, *this, *this, this->align(), this->len(), this->byteOrder(),
-            this->mappings(), this->prefDispBase(), this->_rolesAsSet(), this->userAttrs());
-    }
-
-    void accept(FcVisitor<UserMixinsT>& visitor) override
-    {
-        visitor.visit(*this);
-    }
-
-    void accept(ConstFcVisitor<UserMixinsT>& visitor) const override
-    {
-        visitor.visit(*this);
-    }
-};
-
-/*
- * Fixed-length signed enumeration field class.
- *
- * The only specific property over `FixedLenSIntFc<UserMixinsT>` is the
- * mappings of the field class.
- */
-template <typename UserMixinsT>
-class FixedLenSEnumFc :
-    public FixedLenSIntFc<UserMixinsT>,
-    public internal::EnumFcMixin<SIntRangeSet>
-{
-public:
-    explicit FixedLenSEnumFc(typename UserMixinsT::Fc fcMixin,
-                             typename UserMixinsT::FixedLenBitArrayFc fixedLenBitArrayFcMixin,
-                             typename UserMixinsT::FixedLenIntFc fixedLenIntFcMixin,
-                             const unsigned int align, const bt2c::DataLen len,
-                             const ByteOrder byteOrder, Mappings mappings,
-                             const DispBase prefDispBase = DispBase::DEC,
-                             OptUserAttrs userAttrs = OptUserAttrs {}) :
-        FixedLenSIntFc<UserMixinsT> {FcType::FIXED_LEN_SENUM,
-                                     std::move(fcMixin),
-                                     std::move(fixedLenBitArrayFcMixin),
-                                     std::move(fixedLenIntFcMixin),
-                                     align,
-                                     len,
-                                     byteOrder,
-                                     prefDispBase,
-                                     std::move(userAttrs)},
-        internal::EnumFcMixin<SIntRangeSet> {std::move(mappings)}
-    {
-    }
-
-    typename Fc<UserMixinsT>::UP clone() const override
-    {
-        return bt2s::make_unique<FixedLenSEnumFc>(*this, *this, *this, this->align(), this->len(),
-                                                  this->byteOrder(), this->mappings(),
-                                                  this->prefDispBase(), this->userAttrs());
+        return bt2s::make_unique<FixedLenSIntFc>(
+            *this, *this, *this, this->align(), this->len(), this->byteOrder(), this->bitOrder(),
+            this->prefDispBase(), this->mappings(), this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -1553,22 +1557,19 @@ public:
 
 /*
  * Variable-length integer field class base.
- *
- * The only specific property over `Fc<UserMixinsT>` is the preferred
- * display base of field class instances.
  */
 template <typename UserMixinsT>
 class VarLenIntFc :
     public Fc<UserMixinsT>,
-    public internal::IntFcMixin,
+    public internal::WithPrefDispBaseMixin,
     public UserMixinsT::VarLenIntFc
 {
 protected:
     explicit VarLenIntFc(const FcType type, typename UserMixinsT::Fc fcMixin,
                          typename UserMixinsT::VarLenIntFc mixin, const DispBase prefDispBase,
-                         OptUserAttrs&& userAttrs) :
-        Fc<UserMixinsT> {type, std::move(fcMixin), 8, std::move(userAttrs)},
-        internal::IntFcMixin {prefDispBase}, UserMixinsT::VarLenIntFc {std::move(mixin)}
+                         OptAttrs&& attrs) :
+        Fc<UserMixinsT> {type, std::move(fcMixin), 8, std::move(attrs)},
+        internal::WithPrefDispBaseMixin {prefDispBase}, UserMixinsT::VarLenIntFc {std::move(mixin)}
     {
     }
 };
@@ -1576,42 +1577,37 @@ protected:
 /*
  * Variable-length unsigned integer field class.
  *
- * The only specific property over `VarLenIntFc<UserMixinsT>` is the
- * roles of field class instances.
+ * Specific properties over `VarLenIntFc<UserMixinsT>`:
+ *
+ * • Mappings.
+ * • Roles of instances.
  */
 template <typename UserMixinsT>
-class VarLenUIntFc :
+class VarLenUIntFc final :
     public VarLenIntFc<UserMixinsT>,
+    public internal::WithMappingsMixin<UIntRangeSet>,
     public internal::UIntFcMixin,
     public UserMixinsT::VarLenUIntFc
 {
-protected:
-    explicit VarLenUIntFc(const FcType type, typename UserMixinsT::Fc fcMixin,
-                          typename UserMixinsT::VarLenIntFc fixedLenIntFcMixin,
-                          typename UserMixinsT::VarLenUIntFc mixin, const DispBase prefDispBase,
-                          UIntFieldRoles&& roles, OptUserAttrs&& userAttrs) :
-        VarLenIntFc<UserMixinsT> {type, std::move(fcMixin), std::move(fixedLenIntFcMixin),
-                                  prefDispBase, std::move(userAttrs)},
-        internal::UIntFcMixin {roles}, UserMixinsT::VarLenUIntFc {std::move(mixin)}
-    {
-    }
-
 public:
+    using typename internal::WithMappingsMixin<UIntRangeSet>::Mappings;
+
     explicit VarLenUIntFc(typename UserMixinsT::Fc fcMixin,
-                          typename UserMixinsT::VarLenIntFc fixedLenIntFcMixin,
-                          typename UserMixinsT::VarLenUIntFc mixin,
-                          const DispBase prefDispBase = DispBase::DEC, UIntFieldRoles roles = {},
-                          OptUserAttrs userAttrs = OptUserAttrs {}) :
-        VarLenUIntFc {FcType::VAR_LEN_UINT, std::move(fcMixin), std::move(fixedLenIntFcMixin),
-                      std::move(mixin),     prefDispBase,       std::move(roles),
-                      std::move(userAttrs)}
+                          typename UserMixinsT::VarLenIntFc varLenIntFcMixin,
+                          typename UserMixinsT::VarLenUIntFc mixin, const DispBase prefDispBase,
+                          Mappings mappings = {}, UIntFieldRoles roles = {},
+                          OptAttrs attrs = OptAttrs {}) :
+        VarLenIntFc<UserMixinsT> {FcType::VarLenUInt, std::move(fcMixin),
+                                  std::move(varLenIntFcMixin), prefDispBase, std::move(attrs)},
+        internal::WithMappingsMixin<UIntRangeSet> {std::move(mappings)},
+        internal::UIntFcMixin {std::move(roles)}, UserMixinsT::VarLenUIntFc {std::move(mixin)}
     {
     }
 
     typename Fc<UserMixinsT>::UP clone() const override
     {
         return bt2s::make_unique<VarLenUIntFc>(*this, *this, *this, this->prefDispBase(),
-                                               this->_rolesAsSet(), this->userAttrs());
+                                               this->mappings(), this->roles(), this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -1627,140 +1623,120 @@ public:
 
 /*
  * Variable-length signed integer field class.
+ *
+ * Specific property over `VarLenIntFc<UserMixinsT>`:
+ *
+ * • Mappings.
  */
 template <typename UserMixinsT>
-class VarLenSIntFc : public VarLenIntFc<UserMixinsT>
+class VarLenSIntFc final :
+    public VarLenIntFc<UserMixinsT>,
+    public internal::WithMappingsMixin<SIntRangeSet>
+{
+public:
+    using typename internal::WithMappingsMixin<SIntRangeSet>::Mappings;
+
+    explicit VarLenSIntFc(typename UserMixinsT::Fc fcMixin,
+                          typename UserMixinsT::VarLenIntFc varLenIntFcMixin,
+                          const DispBase prefDispBase, Mappings mappings = {},
+                          OptAttrs attrs = OptAttrs {}) :
+        VarLenIntFc<UserMixinsT> {FcType::VarLenSInt, std::move(fcMixin),
+                                  std::move(varLenIntFcMixin), prefDispBase, std::move(attrs)},
+        internal::WithMappingsMixin<SIntRangeSet> {std::move(mappings)}
+    {
+    }
+
+    typename Fc<UserMixinsT>::UP clone() const override
+    {
+        return bt2s::make_unique<VarLenSIntFc>(*this, *this, this->prefDispBase(), this->mappings(),
+                                               this->attrs());
+    }
+
+    void accept(FcVisitor<UserMixinsT>& visitor) override
+    {
+        visitor.visit(*this);
+    }
+
+    void accept(ConstFcVisitor<UserMixinsT>& visitor) const override
+    {
+        visitor.visit(*this);
+    }
+};
+
+/* clang-format off */
+
+/*
+ * String encoding.
+ */
+WISE_ENUM_CLASS(StrEncoding,
+    /* UTF-8 */
+    Utf8,
+
+    /* UTF-16BE */
+    Utf16Be,
+
+    /* UTF-16LE */
+    Utf16Le,
+
+    /* UTF-32BE */
+    Utf32Be,
+
+    /* UTF-32LE */
+    Utf32Le
+)
+
+/* clang-format on */
+
+/*
+ * String field class base.
+ *
+ * Specific property over `Fc<UserMixinsT>`:
+ *
+ * • Encoding of instances.
+ */
+template <typename UserMixinsT>
+class StrFc : public Fc<UserMixinsT>
 {
 protected:
-    explicit VarLenSIntFc(const FcType type, typename UserMixinsT::Fc fcMixin,
-                          typename UserMixinsT::VarLenIntFc fixedLenIntFcMixin,
-                          const DispBase prefDispBase, OptUserAttrs&& userAttrs) :
-        VarLenIntFc<UserMixinsT> {type, std::move(fcMixin), std::move(fixedLenIntFcMixin),
-                                  prefDispBase, std::move(userAttrs)}
+    explicit StrFc(const FcType type, typename UserMixinsT::Fc fcMixin, const StrEncoding encoding,
+                   OptAttrs&& attrs) :
+        Fc<UserMixinsT> {type, std::move(fcMixin), 8, std::move(attrs)},
+        _mEncoding {encoding}
     {
     }
 
 public:
-    explicit VarLenSIntFc(typename UserMixinsT::Fc fcMixin,
-                          typename UserMixinsT::VarLenIntFc fixedLenIntFcMixin,
-                          const DispBase prefDispBase = DispBase::DEC,
-                          OptUserAttrs userAttrs = OptUserAttrs {}) :
-        VarLenSIntFc {FcType::VAR_LEN_SINT, std::move(fcMixin), std::move(fixedLenIntFcMixin),
-                      prefDispBase, std::move(userAttrs)}
+    /*
+     * Encoding of instances of this string field class.
+     */
+    StrEncoding encoding() const noexcept
     {
+        return _mEncoding;
     }
 
-    typename Fc<UserMixinsT>::UP clone() const override
-    {
-        return bt2s::make_unique<VarLenSIntFc>(*this, *this, this->prefDispBase(),
-                                               this->userAttrs());
-    }
-
-    void accept(FcVisitor<UserMixinsT>& visitor) override
-    {
-        visitor.visit(*this);
-    }
-
-    void accept(ConstFcVisitor<UserMixinsT>& visitor) const override
-    {
-        visitor.visit(*this);
-    }
-};
-
-/*
- * Variable-length unsigned enumeration field class base.
- *
- * The only specific property over `VarLenUIntFc<UserMixinsT>` is the
- * mappings of the field class.
- */
-template <typename UserMixinsT>
-class VarLenUEnumFc : public VarLenUIntFc<UserMixinsT>, public internal::EnumFcMixin<UIntRangeSet>
-{
-public:
-    explicit VarLenUEnumFc(typename UserMixinsT::Fc fcMixin,
-                           typename UserMixinsT::VarLenIntFc varLenIntFcMixin,
-                           typename UserMixinsT::VarLenUIntFc varLenUIntFcMixin, Mappings mappings,
-                           const DispBase prefDispBase = DispBase::DEC, UIntFieldRoles roles = {},
-                           OptUserAttrs userAttrs = OptUserAttrs {}) :
-        VarLenUIntFc<UserMixinsT> {
-            FcType::VAR_LEN_UENUM,        std::move(fcMixin), std::move(varLenIntFcMixin),
-            std::move(varLenUIntFcMixin), prefDispBase,       std::move(roles),
-            std::move(userAttrs)},
-        internal::EnumFcMixin<UIntRangeSet> {std::move(mappings)}
-    {
-    }
-
-    typename Fc<UserMixinsT>::UP clone() const override
-    {
-        return bt2s::make_unique<VarLenUEnumFc>(*this, *this, *this, this->mappings(),
-                                                this->prefDispBase(), this->_rolesAsSet(),
-                                                this->userAttrs());
-    }
-
-    void accept(FcVisitor<UserMixinsT>& visitor) override
-    {
-        visitor.visit(*this);
-    }
-
-    void accept(ConstFcVisitor<UserMixinsT>& visitor) const override
-    {
-        visitor.visit(*this);
-    }
-};
-
-/*
- * Variable-length signed enumeration field class base.
- *
- * The only specific property over `VarLenSIntFc<UserMixinsT>` is the
- * mappings of the field class.
- */
-template <typename UserMixinsT>
-class VarLenSEnumFc : public VarLenSIntFc<UserMixinsT>, public internal::EnumFcMixin<SIntRangeSet>
-{
-public:
-    explicit VarLenSEnumFc(typename UserMixinsT::Fc fcMixin,
-                           typename UserMixinsT::VarLenIntFc varLenIntFcMixin, Mappings mappings,
-                           const DispBase prefDispBase = DispBase::DEC,
-                           OptUserAttrs userAttrs = OptUserAttrs {}) :
-        VarLenSIntFc<UserMixinsT> {FcType::VAR_LEN_SENUM, std::move(fcMixin),
-                                   std::move(varLenIntFcMixin), prefDispBase, std::move(userAttrs)},
-        internal::EnumFcMixin<SIntRangeSet> {std::move(mappings)}
-    {
-    }
-
-    typename Fc<UserMixinsT>::UP clone() const override
-    {
-        return bt2s::make_unique<VarLenSEnumFc>(*this, *this, this->mappings(),
-                                                this->prefDispBase(), this->userAttrs());
-    }
-
-    void accept(FcVisitor<UserMixinsT>& visitor) override
-    {
-        visitor.visit(*this);
-    }
-
-    void accept(ConstFcVisitor<UserMixinsT>& visitor) const override
-    {
-        visitor.visit(*this);
-    }
+private:
+    /* Encoding of instances of this string field class */
+    StrEncoding _mEncoding;
 };
 
 /*
  * Null-terminated string field class.
  */
 template <typename UserMixinsT>
-class NullTerminatedStrFc : public Fc<UserMixinsT>
+class NullTerminatedStrFc final : public StrFc<UserMixinsT>
 {
 public:
     explicit NullTerminatedStrFc(typename UserMixinsT::Fc fcMixin,
-                                 OptUserAttrs userAttrs = OptUserAttrs {}) :
-        Fc<UserMixinsT> {FcType::NULL_TERMINATED_STR, std::move(fcMixin), 8, std::move(userAttrs)}
+                                 const StrEncoding encoding = StrEncoding::Utf8,
+                                 OptAttrs attrs = OptAttrs {}) :
+        StrFc<UserMixinsT> {FcType::NullTerminatedStr, std::move(fcMixin), encoding,
+                            std::move(attrs)}
     {
     }
 
     typename Fc<UserMixinsT>::UP clone() const override
     {
-        return bt2s::make_unique<NullTerminatedStrFc>(*this, this->userAttrs());
+        return bt2s::make_unique<NullTerminatedStrFc>(*this, this->encoding(), this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -1774,58 +1750,67 @@ public:
     }
 };
 
+/* clang-format off */
+
 /*
- * Field location scope.
+ * Scope.
  */
-enum class FieldLocScope
-{
+WISE_ENUM_CLASS(Scope,
     /* Packet header */
-    PKT_HEADER,
+    PktHeader,
 
     /* Packet context */
-    PKT_CTX,
+    PktCtx,
 
     /* Event record header */
-    EVENT_RECORD_HEADER,
+    EventRecordHeader,
 
     /* Common event record context */
-    EVENT_RECORD_COMMON_CTX,
+    CommonEventRecordCtx,
 
     /* Specific event record context */
-    EVENT_RECORD_SPEC_CTX,
+    SpecEventRecordCtx,
 
     /* Event record payload */
-    EVENT_RECORD_PAYLOAD,
-};
+    EventRecordPayload
+)
+
+/* clang-format on */
 
 /*
  * Field location.
+ *
+ * A field location may be:
+ *
+ * Absolute:
+ *     Has an origin and no `bt2s::nullopt` items.
+ *
+ * Relative:
+ *     Has no origin and may contain `bt2s::nullopt` items.
+ *
+ *     A `bt2s::nullopt` item means "go to parent structure field"
+ *     (CTF 2 strategy).
  */
 template <typename UserMixinsT>
-class FieldLoc : public UserMixinsT::FieldLoc
+class FieldLoc final : public UserMixinsT::FieldLoc
 {
 public:
-    using Items = std::vector<std::string>;
+    using Items = std::vector<bt2s::optional<std::string>>;
 
-    explicit FieldLoc(typename UserMixinsT::FieldLoc mixin, const FieldLocScope scope,
+    explicit FieldLoc(typename UserMixinsT::FieldLoc mixin, bt2s::optional<Scope> origin,
                       Items items) :
         UserMixinsT::FieldLoc {std::move(mixin)},
-        _mScope {scope}, _mItems {std::move(items)}
+        _mOrigin {std::move(origin)}, _mItems {std::move(items)}
     {
     }
 
-    /* Use default copy/move operations */
-    FieldLoc(const FieldLoc&) = default;
-    FieldLoc& operator=(const FieldLoc&) = default;
-    FieldLoc(FieldLoc&&) = default;
-    FieldLoc& operator=(FieldLoc&&) = default;
-
     /*
-     * Scope of this field location.
+     * Origin of this field location, or `bt2s::nullopt` if it's a
+     * relative field location.
      */
-    FieldLocScope scope() const noexcept
+    const bt2s::optional<Scope>& origin() const noexcept
     {
-        return _mScope;
+        return _mOrigin;
     }
 
     /*
@@ -1857,8 +1842,8 @@ public:
     }
 
 private:
-    /* Scope of this field location */
-    FieldLocScope _mScope;
+    /* Origin of this field location */
+    bt2s::optional<Scope> _mOrigin;
 
     /* Path items of this field location */
     Items _mItems;
@@ -1871,11 +1856,12 @@ namespace internal {
  */
 class StaticLenFcMixin
 {
-public:
+protected:
     explicit StaticLenFcMixin(const std::size_t len) : _mLen {len}
     {
     }
 
+public:
     /*
      * Length (bytes or elements) of instances of this field class.
      */
@@ -1895,18 +1881,28 @@ private:
 template <typename UserMixinsT>
 class DynLenFcMixin
 {
-public:
+protected:
     explicit DynLenFcMixin(FieldLoc<UserMixinsT> lenFieldLoc) :
         _mLenFieldLoc {std::move(lenFieldLoc)}
     {
     }
 
+public:
     /*
      * Length field location of instances of this field class.
      */
     const FieldLoc<UserMixinsT>& lenFieldLoc() const noexcept
     {
         return _mLenFieldLoc;
+    }
+
+    /*
+     * Sets the length field location of instances of this field class
+     * to `loc`.
+     */
+    void lenFieldLoc(FieldLoc<UserMixinsT> loc) noexcept
+    {
+        _mLenFieldLoc = std::move(loc);
     }
 
 private:
@@ -1920,12 +1916,12 @@ private:
  * Non-null-terminated string field class base.
  */
 template <typename UserMixinsT>
-class NonNullTerminatedStrFc : public Fc<UserMixinsT>
+class NonNullTerminatedStrFc : public StrFc<UserMixinsT>
 {
 protected:
     explicit NonNullTerminatedStrFc(const FcType type, typename UserMixinsT::Fc fcMixin,
-                                    OptUserAttrs&& userAttrs) :
-        Fc<UserMixinsT> {type, std::move(fcMixin), 8, std::move(userAttrs)}
+                                    const StrEncoding strEncoding, OptAttrs&& attrs) :
+        StrFc<UserMixinsT> {type, std::move(fcMixin), strEncoding, std::move(attrs)}
     {
     }
 };
@@ -1933,11 +1929,12 @@ protected:
 /*
  * Static-length string field class.
  *
- * The only specific property over `NonNullTerminatedStrFc<UserMixinsT>`
- * is the length (number of bytes) of field class instances.
+ * Specific property over `NonNullTerminatedStrFc<UserMixinsT>`:
+ *
+ * • Length (number of bytes) of instances.
  */
 template <typename UserMixinsT>
-class StaticLenStrFc :
+class StaticLenStrFc final :
     public NonNullTerminatedStrFc<UserMixinsT>,
     public internal::StaticLenFcMixin,
     public UserMixinsT::StaticLenStrFc
@@ -1945,16 +1942,18 @@ class StaticLenStrFc :
 public:
     explicit StaticLenStrFc(typename UserMixinsT::Fc fcMixin,
                             typename UserMixinsT::StaticLenStrFc mixin, const std::size_t len,
-                            OptUserAttrs userAttrs = OptUserAttrs {}) :
-        NonNullTerminatedStrFc<UserMixinsT> {FcType::STATIC_LEN_STR, std::move(fcMixin),
-                                             std::move(userAttrs)},
+                            const StrEncoding encoding = StrEncoding::Utf8,
+                            OptAttrs attrs = OptAttrs {}) :
+        NonNullTerminatedStrFc<UserMixinsT> {FcType::StaticLenStr, std::move(fcMixin), encoding,
+                                             std::move(attrs)},
         internal::StaticLenFcMixin {len}, UserMixinsT::StaticLenStrFc {std::move(mixin)}
     {
     }
 
     typename Fc<UserMixinsT>::UP clone() const override
     {
-        return bt2s::make_unique<StaticLenStrFc>(*this, *this, this->len(), this->userAttrs());
+        return bt2s::make_unique<StaticLenStrFc>(*this, *this, this->len(), this->encoding(),
+                                                 this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -1971,11 +1970,12 @@ public:
 /*
  * Dynamic-length string field class.
  *
- * The only specific property over `NonNullTerminatedStrFc<UserMixinsT>`
- * is the length field location of field class instances.
+ * Specific property over `NonNullTerminatedStrFc<UserMixinsT>`:
+ *
+ * • Length field location of instances.
  */
 template <typename UserMixinsT>
-class DynLenStrFc :
+class DynLenStrFc final :
     public NonNullTerminatedStrFc<UserMixinsT>,
     public internal::DynLenFcMixin<UserMixinsT>,
     public UserMixinsT::DynLenStrFc
@@ -1983,9 +1983,10 @@ class DynLenStrFc :
 public:
     explicit DynLenStrFc(typename UserMixinsT::Fc fcMixin, typename UserMixinsT::DynLenStrFc mixin,
                          FieldLoc<UserMixinsT> lenFieldLoc,
-                         OptUserAttrs userAttrs = OptUserAttrs {}) :
-        NonNullTerminatedStrFc<UserMixinsT> {FcType::DYN_LEN_STR, std::move(fcMixin),
-                                             std::move(userAttrs)},
+                         const StrEncoding encoding = StrEncoding::Utf8,
+                         OptAttrs attrs = OptAttrs {}) :
+        NonNullTerminatedStrFc<UserMixinsT> {FcType::DynLenStr, std::move(fcMixin), encoding,
+                                             std::move(attrs)},
         internal::DynLenFcMixin<UserMixinsT> {std::move(lenFieldLoc)}, UserMixinsT::DynLenStrFc {
                                                                            std::move(mixin)}
     {
@@ -1993,7 +1994,8 @@ public:
 
     typename Fc<UserMixinsT>::UP clone() const override
     {
-        return bt2s::make_unique<DynLenStrFc>(*this, *this, this->lenFieldLoc(), this->userAttrs());
+        return bt2s::make_unique<DynLenStrFc>(*this, *this, this->lenFieldLoc(), this->encoding(),
+                                              this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -2007,29 +2009,27 @@ public:
     }
 };
 
+extern const char * const defaultBlobMediaType;
+
 /*
  * BLOB field class base.
  *
- * The only specific property over `Fc<UserMixinsT>` is the media type
- * of field class instances.
+ * Specific property over `Fc<UserMixinsT>`:
+ *
+ * • Media type of instances.
  */
 template <typename UserMixinsT>
 class BlobFc : public Fc<UserMixinsT>
 {
 protected:
     explicit BlobFc(const FcType type, typename UserMixinsT::Fc fcMixin, std::string&& mediaType,
-                    OptUserAttrs&& userAttrs) :
-        Fc<UserMixinsT> {type, std::move(fcMixin), 8, std::move(userAttrs)},
+                    OptAttrs&& attrs) :
+        Fc<UserMixinsT> {type, std::move(fcMixin), 8, std::move(attrs)},
         _mMediaType {std::move(mediaType)}
     {
     }
 
 public:
-    /*
-     * Default BLOB field class media type.
-     */
-    constexpr static const char *defaultMediaType = "application/octet-stream";
-
     /*
      * Media type of instances of this field class.
      */
@@ -2048,13 +2048,12 @@ private:
  *
  * Specific properties over `BlobFc<UserMixinsT>`:
  *
- * • Length (number of bytes) of field class instances.
+ * • Length (number of bytes) of instances.
  *
- * • Whether or not field class instances have the "metadata stream
- *   UUID" role.
+ * • Whether or not instances have the "metadata stream UUID" role.
  */
 template <typename UserMixinsT>
-class StaticLenBlobFc :
+class StaticLenBlobFc final :
     public BlobFc<UserMixinsT>,
     public internal::StaticLenFcMixin,
     public UserMixinsT::StaticLenBlobFc
@@ -2062,11 +2061,11 @@ class StaticLenBlobFc :
 public:
     explicit StaticLenBlobFc(typename UserMixinsT::Fc fcMixin,
                              typename UserMixinsT::StaticLenBlobFc mixin, const std::size_t len,
-                             std::string mediaType = StaticLenBlobFc::defaultMediaType,
+                             std::string mediaType = defaultBlobMediaType,
                              const bool hasMetadataStreamUuidRole = false,
-                             OptUserAttrs userAttrs = OptUserAttrs {}) :
-        BlobFc<UserMixinsT> {FcType::STATIC_LEN_BLOB, std::move(fcMixin), std::move(mediaType),
-                             std::move(userAttrs)},
+                             OptAttrs attrs = OptAttrs {}) :
+        BlobFc<UserMixinsT> {FcType::StaticLenBlob, std::move(fcMixin), std::move(mediaType),
+                             std::move(attrs)},
         internal::StaticLenFcMixin {len}, UserMixinsT::StaticLenBlobFc {std::move(mixin)},
         _mHasMetadataStreamUuidRole {hasMetadataStreamUuidRole}
     {
@@ -2080,7 +2079,7 @@ public:
     typename Fc<UserMixinsT>::UP clone() const override
     {
         return bt2s::make_unique<StaticLenBlobFc>(*this, *this, this->len(), this->mediaType(),
-                                                  _mHasMetadataStreamUuidRole, this->userAttrs());
+                                                  _mHasMetadataStreamUuidRole, this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -2100,11 +2099,12 @@ private:
 /*
  * Dynamic-length BLOB field class.
  *
- * The only specific property over `BlobFc<UserMixinsT>` is the length
- * field location of field class instances.
+ * Specific property over `BlobFc<UserMixinsT>`:
+ *
+ * • Length field location of instances.
  */
 template <typename UserMixinsT>
-class DynLenBlobFc :
+class DynLenBlobFc final :
     public BlobFc<UserMixinsT>,
     public internal::DynLenFcMixin<UserMixinsT>,
     public UserMixinsT::DynLenBlobFc
@@ -2113,10 +2113,10 @@ public:
     explicit DynLenBlobFc(typename UserMixinsT::Fc fcMixin,
                           typename UserMixinsT::DynLenBlobFc mixin,
                           FieldLoc<UserMixinsT> lenFieldLoc,
-                          std::string mediaType = DynLenBlobFc::defaultMediaType,
-                          OptUserAttrs userAttrs = OptUserAttrs {}) :
-        BlobFc<UserMixinsT> {FcType::DYN_LEN_BLOB, std::move(fcMixin), std::move(mediaType),
-                             std::move(userAttrs)},
+                          std::string mediaType = defaultBlobMediaType,
+                          OptAttrs attrs = OptAttrs {}) :
+        BlobFc<UserMixinsT> {FcType::DynLenBlob, std::move(fcMixin), std::move(mediaType),
+                             std::move(attrs)},
         internal::DynLenFcMixin<UserMixinsT> {std::move(lenFieldLoc)}, UserMixinsT::DynLenBlobFc {
                                                                            std::move(mixin)}
     {
@@ -2125,7 +2125,7 @@ public:
     typename Fc<UserMixinsT>::UP clone() const override
     {
         return bt2s::make_unique<DynLenBlobFc>(*this, *this, this->lenFieldLoc(), this->mediaType(),
-                                               this->userAttrs());
+                                               this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -2145,7 +2145,7 @@ public:
  * Specific properties over `Fc<UserMixinsT>`:
  *
  * • Class of element fields.
- * • Minimum alignment of field class instances.
+ * • Minimum alignment of instances.
  */
 template <typename UserMixinsT>
 class ArrayFc : public Fc<UserMixinsT>
@@ -2153,9 +2153,9 @@ class ArrayFc : public Fc<UserMixinsT>
 protected:
     explicit ArrayFc(const FcType type, typename UserMixinsT::Fc fcMixin,
                      typename Fc<UserMixinsT>::UP&& elemFc, const unsigned int minAlign,
-                     OptUserAttrs&& userAttrs) :
+                     OptAttrs&& attrs) :
         Fc<UserMixinsT> {type, std::move(fcMixin), ArrayFc::_effectiveAlign(*elemFc, minAlign),
-                         std::move(userAttrs)},
+                         std::move(attrs)},
         _mElemFc {std::move(elemFc)}, _mMinAlign {minAlign}
     {
         BT_ASSERT(_mElemFc);
@@ -2176,6 +2176,24 @@ public:
     Fc<UserMixinsT>& elemFc() noexcept
     {
         return *_mElemFc;
+    }
+
+    /*
+     * Sets the class of the element fields of instances of this field
+     * class.
+     */
+    void elemFc(typename Fc<UserMixinsT>::UP elemFc) noexcept
+    {
+        _mElemFc = std::move(elemFc);
+    }
+
+    /*
+     * Moves the class of the element fields of instances of this field
+     * class to the caller.
+     */
+    typename Fc<UserMixinsT>::UP takeElemFc() noexcept
+    {
+        return std::move(_mElemFc);
     }
 
     /*
@@ -2209,11 +2227,12 @@ private:
 /*
  * Static-length array field class.
  *
- * The only specific property over `ArrayFc<UserMixinsT>` is the length
- * (number of elements) of field class instances.
+ * Specific property over `ArrayFc<UserMixinsT>`:
+ *
+ * • Length (number of elements) of instances.
  */
 template <typename UserMixinsT>
-class StaticLenArrayFc :
+class StaticLenArrayFc final :
     public ArrayFc<UserMixinsT>,
     public internal::StaticLenFcMixin,
     public UserMixinsT::StaticLenArrayFc
@@ -2222,9 +2241,9 @@ public:
     explicit StaticLenArrayFc(typename UserMixinsT::Fc fcMixin,
                               typename UserMixinsT::StaticLenArrayFc mixin, const std::size_t len,
                               typename Fc<UserMixinsT>::UP elemFc, const unsigned int minAlign = 1,
-                              OptUserAttrs userAttrs = OptUserAttrs {}) :
-        ArrayFc<UserMixinsT> {FcType::STATIC_LEN_ARRAY, std::move(fcMixin), std::move(elemFc),
-                              minAlign, std::move(userAttrs)},
+                              OptAttrs attrs = OptAttrs {}) :
+        ArrayFc<UserMixinsT> {FcType::StaticLenArray, std::move(fcMixin), std::move(elemFc),
+                              minAlign, std::move(attrs)},
         internal::StaticLenFcMixin {len}, UserMixinsT::StaticLenArrayFc {std::move(mixin)}
     {
     }
@@ -2232,7 +2251,7 @@ public:
     typename Fc<UserMixinsT>::UP clone() const override
     {
         return bt2s::make_unique<StaticLenArrayFc>(
-            *this, *this, this->len(), this->elemFc().clone(), this->minAlign(), this->userAttrs());
+            *this, *this, this->len(), this->elemFc().clone(), this->minAlign(), this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -2249,11 +2268,12 @@ public:
 /*
  * Dynamic-length array field class.
  *
- * The only specific property over `ArrayFc<UserMixinsT>` is the length
- * field location of field class instances.
+ * Specific property over `ArrayFc<UserMixinsT>`:
+ *
+ * • Length field location of instances.
  */
 template <typename UserMixinsT>
-class DynLenArrayFc :
+class DynLenArrayFc final :
     public ArrayFc<UserMixinsT>,
     public internal::DynLenFcMixin<UserMixinsT>,
     public UserMixinsT::DynLenArrayFc
@@ -2262,10 +2282,9 @@ public:
     explicit DynLenArrayFc(typename UserMixinsT::Fc fcMixin,
                            typename UserMixinsT::DynLenArrayFc mixin,
                            FieldLoc<UserMixinsT> lenFieldLoc, typename Fc<UserMixinsT>::UP elemFc,
-                           const unsigned int minAlign = 1,
-                           OptUserAttrs userAttrs = OptUserAttrs {}) :
-        ArrayFc<UserMixinsT> {FcType::DYN_LEN_ARRAY, std::move(fcMixin), std::move(elemFc),
-                              minAlign, std::move(userAttrs)},
+                           const unsigned int minAlign = 1, OptAttrs attrs = OptAttrs {}) :
+        ArrayFc<UserMixinsT> {FcType::DynLenArray, std::move(fcMixin), std::move(elemFc), minAlign,
+                              std::move(attrs)},
         internal::DynLenFcMixin<UserMixinsT> {std::move(lenFieldLoc)}, UserMixinsT::DynLenArrayFc {
                                                                            std::move(mixin)}
     {
@@ -2275,7 +2294,7 @@ public:
     {
         return bt2s::make_unique<DynLenArrayFc>(*this, *this, this->lenFieldLoc(),
                                                 this->elemFc().clone(), this->minAlign(),
-                                                this->userAttrs());
+                                                this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -2293,15 +2312,15 @@ public:
  * Structure field member class.
  */
 template <typename UserMixinsT>
-class StructFieldMemberCls :
-    public internal::WithUserAttrsMixin,
+class StructFieldMemberCls final :
+    public internal::WithAttrsMixin,
     public UserMixinsT::StructFieldMemberCls
 {
 public:
     explicit StructFieldMemberCls(typename UserMixinsT::StructFieldMemberCls mixin,
                                   std::string name, typename Fc<UserMixinsT>::UP fc,
-                                  OptUserAttrs userAttrs = OptUserAttrs {}) :
-        internal::WithUserAttrsMixin {std::move(userAttrs)},
+                                  OptAttrs attrs = OptAttrs {}) :
+        internal::WithAttrsMixin {std::move(attrs)},
         UserMixinsT::StructFieldMemberCls {std::move(mixin)}, _mName {std::move(name)},
         _mFc {std::move(fc)}
     {
@@ -2312,7 +2331,7 @@ public:
      * Builds a member class from `other`, cloning its field class.
      */
     StructFieldMemberCls(const StructFieldMemberCls& other) :
-        internal::WithUserAttrsMixin {other.userAttrs()},
+        internal::WithAttrsMixin {other.attrs()},
         UserMixinsT::StructFieldMemberCls {other}, _mName {other.name()}, _mFc {other.fc().clone()}
     {
     }
@@ -2341,6 +2360,22 @@ public:
         return *_mFc;
     }
 
+    /*
+     * Moves the field class of this member class to the caller.
+     */
+    typename Fc<UserMixinsT>::UP takeFc() noexcept
+    {
+        return std::move(_mFc);
+    }
+
+    /*
+     * Sets the field class of this member class.
+     */
+    void fc(typename Fc<UserMixinsT>::UP fc) noexcept
+    {
+        _mFc = std::move(fc);
+    }
+
 private:
     std::string _mName;
     typename Fc<UserMixinsT>::UP _mFc;
@@ -2351,20 +2386,20 @@ private:
  *
  * Specific properties over `Fc<UserMixinsT>`:
  *
- * • Minimum alignment of field class instances.
- * • Classes of members of field class instances.
+ * • Minimum alignment of instances.
+ * • Classes of members of instances.
  */
 template <typename UserMixinsT>
-class StructFc : public Fc<UserMixinsT>, public UserMixinsT::StructFc
+class StructFc final : public Fc<UserMixinsT>, public UserMixinsT::StructFc
 {
 public:
     using MemberClasses = std::vector<StructFieldMemberCls<UserMixinsT>>;
 
     explicit StructFc(typename UserMixinsT::Fc fcMixin, typename UserMixinsT::StructFc mixin,
                       MemberClasses memberClasses = {}, const unsigned int minAlign = 1,
-                      OptUserAttrs userAttrs = OptUserAttrs {}) :
-        Fc<UserMixinsT> {FcType::STRUCT, std::move(fcMixin),
-                         StructFc::_effectiveAlign(memberClasses, minAlign), std::move(userAttrs)},
+                      OptAttrs attrs = OptAttrs {}) :
+        Fc<UserMixinsT> {FcType::Struct, std::move(fcMixin),
+                         StructFc::_effectiveAlign(memberClasses, minAlign), std::move(attrs)},
         UserMixinsT::StructFc {std::move(mixin)}, _mMemberClasses {std::move(memberClasses)},
         _mMinAlign {minAlign}
     {
@@ -2461,7 +2496,7 @@ public:
     typename Fc<UserMixinsT>::UP clone() const override
     {
         return bt2s::make_unique<StructFc>(*this, *this, _mMemberClasses, _mMinAlign,
-                                           this->userAttrs());
+                                           this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -2517,8 +2552,8 @@ private:
  *
  * Specific properties over `Fc<UserMixinsT>`:
  *
- * • Selector field location of field class instances.
- * • Optional field of field class instances.
+ * • Selector field location of instances.
+ * • Optional field of instances.
  */
 template <typename UserMixinsT>
 class OptionalFc : public Fc<UserMixinsT>, public UserMixinsT::OptionalFc
@@ -2526,8 +2561,8 @@ class OptionalFc : public Fc<UserMixinsT>, public UserMixinsT::OptionalFc
 protected:
     explicit OptionalFc(const FcType type, typename UserMixinsT::Fc fcMixin,
                         typename UserMixinsT::OptionalFc mixin, typename Fc<UserMixinsT>::UP&& fc,
-                        FieldLoc<UserMixinsT>&& selFieldLoc, OptUserAttrs&& userAttrs) :
-        Fc<UserMixinsT> {type, std::move(fcMixin), 1, std::move(userAttrs)},
+                        FieldLoc<UserMixinsT>&& selFieldLoc, OptAttrs&& attrs) :
+        Fc<UserMixinsT> {type, std::move(fcMixin), 1, std::move(attrs)},
         UserMixinsT::OptionalFc {std::move(mixin)},
         _mSelFieldLoc {std::move(selFieldLoc)}, _mFc {std::move(fc)}
     {
@@ -2540,6 +2575,24 @@ public:
     const FieldLoc<UserMixinsT>& selFieldLoc() const noexcept
     {
         return _mSelFieldLoc;
+    }
+
+    /*
+     * Sets the selector field location of instances of this field class
+     * to `loc`.
+     */
+    void selFieldLoc(FieldLoc<UserMixinsT> loc) noexcept
+    {
+        _mSelFieldLoc = std::move(loc);
+    }
+
+    /*
+     * Moves the selector field location of instances of this field
+     * class to the caller.
+     */
+    FieldLoc<UserMixinsT> takeSelFieldLoc() noexcept
+    {
+        return std::move(_mSelFieldLoc);
     }
 
     /*
@@ -2558,6 +2611,24 @@ public:
         return *_mFc;
     }
 
+    /*
+     * Sets the class of the optional field of instances of this field
+     * class.
+     */
+    void fc(typename Fc<UserMixinsT>::UP fc) noexcept
+    {
+        _mFc = std::move(fc);
+    }
+
+    /*
+     * Moves the class of the optional field of instances of this field
+     * class to the caller.
+     */
+    typename Fc<UserMixinsT>::UP takeFc() noexcept
+    {
+        return std::move(_mFc);
+    }
+
 private:
     /* Selector field location of instances of this field class */
     FieldLoc<UserMixinsT> _mSelFieldLoc;
@@ -2570,7 +2641,7 @@ private:
  * Class of optional fields with a boolean selector.
  */
 template <typename UserMixinsT>
-class OptionalWithBoolSelFc :
+class OptionalWithBoolSelFc final :
     public OptionalFc<UserMixinsT>,
     public UserMixinsT::OptionalWithBoolSelFc
 {
@@ -2583,17 +2654,17 @@ public:
                                    typename UserMixinsT::OptionalWithBoolSelFc mixin,
                                    typename Fc<UserMixinsT>::UP fc,
                                    FieldLoc<UserMixinsT> selFieldLoc,
-                                   OptUserAttrs userAttrs = OptUserAttrs {}) :
-        OptionalFc<UserMixinsT> {FcType::OPTIONAL_WITH_BOOL_SEL, std::move(fcMixin),
-                                 std::move(optionalFcMixin),     std::move(fc),
-                                 std::move(selFieldLoc),         std::move(userAttrs)},
+                                   OptAttrs attrs = OptAttrs {}) :
+        OptionalFc<UserMixinsT> {FcType::OptionalWithBoolSel, std::move(fcMixin),
+                                 std::move(optionalFcMixin),  std::move(fc),
+                                 std::move(selFieldLoc),      std::move(attrs)},
         UserMixinsT::OptionalWithBoolSelFc {std::move(mixin)}
     {
     }
 
     /*
-     * Returns whether or not an instance of this field class is
-     * enabled by the selector value `selVal`.
+     * Returns whether or not an instance of this field class is enabled
+     * by the selector value `selVal`.
      */
     bool isEnabledBySelVal(const bool selVal) const noexcept
     {
@@ -2603,7 +2674,7 @@ public:
     typename Fc<UserMixinsT>::UP clone() const override
     {
         return bt2s::make_unique<OptionalWithBoolSelFc>(*this, *this, *this, this->fc().clone(),
-                                                        this->selFieldLoc(), this->userAttrs());
+                                                        this->selFieldLoc(), this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -2622,8 +2693,9 @@ public:
  *
  * `IntRangeSetT` is the integer selector range set type.
  *
- * The only specific property over `OptionalFc<UserMixinsT>` is the
- * selector field ranges which enable an instance of the field class.
+ * Specific property over `OptionalFc<UserMixinsT>`:
+ *
+ * • Selector field ranges which enable an instance.
  */
 template <typename UserMixinsT, typename IntRangeSetT>
 class OptionalWithIntSelFc :
@@ -2643,9 +2715,9 @@ protected:
                                   typename UserMixinsT::OptionalWithIntSelFc mixin,
                                   typename Fc<UserMixinsT>::UP&& fc,
                                   FieldLoc<UserMixinsT>&& selFieldLoc,
-                                  IntRangeSetT&& selFieldRanges, OptUserAttrs&& userAttrs) :
+                                  IntRangeSetT&& selFieldRanges, OptAttrs&& attrs) :
         OptionalFc<UserMixinsT> {type,          std::move(fcMixin),     std::move(optionalFcMixin),
-                                 std::move(fc), std::move(selFieldLoc), std::move(userAttrs)},
+                                 std::move(fc), std::move(selFieldLoc), std::move(attrs)},
         UserMixinsT::OptionalWithIntSelFc {std::move(mixin)}, _mSelFieldRanges {
                                                                   std::move(selFieldRanges)}
     {
@@ -2679,7 +2751,7 @@ private:
  * Class of optional fields with an unsigned integer selector.
  */
 template <typename UserMixinsT>
-class OptionalWithUIntSelFc :
+class OptionalWithUIntSelFc final :
     public OptionalWithIntSelFc<UserMixinsT, UIntRangeSet>,
     public UserMixinsT::OptionalWithUIntSelFc
 {
@@ -2689,15 +2761,15 @@ public:
         typename UserMixinsT::OptionalWithIntSelFc optionalWithIntSelFcMixin,
         typename UserMixinsT::OptionalWithUIntSelFc mixin, typename Fc<UserMixinsT>::UP fc,
         FieldLoc<UserMixinsT> selFieldLoc, UIntRangeSet selFieldRanges,
-        OptUserAttrs userAttrs = OptUserAttrs {}) :
-        OptionalWithIntSelFc<UserMixinsT, UIntRangeSet> {FcType::OPTIONAL_WITH_UINT_SEL,
+        OptAttrs attrs = OptAttrs {}) :
+        OptionalWithIntSelFc<UserMixinsT, UIntRangeSet> {FcType::OptionalWithUIntSel,
                                                          std::move(fcMixin),
                                                          std::move(optionalFcMixin),
                                                          std::move(optionalWithIntSelFcMixin),
                                                          std::move(fc),
                                                          std::move(selFieldLoc),
                                                          std::move(selFieldRanges),
-                                                         std::move(userAttrs)},
+                                                         std::move(attrs)},
         UserMixinsT::OptionalWithUIntSelFc {std::move(mixin)}
     {
     }
@@ -2706,7 +2778,7 @@ public:
     {
         return bt2s::make_unique<OptionalWithUIntSelFc>(*this, *this, *this, *this,
                                                         this->fc().clone(), this->selFieldLoc(),
-                                                        this->selFieldRanges(), this->userAttrs());
+                                                        this->selFieldRanges(), this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -2724,7 +2796,7 @@ public:
  * Class of optional fields with a signed integer selector.
  */
 template <typename UserMixinsT>
-class OptionalWithSIntSelFc :
+class OptionalWithSIntSelFc final :
     public OptionalWithIntSelFc<UserMixinsT, SIntRangeSet>,
     public UserMixinsT::OptionalWithSIntSelFc
 {
@@ -2734,15 +2806,15 @@ public:
         typename UserMixinsT::OptionalWithIntSelFc optionalWithIntSelFcMixin,
         typename UserMixinsT::OptionalWithSIntSelFc mixin, typename Fc<UserMixinsT>::UP fc,
         FieldLoc<UserMixinsT> selFieldLoc, SIntRangeSet selFieldRanges,
-        OptUserAttrs userAttrs = OptUserAttrs {}) :
-        OptionalWithIntSelFc<UserMixinsT, SIntRangeSet> {FcType::OPTIONAL_WITH_SINT_SEL,
+        OptAttrs attrs = OptAttrs {}) :
+        OptionalWithIntSelFc<UserMixinsT, SIntRangeSet> {FcType::OptionalWithSIntSel,
                                                          std::move(fcMixin),
                                                          std::move(optionalFcMixin),
                                                          std::move(optionalWithIntSelFcMixin),
                                                          std::move(fc),
                                                          std::move(selFieldLoc),
                                                          std::move(selFieldRanges),
-                                                         std::move(userAttrs)},
+                                                         std::move(attrs)},
         UserMixinsT::OptionalWithSIntSelFc {std::move(mixin)}
     {
     }
@@ -2751,7 +2823,7 @@ public:
     {
         return bt2s::make_unique<OptionalWithSIntSelFc>(*this, *this, *this, *this,
                                                         this->fc().clone(), this->selFieldLoc(),
-                                                        this->selFieldRanges(), this->userAttrs());
+                                                        this->selFieldRanges(), this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -2771,7 +2843,7 @@ public:
  * `IntRangeSetT` is the integer selector range set type.
  */
 template <typename UserMixinsT, typename IntRangeSetT>
-class VariantFcOpt : public internal::WithUserAttrsMixin, public UserMixinsT::VariantFcOpt
+class VariantFcOpt final : public internal::WithAttrsMixin, public UserMixinsT::VariantFcOpt
 {
 public:
     /* Integer selector range set type */
@@ -2782,8 +2854,8 @@ public:
 
     explicit VariantFcOpt(typename UserMixinsT::VariantFcOpt mixin, typename Fc<UserMixinsT>::UP fc,
                           IntRangeSetT selFieldRanges, bt2s::optional<std::string> name,
-                          OptUserAttrs userAttrs = OptUserAttrs {}) :
-        internal::WithUserAttrsMixin {std::move(userAttrs)},
+                          OptAttrs attrs = OptAttrs {}) :
+        internal::WithAttrsMixin {std::move(attrs)},
         UserMixinsT::VariantFcOpt {std::move(mixin)}, _mName {std::move(name)},
         _mFc {std::move(fc)}, _mSelFieldRanges {std::move(selFieldRanges)}
     {
@@ -2795,7 +2867,7 @@ public:
      * field class.
      */
     VariantFcOpt(const VariantFcOpt& other) :
-        internal::WithUserAttrsMixin {other.userAttrs()}, UserMixinsT::VariantFcOpt {other},
+        internal::WithAttrsMixin {other.attrs()}, UserMixinsT::VariantFcOpt {other},
         _mName {other.name()}, _mFc {other.fc().clone()}, _mSelFieldRanges {other.selFieldRanges()}
     {
     }
@@ -2806,6 +2878,14 @@ public:
     const bt2s::optional<std::string>& name() const noexcept
     {
         return _mName;
+    }
+
+    /*
+     * Moves the name of this variant field class option to the caller.
+     */
+    typename bt2s::optional<std::string> takeName() noexcept
+    {
+        return std::move(_mName);
     }
 
     /*
@@ -2825,12 +2905,38 @@ public:
     }
 
     /*
+     * Moves the field class of this variant field class option to the
+     * caller.
+     */
+    typename Fc<UserMixinsT>::UP takeFc() noexcept
+    {
+        return std::move(_mFc);
+    }
+
+    /*
+     * Sets the field class of this variant field class option.
+     */
+    void fc(typename Fc<UserMixinsT>::UP fc) noexcept
+    {
+        _mFc = std::move(fc);
+    }
+
+    /*
      * Integer selector field ranges which select this variant field
      * class option.
      */
     const IntRangeSetT& selFieldRanges() const noexcept
     {
         return _mSelFieldRanges;
+    }
+
+    /*
+     * Moves the attributes of this variant field class option to
+     * the caller.
+     */
+    OptAttrs takeAttrs() noexcept
+    {
+        return this->_takeAttrs();
     }
 
 private:
@@ -2846,8 +2952,8 @@ private:
  *
  * Specific properties over `Fc<UserMixinsT>`:
  *
- * • Selector field location of field class instances.
- * • Options of the field class.
+ * • Selector field location of instances.
+ * • Options.
  */
 template <typename UserMixinsT, typename IntRangeSetT>
 class VariantFc : public Fc<UserMixinsT>, public UserMixinsT::VariantFc
@@ -2868,8 +2974,8 @@ public:
 protected:
     explicit VariantFc(const FcType type, typename UserMixinsT::Fc fcMixin,
                        typename UserMixinsT::VariantFc mixin, Opts&& opts,
-                       FieldLoc<UserMixinsT>&& selFieldLoc, OptUserAttrs&& userAttrs) :
-        Fc<UserMixinsT> {type, std::move(fcMixin), 1, std::move(userAttrs)},
+                       FieldLoc<UserMixinsT>&& selFieldLoc, OptAttrs&& attrs) :
+        Fc<UserMixinsT> {type, std::move(fcMixin), 1, std::move(attrs)},
         UserMixinsT::VariantFc {std::move(mixin)}, _mOpts {std::move(opts)},
         _mSelFieldLoc {std::move(selFieldLoc)}
     {
@@ -2882,6 +2988,24 @@ public:
     const FieldLoc<UserMixinsT>& selFieldLoc() const noexcept
     {
         return _mSelFieldLoc;
+    }
+
+    /*
+     * Sets the selector field location of instances of this field class
+     * to `loc`.
+     */
+    void selFieldLoc(FieldLoc<UserMixinsT> loc) noexcept
+    {
+        _mSelFieldLoc = std::move(loc);
+    }
+
+    /*
+     * Moves the selector field location of instances of this field
+     * class to the caller.
+     */
+    FieldLoc<UserMixinsT> takeSelFieldLoc() noexcept
+    {
+        return std::move(_mSelFieldLoc);
     }
 
     /*
@@ -2980,7 +3104,7 @@ private:
  * Class of variant fields with an unsigned integer selector.
  */
 template <typename UserMixinsT>
-class VariantWithUIntSelFc :
+class VariantWithUIntSelFc final :
     public VariantFc<UserMixinsT, UIntRangeSet>,
     public UserMixinsT::VariantWithUIntSelFc
 {
@@ -2989,11 +3113,10 @@ public:
                                   typename UserMixinsT::VariantFc variantFcMixin,
                                   typename UserMixinsT::VariantWithUIntSelFc mixin,
                                   typename VariantFc<UserMixinsT, UIntRangeSet>::Opts opts,
-                                  FieldLoc<UserMixinsT> selFieldLoc,
-                                  OptUserAttrs userAttrs = OptUserAttrs {}) :
-        VariantFc<UserMixinsT, UIntRangeSet> {FcType::VARIANT_WITH_UINT_SEL, std::move(fcMixin),
-                                              std::move(variantFcMixin),     std::move(opts),
-                                              std::move(selFieldLoc),        std::move(userAttrs)},
+                                  FieldLoc<UserMixinsT> selFieldLoc, OptAttrs attrs = OptAttrs {}) :
+        VariantFc<UserMixinsT, UIntRangeSet> {FcType::VariantWithUIntSel, std::move(fcMixin),
+                                              std::move(variantFcMixin),  std::move(opts),
+                                              std::move(selFieldLoc),     std::move(attrs)},
         UserMixinsT::VariantWithUIntSelFc {std::move(mixin)}
     {
     }
@@ -3001,7 +3124,7 @@ public:
     typename Fc<UserMixinsT>::UP clone() const override
     {
         return bt2s::make_unique<VariantWithUIntSelFc>(*this, *this, *this, this->opts(),
-                                                       this->selFieldLoc(), this->userAttrs());
+                                                       this->selFieldLoc(), this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -3019,7 +3142,7 @@ public:
  * Class of variant fields with a signed integer selector.
  */
 template <typename UserMixinsT>
-class VariantWithSIntSelFc :
+class VariantWithSIntSelFc final :
     public VariantFc<UserMixinsT, SIntRangeSet>,
     public UserMixinsT::VariantWithSIntSelFc
 {
@@ -3028,11 +3151,10 @@ public:
                                   typename UserMixinsT::VariantFc variantFcMixin,
                                   typename UserMixinsT::VariantWithSIntSelFc mixin,
                                   typename VariantFc<UserMixinsT, SIntRangeSet>::Opts opts,
-                                  FieldLoc<UserMixinsT> selFieldLoc,
-                                  OptUserAttrs userAttrs = OptUserAttrs {}) :
-        VariantFc<UserMixinsT, SIntRangeSet> {FcType::VARIANT_WITH_SINT_SEL, std::move(fcMixin),
-                                              std::move(variantFcMixin),     std::move(opts),
-                                              std::move(selFieldLoc),        std::move(userAttrs)},
+                                  FieldLoc<UserMixinsT> selFieldLoc, OptAttrs attrs = OptAttrs {}) :
+        VariantFc<UserMixinsT, SIntRangeSet> {FcType::VariantWithSIntSel, std::move(fcMixin),
+                                              std::move(variantFcMixin),  std::move(opts),
+                                              std::move(selFieldLoc),     std::move(attrs)},
         UserMixinsT::VariantWithSIntSelFc {std::move(mixin)}
     {
     }
@@ -3040,7 +3162,7 @@ public:
     typename Fc<UserMixinsT>::UP clone() const override
     {
         return bt2s::make_unique<VariantWithSIntSelFc>(*this, *this, *this, this->opts(),
-                                                       this->selFieldLoc(), this->userAttrs());
+                                                       this->selFieldLoc(), this->attrs());
     }
 
     void accept(FcVisitor<UserMixinsT>& visitor) override
@@ -3066,6 +3188,20 @@ const FixedLenBitArrayFc<UserMixinsT>& Fc<UserMixinsT>::asFixedLenBitArray() con
 {
     BT_ASSERT_DBG(this->isFixedLenBitArray());
     return static_cast<const FixedLenBitArrayFc<UserMixinsT>&>(*this);
+}
+
+template <typename UserMixinsT>
+FixedLenBitMapFc<UserMixinsT>& Fc<UserMixinsT>::asFixedLenBitMap() noexcept
+{
+    BT_ASSERT_DBG(this->isFixedLenBitMap());
+    return static_cast<FixedLenBitMapFc<UserMixinsT>&>(*this);
+}
+
+template <typename UserMixinsT>
+const FixedLenBitMapFc<UserMixinsT>& Fc<UserMixinsT>::asFixedLenBitMap() const noexcept
+{
+    BT_ASSERT_DBG(this->isFixedLenBitMap());
+    return static_cast<const FixedLenBitMapFc<UserMixinsT>&>(*this);
 }
 
 template <typename UserMixinsT>
@@ -3139,34 +3275,6 @@ const FixedLenUIntFc<UserMixinsT>& Fc<UserMixinsT>::asFixedLenUInt() const noexc
 }
 
 template <typename UserMixinsT>
-FixedLenSEnumFc<UserMixinsT>& Fc<UserMixinsT>::asFixedLenSEnum() noexcept
-{
-    BT_ASSERT_DBG(this->isFixedLenSEnum());
-    return static_cast<FixedLenSEnumFc<UserMixinsT>&>(*this);
-}
-
-template <typename UserMixinsT>
-const FixedLenSEnumFc<UserMixinsT>& Fc<UserMixinsT>::asFixedLenSEnum() const noexcept
-{
-    BT_ASSERT_DBG(this->isFixedLenSEnum());
-    return static_cast<const FixedLenSEnumFc<UserMixinsT>&>(*this);
-}
-
-template <typename UserMixinsT>
-FixedLenUEnumFc<UserMixinsT>& Fc<UserMixinsT>::asFixedLenUEnum() noexcept
-{
-    BT_ASSERT_DBG(this->isFixedLenUEnum());
-    return static_cast<FixedLenUEnumFc<UserMixinsT>&>(*this);
-}
-
-template <typename UserMixinsT>
-const FixedLenUEnumFc<UserMixinsT>& Fc<UserMixinsT>::asFixedLenUEnum() const noexcept
-{
-    BT_ASSERT_DBG(this->isFixedLenUEnum());
-    return static_cast<const FixedLenUEnumFc<UserMixinsT>&>(*this);
-}
-
-template <typename UserMixinsT>
 VarLenIntFc<UserMixinsT>& Fc<UserMixinsT>::asVarLenInt() noexcept
 {
     BT_ASSERT_DBG(this->isVarLenInt());
@@ -3209,34 +3317,6 @@ const VarLenUIntFc<UserMixinsT>& Fc<UserMixinsT>::asVarLenUInt() const noexcept
 }
 
 template <typename UserMixinsT>
-VarLenSEnumFc<UserMixinsT>& Fc<UserMixinsT>::asVarLenSEnum() noexcept
-{
-    BT_ASSERT_DBG(this->isVarLenSEnum());
-    return static_cast<VarLenSEnumFc<UserMixinsT>&>(*this);
-}
-
-template <typename UserMixinsT>
-const VarLenSEnumFc<UserMixinsT>& Fc<UserMixinsT>::asVarLenSEnum() const noexcept
-{
-    BT_ASSERT_DBG(this->isVarLenSEnum());
-    return static_cast<const VarLenSEnumFc<UserMixinsT>&>(*this);
-}
-
-template <typename UserMixinsT>
-VarLenUEnumFc<UserMixinsT>& Fc<UserMixinsT>::asVarLenUEnum() noexcept
-{
-    BT_ASSERT_DBG(this->isVarLenUEnum());
-    return static_cast<VarLenUEnumFc<UserMixinsT>&>(*this);
-}
-
-template <typename UserMixinsT>
-const VarLenUEnumFc<UserMixinsT>& Fc<UserMixinsT>::asVarLenUEnum() const noexcept
-{
-    BT_ASSERT_DBG(this->isVarLenUEnum());
-    return static_cast<const VarLenUEnumFc<UserMixinsT>&>(*this);
-}
-
-template <typename UserMixinsT>
 NullTerminatedStrFc<UserMixinsT>& Fc<UserMixinsT>::asNullTerminatedStr() noexcept
 {
     BT_ASSERT_DBG(this->isNullTerminatedStr());
@@ -3262,6 +3342,20 @@ const NonNullTerminatedStrFc<UserMixinsT>& Fc<UserMixinsT>::asNonNullTerminatedS
 {
     BT_ASSERT_DBG(this->isNonNullTerminatedStr());
     return static_cast<const NonNullTerminatedStrFc<UserMixinsT>&>(*this);
+}
+
+template <typename UserMixinsT>
+StrFc<UserMixinsT>& Fc<UserMixinsT>::asStr() noexcept
+{
+    BT_ASSERT_DBG(this->isStr());
+    return static_cast<StrFc<UserMixinsT>&>(*this);
+}
+
+template <typename UserMixinsT>
+const StrFc<UserMixinsT>& Fc<UserMixinsT>::asStr() const noexcept
+{
+    BT_ASSERT_DBG(this->isStr());
+    return static_cast<const StrFc<UserMixinsT>&>(*this);
 }
 
 template <typename UserMixinsT>
@@ -3477,7 +3571,7 @@ const VariantWithSIntSelFc<UserMixinsT>& Fc<UserMixinsT>::asVariantWithSIntSel()
 /*
  * Clock offset (seconds and cycles).
  */
-class ClkOffset
+class ClkOffset final
 {
 public:
     explicit ClkOffset(const long long seconds = 0, const unsigned long long cycles = 0) noexcept :
@@ -3510,40 +3604,139 @@ private:
 };
 
 /*
+ * Clock origin (namespace, name, and unique ID).
+ */
+class ClkOrigin final
+{
+public:
+    /*
+     * Builds a clock origin having the (optional) namespace `ns`, the
+     * name `name`, and the unique ID `uid`.
+     */
+    explicit ClkOrigin(bt2s::optional<std::string> ns, std::string name, std::string uid) :
+        _mNs {std::move(ns)}, _mName {std::move(name)}, _mUid {std::move(uid)}
+    {
+    }
+
+    /*
+     * Builds a Unix epoch clock origin.
+     */
+    explicit ClkOrigin() : ClkOrigin {_unixEpochNs, _unixEpochName, _unixEpochUid}
+    {
+    }
+
+    /*
+     * Namespace.
+     */
+    const bt2s::optional<std::string>& ns() const noexcept
+    {
+        return _mNs;
+    }
+
+    /*
+     * Name.
+     */
+    const std::string& name() const noexcept
+    {
+        return _mName;
+    }
+
+    /*
+     * Unique ID.
+     */
+    const std::string& uid() const noexcept
+    {
+        return _mUid;
+    }
+
+    /*
+     * Returns whether or not this clock origin is the Unix epoch.
+     */
+    bool isUnixEpoch() const noexcept
+    {
+        return _mNs == _unixEpochNs && _mName == _unixEpochName && _mUid == _unixEpochUid;
+    }
+
+private:
+    /* Internal Unix epoch origin namespace, name, and unique ID */
+    static const char * const _unixEpochNs;
+    static const char * const _unixEpochName;
+    static const char * const _unixEpochUid;
+
+    /* Namespace */
+    bt2s::optional<std::string> _mNs;
+
+    /* Name */
+    std::string _mName;
+
+    /* Unique ID */
+    std::string _mUid;
+};
+
+/*
  * Clock class.
  */
 template <typename UserMixinsT>
-class ClkCls :
-    public internal::WithUserAttrsMixin,
+class ClkCls final :
+    public internal::WithAttrsMixin,
     public internal::WithLibCls<bt2::ClockClass>,
     public UserMixinsT::ClkCls
 {
 public:
-    /* Shared pointer to an event record class */
+    /* Shared pointer to a clock class */
     using SP = std::shared_ptr<ClkCls>;
 
-    explicit ClkCls(typename UserMixinsT::ClkCls mixin, std::string name,
-                    const unsigned long long freq, const ClkOffset& clkOffset = ClkOffset {},
-                    const bool originIsUnixEpoch = true,
+    explicit ClkCls(typename UserMixinsT::ClkCls mixin, std::string id,
+                    const unsigned long long freq, bt2s::optional<std::string> ns = bt2s::nullopt,
+                    bt2s::optional<std::string> name = bt2s::nullopt,
+                    bt2s::optional<std::string> uid = bt2s::nullopt,
+                    const ClkOffset& offsetFromOrigin = ClkOffset {},
+                    bt2s::optional<ClkOrigin> origin = ClkOrigin {},
                     bt2s::optional<std::string> descr = bt2s::nullopt,
-                    const unsigned long long precision = 0,
-                    bt2s::optional<bt2c::Uuid> uuid = bt2s::nullopt,
-                    OptUserAttrs userAttrs = OptUserAttrs {}) :
-        internal::WithUserAttrsMixin {std::move(userAttrs)},
-        UserMixinsT::ClkCls {std::move(mixin)}, _mName {std::move(name)}, _mFreq {freq},
-        _mOffset {clkOffset}, _mOriginIsUnixEpoch {originIsUnixEpoch}, _mDescr {std::move(descr)},
-        _mPrecision {precision}, _mUuid {std::move(uuid)}
+                    bt2s::optional<unsigned long long> precision = bt2s::nullopt,
+                    bt2s::optional<unsigned long long> accuracy = bt2s::nullopt,
+                    OptAttrs attrs = OptAttrs {}) :
+        internal::WithAttrsMixin {std::move(attrs)},
+        UserMixinsT::ClkCls {std::move(mixin)}, _mId {std::move(id)}, _mNs {std::move(ns)},
+        _mName {std::move(name)}, _mUid {std::move(uid)}, _mFreq {freq},
+        _mOffsetFromOrigin {offsetFromOrigin}, _mOrigin {std::move(origin)}, _mDescr {std::move(
+                                                                                 descr)},
+        _mPrecision {std::move(precision)}, _mAccuracy {std::move(accuracy)}
     {
         BT_ASSERT(_mFreq > 0);
-        BT_ASSERT(_mOffset.cycles() < _mFreq);
+        BT_ASSERT(_mOffsetFromOrigin.cycles() < _mFreq);
+    }
+
+    /*
+     * Unique ID of this clock class within its trace class.
+     */
+    const std::string& id() const noexcept
+    {
+        return _mId;
+    }
+
+    /*
+     * Namespace of instances of this clock class.
+     */
+    const bt2s::optional<std::string>& ns() const noexcept
+    {
+        return _mNs;
     }
 
     /*
      * Name of instances of this clock class.
      */
-    const std::string& name() const noexcept
+    const bt2s::optional<std::string>& name() const noexcept
     {
         return _mName;
+    }
+
+    /*
+     * UID of instances of this clock class.
+     */
+    const bt2s::optional<std::string>& uid() const noexcept
+    {
+        return _mUid;
     }
 
     /*
@@ -3557,35 +3750,33 @@ public:
     /*
      * Offset from origin of instances of this clock class.
      */
-    const ClkOffset& offset() const noexcept
+    const ClkOffset& offsetFromOrigin() const noexcept
     {
-        return _mOffset;
+        return _mOffsetFromOrigin;
     }
 
     /*
-     * Sets the offset from origin of instances of this clock class.
-     */
-    void offset(const ClkOffset& offset) noexcept
+      * Sets the offset from origin of instances of this clock class.
+      */
+    void offsetFromOrigin(const ClkOffset& offsetFromOrigin) noexcept
     {
-        _mOffset = offset;
+        _mOffsetFromOrigin = offsetFromOrigin;
     }
 
     /*
-     * Whether or not the origin of instances of this clock class is the
-     * Unix epoch.
+     * Origin of instances of this clock class.
      */
-    bool originIsUnixEpoch() const noexcept
+    const bt2s::optional<ClkOrigin>& origin() const noexcept
     {
-        return _mOriginIsUnixEpoch;
+        return _mOrigin;
     }
 
     /*
-     * Sets whether or not the origin of instances of this clock class is the
-     * Unix epoch.
+     * Sets the origin of instances of this clock class.
      */
-    void originIsUnixEpoch(const bool originIsUnixEpoch) noexcept
+    void origin(bt2s::optional<ClkOrigin> origin) noexcept
     {
-        _mOriginIsUnixEpoch = originIsUnixEpoch;
+        _mOrigin = std::move(origin);
     }
 
     /*
@@ -3599,51 +3790,57 @@ public:
     /*
      * Precision (cycles) of instances of this clock class.
      */
-    unsigned long long precision() const noexcept
+    const bt2s::optional<unsigned long long>& precision() const noexcept
     {
         return _mPrecision;
     }
 
     /*
-     * UUID of instances of this clock class.
+     * Accuracy (cycles) of instances of this clock class.
      */
-    const bt2s::optional<bt2c::Uuid>& uuid() const noexcept
+    const bt2s::optional<unsigned long long>& accuracy() const noexcept
     {
-        return _mUuid;
+        return _mAccuracy;
     }
 
 private:
+    /* Unique ID of this clock class within its trace class */
+    std::string _mId;
+
+    /* Namespace of instances of this clock class */
+    bt2s::optional<std::string> _mNs;
+
     /* Name of instances of this clock class */
-    std::string _mName;
+    bt2s::optional<std::string> _mName;
+
+    /* UID of instances of this clock class */
+    bt2s::optional<std::string> _mUid;
 
     /* Frequency (Hz) of instances of this clock class */
     unsigned long long _mFreq;
 
     /* Offset from origin of instances of this clock class */
-    ClkOffset _mOffset;
+    ClkOffset _mOffsetFromOrigin;
 
-    /*
-     * Whether or not the origin of instances of this clock class is the
-     * Unix epoch.
-     */
-    bool _mOriginIsUnixEpoch;
+    /* Origin of instances of this clock class */
+    bt2s::optional<ClkOrigin> _mOrigin;
 
     /* Description of instances of this clock class */
     bt2s::optional<std::string> _mDescr;
 
     /* Precision (cycles) of instances of this clock class */
-    unsigned long long _mPrecision;
+    bt2s::optional<unsigned long long> _mPrecision;
 
-    /* UUID of instances of this clock class */
-    bt2s::optional<bt2c::Uuid> _mUuid;
+    /* Accuracy (cycles) of instances of this clock class */
+    bt2s::optional<unsigned long long> _mAccuracy;
 };
 
 /*
  * Event record class.
  */
 template <typename UserMixinsT>
-class EventRecordCls :
-    public internal::WithUserAttrsMixin,
+class EventRecordCls final :
+    public internal::WithAttrsMixin,
     public internal::WithLibCls<bt2::EventClass>,
     public UserMixinsT::EventRecordCls
 {
@@ -3654,13 +3851,14 @@ public:
     explicit EventRecordCls(typename UserMixinsT::EventRecordCls mixin, const unsigned long long id,
                             bt2s::optional<std::string> ns = bt2s::nullopt,
                             bt2s::optional<std::string> name = bt2s::nullopt,
+                            bt2s::optional<std::string> uid = bt2s::nullopt,
                             typename StructFc<UserMixinsT>::UP specCtxFc = nullptr,
                             typename StructFc<UserMixinsT>::UP payloadFc = nullptr,
-                            OptUserAttrs userAttrs = OptUserAttrs {}) :
-        internal::WithUserAttrsMixin {std::move(userAttrs)},
+                            OptAttrs attrs = OptAttrs {}) :
+        internal::WithAttrsMixin {std::move(attrs)},
         UserMixinsT::EventRecordCls {std::move(mixin)}, _mId {id}, _mNs {std::move(ns)},
-        _mName {std::move(name)}, _mSpecCtxFc {std::move(specCtxFc)}, _mPayloadFc {
-                                                                          std::move(payloadFc)}
+        _mName {std::move(name)}, _mUid {std::move(uid)}, _mSpecCtxFc {std::move(specCtxFc)},
+        _mPayloadFc {std::move(payloadFc)}
     {
     }
 
@@ -3686,6 +3884,14 @@ public:
     const bt2s::optional<std::string>& name() const noexcept
     {
         return _mName;
+    }
+
+    /*
+     * UID of instances of this event record class.
+     */
+    const bt2s::optional<std::string>& uid() const noexcept
+    {
+        return _mUid;
     }
 
     /*
@@ -3734,6 +3940,9 @@ private:
     /* Name of instances of this event record class */
     bt2s::optional<std::string> _mName;
 
+    /* UID of instances of this event record class */
+    bt2s::optional<std::string> _mUid;
+
     /*
      * Class of the specific context field of instances of this event
      * record class.
@@ -3754,7 +3963,7 @@ namespace internal {
  * `ObjT`.
  */
 template <typename ObjT>
-struct ObjUpIdLt
+struct ObjUpIdLt final
 {
     bool operator()(const typename ObjT::UP& objA, const typename ObjT::UP& objB) const noexcept
     {
@@ -3768,8 +3977,8 @@ struct ObjUpIdLt
  * Data stream class.
  */
 template <typename UserMixinsT>
-class DataStreamCls :
-    public internal::WithUserAttrsMixin,
+class DataStreamCls final :
+    public internal::WithAttrsMixin,
     public internal::WithLibCls<bt2::StreamClass>,
     public UserMixinsT::DataStreamCls
 {
@@ -3784,16 +3993,17 @@ public:
     explicit DataStreamCls(typename UserMixinsT::DataStreamCls mixin, const unsigned long long id,
                            bt2s::optional<std::string> ns = bt2s::nullopt,
                            bt2s::optional<std::string> name = bt2s::nullopt,
+                           bt2s::optional<std::string> uid = bt2s::nullopt,
                            typename StructFc<UserMixinsT>::UP pktCtxFc = nullptr,
                            typename StructFc<UserMixinsT>::UP eventRecordHeaderFc = nullptr,
-                           typename StructFc<UserMixinsT>::UP eventRecordCommonCtxFc = nullptr,
+                           typename StructFc<UserMixinsT>::UP commonEventRecordCtxFc = nullptr,
                            typename ClkCls<UserMixinsT>::SP defClkCls = nullptr,
-                           OptUserAttrs userAttrs = OptUserAttrs {}) :
-        internal::WithUserAttrsMixin {std::move(userAttrs)},
+                           OptAttrs attrs = OptAttrs {}) :
+        internal::WithAttrsMixin {std::move(attrs)},
         UserMixinsT::DataStreamCls {std::move(mixin)}, _mId {id}, _mNs {std::move(ns)},
-        _mName {std::move(name)}, _mPktCtxFc {std::move(pktCtxFc)},
+        _mName {std::move(name)}, _mUid {std::move(uid)}, _mPktCtxFc {std::move(pktCtxFc)},
         _mEventRecordHeaderFc {std::move(eventRecordHeaderFc)},
-        _mEventRecordCommonCtxFc {std::move(eventRecordCommonCtxFc)}, _mDefClkCls {
+        _mCommonEventRecordCtxFc {std::move(commonEventRecordCtxFc)}, _mDefClkCls {
                                                                           std::move(defClkCls)}
     {
     }
@@ -3820,6 +4030,14 @@ public:
     const bt2s::optional<std::string>& name() const noexcept
     {
         return _mName;
+    }
+
+    /*
+     * UID of instances of this data stream class.
+     */
+    const bt2s::optional<std::string>& uid() const noexcept
+    {
+        return _mUid;
     }
 
     /*
@@ -3862,18 +4080,18 @@ public:
      * Class of the header field of event records which are part of
      * instances of this data stream class.
      */
-    const StructFc<UserMixinsT> *eventRecordCommonCtxFc() const noexcept
+    const StructFc<UserMixinsT> *commonEventRecordCtxFc() const noexcept
     {
-        return static_cast<StructFc<UserMixinsT> *>(_mEventRecordCommonCtxFc.get());
+        return static_cast<StructFc<UserMixinsT> *>(_mCommonEventRecordCtxFc.get());
     }
 
     /*
      * Class of the common context field of event records which are part
      * of instances of this data stream class.
      */
-    StructFc<UserMixinsT> *eventRecordCommonCtxFc() noexcept
+    StructFc<UserMixinsT> *commonEventRecordCtxFc() noexcept
     {
-        return static_cast<StructFc<UserMixinsT> *>(_mEventRecordCommonCtxFc.get());
+        return static_cast<StructFc<UserMixinsT> *>(_mCommonEventRecordCtxFc.get());
     }
 
     /*
@@ -3980,6 +4198,9 @@ private:
     /* Name of instances of this data stream class */
     bt2s::optional<std::string> _mName;
 
+    /* UID of instances of this data stream class */
+    bt2s::optional<std::string> _mUid;
+
     /*
      * Class of the context field of packets which are part of instances
      * of this data stream class.
@@ -3996,7 +4217,7 @@ private:
      * Class of the common context field of event records which are part
      * of instances of this data stream class.
      */
-    typename Fc<UserMixinsT>::UP _mEventRecordCommonCtxFc;
+    typename Fc<UserMixinsT>::UP _mCommonEventRecordCtxFc;
 
     /*
      * Class of the default clock of instances of this data stream
@@ -4009,8 +4230,8 @@ private:
  * Trace class.
  */
 template <typename UserMixinsT>
-class TraceCls :
-    public internal::WithUserAttrsMixin,
+class TraceCls final :
+    public internal::WithAttrsMixin,
     public internal::WithLibCls<bt2::TraceClass>,
     public UserMixinsT::TraceCls
 {
@@ -4020,35 +4241,49 @@ public:
                                       internal::ObjUpIdLt<DataStreamCls<UserMixinsT>>>;
 
     explicit TraceCls(typename UserMixinsT::TraceCls mixin,
-                      bt2s::optional<bt2c::Uuid> uuid = bt2s::nullopt,
+                      bt2s::optional<std::string> ns = bt2s::nullopt,
+                      bt2s::optional<std::string> name = bt2s::nullopt,
+                      bt2s::optional<std::string> uid = bt2s::nullopt,
                       bt2::ConstMapValue::Shared env = bt2::ConstMapValue::Shared {},
                       typename Fc<UserMixinsT>::UP pktHeaderFc = nullptr,
-                      OptUserAttrs userAttrs = OptUserAttrs {}) :
-        internal::WithUserAttrsMixin {std::move(userAttrs)},
-        UserMixinsT::TraceCls {std::move(mixin)}, _mUuid {std::move(uuid)}, _mEnv {std::move(env)},
-        _mPktHeaderFc {std::move(pktHeaderFc)}
+                      OptAttrs attrs = OptAttrs {}) :
+        internal::WithAttrsMixin {std::move(attrs)},
+        UserMixinsT::TraceCls {std::move(mixin)}, _mNs {std::move(ns)}, _mName {std::move(name)},
+        _mUid {std::move(uid)}, _mEnv {std::move(env)}, _mPktHeaderFc {std::move(pktHeaderFc)}
     {
         BT_ASSERT(!_mPktHeaderFc || _mPktHeaderFc->isStruct());
     }
 
     /*
-     * UUID of instances of this trace class.
+     * Namespace of instances of this trace class.
      */
-    const bt2s::optional<bt2c::Uuid>& uuid() const noexcept
+    const bt2s::optional<std::string>& ns() const noexcept
     {
-        return _mUuid;
+        return _mNs;
+    }
+
+    /*
+     * Name of instances of this trace class.
+     */
+    const bt2s::optional<std::string>& name() const noexcept
+    {
+        return _mName;
+    }
+
+    /*
+     * UID of instances of this trace class.
+     */
+    const bt2s::optional<std::string>& uid() const noexcept
+    {
+        return _mUid;
     }
 
     /*
      * Environment of instances of this trace class.
      */
-    const bt2::OptionalBorrowedObject<bt2::ConstMapValue> env() const noexcept
+    const bt2::ConstMapValue::Shared& env() const noexcept
     {
-        if (!_mEnv) {
-            return {};
-        }
-
-        return *_mEnv;
+        return _mEnv;
     }
 
     /*
@@ -4145,8 +4380,14 @@ private:
     /* Map of data stream class ID to data stream class */
     _DataStreamClsByIdMap _mDataStreamClsIdMap;
 
-    /* UUID of instances of this trace class */
-    bt2s::optional<bt2c::Uuid> _mUuid;
+    /* Namespace of instances of this trace class */
+    bt2s::optional<std::string> _mNs;
+
+    /* Name of instances of this trace class */
+    bt2s::optional<std::string> _mName;
+
+    /* UID of instances of this trace class */
+    bt2s::optional<std::string> _mUid;
 
     /* Environment of instances of this trace class */
     bt2::ConstMapValue::Shared _mEnv;
@@ -4172,6 +4413,10 @@ struct DefUserMixins
     };
 
     struct FixedLenBitArrayFc
+    {
+    };
+
+    struct FixedLenBitMapFc
     {
     };
 
@@ -4283,4 +4528,4 @@ struct DefUserMixins
 } /* namespace ir */
 } /* namespace ctf */
 
-#endif /* _CTF_CTF_IR_HPP */
+#endif /* CTF_COMMON_METADATA_CTF_IR_HPP */

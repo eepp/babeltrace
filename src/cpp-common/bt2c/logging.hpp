@@ -21,12 +21,14 @@
 #include "cpp-common/bt2/self-component-class.hpp"
 #include "cpp-common/bt2/self-component-port.hpp"
 #include "cpp-common/bt2/self-message-iterator.hpp"
-#include "cpp-common/bt2c/text-loc-str.hpp"
 #include "cpp-common/bt2s/optional.hpp"
 #include "cpp-common/bt2s/span.hpp"
 #include "cpp-common/vendor/fmt/core.h"
 #include "cpp-common/vendor/wise-enum/wise_enum.h"
 #include "logging/log-api.h"
+
+#include "aliases.hpp"
+#include "text-loc-str.hpp"
 
 namespace bt2c {
 
@@ -70,8 +72,6 @@ namespace bt2c {
 class Logger final
 {
 public:
-    using MemData = bt2s::span<const std::uint8_t>;
-
     /* clang-format off */
 
     /* Available log levels */
@@ -327,8 +327,8 @@ private:
     struct _StdLogWriter final
     {
         static void write(const char * const fileName, const char * const funcName,
-                          const unsigned lineNo, const Level level, const char * const tag, MemData,
-                          const char * const initMsg, const char * const msg) noexcept
+                          const unsigned lineNo, const Level level, const char * const tag,
+                          ConstBytes, const char * const initMsg, const char * const msg) noexcept
         {
             BT_ASSERT_DBG(initMsg && std::strcmp(initMsg, "") == 0);
             bt_log_write(fileName, funcName, lineNo, static_cast<bt_log_level>(level), tag, msg);
@@ -384,8 +384,8 @@ private:
     struct _InitMsgLogWriter final
     {
         static void write(const char * const fileName, const char * const funcName,
-                          const unsigned lineNo, const Level level, const char * const tag, MemData,
-                          const char * const initMsg, const char * const msg) noexcept
+                          const unsigned lineNo, const Level level, const char * const tag,
+                          ConstBytes, const char * const initMsg, const char * const msg) noexcept
         {
             bt_log_write_printf(funcName, fileName, lineNo, static_cast<bt_log_level>(level), tag,
                                 "%s%s", initMsg, msg);
@@ -485,10 +485,10 @@ public:
      * rethrows.
      */
     template <bool AppendCauseV, typename... ArgTs>
-    [[noreturn]] void logErrorErrnoAndRethrow(const char * const fileName,
-                                              const char * const funcName,
-                                              const unsigned int lineNo, const TextLoc& textLoc,
-                                              const char * const fmt, ArgTs&&...args) const
+    [[noreturn]] void logErrorTextLocAndRethrow(const char * const fileName,
+                                                const char * const funcName,
+                                                const unsigned int lineNo, const TextLoc& textLoc,
+                                                const char * const fmt, ArgTs&&...args) const
     {
         this->logTextLoc<Level::Error, AppendCauseV>(fileName, funcName, lineNo, textLoc, fmt,
                                                      std::forward<ArgTs>(args)...);
@@ -500,7 +500,7 @@ private:
     {
         static void write(const char * const fileName, const char * const funcName,
                           const unsigned lineNo, const Level level, const char * const tag,
-                          const MemData memData, const char *, const char * const msg) noexcept
+                          const ConstBytes memData, const char *, const char * const msg) noexcept
         {
             bt_log_write_mem(funcName, fileName, lineNo, static_cast<bt_log_level>(level), tag,
                              memData.data(), memData.size(), msg);
@@ -516,7 +516,7 @@ public:
      */
     template <Level LevelV, typename... ArgTs>
     void logMem(const char * const fileName, const char * const funcName, const unsigned int lineNo,
-                const MemData memData, const char * const fmt, ArgTs&&...args) const
+                const ConstBytes memData, const char * const fmt, ArgTs&&...args) const
     {
         this->_log<_MemLogWriter, LevelV, false>(fileName, funcName, lineNo, memData, "", fmt,
                                                  std::forward<ArgTs>(args)...);
@@ -536,7 +536,7 @@ private:
      */
     template <typename LogWriterT, Level LevelV, bool AppendCauseV, typename... ArgTs>
     void _log(const char * const fileName, const char * const funcName, const unsigned int lineNo,
-              const MemData memData, const char * const initMsg, const char * const fmt,
+              const ConstBytes memData, const char * const initMsg, const char * const fmt,
               ArgTs&&...args) const
     {
         const auto wouldLog = this->wouldLog(LevelV);
@@ -895,8 +895,8 @@ inline const char *maybeNull(const char * const s) noexcept
  * `_excCls`.
  */
 #define BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(_logger, _excCls, _textLoc, _fmt, ...)     \
-    (_logger).template logErrorErrnoAndThrow<true, _excCls>(__FILE__, __func__, __LINE__,          \
-                                                            (_textLoc), (_fmt), ##__VA_ARGS__)
+    (_logger).template logErrorTextLocAndThrow<true, _excCls>(__FILE__, __func__, __LINE__,        \
+                                                              (_textLoc), (_fmt), ##__VA_ARGS__)
 
 /*
  * BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC() using the default
@@ -912,8 +912,8 @@ inline const char *maybeNull(const char * const s) noexcept
  * `_excCls`.
  */
 #define BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(_logger, _textLoc, _fmt, ...)            \
-    (_logger).template logErrorErrnoAndRethrow<true>(__FILE__, __func__, __LINE__, (_textLoc),     \
-                                                     (_fmt), ##__VA_ARGS__)
+    (_logger).template logErrorTextLocAndRethrow<true>(__FILE__, __func__, __LINE__, (_textLoc),   \
+                                                       (_fmt), ##__VA_ARGS__)
 
 /*
  * BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC() using the default

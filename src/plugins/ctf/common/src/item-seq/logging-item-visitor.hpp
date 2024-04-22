@@ -5,10 +5,9 @@
  * Copyright (c) 2022 Philippe Proulx <eeppeliteloop@gmail.com>
  */
 
-#ifndef _CTF_SRC_ITEM_SEQ_LOGGING_ITEM_VISITOR_HPP
-#define _CTF_SRC_ITEM_SEQ_LOGGING_ITEM_VISITOR_HPP
+#ifndef CTF_COMMON_SRC_ITEM_SEQ_LOGGING_ITEM_VISITOR_HPP
+#define CTF_COMMON_SRC_ITEM_SEQ_LOGGING_ITEM_VISITOR_HPP
 
-#include <sstream>
 #include <string>
 
 #include "cpp-common/bt2c/logging.hpp"
@@ -29,7 +28,7 @@ namespace src {
  *
  *     // ...
  *
- *     if (BT_LOG_ON_TRACE) {
+ *     if (_mLogger.wouldLogT()) {
  *         item.accept(visitor);
  *     }
  */
@@ -37,19 +36,20 @@ class LoggingItemVisitor final : public ItemVisitor
 {
 public:
     /*
-     * Builds a logging item visitor using the introductory text `intro`.
+     * Builds a logging item visitor using the introductory
+     * text `intro`.
      *
      * The message of each logging statement starts with `intro`.
      */
     explicit LoggingItemVisitor(std::string intro, const bt2c::Logger& parentLogger);
 
     /*
-     * Builds a logging item visitor using the introductory text `Processing item`.
+     * Builds a logging item visitor using the introductory text
+     * `Processing item`.
      */
     explicit LoggingItemVisitor(const bt2c::Logger& parentLogger);
 
     /* Visiting methods below */
-    void visit(const BlobFieldSectionItem&) override;
     void visit(const DataStreamInfoItem&) override;
     void visit(const DefClkValItem&) override;
     void visit(const DynLenArrayFieldBeginItem&) override;
@@ -68,12 +68,12 @@ public:
     void visit(const OptionalFieldWithUIntSelBeginItem&) override;
     void visit(const PktInfoItem&) override;
     void visit(const PktMagicNumberItem&) override;
+    void visit(const RawDataItem&) override;
     void visit(const ScopeBeginItem&) override;
     void visit(const ScopeEndItem&) override;
     void visit(const StaticLenArrayFieldBeginItem&) override;
     void visit(const StaticLenBlobFieldBeginItem&) override;
     void visit(const StaticLenStrFieldBeginItem&) override;
-    void visit(const StrFieldSubstrItem&) override;
     void visit(const StructFieldBeginItem&) override;
     void visit(const VariantFieldWithSIntSelBeginItem&) override;
     void visit(const VariantFieldWithUIntSelBeginItem&) override;
@@ -93,4 +93,4 @@ private:
 } /* namespace src */
 } /* namespace ctf */
 
-#endif /* _CTF_SRC_ITEM_SEQ_ITEM_HPP */
+#endif /* CTF_COMMON_SRC_ITEM_SEQ_LOGGING_ITEM_VISITOR_HPP */

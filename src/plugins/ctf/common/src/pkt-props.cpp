@@ -46,7 +46,7 @@ PktProps readPktProps(const TraceCls& traceCls, Medium::UP medium, const bt2c::D
                       const bt2c::Logger& parentLogger)
 {
     bt2c::Logger logger {parentLogger, "PLUGIN/CTF/PKT-PROPS"};
-    BT_CPPLOGD_SPEC(logger, "Read packet properties: pkt-offset-bytes={}", pktOffset.bytes());
+    BT_CPPLOGD_SPEC(logger, "Reading packet properties: pkt-offset-bytes={}", pktOffset.bytes());
 
     ItemSeqIter itemSeqIter {std::move(medium), traceCls, pktOffset, logger};
     ReadPacketPropertiesItemVisitor visitor;

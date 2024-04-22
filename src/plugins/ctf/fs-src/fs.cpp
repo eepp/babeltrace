@@ -17,6 +17,7 @@
 #include "common/common.h"
 #include "cpp-common/bt2/message.hpp"
 #include "cpp-common/bt2/private-query-executor.hpp"
+#include "cpp-common/bt2/wrap.hpp"
 #include "cpp-common/bt2c/file-utils.hpp"
 #include "cpp-common/bt2c/glib-up.hpp"
 #include "cpp-common/bt2s/make-unique.hpp"
@@ -121,7 +122,7 @@ static void instantiateMsgIter(ctf_fs_msg_iter_data *msg_iter_data)
 
     Medium::UP medium = bt2s::make_unique<fs::Medium>(ds_file_group->index, msg_iter_data->logger);
     msg_iter_data->msgIter.emplace(
-        msg_iter_data->self_msg_iter, *ds_file_group->ctf_fs_trace->cls(),
+        bt2::wrap(msg_iter_data->self_msg_iter), *ds_file_group->ctf_fs_trace->cls(),
         ds_file_group->ctf_fs_trace->metadataStreamUuid(), *ds_file_group->stream,
         std::move(medium), msg_iter_data->port_data->ctf_fs->quirks, msg_iter_data->logger);
 }
@@ -203,10 +204,11 @@ std::string ctf_fs_make_port_name(ctf_fs_ds_file_group *ds_file_group)
      *   - the stream
      */
 
-    /* For the trace, use the uuid if present, else the path. */
-    bt2s::optional<bt2c::Uuid> uuid = ds_file_group->ctf_fs_trace->cls()->uuid();
-    if (uuid) {
-        name << uuid->str();
+    /* For the trace, use the UID if present, else the path. */
+    // TODO: also consider namespace and name?
+    auto& uid = ds_file_group->ctf_fs_trace->cls()->uid();
+    if (uid) {
+        name << *uid;
     } else {
         name << ds_file_group->ctf_fs_trace->path;
     }
@@ -350,7 +352,8 @@ static int add_ds_file_to_ds_file_group(struct ctf_fs_trace *ctf_fs_trace, const
         BT_ASSERT(sc->defClkCls());
         int ret = bt_util_clock_cycles_to_ns_from_origin(
             *props.snapshots.beginDefClk, sc->defClkCls()->freq(),
-            sc->defClkCls()->offset().seconds(), sc->defClkCls()->offset().cycles(), &begin_ns);
+            sc->defClkCls()->offsetFromOrigin().seconds(),
+            sc->defClkCls()->offsetFromOrigin().cycles(), &begin_ns);
         if (ret) {
             BT_CPPLOGE_APPEND_CAUSE_SPEC(
                 logger, "Cannot convert clock cycles to nanoseconds from origin (`{}`).", path);
@@ -512,7 +515,8 @@ static ctf_fs_trace::UP ctf_fs_trace_create(const char *path, const char *name,
     if (ctf_fs_trace->cls()->libCls()) {
         bt2::TraceClass traceCls = *ctf_fs_trace->cls()->libCls();
         ctf_fs_trace->trace = traceCls.instantiate();
-        ctf_trace_class_configure_ir_trace(*ctf_fs_trace->cls(), *ctf_fs_trace->trace, logger);
+        ctf_trace_class_configure_ir_trace(*ctf_fs_trace->cls(), *ctf_fs_trace->trace, selfComp,
+                                           logger);
         set_trace_name(*ctf_fs_trace->trace, name);
     }
 
@@ -701,7 +705,8 @@ static int merge_ctf_fs_traces(std::vector<ctf_fs_trace::UP> traces, ctf_fs_trac
         unsigned int candidate_count;
 
         /* A bit of sanity check. */
-        BT_ASSERT(winner->cls()->uuid() == candidate->cls()->uuid());
+        // TODO: also consider namespace and name
+        BT_ASSERT(winner->cls()->uid() == candidate->cls()->uid());
 
         candidate_count = metadata_count_stream_and_event_classes(candidate);
 
@@ -824,8 +829,9 @@ static int decode_clock_snapshot_after_event(struct ctf_fs_trace *ctf_fs_trace,
     *cs = *visitor.result();
 
     /* Convert clock snapshot to timestamp. */
-    int ret = bt_util_clock_cycles_to_ns_from_origin(
-        *cs, default_cc.freq(), default_cc.offset().seconds(), default_cc.offset().cycles(), ts_ns);
+    int ret = bt_util_clock_cycles_to_ns_from_origin(*cs, default_cc.freq(),
+                                                     default_cc.offsetFromOrigin().seconds(),
+                                                     default_cc.offsetFromOrigin().cycles(), ts_ns);
     if (ret) {
         BT_CPPLOGE_APPEND_CAUSE_SPEC(logger, "Failed to convert clock snapshot to timestamp");
         return ret;
@@ -1057,12 +1063,11 @@ static int fix_index_lttng_crash_quirk(struct ctf_fs_trace *trace, const bt2c::L
  */
 static int extract_tracer_info(struct ctf_fs_trace *trace, struct tracer_info *current_tracer_info)
 {
-    bt2::OptionalBorrowedObject<bt2::ConstMapValue> optEnv = trace->cls()->env();
-    if (!optEnv) {
+    if (!trace->cls()->env()) {
         return -1;
     }
 
-    bt2::ConstMapValue env = *optEnv;
+    bt2::ConstMapValue env = *trace->cls()->env();
 
     /* Clear the current_tracer_info struct */
     memset(current_tracer_info, 0, sizeof(*current_tracer_info));
@@ -1305,10 +1310,11 @@ int ctf_fs_component_create_ctf_fs_trace(struct ctf_fs_component *ctf_fs,
 
         /*
          * We have more than one trace, they must all share the same
-         * UUID, verify that.
+         * UID, verify that.
          */
+        // TODO: also consider namespace and name
         for (const ctf_fs_trace::UP& this_trace : traces) {
-            if (!this_trace->cls()->uuid()) {
+            if (!this_trace->cls()->uid()) {
                 BT_CPPLOGE_APPEND_CAUSE_SPEC(
                     ctf_fs->logger,
                     "Multiple traces given, but a trace does not have a UUID: path={}",
@@ -1316,18 +1322,15 @@ int ctf_fs_component_create_ctf_fs_trace(struct ctf_fs_component *ctf_fs,
                 return -1;
             }
 
-            const bt2c::Uuid first_trace_uuid = *first_trace->cls()->uuid();
-            const bt2c::Uuid this_trace_uuid = *this_trace->cls()->uuid();
+            auto& first_trace_uid = *first_trace->cls()->uid();
+            auto& this_trace_uid = *this_trace->cls()->uid();
 
-            if (first_trace_uuid != this_trace_uuid) {
-                std::string firstTraceUUidStr = first_trace_uuid.str();
-                std::string thisTraceUuidStr = this_trace_uuid.str();
-
+            if (first_trace_uid != this_trace_uid) {
                 BT_CPPLOGE_APPEND_CAUSE_SPEC(ctf_fs->logger,
                                              "Multiple traces given, but UUIDs don't match: "
-                                             "first-trace-uuid={}, first-trace-path={}, "
-                                             "trace-uuid={}, trace-path={}",
-                                             firstTraceUUidStr, first_trace->path, thisTraceUuidStr,
+                                             "first-trace-uid={}, first-trace-path={}, "
+                                             "trace-uid={}, trace-path={}",
+                                             first_trace_uid, first_trace->path, this_trace_uid,
                                              this_trace->path);
                 return -1;
             }

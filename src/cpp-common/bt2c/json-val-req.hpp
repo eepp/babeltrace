@@ -24,22 +24,22 @@ struct JsonValOps final
     static ValType valType(const JsonVal& jsonVal) noexcept
     {
         switch (jsonVal.type()) {
-        case JsonVal::Type::NUL:
-            return ValType::NUL;
-        case JsonVal::Type::BOOL:
-            return ValType::BOOL;
-        case JsonVal::Type::SINT:
-            return ValType::SINT;
-        case JsonVal::Type::UINT:
-            return ValType::UINT;
-        case JsonVal::Type::REAL:
-            return ValType::REAL;
-        case JsonVal::Type::STR:
-            return ValType::STR;
-        case JsonVal::Type::ARRAY:
-            return ValType::ARRAY;
-        case JsonVal::Type::OBJ:
-            return ValType::OBJ;
+        case JsonVal::Type::Null:
+            return ValType::Null;
+        case JsonVal::Type::Bool:
+            return ValType::Bool;
+        case JsonVal::Type::SInt:
+            return ValType::SInt;
+        case JsonVal::Type::UInt:
+            return ValType::UInt;
+        case JsonVal::Type::Real:
+            return ValType::Real;
+        case JsonVal::Type::Str:
+            return ValType::Str;
+        case JsonVal::Type::Array:
+            return ValType::Array;
+        case JsonVal::Type::Obj:
+            return ValType::Obj;
         default:
             bt_common_abort();
         }
@@ -48,16 +48,16 @@ struct JsonValOps final
     static const char *typeDetStr(const ValType type) noexcept
     {
         switch (type) {
-        case ValType::NUL:
+        case ValType::Null:
             return "";
-        case ValType::BOOL:
-        case ValType::SINT:
-        case ValType::REAL:
-        case ValType::STR:
+        case ValType::Bool:
+        case ValType::SInt:
+        case ValType::Real:
+        case ValType::Str:
             return "a";
-        case ValType::UINT:
-        case ValType::ARRAY:
-        case ValType::OBJ:
+        case ValType::UInt:
+        case ValType::Array:
+        case ValType::Obj:
             return "an";
         default:
             bt_common_abort();
@@ -67,21 +67,21 @@ struct JsonValOps final
     static const char *typeStr(const ValType type) noexcept
     {
         switch (type) {
-        case ValType::NUL:
+        case ValType::Null:
             return "`null`";
-        case ValType::BOOL:
+        case ValType::Bool:
             return "boolean";
-        case ValType::SINT:
+        case ValType::SInt:
             return "signed integer";
-        case ValType::UINT:
+        case ValType::UInt:
             return "unsigned integer";
-        case ValType::REAL:
+        case ValType::Real:
             return "real";
-        case ValType::STR:
+        case ValType::Str:
             return "string";
-        case ValType::ARRAY:
+        case ValType::Array:
             return "array";
-        case ValType::OBJ:
+        case ValType::Obj:
             return "object";
         default:
             bt_common_abort();
@@ -178,22 +178,22 @@ using JsonUIntValReq = UIntValReq<JsonVal, internal::JsonValOps>;
 using JsonSIntValReq = SIntValReq<JsonVal, internal::JsonValOps>;
 
 using JsonUIntValInRangeReq =
-    IntValInRangeReq<JsonVal, internal::JsonValOps, JsonUIntVal, ValType::UINT>;
+    IntValInRangeReq<JsonVal, internal::JsonValOps, JsonUIntVal, ValType::UInt>;
 
 using JsonSIntValInRangeReq =
-    IntValInRangeReq<JsonVal, internal::JsonValOps, JsonSIntVal, ValType::SINT>;
+    IntValInRangeReq<JsonVal, internal::JsonValOps, JsonSIntVal, ValType::SInt>;
 
 using JsonBoolValInSetReq =
-    ScalarValInSetReq<JsonVal, internal::JsonValOps, JsonBoolVal, ValType::BOOL>;
+    ScalarValInSetReq<JsonVal, internal::JsonValOps, JsonBoolVal, ValType::Bool>;
 
 using JsonUIntValInSetReq =
-    ScalarValInSetReq<JsonVal, internal::JsonValOps, JsonUIntVal, ValType::UINT>;
+    ScalarValInSetReq<JsonVal, internal::JsonValOps, JsonUIntVal, ValType::UInt>;
 
 using JsonSIntValInSetReq =
-    ScalarValInSetReq<JsonVal, internal::JsonValOps, JsonSIntVal, ValType::SINT>;
+    ScalarValInSetReq<JsonVal, internal::JsonValOps, JsonSIntVal, ValType::SInt>;
 
 using JsonStrValInSetReq =
-    ScalarValInSetReq<JsonVal, internal::JsonValOps, JsonStrVal, ValType::STR>;
+    ScalarValInSetReq<JsonVal, internal::JsonValOps, JsonStrVal, ValType::Str>;
 
 using JsonStrValMatchesRegexReq = StrValMatchesRegexReq<JsonVal, internal::JsonValOps>;
 using JsonArrayValReq = ArrayValReq<JsonVal, internal::JsonValOps>;

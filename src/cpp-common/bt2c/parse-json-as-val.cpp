@@ -1,11 +1,8 @@
 /*
- * Copyright (c) 2016-2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2016-2024 Philippe Proulx <pproulx@efficios.com>
  *
  * SPDX-License-Identifier: MIT
  */
-
-#define BT_CLOG_CFG _mLogCfg
-#define BT_LOG_TAG  "PARSE-JSON-AS-VAL"
 
 #include "common/assert.h"
 #include "common/common.h"
@@ -38,9 +35,14 @@ public:
         this->_handleVal(loc, val);
     }
 
+    void onScalarVal(const bt2s::string_view val, const TextLoc& loc)
+    {
+        this->_handleVal(loc, val.to_string());
+    }
+
     void onArrayBegin(const TextLoc&)
     {
-        _mStack.emplace_back(_State::IN_ARRAY);
+        _mStack.emplace_back(_State::InArray);
     }
 
     void onArrayEnd(const TextLoc& loc)
@@ -53,12 +55,12 @@ public:
 
     void onObjBegin(const TextLoc&)
     {
-        _mStack.emplace_back(_State::IN_OBJ);
+        _mStack.emplace_back(_State::InObj);
     }
 
-    void onObjKey(const std::string& key, const TextLoc&)
+    void onObjKey(const bt2s::string_view key, const TextLoc&)
     {
-        this->_stackTop().lastObjKey = key;
+        this->_stackTop().lastObjKey = key.to_string();
     }
 
     void onObjEnd(const TextLoc& loc)
@@ -78,12 +80,14 @@ private:
     /* The state of a stack frame */
     enum class _State
     {
-        IN_ARRAY,
-        IN_OBJ,
+        InArray,
+        InObj,
     };
 
-    /* A entry of `_mStack` */
-    struct _StackFrame
+    /*
+     * An entry of `_mStack`.
+     */
+    struct _StackFrame final
     {
         explicit _StackFrame(const _State stateParam) : state {stateParam}
         {
@@ -120,12 +124,12 @@ private:
         }
 
         switch (_mStack.back().state) {
-        case _State::IN_ARRAY:
+        case _State::InArray:
             /* Append to current JSON array value container */
             this->_stackTop().arrayValCont.push_back(std::move(jsonVal));
             break;
 
-        case _State::IN_OBJ:
+        case _State::InObj:
             /*
              * Insert into current JSON object value container
              *
@@ -149,13 +153,12 @@ private:
 
 } /* namespace */
 
-JsonVal::UP parseJson(const char * const begin, const char * const end,
-                      const std::size_t baseOffset, const bt2c::Logger& logger,
-                      const TextLocStrFmt textLocStrFmt)
+JsonVal::UP parseJson(const bt2s::string_view str, const std::size_t baseOffset,
+                      const Logger& logger)
 {
     JsonValBuilder builder {baseOffset};
 
-    parseJson(begin, end, builder, baseOffset, logger, textLocStrFmt);
+    parseJson(str, builder, baseOffset, logger);
     return builder.releaseVal();
 }
 

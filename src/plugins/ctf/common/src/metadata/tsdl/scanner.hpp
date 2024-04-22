@@ -4,8 +4,8 @@
  * Copyright 2011-2012 Mathieu Desnoyers <mathieu.desnoyers@efficios.com>
  */
 
-#ifndef _CTF_SCANNER_H
-#define _CTF_SCANNER_H
+#ifndef CTF_COMMON_SRC_METADATA_TSDL_SCANNER_HPP
+#define CTF_COMMON_SRC_METADATA_TSDL_SCANNER_HPP
 
 #include <stdio.h>
 
@@ -51,4 +51,4 @@ static inline struct ctf_ast *ctf_scanner_get_ast(struct ctf_scanner *scanner)
 
 int is_type(struct ctf_scanner *scanner, const char *id);
 
-#endif /* _CTF_SCANNER_H */
+#endif /* CTF_COMMON_SRC_METADATA_TSDL_SCANNER_HPP */

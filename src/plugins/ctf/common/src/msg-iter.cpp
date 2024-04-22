@@ -2,30 +2,36 @@
  * SPDX-License-Identifier: MIT
  *
  * Copyright (c) 2022 Simon Marchi <simon.marchi@efficios.com>
- * Copyright (c) 2015-2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2015-2024 Philippe Proulx <pproulx@efficios.com>
  */
 
 #include <algorithm>
 
+#include "common/assert.h"
+#include "common/common.h"
+#include "cpp-common/bt2/message.hpp"
+#include "cpp-common/bt2c/aliases.hpp"
+#include "cpp-common/bt2c/call.hpp"
 #include "cpp-common/bt2c/fmt.hpp"
 #include "cpp-common/vendor/fmt/format.h"
 
 #include "item-seq/item.hpp"
 #include "msg-iter.hpp"
+#include "plugins/ctf/common/src/metadata/ctf-ir.hpp"
 
 namespace ctf {
 namespace src {
 
 using namespace bt2c::literals::datalen;
 
-MsgIter::MsgIter(bt_self_message_iterator * const selfMsgIter, const ctf::src::TraceCls& traceCls,
+MsgIter::MsgIter(const bt2::SelfMessageIterator selfMsgIter, const ctf::src::TraceCls& traceCls,
                  bt2s::optional<bt2c::Uuid> expectedMetadataStreamUuid, const bt2::Stream stream,
                  Medium::UP medium, const MsgIterQuirks& quirks, const bt2c::Logger& parentLogger) :
     _mLogger {parentLogger, "PLUGIN/CTF/MSG-ITER"},
     _mSelfMsgIter {selfMsgIter}, _mStream {stream},
     _mExpectedMetadataStreamUuid {std::move(expectedMetadataStreamUuid)}, _mQuirks {quirks},
-    _mItemSeqIter {std::move(medium), traceCls, _mLogger}, _mLoggingVisitor {"Handling item",
-                                                                             _mLogger}
+    _mItemSeqIter {std::move(medium), traceCls, _mLogger}, _mUnicodeConv {_mLogger},
+    _mLoggingVisitor {"Handling item", _mLogger}
 {
     BT_CPPLOGD("Created CTF plugin message iterator: "
                "addr={}, trace-cls-addr={}, log-level={}",
@@ -41,9 +47,9 @@ bt2::ConstMessage::Shared MsgIter::next()
     }
 
     /*
-     * Return any message that's already in the queue (one iteration
-     * of the underlying item sequence iterator may yield more than
-     * one message, but we return one at a time).
+     * Return any message that's already in the queue (one iteration of
+     * the underlying item sequence iterator may yield more than one
+     * message, but we return one at a time).
      */
     if (auto msg = this->_releaseNextMsg()) {
         return msg;
@@ -52,32 +58,29 @@ bt2::ConstMessage::Shared MsgIter::next()
     try {
         while (true) {
             /*
-             * Get the next item from the underlying item sequence
-             * iterator.
+             * Get the next item from the underlying item
+             * sequence iterator.
              */
-            const auto item = _mItemSeqIter.next();
+            if (const auto item = _mItemSeqIter.next()) {
+                /* Handle item if needed */
+                if (!_mSkipItemsUntilScopeEndItem || item->isScopeEnd()) {
+                    this->_handleItem(*item);
 
-            if (!item) {
+                    if (auto msg = this->_releaseNextMsg()) {
+                        return msg;
+                    }
+                }
+            } else {
                 /* No more items: this is the end! */
                 break;
-            }
-
-            /* Handle item if needed */
-            if (!_mSkipItemsUntilScopeEndItem || item->isScopeEndItem()) {
-                this->_handleItem(*item);
-
-                if (auto msg = this->_releaseNextMsg()) {
-                    return msg;
-                }
             }
         }
 
         /* We're done! */
         _mIsDone = true;
-        return bt2::ConstMessage::Shared::createWithoutRef(
-            bt_message_stream_end_create(_mSelfMsgIter, _mStream.libObjPtr()));
+        return _mSelfMsgIter.createStreamEndMessage(_mStream);
     } catch (const bt2c::Error&) {
-        BT_CPPLOGE_APPEND_CAUSE_AND_RETHROW("Failed to create next message: addr={}",
+        BT_CPPLOGE_APPEND_CAUSE_AND_RETHROW("Failed to create the next message: addr={}",
                                             fmt::ptr(this));
     }
 }
@@ -91,127 +94,121 @@ void MsgIter::_handleItem(const Item& item)
 
     /* Defer to specific handler */
     switch (item.type()) {
-    case Item::Type::PKT_BEGIN:
-        this->_handleItem(static_cast<const PktBeginItem&>(item));
+    case Item::Type::PktBegin:
+        this->_handleItem(item.asPktBegin());
         break;
-    case Item::Type::PKT_END:
-        this->_handleItem(static_cast<const PktEndItem&>(item));
+    case Item::Type::PktEnd:
+        this->_handleItem(item.asPktEnd());
         break;
-    case Item::Type::SCOPE_BEGIN:
-        this->_handleItem(static_cast<const ScopeBeginItem&>(item));
+    case Item::Type::ScopeBegin:
+        this->_handleItem(item.asScopeBegin());
         break;
-    case Item::Type::SCOPE_END:
-        this->_handleItem(static_cast<const ScopeEndItem&>(item));
+    case Item::Type::ScopeEnd:
+        this->_handleItem(item.asScopeEnd());
         break;
-    case Item::Type::PKT_CONTENT_END:
-        this->_handleItem(static_cast<const PktContentEndItem&>(item));
+    case Item::Type::PktContentEnd:
+        this->_handleItem(item.asPktContentEnd());
         break;
-    case Item::Type::EVENT_RECORD_END:
-        this->_handleItem(static_cast<const EventRecordEndItem&>(item));
+    case Item::Type::EventRecordEnd:
+        this->_handleItem(item.asEventRecordEnd());
         break;
-    case Item::Type::PKT_MAGIC_NUMBER:
-        this->_handleItem(static_cast<const PktMagicNumberItem&>(item));
+    case Item::Type::PktMagicNumber:
+        this->_handleItem(item.asPktMagicNumber());
         break;
-    case Item::Type::METADATA_STREAM_UUID:
-        this->_handleItem(static_cast<const MetadataStreamUuidItem&>(item));
+    case Item::Type::MetadataStreamUuid:
+        this->_handleItem(item.asMetadataStreamUuid());
         break;
-    case Item::Type::DATA_STREAM_INFO:
-        this->_handleItem(static_cast<const DataStreamInfoItem&>(item));
+    case Item::Type::DataStreamInfo:
+        this->_handleItem(item.asDataStreamInfo());
         break;
-    case Item::Type::PKT_INFO:
-        this->_handleItem(static_cast<const PktInfoItem&>(item));
+    case Item::Type::PktInfo:
+        this->_handleItem(item.asPktInfo());
         break;
-    case Item::Type::EVENT_RECORD_INFO:
-        this->_handleItem(static_cast<const EventRecordInfoItem&>(item));
+    case Item::Type::EventRecordInfo:
+        this->_handleItem(item.asEventRecordInfo());
         break;
-    case Item::Type::FIXED_LEN_BIT_ARRAY_FIELD:
-        this->_handleItem(static_cast<const FixedLenBitArrayFieldItem&>(item));
+    case Item::Type::FixedLenBitArrayField:
+    case Item::Type::FixedLenBitMapField:
+        this->_handleItem(item.asFixedLenBitArrayField());
         break;
-    case Item::Type::FIXED_LEN_BOOL_FIELD:
-        this->_handleItem(static_cast<const FixedLenBoolFieldItem&>(item));
+    case Item::Type::FixedLenBoolField:
+        this->_handleItem(item.asFixedLenBoolField());
         break;
-    case Item::Type::FIXED_LEN_SINT_FIELD:
-    case Item::Type::FIXED_LEN_SENUM_FIELD:
-        this->_handleItem(static_cast<const FixedLenSIntFieldItem&>(item));
+    case Item::Type::FixedLenSIntField:
+        this->_handleItem(item.asFixedLenSIntField());
         break;
-    case Item::Type::FIXED_LEN_UINT_FIELD:
-    case Item::Type::FIXED_LEN_UENUM_FIELD:
-        this->_handleItem(static_cast<const FixedLenUIntFieldItem&>(item));
+    case Item::Type::FixedLenUIntField:
+        this->_handleItem(item.asFixedLenUIntField());
         break;
-    case Item::Type::FIXED_LEN_FLOAT_FIELD:
-        this->_handleItem(static_cast<const FixedLenFloatFieldItem&>(item));
+    case Item::Type::FixedLenFloatField:
+        this->_handleItem(item.asFixedLenFloatField());
         break;
-    case Item::Type::VAR_LEN_SINT_FIELD:
-    case Item::Type::VAR_LEN_SENUM_FIELD:
-        this->_handleItem(static_cast<const VarLenSIntFieldItem&>(item));
+    case Item::Type::VarLenSIntField:
+        this->_handleItem(item.asVarLenSIntField());
         break;
-    case Item::Type::VAR_LEN_UINT_FIELD:
-    case Item::Type::VAR_LEN_UENUM_FIELD:
-        this->_handleItem(static_cast<const VarLenUIntFieldItem&>(item));
+    case Item::Type::VarLenUIntField:
+        this->_handleItem(item.asVarLenUIntField());
         break;
-    case Item::Type::NULL_TERMINATED_STR_FIELD_BEGIN:
-        this->_handleItem(static_cast<const NullTerminatedStrFieldBeginItem&>(item));
+    case Item::Type::NullTerminatedStrFieldBegin:
+        this->_handleItem(item.asNullTerminatedStrFieldBegin());
         break;
-    case Item::Type::NULL_TERMINATED_STR_FIELD_END:
-        this->_handleItem(static_cast<const NullTerminatedStrFieldEndItem&>(item));
+    case Item::Type::NullTerminatedStrFieldEnd:
+        this->_handleItem(item.asNullTerminatedStrFieldEnd());
         break;
-    case Item::Type::STR_FIELD_SUBSTR:
-        this->_handleItem(static_cast<const StrFieldSubstrItem&>(item));
+    case Item::Type::RawData:
+        this->_handleItem(item.asRawData());
         break;
-    case Item::Type::BLOB_FIELD_SECTION:
-        this->_handleItem(static_cast<const BlobFieldSectionItem&>(item));
+    case Item::Type::StructFieldBegin:
+        this->_handleItem(item.asStructFieldBegin());
         break;
-    case Item::Type::STRUCT_FIELD_BEGIN:
-        this->_handleItem(static_cast<const StructFieldBeginItem&>(item));
+    case Item::Type::StructFieldEnd:
+        this->_handleItem(item.asStructFieldEnd());
         break;
-    case Item::Type::STRUCT_FIELD_END:
-        this->_handleItem(static_cast<const StructFieldEndItem&>(item));
+    case Item::Type::StaticLenArrayFieldBegin:
+        this->_handleItem(item.asStaticLenArrayFieldBegin());
         break;
-    case Item::Type::STATIC_LEN_ARRAY_FIELD_BEGIN:
-        this->_handleItem(static_cast<const StaticLenArrayFieldBeginItem&>(item));
+    case Item::Type::StaticLenArrayFieldEnd:
+    case Item::Type::DynLenArrayFieldEnd:
+        this->_handleItem(item.asArrayFieldEnd());
         break;
-    case Item::Type::STATIC_LEN_ARRAY_FIELD_END:
-    case Item::Type::DYN_LEN_ARRAY_FIELD_END:
-        this->_handleItem(static_cast<const ArrayFieldEndItem&>(item));
+    case Item::Type::DynLenArrayFieldBegin:
+        this->_handleItem(item.asDynLenArrayFieldBegin());
         break;
-    case Item::Type::DYN_LEN_ARRAY_FIELD_BEGIN:
-        this->_handleItem(static_cast<const DynLenArrayFieldBeginItem&>(item));
+    case Item::Type::StaticLenBlobFieldBegin:
+        this->_handleItem(item.asStaticLenBlobFieldBegin());
         break;
-    case Item::Type::STATIC_LEN_BLOB_FIELD_BEGIN:
-        this->_handleItem(static_cast<const StaticLenBlobFieldBeginItem&>(item));
+    case Item::Type::StaticLenBlobFieldEnd:
+    case Item::Type::DynLenBlobFieldEnd:
+        this->_handleItem(item.asBlobFieldEnd());
         break;
-    case Item::Type::STATIC_LEN_BLOB_FIELD_END:
-    case Item::Type::DYN_LEN_BLOB_FIELD_END:
-        this->_handleItem(static_cast<const BlobFieldEndItem&>(item));
+    case Item::Type::DynLenBlobFieldBegin:
+        this->_handleItem(item.asDynLenBlobFieldBegin());
         break;
-    case Item::Type::DYN_LEN_BLOB_FIELD_BEGIN:
-        this->_handleItem(static_cast<const DynLenBlobFieldBeginItem&>(item));
+    case Item::Type::StaticLenStrFieldBegin:
+    case Item::Type::DynLenStrFieldBegin:
+        this->_handleItem(item.asNonNullTerminatedStrFieldBegin());
         break;
-    case Item::Type::STATIC_LEN_STR_FIELD_BEGIN:
-    case Item::Type::DYN_LEN_STR_FIELD_BEGIN:
-        this->_handleItem(static_cast<const NonNullTerminatedStrFieldBeginItem&>(item));
+    case Item::Type::StaticLenStrFieldEnd:
+    case Item::Type::DynLenStrFieldEnd:
+        this->_handleItem(item.asNonNullTerminatedStrFieldEnd());
         break;
-    case Item::Type::STATIC_LEN_STR_FIELD_END:
-    case Item::Type::DYN_LEN_STR_FIELD_END:
-        this->_handleItem(static_cast<const NonNullTerminatedStrFieldEndItem&>(item));
+    case Item::Type::VariantFieldWithSIntSelBegin:
+    case Item::Type::VariantFieldWithUIntSelBegin:
+        this->_handleItem(item.asVariantFieldBegin());
         break;
-    case Item::Type::VARIANT_FIELD_WITH_SINT_SEL_BEGIN:
-    case Item::Type::VARIANT_FIELD_WITH_UINT_SEL_BEGIN:
-        this->_handleItem(static_cast<const VariantFieldBeginItem&>(item));
+    case Item::Type::VariantFieldWithSIntSelEnd:
+    case Item::Type::VariantFieldWithUIntSelEnd:
+        this->_handleItem(item.asVariantFieldEnd());
         break;
-    case Item::Type::VARIANT_FIELD_WITH_SINT_SEL_END:
-    case Item::Type::VARIANT_FIELD_WITH_UINT_SEL_END:
-        this->_handleItem(static_cast<const VariantFieldEndItem&>(item));
+    case Item::Type::OptionalFieldWithBoolSelBegin:
+    case Item::Type::OptionalFieldWithSIntSelBegin:
+    case Item::Type::OptionalFieldWithUIntSelBegin:
+        this->_handleItem(item.asOptionalFieldBegin());
         break;
-    case Item::Type::OPTIONAL_FIELD_WITH_BOOL_SEL_BEGIN:
-    case Item::Type::OPTIONAL_FIELD_WITH_SINT_SEL_BEGIN:
-    case Item::Type::OPTIONAL_FIELD_WITH_UINT_SEL_BEGIN:
-        this->_handleItem(static_cast<const OptionalFieldBeginItem&>(item));
-        break;
-    case Item::Type::OPTIONAL_FIELD_WITH_BOOL_SEL_END:
-    case Item::Type::OPTIONAL_FIELD_WITH_SINT_SEL_END:
-    case Item::Type::OPTIONAL_FIELD_WITH_UINT_SEL_END:
-        this->_handleItem(static_cast<const OptionalFieldEndItem&>(item));
+    case Item::Type::OptionalFieldWithBoolSelEnd:
+    case Item::Type::OptionalFieldWithSIntSelEnd:
+    case Item::Type::OptionalFieldWithUIntSelEnd:
+        this->_handleItem(item.asOptionalFieldEnd());
         break;
     default:
         BT_CPPLOGT("Skipping item.");
@@ -221,12 +218,14 @@ void MsgIter::_handleItem(const Item& item)
 
 void MsgIter::_handleItem(const PktBeginItem&)
 {
-    BT_ASSERT_DBG(!this->_curPkt());
+    BT_ASSERT_DBG(!_mCurPkt);
     this->_curPkt(_mStream.createPacket());
 }
 
-bt_message *MsgIter::_createPktEndMsgAndUpdateCurDefClkVal()
+bt2::Message::Shared MsgIter::_createPktEndMsgAndUpdateCurDefClkVal()
 {
+    BT_ASSERT_DBG(_mCurPkt);
+
     if (_mPktEndDefClkVal) {
         const auto pktEndDefClkValZeroBug = _mQuirks.pktEndDefClkValZero && _mPktBeginDefClkVal &&
                                             _mPktEndDefClkVal && *_mPktBeginDefClkVal != 0 &&
@@ -242,17 +241,16 @@ bt_message *MsgIter::_createPktEndMsgAndUpdateCurDefClkVal()
             _mCurDefClkVal = _mPktEndDefClkVal;
         }
 
-        return bt_message_packet_end_create_with_default_clock_snapshot(_mSelfMsgIter,
-                                                                        this->_curPkt(), defClkVal);
+        return _mSelfMsgIter.createPacketEndMessage(*_mCurPkt, defClkVal);
     } else {
-        return bt_message_packet_end_create(_mSelfMsgIter, this->_curPkt());
+        return _mSelfMsgIter.createPacketEndMessage(*_mCurPkt);
     }
 }
 
 void MsgIter::_handleItem(const PktEndItem&)
 {
     BT_ASSERT_DBG(!_mCurMsg);
-    BT_ASSERT_DBG(this->_curPkt());
+    BT_ASSERT_DBG(_mCurPkt);
 
     /* Emit a packet beginning message now if required to fix a quirk */
     if (_mDelayPktBeginMsgEmission) {
@@ -273,20 +271,16 @@ void MsgIter::_handleItem(const ScopeBeginItem& item)
 
     /* Handle specific scope */
     switch (item.scope()) {
-    case ir::FieldLocScope::PKT_HEADER:
+    case Scope::PktHeader:
         /* Nothing needed from the packet header: fast-forward */
         _mSkipItemsUntilScopeEndItem = true;
         break;
-    case ir::FieldLocScope::PKT_CTX:
+    case Scope::PktCtx:
     {
-        const auto pkt = this->_curPkt();
+        BT_ASSERT_DBG(_mCurPkt);
 
-        BT_ASSERT_DBG(pkt);
-
-        const auto pktCtxField = bt_packet_borrow_context_field(pkt);
-
-        if (pktCtxField) {
-            _mCurScopeField = bt2::StructureField {pktCtxField};
+        if (const auto pktCtxField = _mCurPkt->contextField()) {
+            _mCurScopeField = pktCtxField;
         } else {
             /* Nothing needed from the packet context: fast-forward */
             _mSkipItemsUntilScopeEndItem = true;
@@ -294,17 +288,16 @@ void MsgIter::_handleItem(const ScopeBeginItem& item)
 
         break;
     }
-    case ir::FieldLocScope::EVENT_RECORD_HEADER:
+    case Scope::EventRecordHeader:
         /* Nothing needed from the event record header: fast-forward */
         _mSkipItemsUntilScopeEndItem = true;
         break;
-    case ir::FieldLocScope::EVENT_RECORD_COMMON_CTX:
+    case Scope::CommonEventRecordCtx:
     {
-        const auto event = bt_message_event_borrow_event(_mCurMsg->libObjPtr());
-        const auto commonCtxField = bt_event_borrow_common_context_field(event);
+        BT_ASSERT_DBG(_mCurMsg);
 
-        if (commonCtxField) {
-            _mCurScopeField = bt2::StructureField {commonCtxField};
+        if (const auto commonCtxField = _mCurMsg->asEvent().event().commonContextField()) {
+            _mCurScopeField = commonCtxField;
         } else {
             /* Nothing needed from the common context: fast-forward */
             _mSkipItemsUntilScopeEndItem = true;
@@ -312,13 +305,12 @@ void MsgIter::_handleItem(const ScopeBeginItem& item)
 
         break;
     }
-    case ir::FieldLocScope::EVENT_RECORD_SPEC_CTX:
+    case Scope::SpecEventRecordCtx:
     {
-        const auto event = bt_message_event_borrow_event(_mCurMsg->libObjPtr());
-        const auto specCtxField = bt_event_borrow_specific_context_field(event);
+        BT_ASSERT_DBG(_mCurMsg);
 
-        if (specCtxField) {
-            _mCurScopeField = bt2::StructureField {specCtxField};
+        if (const auto specCtxField = _mCurMsg->asEvent().event().specificContextField()) {
+            _mCurScopeField = specCtxField;
         } else {
             /* Nothing needed from the specific context: fast-forward */
             _mSkipItemsUntilScopeEndItem = true;
@@ -326,13 +318,12 @@ void MsgIter::_handleItem(const ScopeBeginItem& item)
 
         break;
     }
-    case ir::FieldLocScope::EVENT_RECORD_PAYLOAD:
+    case Scope::EventRecordPayload:
     {
-        const auto event = bt_message_event_borrow_event(_mCurMsg->libObjPtr());
-        const auto payloadField = bt_event_borrow_payload_field(event);
+        BT_ASSERT_DBG(_mCurMsg);
 
-        if (payloadField) {
-            _mCurScopeField = bt2::StructureField {payloadField};
+        if (const auto payloadField = _mCurMsg->asEvent().event().payloadField()) {
+            _mCurScopeField = payloadField;
         } else {
             /* Nothing needed from the payload: fast-forward */
             _mSkipItemsUntilScopeEndItem = true;
@@ -362,7 +353,7 @@ void MsgIter::_handleItem(const ScopeEndItem&)
 
 void MsgIter::_handleItem(const PktContentEndItem&)
 {
-    BT_ASSERT_DBG(this->_curPkt());
+    BT_ASSERT_DBG(_mCurPkt);
 }
 
 void MsgIter::_handleItem(const EventRecordEndItem&)
@@ -370,9 +361,9 @@ void MsgIter::_handleItem(const EventRecordEndItem&)
     BT_ASSERT_DBG(_mStack.empty());
     BT_ASSERT_DBG(_mCurMsg);
 
-    /* Emit current message */
-    _mMsgs.emplace(bt2::ConstMessage::Shared::createWithoutRef(_mCurMsg.release()));
-    _mCurMsg.reset();
+    /* Emit current message (move to message queue) */
+    _mMsgs.emplace(std::move(_mCurMsg));
+    BT_ASSERT_DBG(!_mCurMsg);
 }
 
 void MsgIter::_handleItem(const PktMagicNumberItem& item)
@@ -398,13 +389,12 @@ void MsgIter::_handleItem(const MetadataStreamUuidItem& item)
 void MsgIter::_handleItem(const DataStreamInfoItem&)
 {
     if (!_mEmittedStreamBeginMsg) {
-        this->_addMsgToQueue(
-            bt_message_stream_beginning_create(_mSelfMsgIter, _mStream.libObjPtr()));
+        this->_addMsgToQueue(_mSelfMsgIter.createStreamBeginningMessage(_mStream));
         _mEmittedStreamBeginMsg = true;
     }
 }
 
-bt_message *MsgIter::_createInitDiscEventsMsg(const _OptUll& prevPktEndDefClkVal)
+bt2::Message::Shared MsgIter::_createInitDiscEventsMsg(const _OptUll& prevPktEndDefClkVal)
 {
     if (_mStream.cls().discardedEventsHaveDefaultClockSnapshots()) {
         /*
@@ -412,14 +402,14 @@ bt_message *MsgIter::_createInitDiscEventsMsg(const _OptUll& prevPktEndDefClkVal
          * point for the first packet.
          */
         BT_ASSERT_DBG(prevPktEndDefClkVal);
-        return bt_message_discarded_events_create_with_default_clock_snapshots(
-            _mSelfMsgIter, _mStream.libObjPtr(), *prevPktEndDefClkVal, *_mPktEndDefClkVal);
+        return _mSelfMsgIter.createDiscardedEventsMessage(_mStream, *prevPktEndDefClkVal,
+                                                          *_mPktEndDefClkVal);
     } else {
-        return bt_message_discarded_events_create(_mSelfMsgIter, _mStream.libObjPtr());
+        return _mSelfMsgIter.createDiscardedEventsMessage(_mStream);
     }
 }
 
-bt_message *MsgIter::_createInitDiscPktsMsg(const _OptUll& prevPktEndDefClkVal)
+bt2::Message::Shared MsgIter::_createInitDiscPktsMsg(const _OptUll& prevPktEndDefClkVal)
 {
     if (_mStream.cls().discardedPacketsHaveDefaultClockSnapshots()) {
         /*
@@ -427,28 +417,26 @@ bt_message *MsgIter::_createInitDiscPktsMsg(const _OptUll& prevPktEndDefClkVal)
          * point for the first packet.
          */
         BT_ASSERT_DBG(prevPktEndDefClkVal);
-        return bt_message_discarded_packets_create_with_default_clock_snapshots(
-            _mSelfMsgIter, _mStream.libObjPtr(), *prevPktEndDefClkVal, *_mPktBeginDefClkVal);
+        return _mSelfMsgIter.createDiscardedPacketsMessage(_mStream, *prevPktEndDefClkVal,
+                                                           *_mPktBeginDefClkVal);
     } else {
-        return bt_message_discarded_packets_create(_mSelfMsgIter, _mStream.libObjPtr());
+        return _mSelfMsgIter.createDiscardedPacketsMessage(_mStream);
     }
 }
 
 void MsgIter::_emitPktBeginMsg(const _OptUll& defClkVal)
 {
-    /* Create message */
-    const auto msg = [this, &defClkVal] {
+    BT_ASSERT_DBG(_mCurPkt);
+
+    /* Add new message to queue */
+    this->_addMsgToQueue(bt2c::call([this, &defClkVal] {
         if (defClkVal) {
             _mCurDefClkVal = defClkVal;
-            return bt_message_packet_beginning_create_with_default_clock_snapshot(
-                _mSelfMsgIter, this->_curPkt(), *defClkVal);
+            return _mSelfMsgIter.createPacketBeginningMessage(*_mCurPkt, *defClkVal);
         } else {
-            return bt_message_packet_beginning_create(_mSelfMsgIter, this->_curPkt());
+            return _mSelfMsgIter.createPacketBeginningMessage(*_mCurPkt);
         }
-    }();
-
-    /* Add to queue */
-    this->_addMsgToQueue(msg);
+    }));
 }
 
 void MsgIter::_emitDelayedPktBeginMsg(const _OptUll& otherDefClkVal)
@@ -461,8 +449,10 @@ void MsgIter::_emitDelayedPktBeginMsg(const _OptUll& otherDefClkVal)
     /*
      * Only fix the beginning timestamp of the packet if it's larger
      * than the timestamp of its first event record.
+     *
+     * Emit a packet beginning message now.
      */
-    const auto defClkVal = [this, &otherDefClkVal]() -> _OptUll {
+    this->_emitPktBeginMsg(bt2c::call([this, &otherDefClkVal]() -> _OptUll {
         if (_mPktBeginDefClkVal && otherDefClkVal) {
             return std::min(*_mPktBeginDefClkVal, *otherDefClkVal);
         } else if (_mPktBeginDefClkVal) {
@@ -472,10 +462,7 @@ void MsgIter::_emitDelayedPktBeginMsg(const _OptUll& otherDefClkVal)
         }
 
         return bt2s::nullopt;
-    }();
-
-    /* Emit a packet beginning message now */
-    this->_emitPktBeginMsg(defClkVal);
+    }));
 }
 
 void MsgIter::_handleItem(const PktInfoItem& item)
@@ -498,60 +485,63 @@ void MsgIter::_handleItem(const PktInfoItem& item)
      * For the first packet, `_mCurDiscErCounterSnap` isn't set: we
      * don't have anything to compare to.
      */
-    const auto& discErCounterSnap = item.discEventRecordCounterSnap();
+    {
+        const auto& discErCounterSnap = item.discEventRecordCounterSnap();
 
-    if (_mCurDiscErCounterSnap) {
-        /*
-         * If the previous packet of this same stream had a discarded
-         * event record counter snapshot, then this one must have one
-         * too.
-         */
-        BT_ASSERT_DBG(discErCounterSnap);
+        if (_mCurDiscErCounterSnap) {
+            /*
+             * If the previous packet of this same stream had a discarded
+             * event record counter snapshot, then this one must have one
+             * too.
+             */
+            BT_ASSERT_DBG(discErCounterSnap);
 
-        if (*discErCounterSnap > *_mCurDiscErCounterSnap) {
-            /* Create and initialize the message */
-            const auto msg = this->_createInitDiscEventsMsg(prevPktEndDefClkVal);
+            if (*discErCounterSnap > *_mCurDiscErCounterSnap) {
+                /* Create and initialize the message */
+                auto msg = this->_createInitDiscEventsMsg(prevPktEndDefClkVal);
 
-            /* Set its count */
-            bt_message_discarded_events_set_count(msg,
-                                                  *discErCounterSnap - *_mCurDiscErCounterSnap);
+                /* Set its count */
+                msg->asDiscardedEvents().count(*discErCounterSnap - *_mCurDiscErCounterSnap);
 
-            /* Add to queue */
-            this->_addMsgToQueue(msg);
+                /* Add to queue */
+                this->_addMsgToQueue(std::move(msg));
+            }
         }
-    }
 
-    /* Set new current discarded event record counter snapshot */
-    _mCurDiscErCounterSnap = discErCounterSnap;
+        /* Set new current discarded event record counter snapshot */
+        _mCurDiscErCounterSnap = discErCounterSnap;
+    }
 
     /*
      * Emit a discarded packets message if there's a gap between the
      * previous packet sequence number and the sequence number of this
      * new packet.
      */
-    const auto& seqNum = item.seqNum();
+    {
+        const auto& seqNum = item.seqNum();
 
-    if (_mCurPktSeqNum) {
-        /*
+        if (_mCurPktSeqNum) {
+            /*
          * If the previous packet of this same stream had a sequence
          * number, then this one must have one too.
          */
-        BT_ASSERT_DBG(seqNum);
+            BT_ASSERT_DBG(seqNum);
 
-        if (*_mCurPktSeqNum + 1 < *seqNum) {
-            /* Create and initialize the message */
-            const auto msg = this->_createInitDiscPktsMsg(prevPktEndDefClkVal);
+            if (*_mCurPktSeqNum + 1 < *seqNum) {
+                /* Create and initialize the message */
+                const auto msg = this->_createInitDiscPktsMsg(prevPktEndDefClkVal);
 
-            /* Set its count */
-            bt_message_discarded_packets_set_count(msg, *seqNum - *_mCurPktSeqNum - 1);
+                /* Set its count */
+                msg->asDiscardedPackets().count(*seqNum - *_mCurPktSeqNum - 1);
 
-            /* Add to queue */
-            this->_addMsgToQueue(msg);
+                /* Add to queue */
+                this->_addMsgToQueue(std::move(msg));
+            }
         }
-    }
 
-    /* Set new packet sequence number */
-    _mCurPktSeqNum = seqNum;
+        /* Set new packet sequence number */
+        _mCurPktSeqNum = seqNum;
+    }
 
     /* There's no pending message */
     BT_ASSERT_DBG(!_mCurMsg);
@@ -568,29 +558,26 @@ void MsgIter::_handleItem(const PktInfoItem& item)
     }
 }
 
-bt_message *MsgIter::_createEventMsg(const bt2::EventClass cls, const _OptUll& defClkVal)
+bt2::Message::Shared MsgIter::_createEventMsg(const bt2::EventClass cls, const _OptUll& defClkVal)
 {
     if (defClkVal) {
-        if (this->_curPkt()) {
-            return bt_message_event_create_with_packet_and_default_clock_snapshot(
-                _mSelfMsgIter, cls.libObjPtr(), this->_curPkt(), *defClkVal);
+        if (_mCurPkt) {
+            return _mSelfMsgIter.createEventMessage(cls, *_mCurPkt, *defClkVal);
         } else {
-            return bt_message_event_create_with_default_clock_snapshot(
-                _mSelfMsgIter, cls.libObjPtr(), _mStream.libObjPtr(), *defClkVal);
+            return _mSelfMsgIter.createEventMessage(cls, _mStream, *defClkVal);
         }
     } else {
-        if (this->_curPkt()) {
-            return bt_message_event_create_with_packet(_mSelfMsgIter, cls.libObjPtr(),
-                                                       this->_curPkt());
+        if (_mCurPkt) {
+            return _mSelfMsgIter.createEventMessage(cls, *_mCurPkt);
         } else {
-            return bt_message_event_create(_mSelfMsgIter, cls.libObjPtr(), _mStream.libObjPtr());
+            return _mSelfMsgIter.createEventMessage(cls, _mStream);
         }
     }
 }
 
 void MsgIter::_handleItem(const EventRecordInfoItem& item)
 {
-    /* TODO: Test having a trace with only event record headers */
+    // TODO: Test having a trace with only event record headers
     BT_ASSERT_DBG(item.cls());
     BT_ASSERT_DBG(item.cls()->libCls());
     BT_ASSERT_DBG(!_mCurMsg);
@@ -613,8 +600,7 @@ void MsgIter::_handleItem(const EventRecordInfoItem& item)
      * This message will be emitted (added to the message queue) when
      * handling the next `EventRecordEndItem`.
      */
-    _mCurMsg = bt2::Message::Shared::createWithoutRef(
-        this->_createEventMsg(*item.cls()->libCls(), item.defClkVal()));
+    _mCurMsg = this->_createEventMsg(*item.cls()->libCls(), item.defClkVal());
 }
 
 void MsgIter::_handleItem(const FixedLenBitArrayFieldItem& item)
@@ -667,20 +653,59 @@ void MsgIter::_handleItem(const VarLenUIntFieldItem& item)
     this->_handleUIntFieldItem(item);
 }
 
-void MsgIter::_handleStrFieldBeginItem()
+void MsgIter::_handleStrFieldBeginItem(const FieldItem& item)
 {
     this->_stackTopCurSubField().asString().value("");
-    _mHaveStrFieldSubstrItemNullChar = false;
+    _mHaveNullChar = false;
+    _mUtf16NullCpFinder = NullCpFinder<2> {};
+    _mUtf32NullCpFinder = NullCpFinder<4> {};
+    _mStrBuf.clear();
+    _mCurStrFieldEncoding = item.cls().asStr().encoding();
 }
 
 void MsgIter::_handleStrFieldEndItem()
 {
+    switch (_mCurStrFieldEncoding) {
+    case StrEncoding::Utf16Be:
+    case StrEncoding::Utf16Le:
+    case StrEncoding::Utf32Be:
+    case StrEncoding::Utf32Le:
+    {
+        /* Convert to UTF-8 */
+        const auto utf8Str = bt2c::call([this] {
+            bt2c::ConstBytes inBytes {_mStrBuf.begin(), _mStrBuf.end()};
+
+            switch (_mCurStrFieldEncoding) {
+            case StrEncoding::Utf16Be:
+                return _mUnicodeConv.utf8FromUtf16Be(inBytes);
+            case StrEncoding::Utf16Le:
+                return _mUnicodeConv.utf8FromUtf16Le(inBytes);
+            case StrEncoding::Utf32Be:
+                return _mUnicodeConv.utf8FromUtf32Be(inBytes);
+            case StrEncoding::Utf32Le:
+                return _mUnicodeConv.utf8FromUtf32Le(inBytes);
+            default:
+                bt_common_abort();
+            }
+        });
+        const auto endIt =
+            !utf8Str.empty() && utf8Str.back() == 0 ? utf8Str.end() - 1 : utf8Str.end();
+
+        /* Append */
+        this->_stackTopCurSubField().asString().append(
+            reinterpret_cast<const char *>(utf8Str.data()), endIt - utf8Str.begin());
+    }
+
+    default:
+        break;
+    }
+
     this->_stackTopGoToNextSubField();
 }
 
-void MsgIter::_handleItem(const NullTerminatedStrFieldBeginItem&)
+void MsgIter::_handleItem(const NullTerminatedStrFieldBeginItem& item)
 {
-    this->_handleStrFieldBeginItem();
+    this->_handleStrFieldBeginItem(item);
 }
 
 void MsgIter::_handleItem(const NullTerminatedStrFieldEndItem&)
@@ -688,24 +713,61 @@ void MsgIter::_handleItem(const NullTerminatedStrFieldEndItem&)
     this->_handleStrFieldEndItem();
 }
 
-void MsgIter::_handleItem(const StrFieldSubstrItem& item)
+void MsgIter::_handleBlobRawDataItem(const RawDataItem& item)
 {
-    if (_mHaveStrFieldSubstrItemNullChar) {
+    std::memcpy(&this->_stackTopCurSubField().asBlob().data()[_mCurBlobFieldDataOffset],
+                item.data().begin(), item.data().size());
+    _mCurBlobFieldDataOffset += item.data().size();
+}
+
+void MsgIter::_handleStrRawDataItem(const RawDataItem& item)
+{
+    if (_mHaveNullChar) {
         /* No more text data */
         return;
     }
 
-    const auto end = item.strEnd();
+    if (_mCurStrFieldEncoding == StrEncoding::Utf8) {
+        /* Try to find the first U+0000 codepoint */
+        const auto endIt = std::find(item.data().begin(), item.data().end(), 0);
+        _mHaveNullChar = endIt != item.data().end();
 
-    this->_stackTopCurSubField().asString().append(item.begin(), end - item.begin());
-    _mHaveStrFieldSubstrItemNullChar = end != item.end();
+        /* Append to current string field */
+        this->_stackTopCurSubField().asString().append(
+            reinterpret_cast<const char *>(item.data().data()), endIt - item.data().begin());
+    } else {
+        /* Try to find the first U+0000 codepoint */
+        auto endIt = item.data().end();
+        const auto afterNullCpIt = bt2c::call([this, &item] {
+            if (_mCurStrFieldEncoding == StrEncoding::Utf16Be ||
+                _mCurStrFieldEncoding == StrEncoding::Utf16Le) {
+                return _mUtf16NullCpFinder.findNullCp(item.data());
+            } else {
+                BT_ASSERT_DBG(_mCurStrFieldEncoding == StrEncoding::Utf32Be ||
+                              _mCurStrFieldEncoding == StrEncoding::Utf32Le);
+                return _mUtf32NullCpFinder.findNullCp(item.data());
+            }
+        });
+
+        if (afterNullCpIt) {
+            /* Found U+0000 */
+            endIt = *afterNullCpIt;
+            _mHaveNullChar = true;
+        }
+
+        /* Append to current string buffer */
+        _mStrBuf.insert(_mStrBuf.end(), item.data().begin(), endIt);
+    }
 }
 
-void MsgIter::_handleItem(const BlobFieldSectionItem& item)
+void MsgIter::_handleItem(const RawDataItem& item)
 {
-    std::memcpy(&this->_stackTopCurSubField().asBlob().data()[_mCurBlobFieldDataOffset],
-                item.begin(), item.size().bytes());
-    _mCurBlobFieldDataOffset += item.size().bytes();
+    if (this->_stackTopCurSubField().isString()) {
+        this->_handleStrRawDataItem(item);
+    } else {
+        BT_ASSERT_DBG(this->_stackTopCurSubField().isBlob());
+        this->_handleBlobRawDataItem(item);
+    }
 }
 
 void MsgIter::_handleItem(const StructFieldBeginItem&)
@@ -759,9 +821,9 @@ void MsgIter::_handleItem(const BlobFieldEndItem&)
     this->_stackTopGoToNextSubField();
 }
 
-void MsgIter::_handleItem(const NonNullTerminatedStrFieldBeginItem&)
+void MsgIter::_handleItem(const NonNullTerminatedStrFieldBeginItem& item)
 {
-    this->_handleStrFieldBeginItem();
+    this->_handleStrFieldBeginItem(item);
 }
 
 void MsgIter::_handleItem(const NonNullTerminatedStrFieldEndItem&)
@@ -795,9 +857,9 @@ void MsgIter::_handleItem(const OptionalFieldEndItem&)
     this->_stackPop();
 }
 
-void MsgIter::_addMsgToQueue(bt_message * const msg)
+void MsgIter::_addMsgToQueue(bt2::ConstMessage::Shared msg)
 {
-    _mMsgs.emplace(bt2::ConstMessage::Shared::createWithoutRef(msg));
+    _mMsgs.emplace(std::move(msg));
 }
 
 bt2::ConstMessage::Shared MsgIter::_releaseNextMsg()

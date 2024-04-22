@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2015-2024 Philippe Proulx <pproulx@efficios.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -7,39 +7,40 @@
 #include <cmath>
 #include <regex>
 
+#include "cpp-common/bt2c/c-string-view.hpp"
+#include "cpp-common/bt2s/string-view.hpp"
+
 #include "str-scanner.hpp"
 
 namespace bt2c {
 
-const std::regex StrScanner::_mRealRegex {
-    "^"                   /* Start of target */
-    "-?"                  /* Optional negation */
-    "(?:0|[1-9]\\d*)"     /* Integer part */
-    "(?=[eE.]\\d)"        /* Assertion: need fraction/exponent part */
-    "(?:\\.\\d+)?"        /* Optional fraction part */
-    "(?:[eE][+-]?\\d+)?", /* Optional exponent part */
-    std::regex::optimize};
+const std::regex StrScanner::_realRegex {"^"               /* Start of target */
+                                         "-?"              /* Optional negation */
+                                         "(?:0|[1-9]\\d*)" /* Integer part */
+                                         "(?=[eE.]\\d)" /* Assertion: need fraction/exponent part */
+                                         "(?:\\.\\d+)?" /* Optional fraction part */
+                                         "(?:[eE][+-]?\\d+)?", /* Optional exponent part */
+                                         std::regex::optimize};
 
-StrScanner::StrScanner(const char * const begin, const char * const end,
-                       const std::size_t baseOffset, const bt2c::Logger& logger,
-                       const TextLocStrFmt textLocStrFmt) :
-    _mBegin {begin},
-    _mEnd {end}, _mAt {begin}, _mLineBegin {begin},
-    _mBaseOffset {baseOffset}, _mLogger {logger, "STR-SCANNER"}, _mTextLocStrFmt {textLocStrFmt}
+StrScanner::StrScanner(const bt2s::string_view str, const std::size_t baseOffset,
+                       const Logger& logger) :
+    _mStr {str},
+    _mAt {str.begin()}, _mLineBegin {str.begin()}, _mBaseOffset {baseOffset}, _mLogger {
+                                                                                  logger,
+                                                                                  "STR-SCANNER"}
 {
 }
 
-StrScanner::StrScanner(const char * const begin, const char * const end, const bt2c::Logger& logger,
-                       const TextLocStrFmt textLocStrFmt) :
-    StrScanner {begin, end, 0, logger, textLocStrFmt}
+StrScanner::StrScanner(const bt2s::string_view str, const Logger& logger) :
+    StrScanner {str, 0, logger}
 {
 }
 
 void StrScanner::reset()
 {
-    this->at(_mBegin);
+    this->at(_mStr.begin());
     _mNbLines = 0;
-    _mLineBegin = _mBegin;
+    _mLineBegin = _mStr.begin();
 }
 
 void StrScanner::skipWhitespaces() noexcept
@@ -61,11 +62,6 @@ void StrScanner::skipWhitespaces() noexcept
     }
 }
 
-std::string StrScanner::_locStr() const
-{
-    return textLocStr(this->loc(), _mTextLocStrFmt);
-}
-
 void StrScanner::_appendEscapedUnicodeChar(const char * const at)
 {
     /* Create array of four hex characters */
@@ -74,9 +70,8 @@ void StrScanner::_appendEscapedUnicodeChar(const char * const at)
     /* Validate hex characters */
     for (const auto ch : hexCpBuf) {
         if (!std::isxdigit(ch)) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW(
-                bt2::Error, "[{}] In `\\u` escape sequence: unexpected character `{:c}`.",
-                this->_locStr(), ch);
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW(
+                Error, this->loc(), "In `\\u` escape sequence: unexpected character `{:c}`.", ch);
         }
     }
 
@@ -95,9 +90,9 @@ void StrScanner::_appendEscapedUnicodeChar(const char * const at)
         _mStrBuf.push_back(static_cast<char>((cp & 0x3f) + 0x80));
     } else if (cp > 0xd800 && cp <= 0xdfff) {
         /* Unsupported surrogate pairs */
-        BT_CPPLOGE_APPEND_CAUSE_AND_THROW(
-            bt2::Error, "[{}] In `\\u` escape sequence: unsupported surrogate codepoint U+{:x}.",
-            this->_locStr(), static_cast<unsigned int>(cp));
+        BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW(
+            Error, this->loc(), "In `\\u` escape sequence: unsupported surrogate codepoint U+{:X}.",
+            static_cast<unsigned int>(cp));
     } else {
         BT_ASSERT(cp <= 0xffff);
         _mStrBuf.push_back(static_cast<char>((cp >> 12) + 0xe0));
@@ -106,7 +101,7 @@ void StrScanner::_appendEscapedUnicodeChar(const char * const at)
     }
 }
 
-bool StrScanner::_tryAppendEscapedChar(const char * const escapeSeqStartList)
+bool StrScanner::_tryAppendEscapedChar(const bt2s::string_view escapeSeqStartList)
 {
     if (this->charsLeft() < 2) {
         /* Need at least `\` and another character */
@@ -118,19 +113,16 @@ bool StrScanner::_tryAppendEscapedChar(const char * const escapeSeqStartList)
         return false;
     }
 
-    auto escapeSeqStart = escapeSeqStartList;
-
     /* Try each character of `escapeSeqStartList` */
-    while (*escapeSeqStart != '\0') {
-        if (_mAt[1] == '"' || _mAt[1] == '\\' || _mAt[1] == *escapeSeqStart) {
+    for (const auto escapeSeqStart : escapeSeqStartList) {
+        if (_mAt[1] == '"' || _mAt[1] == '\\' || _mAt[1] == escapeSeqStart) {
             /* Escape sequence detected */
             if (_mAt[1] == 'u') {
                 /* `\u` escape sequence */
                 if (this->charsLeft() < 6) {
                     /* Need `\u` + four hex characters */
-                    BT_CPPLOGE_APPEND_CAUSE_AND_THROW(
-                        bt2::Error, "[{}] `\\u` escape sequence needs four hexadecimal digits.",
-                        this->_locStr());
+                    BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW(
+                        Error, this->loc(), "`\\u` escape sequence needs four hexadecimal digits.");
                 }
 
                 this->_appendEscapedUnicodeChar(_mAt + 2);
@@ -170,14 +162,12 @@ bool StrScanner::_tryAppendEscapedChar(const char * const escapeSeqStartList)
 
             return true;
         }
-
-        ++escapeSeqStart;
     }
 
     return false;
 }
 
-const std::string *StrScanner::tryScanLitStr(const char * const escapeSeqStartList)
+bt2s::string_view StrScanner::tryScanLitStr(const bt2s::string_view escapeSeqStartList)
 {
     this->skipWhitespaces();
 
@@ -187,10 +177,10 @@ const std::string *StrScanner::tryScanLitStr(const char * const escapeSeqStartLi
     const auto initNbLines = _mNbLines;
 
     /* First character: `"` or alpha */
-    auto c = this->_tryScanAnyChar();
+    const auto c = this->_tryScanAnyChar();
 
     if (c < 0) {
-        return nullptr;
+        return {};
     }
 
     if (c != '"') {
@@ -198,7 +188,7 @@ const std::string *StrScanner::tryScanLitStr(const char * const escapeSeqStartLi
         this->at(initAt);
         _mLineBegin = initLineBegin;
         _mNbLines = initNbLines;
-        return nullptr;
+        return {};
     }
 
     /* Reset string buffer */
@@ -211,9 +201,9 @@ const std::string *StrScanner::tryScanLitStr(const char * const escapeSeqStartLi
     while (!this->isDone()) {
         /* Check for illegal control character */
         if (std::iscntrl(*_mAt)) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW(
-                bt2::Error, "[{}] Illegal control character 0x{:02x} in literal string.",
-                this->_locStr(), static_cast<unsigned int>(*_mAt));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW(
+                Error, this->loc(), "Illegal control character {:#02x} in literal string.",
+                static_cast<unsigned int>(*_mAt));
         }
 
         /* Try to append an escaped character first */
@@ -225,7 +215,7 @@ const std::string *StrScanner::tryScanLitStr(const char * const escapeSeqStartLi
         if (*_mAt == '"') {
             /* Skip `"` */
             this->_incrAt();
-            return &_mStrBuf;
+            return _mStrBuf;
         }
 
         /* Check for newline */
@@ -240,10 +230,10 @@ const std::string *StrScanner::tryScanLitStr(const char * const escapeSeqStartLi
     this->at(initAt);
     _mLineBegin = initLineBegin;
     _mNbLines = initNbLines;
-    return nullptr;
+    return {};
 }
 
-bool StrScanner::tryScanToken(const char * const token) noexcept
+bool StrScanner::tryScanToken(const bt2s::string_view token) noexcept
 {
     this->skipWhitespaces();
 
@@ -251,9 +241,9 @@ bool StrScanner::tryScanToken(const char * const token) noexcept
     const auto initAt = _mAt;
 
     /* Try to scan token completely */
-    auto tokenAt = token;
+    auto tokenAt = token.begin();
 
-    while (*tokenAt != '\0' && _mAt != _mEnd) {
+    while (tokenAt < token.end() && _mAt != _mStr.end()) {
         if (*_mAt != *tokenAt) {
             /* Mismatch */
             this->at(initAt);
@@ -264,7 +254,7 @@ bool StrScanner::tryScanToken(const char * const token) noexcept
         ++tokenAt;
     }
 
-    if (*tokenAt != '\0') {
+    if (tokenAt != token.end()) {
         /* Wrapped string ends before end of token */
         this->at(initAt);
         return false;
@@ -284,7 +274,7 @@ bt2s::optional<double> StrScanner::tryScanConstReal() noexcept
      * This is needed because std::strtod() accepts more formats which
      * JSON doesn't support.
      */
-    if (!std::regex_search(_mAt, _mEnd, _mRealRegex)) {
+    if (!std::regex_search(_mAt, _mStr.end(), _realRegex)) {
         return bt2s::nullopt;
     }
 

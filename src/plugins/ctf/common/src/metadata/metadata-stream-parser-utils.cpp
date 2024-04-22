@@ -14,8 +14,7 @@
 namespace ctf {
 namespace src {
 
-MetadataStreamMajorVersion
-getMetadataStreamMajorVersion(const bt2s::span<const std::uint8_t> buffer) noexcept
+MetadataStreamMajorVersion getMetadataStreamMajorVersion(const bt2c::ConstBytes buffer) noexcept
 {
     {
         BT_ASSERT(buffer.data());
@@ -27,39 +26,38 @@ getMetadataStreamMajorVersion(const bt2s::span<const std::uint8_t> buffer) noexc
 
 std::unique_ptr<MetadataStreamParser>
 createMetadataStreamParser(const MetadataStreamMajorVersion majorVersion,
-                           const ClkClsCfg& clkClsCfg,
                            const bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp,
-                           const bt2c::Logger& parentLogger)
+                           const ClkClsCfg& clkClsCfg, const bt2c::Logger& parentLogger)
 {
     if (majorVersion == MetadataStreamMajorVersion::V1) {
-        return bt2s::make_unique<Ctf1MetadataStreamParser>(clkClsCfg, selfComp, parentLogger);
+        return bt2s::make_unique<Ctf1MetadataStreamParser>(selfComp, clkClsCfg, parentLogger);
     } else {
         BT_ASSERT(majorVersion == MetadataStreamMajorVersion::V2);
-        return bt2s::make_unique<Ctf2MetadataStreamParser>(clkClsCfg, selfComp, parentLogger);
+        return bt2s::make_unique<Ctf2MetadataStreamParser>(selfComp, clkClsCfg, parentLogger);
     }
 }
 
 std::unique_ptr<MetadataStreamParser>
-createMetadataStreamParser(const bt2s::span<const std::uint8_t> buffer, const ClkClsCfg& clkClsCfg,
+createMetadataStreamParser(const bt2c::ConstBytes buffer,
                            const bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp,
-                           const bt2c::Logger& parentLogger)
+                           const ClkClsCfg& clkClsCfg, const bt2c::Logger& parentLogger)
 {
-    return createMetadataStreamParser(getMetadataStreamMajorVersion(buffer), clkClsCfg, selfComp,
+    return createMetadataStreamParser(getMetadataStreamMajorVersion(buffer), selfComp, clkClsCfg,
                                       parentLogger);
 }
 
 MetadataStreamParser::ParseRet
-parseMetadataStream(const ClkClsCfg& clkClsCfg,
-                    const bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp,
-                    const bt2s::span<const std::uint8_t> buffer, const bt2c::Logger& parentLogger)
+parseMetadataStream(const bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp,
+                    const ClkClsCfg& clkClsCfg, const bt2c::ConstBytes buffer,
+                    const bt2c::Logger& parentLogger)
 {
     const auto majorVersion = getMetadataStreamMajorVersion(buffer);
 
     if (majorVersion == MetadataStreamMajorVersion::V1) {
-        return Ctf1MetadataStreamParser::parse(clkClsCfg, selfComp, buffer, parentLogger);
+        return Ctf1MetadataStreamParser::parse(selfComp, clkClsCfg, buffer, parentLogger);
     } else {
         BT_ASSERT(majorVersion == MetadataStreamMajorVersion::V2);
-        return Ctf2MetadataStreamParser::parse(clkClsCfg, selfComp, buffer, parentLogger);
+        return Ctf2MetadataStreamParser::parse(selfComp, clkClsCfg, buffer, parentLogger);
     }
 }
 

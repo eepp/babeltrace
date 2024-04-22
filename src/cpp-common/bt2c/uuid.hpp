@@ -135,7 +135,7 @@ public:
         this->_setFromPtr(uuid);
     }
 
-    explicit Uuid(const bt2c::CStringView str) noexcept
+    explicit Uuid(const CStringView str) noexcept
     {
         const auto ret = bt_uuid_from_str(str.data(), _mUuid.data());
         BT_ASSERT(ret == 0);
@@ -220,6 +220,13 @@ public:
         return this->_view().isNil();
     }
 
+    static bool isValidUuidStr(const CStringView str) noexcept
+    {
+        std::array<Val, Uuid::size()> tmp;
+
+        return bt_uuid_from_str(str.data(), tmp.data()) == 0;
+    }
+
 private:
     /*
      * std::copy_n() won't throw when simply copying bytes below,
@@ -248,7 +255,7 @@ inline UuidView::operator Uuid() const noexcept
     return Uuid {*this};
 }
 
-static inline std::string format_as(const bt2c::Uuid& uuid)
+inline std::string format_as(const bt2c::Uuid& uuid)
 {
     return uuid.str();
 }

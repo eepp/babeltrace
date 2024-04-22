@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2022-2024 Philippe Proulx <pproulx@efficios.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -25,14 +25,14 @@ namespace bt2c {
  */
 enum class JsonValType
 {
-    NUL,
-    BOOL,
-    SINT,
-    UINT,
-    REAL,
-    STR,
-    ARRAY,
-    OBJ,
+    Null,
+    Bool,
+    SInt,
+    UInt,
+    Real,
+    Str,
+    Array,
+    Obj,
 };
 
 class JsonNullVal;
@@ -43,27 +43,27 @@ class JsonScalarVal;
 /*
  * JSON boolean value.
  */
-using JsonBoolVal = JsonScalarVal<bool, JsonValType::BOOL>;
+using JsonBoolVal = JsonScalarVal<bool, JsonValType::Bool>;
 
 /*
  * JSON signed integer value.
  */
-using JsonSIntVal = JsonScalarVal<long long, JsonValType::SINT>;
+using JsonSIntVal = JsonScalarVal<long long, JsonValType::SInt>;
 
 /*
  * JSON unsigned integer value.
  */
-using JsonUIntVal = JsonScalarVal<unsigned long long, JsonValType::UINT>;
+using JsonUIntVal = JsonScalarVal<unsigned long long, JsonValType::UInt>;
 
 /*
  * JSON real number value.
  */
-using JsonRealVal = JsonScalarVal<double, JsonValType::REAL>;
+using JsonRealVal = JsonScalarVal<double, JsonValType::Real>;
 
 /*
  * JSON string value.
  */
-using JsonStrVal = JsonScalarVal<std::string, JsonValType::STR>;
+using JsonStrVal = JsonScalarVal<std::string, JsonValType::Str>;
 
 class JsonArrayVal;
 class JsonObjVal;
@@ -77,6 +77,8 @@ protected:
     explicit JsonValVisitor() = default;
 
 public:
+    virtual ~JsonValVisitor() = default;
+
     virtual void visit(const JsonNullVal&)
     {
     }
@@ -158,7 +160,7 @@ public:
      */
     bool isNull() const noexcept
     {
-        return _mType == Type::NUL;
+        return _mType == Type::Null;
     }
 
     /*
@@ -166,7 +168,7 @@ public:
      */
     bool isBool() const noexcept
     {
-        return _mType == Type::BOOL;
+        return _mType == Type::Bool;
     }
 
     /*
@@ -174,7 +176,7 @@ public:
      */
     bool isSInt() const noexcept
     {
-        return _mType == Type::SINT;
+        return _mType == Type::SInt;
     }
 
     /*
@@ -182,7 +184,7 @@ public:
      */
     bool isUInt() const noexcept
     {
-        return _mType == Type::UINT;
+        return _mType == Type::UInt;
     }
 
     /*
@@ -190,7 +192,7 @@ public:
      */
     bool isReal() const noexcept
     {
-        return _mType == Type::REAL;
+        return _mType == Type::Real;
     }
 
     /*
@@ -198,7 +200,7 @@ public:
      */
     bool isStr() const noexcept
     {
-        return _mType == Type::STR;
+        return _mType == Type::Str;
     }
 
     /*
@@ -206,7 +208,7 @@ public:
      */
     bool isArray() const noexcept
     {
-        return _mType == Type::ARRAY;
+        return _mType == Type::Array;
     }
 
     /*
@@ -214,7 +216,7 @@ public:
      */
     bool isObj() const noexcept
     {
-        return _mType == Type::OBJ;
+        return _mType == Type::Obj;
     }
 
     /*
@@ -253,7 +255,7 @@ public:
     const JsonArrayVal& asArray() const noexcept;
 
     /*
-     * Returns this JSON value as a JSON map value.
+     * Returns this JSON value as a JSON object value.
      */
     const JsonObjVal& asObj() const noexcept;
 
@@ -402,7 +404,7 @@ protected:
 /*
  * JSON array value.
  */
-class JsonArrayVal : public JsonCompoundVal<std::vector<JsonVal::UP>, JsonValType::ARRAY>
+class JsonArrayVal : public JsonCompoundVal<std::vector<JsonVal::UP>, JsonValType::Array>
 {
 public:
     /* Unique pointer to constant JSON array value */
@@ -432,7 +434,7 @@ private:
  * JSON object value.
  */
 class JsonObjVal :
-    public JsonCompoundVal<std::unordered_map<std::string, JsonVal::UP>, JsonValType::OBJ>
+    public JsonCompoundVal<std::unordered_map<std::string, JsonVal::UP>, JsonValType::Obj>
 {
 public:
     /* Unique pointer to constant JSON object value */

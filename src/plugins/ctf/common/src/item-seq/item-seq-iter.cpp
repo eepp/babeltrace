@@ -20,13 +20,13 @@ ItemSeqIter::ItemSeqIter(std::unique_ptr<Medium> medium, const TraceCls& traceCl
                          const bt2c::Logger& parentLogger) :
     _mMedium {std::move(medium)},
     _mTraceCls {&traceCls},
-    _mTraceClsSavedValueCountUpdatedObservableToken(
-        _mTraceCls->savedValCountUpdatedObservable().attach(
-            std::bind(&ItemSeqIter::_savedValCountUpdated, this, std::placeholders::_1))),
+    _mTraceClsSavedKeyValCountUpdatedObservableToken(
+        _mTraceCls->savedKeyValCountUpdatedObservable().attach(
+            std::bind(&ItemSeqIter::_savedKeyValCountUpdated, this, std::placeholders::_1))),
     _mLogger {parentLogger, "PLUGIN/CTF/ITEM-SEQ-ITER"}
 {
     /* Allocate enough elements to save values for dependent fields */
-    _mSavedVals.resize(traceCls.savedValCount());
+    _mSavedKeyVals.resize(traceCls.savedKeyValCount());
 }
 
 ItemSeqIter::ItemSeqIter(std::unique_ptr<Medium> medium, const TraceCls& traceCls,
@@ -60,7 +60,7 @@ void ItemSeqIter::seekPkt(const bt2c::DataLen pktOffset)
     this->_mBuf = Buf {};
 
     /* Next: try to begin reading a packet */
-    this->_state(_State::TRY_BEGIN_READ_PKT);
+    this->_state(_State::TryBeginReadPkt);
 }
 
 void ItemSeqIter::_updateDefClkVal(const unsigned long long val, const bt2c::DataLen len) noexcept
@@ -76,14 +76,17 @@ void ItemSeqIter::_updateDefClkVal(const unsigned long long val, const bt2c::Dat
     }
 
     const auto newValMask = (1ULL << *len) - 1;
-    const auto curValMasked = _mDefClkVal & newValMask;
 
-    if (val < curValMasked) {
-        /*
-         * It looks like a wrap occurred on the number of bits of the
-         * new value. Assume that the clock value wrapped only once.
-         */
-        _mDefClkVal += newValMask + 1;
+    {
+        const auto curValMasked = _mDefClkVal & newValMask;
+
+        if (val < curValMasked) {
+            /*
+             * It looks like a wrap occurred on the number of bits of the
+             * new value. Assume that the clock value wrapped only once.
+             */
+            _mDefClkVal += newValMask + 1;
+        }
     }
 
     /* Clear the low bits of the current default clock value */
@@ -116,7 +119,7 @@ void ItemSeqIter::_resetForNewPkt()
     /*
      * Reset both expected total and content packet lengths to
      * "infinity" so that, if both are missing at the
-     * `_State::SET_PKT_INFO_ITEM` state, then _remainingPktContentLen()
+     * `_State::SetPktInfoItem` state, then _remainingPktContentLen()
      * will always return a very large value so as to read the whole
      * medium data (the medium offers a single packet).
      */
@@ -149,22 +152,15 @@ void ItemSeqIter::_resetForNewPkt()
 void ItemSeqIter::_newBuf(const bt2c::DataLen offsetInItemSeq, const bt2c::DataLen minSize)
 {
     BT_ASSERT_DBG(minSize <= 9_bytes);
-
     _mBuf = _mMedium->buf(offsetInItemSeq, minSize);
     _mBufOffsetInCurPkt = offsetInItemSeq - _mCurPktOffsetInItemSeq;
-}
-
-[[noreturn]] void ItemSeqIter::_logAppendCauseAndThrow(const std::string& msg) const
-{
-    BT_CPPLOGE_APPEND_CAUSE_AND_THROW(bt2c::Error, "At {} bits: {}", *this->_headOffsetInItemSeq(),
-                                      msg);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleInitState()
 {
     /* Next: try to begin reading a packet */
-    this->_state(_State::TRY_BEGIN_READ_PKT);
-    return _StateHandlingReaction::CONTINUE;
+    this->_state(_State::TryBeginReadPkt);
+    return _StateHandlingReaction::Continue;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadPktState()
@@ -180,8 +176,8 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadPktState()
         if (!this->_tryHaveData(1_bits)) {
             /* No more data: no more packets */
             _mCurItem = nullptr;
-            _mState = _State::DONE;
-            return _StateHandlingReaction::STOP;
+            _mState = _State::Done;
+            return _StateHandlingReaction::Stop;
         }
     }
 
@@ -189,8 +185,8 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadPktState()
     this->_updateForUser(_mItems.pktBegin);
 
     /* Next: begin reading packet content */
-    this->_state(_State::BEGIN_READ_PKT_CONTENT);
-    return _StateHandlingReaction::STOP;
+    this->_state(_State::BeginReadPktContent);
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadPktState()
@@ -239,8 +235,8 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadPktState()
     _mBufOffsetInCurPkt = 0_bits;
 
     /* Next: try reading a packet */
-    this->_state(_State::TRY_BEGIN_READ_PKT);
-    return _StateHandlingReaction::STOP;
+    this->_state(_State::TryBeginReadPkt);
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadPktContentState()
@@ -249,10 +245,9 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadPktContentState
     this->_updateForUser(_mItems.pktContentBegin);
 
     /* Next: try reading packet header field */
-    this->_prepareToTryReadScope(_State::TRY_BEGIN_READ_PKT_HEADER_SCOPE,
-                                 _State::END_READ_PKT_HEADER_SCOPE, ir::FieldLocScope::PKT_HEADER,
-                                 _mTraceCls->pktHeaderFc());
-    return _StateHandlingReaction::STOP;
+    this->_prepareToTryReadScope(_State::TryBeginReadPktHeaderScope, _State::EndReadPktHeaderScope,
+                                 Scope::PktHeader, _mTraceCls->pktHeaderFc());
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadPktContentState()
@@ -263,7 +258,7 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadPktContentState()
     /* Next step depends on whether or not there's a single packet */
     if (_mCurPktExpectedLens.total == this->_infDataLen()) {
         /* Single packet: next, end reading the packet */
-        this->_state(_State::END_READ_PKT);
+        this->_state(_State::EndReadPkt);
     } else {
         /*
          * Compute the non-content padding data to skip to reach the end
@@ -279,16 +274,16 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadPktContentState()
              * all of it immediately.
              */
             _mRemainingLenToSkip = lenToSkip;
-            _mPostSkipPaddingState = _State::END_READ_PKT;
-            this->_state(_State::SKIP_PADDING);
+            _mPostSkipPaddingState = _State::EndReadPkt;
+            this->_state(_State::SkipPadding);
             this->_skipPadding<false>();
         } else {
             /* No padding: next, end reading the packet*/
-            this->_state(_State::END_READ_PKT);
+            this->_state(_State::EndReadPkt);
         }
     }
 
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSkipPaddingState()
@@ -296,7 +291,7 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSkipPaddingState()
     this->_skipPadding<false>();
 
     /* Continue to `_mPostSkipPaddingState` */
-    return _StateHandlingReaction::CONTINUE;
+    return _StateHandlingReaction::Continue;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSkipContentPaddingState()
@@ -304,7 +299,7 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSkipContentPaddingState(
     this->_skipPadding<true>();
 
     /* Continue to `_mPostSkipPaddingState` */
-    return _StateHandlingReaction::CONTINUE;
+    return _StateHandlingReaction::Continue;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetPktMagicNumberItem()
@@ -317,7 +312,7 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetPktMagicNumberItem()
 
     /* Next: read next field */
     this->_prepareToReadNextField();
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetDefClkValItem()
@@ -330,11 +325,10 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetDefClkValItem()
 
     /* Next: read next field */
     this->_prepareToReadNextField();
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
-ItemSeqIter::_StateHandlingReaction
-ItemSeqIter::_handleCommonBeginReadScopeState(const ir::FieldLocScope scope)
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleCommonBeginReadScopeState(const Scope scope)
 {
     /* Update for user */
     _mItems.scopeBegin._mScope = scope;
@@ -343,11 +337,10 @@ ItemSeqIter::_handleCommonBeginReadScopeState(const ir::FieldLocScope scope)
     /* Next: read the scope structure field */
     BT_ASSERT_DBG(_mCurScope.fc);
     this->_prepareToReadStructField(*_mCurScope.fc);
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
-ItemSeqIter::_StateHandlingReaction
-ItemSeqIter::_handleCommonEndReadScopeState(const ir::FieldLocScope scope)
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleCommonEndReadScopeState(const Scope scope)
 {
     /* Update for user */
     {
@@ -355,47 +348,47 @@ ItemSeqIter::_handleCommonEndReadScopeState(const ir::FieldLocScope scope)
         this->_updateForUser(_mItems.scopeEnd);
     }
 
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadPktHeaderScopeState()
 {
     if (!_mCurScope.fc) {
         /* No packet header field: set data stream info item immediately */
-        this->_state(_State::SET_DATA_STREAM_INFO_ITEM);
-        return _StateHandlingReaction::CONTINUE;
+        this->_state(_State::SetDataStreamInfoItem);
+        return _StateHandlingReaction::Continue;
     }
 
-    return this->_handleCommonBeginReadScopeState(ir::FieldLocScope::PKT_HEADER);
+    return this->_handleCommonBeginReadScopeState(Scope::PktHeader);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadPktHeaderScopeState()
 {
     /* Next: set data stream info item */
-    this->_state(_State::SET_DATA_STREAM_INFO_ITEM);
+    this->_state(_State::SetDataStreamInfoItem);
 
     /* End reading packet header scope */
-    return this->_handleCommonEndReadScopeState(ir::FieldLocScope::PKT_HEADER);
+    return this->_handleCommonEndReadScopeState(Scope::PktHeader);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadPktCtxScopeState()
 {
     if (!_mCurScope.fc) {
         /* No packet context field: set packet info item immediately */
-        this->_state(_State::SET_PKT_INFO_ITEM);
-        return _StateHandlingReaction::CONTINUE;
+        this->_state(_State::SetPktInfoItem);
+        return _StateHandlingReaction::Continue;
     }
 
-    return this->_handleCommonBeginReadScopeState(ir::FieldLocScope::PKT_CTX);
+    return this->_handleCommonBeginReadScopeState(Scope::PktCtx);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadPktCtxScopeState()
 {
     /* Next: set packet info item */
-    this->_state(_State::SET_PKT_INFO_ITEM);
+    this->_state(_State::SetPktInfoItem);
 
     /* End reading packet context scope */
-    return this->_handleCommonEndReadScopeState(ir::FieldLocScope::PKT_CTX);
+    return this->_handleCommonEndReadScopeState(Scope::PktCtx);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadEventRecordHeaderScopeState()
@@ -405,99 +398,97 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadEventRecordH
          * No event record header field: set event record info item
          * immediately.
          */
-        this->_state(_State::SET_EVENT_RECORD_INFO_ITEM);
-        return _StateHandlingReaction::CONTINUE;
+        this->_state(_State::SetEventRecordInfoItem);
+        return _StateHandlingReaction::Continue;
     }
 
-    return this->_handleCommonBeginReadScopeState(ir::FieldLocScope::EVENT_RECORD_HEADER);
+    return this->_handleCommonBeginReadScopeState(Scope::EventRecordHeader);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadEventRecordHeaderScopeState()
 {
     /* Next: set event record info item */
-    this->_state(_State::SET_EVENT_RECORD_INFO_ITEM);
+    this->_state(_State::SetEventRecordInfoItem);
 
     /* End reading event record header scope */
-    return this->_handleCommonEndReadScopeState(ir::FieldLocScope::EVENT_RECORD_HEADER);
+    return this->_handleCommonEndReadScopeState(Scope::EventRecordHeader);
 }
 
-void ItemSeqIter::_handleCommonAfterEventRecordCommonCtxScopeState()
+void ItemSeqIter::_handleCommonAfterCommonEventRecordCtxScopeState()
 {
     if (_mItems.eventRecordInfo._mCls) {
         /* Next: try reading specific context field */
-        this->_prepareToTryReadScope(_State::TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE,
-                                     _State::END_READ_EVENT_RECORD_SPEC_CTX_SCOPE,
-                                     ir::FieldLocScope::EVENT_RECORD_SPEC_CTX,
-                                     _mItems.eventRecordInfo._mCls->specCtxFc());
+        this->_prepareToTryReadScope(
+            _State::TryBeginReadSpecEventRecordCtxScope, _State::EndReadSpecEventRecordCtxScope,
+            Scope::SpecEventRecordCtx, _mItems.eventRecordInfo._mCls->specCtxFc());
     } else {
         /* Next: end event record */
-        this->_state(_State::END_READ_EVENT_RECORD);
+        this->_state(_State::EndReadEventRecord);
     }
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadEventRecordCommonCtxScopeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadCommonEventRecordCtxScopeState()
 {
     if (!_mCurScope.fc) {
         /* No common event record context field */
-        this->_handleCommonAfterEventRecordCommonCtxScopeState();
-        return _StateHandlingReaction::CONTINUE;
+        this->_handleCommonAfterCommonEventRecordCtxScopeState();
+        return _StateHandlingReaction::Continue;
     }
 
-    return this->_handleCommonBeginReadScopeState(ir::FieldLocScope::EVENT_RECORD_COMMON_CTX);
+    return this->_handleCommonBeginReadScopeState(Scope::CommonEventRecordCtx);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadEventRecordCommonCtxScopeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadCommonEventRecordCtxScopeState()
 {
-    this->_handleCommonAfterEventRecordCommonCtxScopeState();
-    return this->_handleCommonEndReadScopeState(ir::FieldLocScope::EVENT_RECORD_COMMON_CTX);
+    this->_handleCommonAfterCommonEventRecordCtxScopeState();
+    return this->_handleCommonEndReadScopeState(Scope::CommonEventRecordCtx);
 }
 
-void ItemSeqIter::_handleCommonAfterEventRecordSpecCtxScopeState()
+void ItemSeqIter::_handleCommonAfterSpecEventRecordCtxScopeState()
 {
     BT_ASSERT_DBG(_mItems.eventRecordInfo._mCls);
 
     /* Next: try reading payload field */
-    this->_prepareToTryReadScope(_State::TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE,
-                                 _State::END_READ_EVENT_RECORD_PAYLOAD_SCOPE,
-                                 ir::FieldLocScope::EVENT_RECORD_PAYLOAD,
+    this->_prepareToTryReadScope(_State::TryBeginReadEventRecordPayloadScope,
+                                 _State::EndReadEventRecordPayloadScope, Scope::EventRecordPayload,
                                  _mItems.eventRecordInfo._mCls->payloadFc());
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadEventRecordSpecCtxScopeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadSpecEventRecordCtxScopeState()
 {
     if (!_mCurScope.fc) {
         /* No specific event record context field */
-        this->_handleCommonAfterEventRecordSpecCtxScopeState();
-        return _StateHandlingReaction::CONTINUE;
+        this->_handleCommonAfterSpecEventRecordCtxScopeState();
+        return _StateHandlingReaction::Continue;
     }
 
-    return this->_handleCommonBeginReadScopeState(ir::FieldLocScope::EVENT_RECORD_SPEC_CTX);
+    return this->_handleCommonBeginReadScopeState(Scope::SpecEventRecordCtx);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadEventRecordSpecCtxScopeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadSpecEventRecordCtxScopeState()
 {
-    this->_handleCommonAfterEventRecordSpecCtxScopeState();
-    return this->_handleCommonEndReadScopeState(ir::FieldLocScope::EVENT_RECORD_SPEC_CTX);
+    this->_handleCommonAfterSpecEventRecordCtxScopeState();
+    return this->_handleCommonEndReadScopeState(Scope::SpecEventRecordCtx);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadEventRecordPayloadScopeState()
 {
     if (!_mCurScope.fc) {
         /* No event record payload field: end event record immediately */
-        this->_state(_State::END_READ_EVENT_RECORD);
-        return _StateHandlingReaction::CONTINUE;
+        this->_state(_State::EndReadEventRecord);
+        return _StateHandlingReaction::Continue;
     }
 
-    return this->_handleCommonBeginReadScopeState(ir::FieldLocScope::EVENT_RECORD_PAYLOAD);
+    return this->_handleCommonBeginReadScopeState(Scope::EventRecordPayload);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadEventRecordPayloadScopeState()
 {
     /* Next: end reading event record */
-    this->_state(_State::END_READ_EVENT_RECORD);
+    this->_state(_State::EndReadEventRecord);
 
     /* End reading event record payload scope */
-    return this->_handleCommonEndReadScopeState(ir::FieldLocScope::EVENT_RECORD_PAYLOAD);
+    return this->_handleCommonEndReadScopeState(Scope::EventRecordPayload);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetDataStreamInfoItemState()
@@ -507,10 +498,8 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetDataStreamInfoItemSta
         _mItems.dataStreamInfo._mCls = (*_mTraceCls)[*_mCurClsId];
 
         if (!_mItems.dataStreamInfo._mCls) {
-            std::ostringstream ss;
-
-            ss << "no data stream class exists with ID " << *_mCurClsId << '.';
-            this->_logAppendCauseAndThrow(ss);
+            CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(
+                "no data stream class exists with ID {}", *_mCurClsId);
         }
 
         /*
@@ -539,15 +528,14 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetDataStreamInfoItemSta
      */
     if (_mItems.dataStreamInfo._mCls) {
         /* Next: try reading its packet context field */
-        this->_prepareToTryReadScope(_State::TRY_BEGIN_READ_PKT_CTX_SCOPE,
-                                     _State::END_READ_PKT_CTX_SCOPE, ir::FieldLocScope::PKT_CTX,
-                                     _mItems.dataStreamInfo._mCls->pktCtxFc());
+        this->_prepareToTryReadScope(_State::TryBeginReadPktCtxScope, _State::EndReadPktCtxScope,
+                                     Scope::PktCtx, _mItems.dataStreamInfo._mCls->pktCtxFc());
     } else {
         /* Next: end of packet content: set packet info item */
-        this->_state(_State::SET_PKT_INFO_ITEM);
+        this->_state(_State::SetPktInfoItem);
     }
 
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetPktInfoItemState()
@@ -566,20 +554,16 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetPktInfoItemState()
     /* Validate expected packet lengths */
     {
         if (_mCurPktExpectedLens.total.hasExtraBits()) {
-            std::ostringstream ss;
-
-            ss << "expected total length of current packet (" << *_mCurPktExpectedLens.total
-               << " bits) isn't a multiple of 8 bits.";
-            this->_logAppendCauseAndThrow(ss);
+            CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(
+                "expected total length of current packet ({} bits) isn't a multiple of 8 bits.",
+                *_mCurPktExpectedLens.total);
         }
 
         if (_mCurPktExpectedLens.content > _mCurPktExpectedLens.total) {
-            std::ostringstream ss;
-
-            ss << "expected content length of current packet (" << *_mCurPktExpectedLens.content
-               << " bits) is greater than its expected total length ("
-               << *_mCurPktExpectedLens.total << " bits).";
-            this->_logAppendCauseAndThrow(ss);
+            CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(
+                "expected content length of current packet ({} bits) "
+                "is greater than its expected total length ({} bits).",
+                *_mCurPktExpectedLens.content, *_mCurPktExpectedLens.total);
         }
     }
 
@@ -591,8 +575,8 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetPktInfoItemState()
     this->_updateForUser(_mItems.pktInfo);
 
     /* Next: try reading an event record */
-    this->_state(_State::TRY_BEGIN_READ_EVENT_RECORD);
-    return _StateHandlingReaction::STOP;
+    this->_state(_State::TryBeginReadEventRecord);
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetEventRecordInfoItemState()
@@ -606,11 +590,10 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetEventRecordInfoItemSt
         _mItems.eventRecordInfo._mCls = (*_mItems.dataStreamInfo._mCls)[*_mCurClsId];
 
         if (!_mItems.eventRecordInfo._mCls) {
-            std::ostringstream ss;
-
-            ss << "no event record class exists with ID " << *_mCurClsId << " within the "
-               << "data stream class with ID " << _mItems.dataStreamInfo._mCls->id() << '.';
-            this->_logAppendCauseAndThrow(ss);
+            CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(
+                "no event record class exists with ID {} within the "
+                "data stream class with ID {}.",
+                *_mCurClsId, _mItems.dataStreamInfo._mCls->id());
         }
     } else {
         /*
@@ -633,11 +616,10 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetEventRecordInfoItemSt
     this->_updateForUser(_mItems.eventRecordInfo);
 
     /* Next: try reading common event record context field */
-    this->_prepareToTryReadScope(_State::TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE,
-                                 _State::END_READ_EVENT_RECORD_COMMON_CTX_SCOPE,
-                                 ir::FieldLocScope::EVENT_RECORD_COMMON_CTX,
-                                 dataStreamCls.eventRecordCommonCtxFc());
-    return _StateHandlingReaction::STOP;
+    this->_prepareToTryReadScope(
+        _State::TryBeginReadCommonEventRecordCtxScope, _State::EndReadCommonEventRecordCtxScope,
+        Scope::CommonEventRecordCtx, dataStreamCls.commonEventRecordCtxFc());
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadEventRecordState()
@@ -658,14 +640,14 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadEventRecordS
              */
             if (!this->_tryHaveData(1_bits)) {
                 /* No more data: no more event records */
-                this->_state(_State::END_READ_PKT_CONTENT);
-                return _StateHandlingReaction::CONTINUE;
+                this->_state(_State::EndReadPktContent);
+                return _StateHandlingReaction::Continue;
             }
         }
     } else if (this->_remainingPktContentLen() == 0_bits) {
         /* End of packet content: no more event records */
-        this->_state(_State::END_READ_PKT_CONTENT);
-        return _StateHandlingReaction::CONTINUE;
+        this->_state(_State::EndReadPktContent);
+        return _StateHandlingReaction::Continue;
     }
 
     /* Update for user */
@@ -673,11 +655,10 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleTryBeginReadEventRecordS
 
     /* Next: try reading the event record header field */
     BT_ASSERT_DBG(this->_remainingPktContentLen() > 0_bits);
-    this->_prepareToTryReadScope(_State::TRY_BEGIN_READ_EVENT_RECORD_HEADER_SCOPE,
-                                 _State::END_READ_EVENT_RECORD_HEADER_SCOPE,
-                                 ir::FieldLocScope::EVENT_RECORD_HEADER,
+    this->_prepareToTryReadScope(_State::TryBeginReadEventRecordHeaderScope,
+                                 _State::EndReadEventRecordHeaderScope, Scope::EventRecordHeader,
                                  _mItems.dataStreamInfo._mCls->eventRecordHeaderFc());
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadEventRecordState()
@@ -686,8 +667,8 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadEventRecordState(
     this->_updateForUser(_mItems.eventRecordEnd);
 
     /* Next: try reading the next event record */
-    this->_state(_State::TRY_BEGIN_READ_EVENT_RECORD);
-    return _StateHandlingReaction::STOP;
+    this->_state(_State::TryBeginReadEventRecord);
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadStructFieldState()
@@ -713,7 +694,7 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadStructFieldStat
         this->_prepareToReadField(structFc.begin()->fc());
     }
 
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadStructFieldState()
@@ -740,7 +721,7 @@ ItemSeqIter::_handleCommonBeginReadArrayFieldState(const unsigned long long len,
         this->_prepareToReadField(arrayFc.elemFc());
     }
 
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadStaticLenArrayFieldState()
@@ -770,18 +751,10 @@ ItemSeqIter::_handleBeginReadStaticLenArrayFieldMetadataStreamUuidState()
     this->_alignHead(arrayFc);
 
     /* Next step: read the first byte field */
-    {
-        _mCurScalarFc = &arrayFc.elemFc();
+    _mCurScalarFc = &arrayFc.elemFc();
+    this->_state(_State::ReadFixedLenMetadataStreamUuidByteUIntFieldBa8);
 
-        if (arrayFc.elemFc().type() == Fc::Type::FIXED_LEN_UINT) {
-            this->_state(_State::READ_FIXED_LEN_METADATA_STREAM_UUID_BYTE_UINT_FIELD_BA_8);
-        } else {
-            BT_ASSERT_DBG(arrayFc.elemFc().type() == Fc::Type::FIXED_LEN_UENUM);
-            this->_state(_State::READ_FIXED_LEN_METADATA_STREAM_UUID_BYTE_UENUM_FIELD_BA_8);
-        }
-    }
-
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetMetadataStreamUuidItemState()
@@ -794,7 +767,7 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleSetMetadataStreamUuidIte
      * field.
      */
     this->_restoreState();
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadStaticLenArrayFieldState()
@@ -808,7 +781,7 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadDynLenArrayFiel
     auto& arrayFc = this->_stackTop().fc->asDynLenArray();
 
     /* Get length of array field */
-    const auto len = this->_savedUIntVal(arrayFc);
+    const auto len = this->_savedUIntKeyVal(arrayFc);
 
     /* Update for user */
     this->_setFieldItemFcAndUpdateForUser(_mItems.dynLenArrayFieldBegin, *this->_stackTop().fc);
@@ -823,18 +796,25 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadDynLenArrayFieldS
     return this->_handleCommonEndReadCompoundFieldState(_mItems.dynLenArrayFieldEnd);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadNullTerminatedStrFieldState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadNullTerminatedStrFieldUtf8State()
 {
-    /* Update for user */
-    this->_setFieldItemFcAndUpdateForUser(_mItems.nullTerminatedStrFieldBegin,
-                                          *this->_stackTop().fc);
+    this->_handleCommonBeginReadNullTerminatedStrFieldState(
+        _mUtf8NullCpFinder, _State::ReadSubstrUntilNullCodepointUtf8);
+    return _StateHandlingReaction::Stop;
+}
 
-    /* Align head for string field */
-    this->_alignHead(*this->_stackTop().fc);
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadNullTerminatedStrFieldUtf16State()
+{
+    this->_handleCommonBeginReadNullTerminatedStrFieldState(
+        _mUtf16NullCpFinder, _State::ReadSubstrUntilNullCodepointUtf16);
+    return _StateHandlingReaction::Stop;
+}
 
-    /* Next: read substring until (and including) a null character */
-    this->_state(_State::READ_SUBSTR_UNTIL_NULL_CHAR);
-    return _StateHandlingReaction::STOP;
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadNullTerminatedStrFieldUtf32State()
+{
+    this->_handleCommonBeginReadNullTerminatedStrFieldState(
+        _mUtf32NullCpFinder, _State::ReadSubstrUntilNullCodepointUtf32);
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadNullTerminatedStrFieldState()
@@ -842,54 +822,19 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadNullTerminatedStr
     return this->_handleCommonEndReadCompoundFieldState(_mItems.nullTerminatedStrFieldEnd);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadSubstrUntilNullCharState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadSubstrUntilNullCodepointUtf8State()
 {
-    BT_ASSERT_DBG(!_mHeadOffsetInCurPkt.hasExtraBits());
+    return this->_handleCommonReadSubstrUntilNullCodepointState(_mUtf8NullCpFinder);
+}
 
-    /* Require at least one byte of packet content */
-    this->_requireContentData(1_bytes);
-    BT_ASSERT_DBG(this->_remainingBufLen() >= 1_bytes);
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadSubstrUntilNullCodepointUtf16State()
+{
+    return this->_handleCommonReadSubstrUntilNullCodepointState(_mUtf16NullCpFinder);
+}
 
-    /* Find any null character within the current buffer */
-    const auto begin = this->_bufAtHead();
-    const auto maxEnd = begin + this->_remainingBufLen().bytes();
-    auto end = std::find(begin, maxEnd, '\0');
-    auto foundNullChar = false;
-
-    if (end != maxEnd) {
-        /* Include the null character found */
-        ++end;
-        foundNullChar = true;
-    }
-
-    /* Make sure the substring is completely part of the packet content */
-    const auto substrLen = bt2c::DataLen::fromBytes(end - begin);
-
-    if (substrLen > this->_remainingPktContentLen()) {
-        std::ostringstream ss;
-
-        ss << substrLen.bytes() << " string field substring bytes "
-           << " required at this point, but only " << *this->_remainingPktContentLen()
-           << " bits of packet content remain.";
-        this->_logAppendCauseAndThrow(ss);
-    }
-
-    /* Update for user */
-    _mItems.strFieldSubstr._mBegin = reinterpret_cast<const char *>(begin);
-    _mItems.strFieldSubstr._mEnd = reinterpret_cast<const char *>(end);
-    BT_ASSERT_DBG(substrLen >= 1_bytes);
-    this->_updateForUser(_mItems.strFieldSubstr);
-
-    /* Mark the substring as consumed */
-    this->_consumeAvailData(substrLen);
-
-    /* End found yet? */
-    if (foundNullChar) {
-        /* Next: end reading null-terminated string field */
-        this->_restoreState();
-    }
-
-    return _StateHandlingReaction::STOP;
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadSubstrUntilNullCodepointUtf32State()
+{
+    return this->_handleCommonReadSubstrUntilNullCodepointState(_mUtf32NullCpFinder);
 }
 
 ItemSeqIter::_StateHandlingReaction
@@ -911,7 +856,7 @@ ItemSeqIter::_handleCommonBeginReadStrBlobFieldState(const unsigned long long le
         this->_state(contentState);
     }
 
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadStaticLenStrFieldState()
@@ -923,7 +868,7 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadStaticLenStrFie
     auto& strFc = this->_stackTop().fc->asStaticLenStr();
 
     /* Begin reading static-length string field */
-    return this->_handleCommonBeginReadStrBlobFieldState(strFc.len(), _State::READ_SUBSTR, strFc);
+    return this->_handleCommonBeginReadStrBlobFieldState(strFc.len(), _State::ReadRawData, strFc);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadStaticLenStrFieldState()
@@ -937,14 +882,14 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadDynLenStrFieldS
     auto& strFc = this->_stackTop().fc->asDynLenStr();
 
     /* Get length of string field */
-    const auto len = this->_savedUIntVal(strFc);
+    const auto len = this->_savedUIntKeyVal(strFc);
 
     /* Update for user */
     this->_setFieldItemFcAndUpdateForUser(_mItems.dynLenStrFieldBegin, *this->_stackTop().fc);
     _mItems.dynLenStrFieldBegin._mLen = bt2c::DataLen::fromBytes(len);
 
     /* Begin reading dynamic-length string field */
-    return this->_handleCommonBeginReadStrBlobFieldState(len, _State::READ_SUBSTR, strFc);
+    return this->_handleCommonBeginReadStrBlobFieldState(len, _State::ReadRawData, strFc);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadDynLenStrFieldState()
@@ -952,9 +897,56 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadDynLenStrFieldSta
     return this->_handleCommonEndReadCompoundFieldState(_mItems.dynLenStrFieldEnd);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadSubstrState()
+void ItemSeqIter::_handleCommonReadRawDataNoNextState()
 {
-    return this->_handleCommonReadBytesState<char>(_mItems.strFieldSubstr);
+    BT_ASSERT_DBG(!_mHeadOffsetInCurPkt.hasExtraBits());
+
+    auto& top = this->_stackTop();
+
+    BT_ASSERT_DBG(top.elemIndex < top.len);
+
+    /* Require at least one byte of packet content */
+    this->_requireContentData(1_bytes);
+    BT_ASSERT_DBG(this->_remainingBufLen() >= 1_bytes);
+
+    /* Set beginning and end pointers */
+    const auto begin = this->_bufAtHead();
+    const auto end = begin + std::min(this->_remainingBufLen().bytes(),
+                                      static_cast<unsigned long long>(top.len - top.elemIndex));
+
+    /* Make sure the section is completely part of the packet content */
+    const auto len = bt2c::DataLen::fromBytes(end - begin);
+
+    if (len > this->_remainingPktContentLen()) {
+        CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(
+            "{} string/BLOB field bytes required at this point, "
+            "but only {} bits of packet content remain.",
+            len.bytes(), *this->_remainingPktContentLen());
+    }
+
+    /* Update for user */
+    _mItems.rawData._assign(begin, end);
+    BT_ASSERT_DBG(len >= 1_bytes);
+    this->_updateForUser(_mItems.rawData);
+
+    /* Mark the section as consumed */
+    this->_consumeAvailData(len);
+
+    /* Update `top.elemIndex` */
+    top.elemIndex += len.bytes();
+    BT_ASSERT_DBG(top.elemIndex <= top.len);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadRawDataState()
+{
+    this->_handleCommonReadRawDataNoNextState();
+
+    if (this->_stackTop().elemIndex == this->_stackTop().len) {
+        /* Next: end reading string/BLOB field */
+        this->_restoreState();
+    }
+
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction
@@ -972,14 +964,14 @@ ItemSeqIter::_handleCommonBeginReadStaticLenBlobFieldState(const _State contentS
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadStaticLenBlobFieldState()
 {
-    return this->_handleCommonBeginReadStaticLenBlobFieldState(_State::READ_BLOB_FIELD_SECTION);
+    return this->_handleCommonBeginReadStaticLenBlobFieldState(_State::ReadRawData);
 }
 
 ItemSeqIter::_StateHandlingReaction
 ItemSeqIter::_handleBeginReadStaticLenBlobFieldMetadataStreamUuidState()
 {
     return this->_handleCommonBeginReadStaticLenBlobFieldState(
-        _State::READ_METADATA_STREAM_UUID_BLOB_FIELD_SECTION);
+        _State::ReadMetadataStreamUuidBlobFieldSection);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadStaticLenBlobFieldState()
@@ -993,15 +985,14 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadDynLenBlobField
     auto& blobFc = this->_stackTop().fc->asDynLenBlob();
 
     /* Get length of BLOB field */
-    const auto len = this->_savedUIntVal(blobFc);
+    const auto len = this->_savedUIntKeyVal(blobFc);
 
     /* Update for user */
     this->_setFieldItemFcAndUpdateForUser(_mItems.dynLenBlobFieldBegin, *this->_stackTop().fc);
     _mItems.dynLenBlobFieldBegin._mLen = bt2c::DataLen::fromBytes(len);
 
     /* Begin reading dynamic-length BLOB field */
-    return this->_handleCommonBeginReadStrBlobFieldState(len, _State::READ_BLOB_FIELD_SECTION,
-                                                         blobFc);
+    return this->_handleCommonBeginReadStrBlobFieldState(len, _State::ReadRawData, blobFc);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadDynLenBlobFieldState()
@@ -1009,24 +1000,19 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadDynLenBlobFieldSt
     return this->_handleCommonEndReadCompoundFieldState(_mItems.dynLenBlobFieldEnd);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadBlobFieldSectionState()
-{
-    return this->_handleCommonReadBytesState<std::uint8_t>(_mItems.blobFieldSection);
-}
-
 ItemSeqIter::_StateHandlingReaction
 ItemSeqIter::_handleReadMetadataStreamUuidBlobFieldSectionState()
 {
     const auto uuidByteIndex = this->_stackTop().elemIndex;
 
-    this->_handleCommonReadBytesNoNextState<std::uint8_t>(_mItems.blobFieldSection);
+    this->_handleCommonReadRawDataNoNextState();
 
     /*
      * Set current metadata stream UUID bytes from current BLOB section.
      */
-    BT_ASSERT_DBG(uuidByteIndex + _mItems.blobFieldSection.size().bytes() <=
+    BT_ASSERT_DBG(uuidByteIndex + _mItems.rawData.data().size() <=
                   _mItems.metadataStreamUuid._mUuid.size());
-    std::copy(_mItems.blobFieldSection._mBegin, _mItems.blobFieldSection._mEnd,
+    std::copy(_mItems.rawData.data().begin(), _mItems.rawData.data().end(),
               _mCurMetadataStreamUuid.data() + uuidByteIndex);
 
     /*
@@ -1038,10 +1024,10 @@ ItemSeqIter::_handleReadMetadataStreamUuidBlobFieldSectionState()
         _mItems.metadataStreamUuid._mUuid = bt2c::Uuid {_mCurMetadataStreamUuid.data()};
 
         /* Next: set metadata stream UUID item */
-        this->_state(_State::SET_METADATA_STREAM_UUID_ITEM);
+        this->_state(_State::SetMetadataStreamUuidItem);
     }
 
-    return _StateHandlingReaction::STOP;
+    return _StateHandlingReaction::Stop;
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleBeginReadVariantFieldWithUIntSelState()
@@ -1101,1014 +1087,1331 @@ ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleEndReadOptionalFieldWith
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBeState()
 {
-    return this->_handleCommonReadFixedLenBitArrayFieldState<0, ir::ByteOrder::BIG>(
+    return this->_handleCommonReadFixedLenBitArrayFieldState<0, ByteOrder::Big,
+                                                             internal::BitOrder::Natural>(
         _mItems.fixedLenBitArrayField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldLeState()
 {
-    return this->_handleCommonReadFixedLenBitArrayFieldState<0, ir::ByteOrder::LITTLE>(
+    return this->_handleCommonReadFixedLenBitArrayFieldState<0, ByteOrder::Little,
+                                                             internal::BitOrder::Natural>(
         _mItems.fixedLenBitArrayField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa8State()
 {
-    return this->_handleCommonReadFixedLenBitArrayFieldState<8, ir::ByteOrder::BIG>(
+    return this->_handleCommonReadFixedLenBitArrayFieldState<8, ByteOrder::Big,
+                                                             internal::BitOrder::Natural>(
         _mItems.fixedLenBitArrayField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa16LeState()
 {
-    return this->_handleCommonReadFixedLenBitArrayFieldState<16, ir::ByteOrder::LITTLE>(
+    return this->_handleCommonReadFixedLenBitArrayFieldState<16, ByteOrder::Little,
+                                                             internal::BitOrder::Natural>(
         _mItems.fixedLenBitArrayField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa16BeState()
 {
-    return this->_handleCommonReadFixedLenBitArrayFieldState<16, ir::ByteOrder::BIG>(
+    return this->_handleCommonReadFixedLenBitArrayFieldState<16, ByteOrder::Big,
+                                                             internal::BitOrder::Natural>(
         _mItems.fixedLenBitArrayField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa32LeState()
 {
-    return this->_handleCommonReadFixedLenBitArrayFieldState<32, ir::ByteOrder::LITTLE>(
+    return this->_handleCommonReadFixedLenBitArrayFieldState<32, ByteOrder::Little,
+                                                             internal::BitOrder::Natural>(
         _mItems.fixedLenBitArrayField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa32BeState()
 {
-    return this->_handleCommonReadFixedLenBitArrayFieldState<32, ir::ByteOrder::BIG>(
+    return this->_handleCommonReadFixedLenBitArrayFieldState<32, ByteOrder::Big,
+                                                             internal::BitOrder::Natural>(
         _mItems.fixedLenBitArrayField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa64LeState()
 {
-    return this->_handleCommonReadFixedLenBitArrayFieldState<64, ir::ByteOrder::LITTLE>(
+    return this->_handleCommonReadFixedLenBitArrayFieldState<64, ByteOrder::Little,
+                                                             internal::BitOrder::Natural>(
         _mItems.fixedLenBitArrayField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa64BeState()
 {
-    return this->_handleCommonReadFixedLenBitArrayFieldState<64, ir::ByteOrder::BIG>(
+    return this->_handleCommonReadFixedLenBitArrayFieldState<64, ByteOrder::Big,
+                                                             internal::BitOrder::Natural>(
         _mItems.fixedLenBitArrayField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBeState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<0, ir::ByteOrder::BIG, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenBoolFieldState<0, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldLeState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<0, ir::ByteOrder::LITTLE, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenBoolFieldState<0, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa8State()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<8, ir::ByteOrder::BIG, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenBoolFieldState<8, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa16LeState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<16, ir::ByteOrder::LITTLE, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenBoolFieldState<16, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa16BeState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<16, ir::ByteOrder::BIG, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenBoolFieldState<16, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa32LeState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<32, ir::ByteOrder::LITTLE, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenBoolFieldState<32, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa32BeState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<32, ir::ByteOrder::BIG, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenBoolFieldState<32, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa64LeState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<64, ir::ByteOrder::LITTLE, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenBoolFieldState<64, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa64BeState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<64, ir::ByteOrder::BIG, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenBoolFieldState<64, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBeSaveValState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<0, ir::ByteOrder::BIG, _SaveVal::YES>(
-        _mItems.fixedLenBoolField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        0, ByteOrder::Big, internal::BitOrder::Natural, _SaveVal::Yes>(_mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldLeSaveValState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<0, ir::ByteOrder::LITTLE, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        0, ByteOrder::Little, internal::BitOrder::Natural, _SaveVal::Yes>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa8SaveValState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<8, ir::ByteOrder::BIG, _SaveVal::YES>(
-        _mItems.fixedLenBoolField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        8, ByteOrder::Big, internal::BitOrder::Natural, _SaveVal::Yes>(_mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa16LeSaveValState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<16, ir::ByteOrder::LITTLE, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        16, ByteOrder::Little, internal::BitOrder::Natural, _SaveVal::Yes>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa16BeSaveValState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<16, ir::ByteOrder::BIG, _SaveVal::YES>(
-        _mItems.fixedLenBoolField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        16, ByteOrder::Big, internal::BitOrder::Natural, _SaveVal::Yes>(_mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa32LeSaveValState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<32, ir::ByteOrder::LITTLE, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        32, ByteOrder::Little, internal::BitOrder::Natural, _SaveVal::Yes>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa32BeSaveValState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<32, ir::ByteOrder::BIG, _SaveVal::YES>(
-        _mItems.fixedLenBoolField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        32, ByteOrder::Big, internal::BitOrder::Natural, _SaveVal::Yes>(_mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa64LeSaveValState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<64, ir::ByteOrder::LITTLE, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        64, ByteOrder::Little, internal::BitOrder::Natural, _SaveVal::Yes>(
         _mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa64BeSaveValState()
 {
-    return this->_handleCommonReadFixedLenBoolFieldState<64, ir::ByteOrder::BIG, _SaveVal::YES>(
-        _mItems.fixedLenBoolField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        64, ByteOrder::Big, internal::BitOrder::Natural, _SaveVal::Yes>(_mItems.fixedLenBoolField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatField32BeState()
 {
-    return this->_handleCommonReadFixedLenFloatFieldState<0, ir::ByteOrder::BIG, float>();
+    return this->_handleCommonReadFixedLenFloatFieldState<0, ByteOrder::Big,
+                                                          internal::BitOrder::Natural, float>();
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatField32LeState()
 {
-    return this->_handleCommonReadFixedLenFloatFieldState<0, ir::ByteOrder::LITTLE, float>();
+    return this->_handleCommonReadFixedLenFloatFieldState<0, ByteOrder::Little,
+                                                          internal::BitOrder::Natural, float>();
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatField64BeState()
 {
-    return this->_handleCommonReadFixedLenFloatFieldState<0, ir::ByteOrder::BIG, double>();
+    return this->_handleCommonReadFixedLenFloatFieldState<0, ByteOrder::Big,
+                                                          internal::BitOrder::Natural, double>();
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatField64LeState()
 {
-    return this->_handleCommonReadFixedLenFloatFieldState<0, ir::ByteOrder::LITTLE, double>();
+    return this->_handleCommonReadFixedLenFloatFieldState<0, ByteOrder::Little,
+                                                          internal::BitOrder::Natural, double>();
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatFieldBa32LeState()
 {
-    return this->_handleCommonReadFixedLenFloatFieldState<32, ir::ByteOrder::LITTLE, float>();
+    return this->_handleCommonReadFixedLenFloatFieldState<32, ByteOrder::Little,
+                                                          internal::BitOrder::Natural, float>();
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatFieldBa32BeState()
 {
-    return this->_handleCommonReadFixedLenFloatFieldState<32, ir::ByteOrder::BIG, float>();
+    return this->_handleCommonReadFixedLenFloatFieldState<32, ByteOrder::Big,
+                                                          internal::BitOrder::Natural, float>();
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatFieldBa64LeState()
 {
-    return this->_handleCommonReadFixedLenFloatFieldState<64, ir::ByteOrder::LITTLE, double>();
+    return this->_handleCommonReadFixedLenFloatFieldState<64, ByteOrder::Little,
+                                                          internal::BitOrder::Natural, double>();
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatFieldBa64BeState()
 {
-    return this->_handleCommonReadFixedLenFloatFieldState<64, ir::ByteOrder::BIG, double>();
+    return this->_handleCommonReadFixedLenFloatFieldState<64, ByteOrder::Big,
+                                                          internal::BitOrder::Natural, double>();
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBeState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::No>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldLeState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::No>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa8State()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::No>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa16LeState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::No>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa16BeState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::No>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa32LeState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::No>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa32BeState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::No>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa64LeState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::No>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa64BeState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::No>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBeWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Big,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::No>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldLeWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Little,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::No>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa8WithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ByteOrder::Big,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::No>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa16LeWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Little,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::No>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa16BeWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Big,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::No>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa32LeWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Little,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::No>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa32BeWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Big,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::No>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa64LeWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Little,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::No>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa64BeWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::NO>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Big,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::No>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBeSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::Yes>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldLeSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::Yes>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa8SaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::Yes>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa16LeSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::Yes>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa16BeSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::Yes>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa32LeSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::Yes>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa32BeSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::Yes>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa64LeSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::Yes>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa64BeSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUIntField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _WithRole::No,
+                                                         _SaveVal::Yes>(_mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
 ItemSeqIter::_handleReadFixedLenUIntFieldBeWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Big,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
 ItemSeqIter::_handleReadFixedLenUIntFieldLeWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Little,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
 ItemSeqIter::_handleReadFixedLenUIntFieldBa8WithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ByteOrder::Big,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
 ItemSeqIter::_handleReadFixedLenUIntFieldBa16LeWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Little,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
 ItemSeqIter::_handleReadFixedLenUIntFieldBa16BeWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Big,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
 ItemSeqIter::_handleReadFixedLenUIntFieldBa32LeWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Little,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
 ItemSeqIter::_handleReadFixedLenUIntFieldBa32BeWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Big,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
 ItemSeqIter::_handleReadFixedLenUIntFieldBa64LeWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Little,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
 ItemSeqIter::_handleReadFixedLenUIntFieldBa64BeWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::YES>(
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Big,
+                                                         internal::BitOrder::Natural,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
         _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBeState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 0, ir::ByteOrder::BIG,
-                                                         _SaveVal::NO>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 0, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldLeState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 0, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::NO>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 0, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa8State()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 8, ir::ByteOrder::BIG,
-                                                         _SaveVal::NO>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 8, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa16LeState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 16, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::NO>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 16, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa16BeState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 16, ir::ByteOrder::BIG,
-                                                         _SaveVal::NO>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 16, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa32LeState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 32, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::NO>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 32, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa32BeState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 32, ir::ByteOrder::BIG,
-                                                         _SaveVal::NO>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 32, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa64LeState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 64, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::NO>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 64, ByteOrder::Little,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa64BeState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 64, ir::ByteOrder::BIG,
-                                                         _SaveVal::NO>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 64, ByteOrder::Big,
+                                                         internal::BitOrder::Natural, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBeSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 0, ir::ByteOrder::BIG,
-                                                         _SaveVal::YES>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 0, ByteOrder::Big, internal::BitOrder::Natural, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldLeSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 0, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::YES>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 0, ByteOrder::Little, internal::BitOrder::Natural, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa8SaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 8, ir::ByteOrder::BIG,
-                                                         _SaveVal::YES>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 8, ByteOrder::Big, internal::BitOrder::Natural, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa16LeSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 16, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::YES>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 16, ByteOrder::Little, internal::BitOrder::Natural, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa16BeSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 16, ir::ByteOrder::BIG,
-                                                         _SaveVal::YES>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 16, ByteOrder::Big, internal::BitOrder::Natural, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa32LeSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 32, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::YES>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 32, ByteOrder::Little, internal::BitOrder::Natural, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa32BeSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 32, ir::ByteOrder::BIG,
-                                                         _SaveVal::YES>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 32, ByteOrder::Big, internal::BitOrder::Natural, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa64LeSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 64, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::YES>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 64, ByteOrder::Little, internal::BitOrder::Natural, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa64BeSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 64, ir::ByteOrder::BIG,
-                                                         _SaveVal::YES>(_mItems.fixedLenSIntField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 64, ByteOrder::Big, internal::BitOrder::Natural, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBitArrayFieldState<0, ByteOrder::Big,
+                                                             internal::BitOrder::Reversed>(
+        _mItems.fixedLenBitArrayField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldLeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldLeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBitArrayFieldState<0, ByteOrder::Little,
+                                                             internal::BitOrder::Reversed>(
+        _mItems.fixedLenBitArrayField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa8State()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa8RevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBitArrayFieldState<8, ByteOrder::Big,
+                                                             internal::BitOrder::Reversed>(
+        _mItems.fixedLenBitArrayField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa16LeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa16LeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBitArrayFieldState<16, ByteOrder::Little,
+                                                             internal::BitOrder::Reversed>(
+        _mItems.fixedLenBitArrayField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa16BeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa16BeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBitArrayFieldState<16, ByteOrder::Big,
+                                                             internal::BitOrder::Reversed>(
+        _mItems.fixedLenBitArrayField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa32LeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa32LeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBitArrayFieldState<32, ByteOrder::Little,
+                                                             internal::BitOrder::Reversed>(
+        _mItems.fixedLenBitArrayField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa32BeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa32BeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBitArrayFieldState<32, ByteOrder::Big,
+                                                             internal::BitOrder::Reversed>(
+        _mItems.fixedLenBitArrayField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa64LeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa64LeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBitArrayFieldState<64, ByteOrder::Little,
+                                                             internal::BitOrder::Reversed>(
+        _mItems.fixedLenBitArrayField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa64BeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBitArrayFieldBa64BeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBitArrayFieldState<64, ByteOrder::Big,
+                                                             internal::BitOrder::Reversed>(
+        _mItems.fixedLenBitArrayField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBeWithRoleState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        0, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::No>(_mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldLeWithRoleState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldLeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        0, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa8WithRoleState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa8RevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        8, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::No>(_mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa16LeWithRoleState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa16LeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        16, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa16BeWithRoleState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa16BeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        16, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::No>(_mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa32LeWithRoleState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa32LeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        32, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa32BeWithRoleState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa32BeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        32, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::No>(_mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa64LeWithRoleState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa64LeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        64, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa64BeWithRoleState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa64BeRevState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::NO>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        64, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::No>(_mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBeRevSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        0, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::Yes>(_mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldLeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldLeRevSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        0, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa8SaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa8RevSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        8, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::Yes>(_mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa16LeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa16LeRevSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        16, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa16BeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa16BeRevSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        16, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::Yes>(_mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa32LeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa32LeRevSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        32, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa32BeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa32BeRevSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        32, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::Yes>(_mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa64LeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa64LeRevSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::LITTLE,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        64, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenBoolField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUEnumFieldBa64BeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenBoolFieldBa64BeRevSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::BIG,
-                                                         _WithRole::NO, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenBoolFieldState<
+        64, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::Yes>(_mItems.fixedLenBoolField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatField32BeRevState()
+{
+    return this->_handleCommonReadFixedLenFloatFieldState<0, ByteOrder::Big,
+                                                          internal::BitOrder::Reversed, float>();
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatField32LeRevState()
+{
+    return this->_handleCommonReadFixedLenFloatFieldState<0, ByteOrder::Little,
+                                                          internal::BitOrder::Reversed, float>();
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatField64BeRevState()
+{
+    return this->_handleCommonReadFixedLenFloatFieldState<0, ByteOrder::Big,
+                                                          internal::BitOrder::Reversed, double>();
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatField64LeRevState()
+{
+    return this->_handleCommonReadFixedLenFloatFieldState<0, ByteOrder::Little,
+                                                          internal::BitOrder::Reversed, double>();
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatFieldBa32LeRevState()
+{
+    return this->_handleCommonReadFixedLenFloatFieldState<32, ByteOrder::Little,
+                                                          internal::BitOrder::Reversed, float>();
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatFieldBa32BeRevState()
+{
+    return this->_handleCommonReadFixedLenFloatFieldState<32, ByteOrder::Big,
+                                                          internal::BitOrder::Reversed, float>();
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatFieldBa64LeRevState()
+{
+    return this->_handleCommonReadFixedLenFloatFieldState<64, ByteOrder::Little,
+                                                          internal::BitOrder::Reversed, double>();
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenFloatFieldBa64BeRevState()
+{
+    return this->_handleCommonReadFixedLenFloatFieldState<64, ByteOrder::Big,
+                                                          internal::BitOrder::Reversed, double>();
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBeRevState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldLeRevState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa8RevState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa16LeRevState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa16BeRevState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa32LeRevState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa32BeRevState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa64LeRevState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa64BeRevState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBeRevWithRoleState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldLeRevWithRoleState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa8RevWithRoleState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
-ItemSeqIter::_handleReadFixedLenUEnumFieldBeWithRoleSaveValState()
+ItemSeqIter::_handleReadFixedLenUIntFieldBa16LeRevWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
-ItemSeqIter::_handleReadFixedLenUEnumFieldLeWithRoleSaveValState()
+ItemSeqIter::_handleReadFixedLenUIntFieldBa16BeRevWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
-ItemSeqIter::_handleReadFixedLenUEnumFieldBa8WithRoleSaveValState()
+ItemSeqIter::_handleReadFixedLenUIntFieldBa32LeRevWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
-ItemSeqIter::_handleReadFixedLenUEnumFieldBa16LeWithRoleSaveValState()
+ItemSeqIter::_handleReadFixedLenUIntFieldBa32BeRevWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
-ItemSeqIter::_handleReadFixedLenUEnumFieldBa16BeWithRoleSaveValState()
+ItemSeqIter::_handleReadFixedLenUIntFieldBa64LeRevWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
-ItemSeqIter::_handleReadFixedLenUEnumFieldBa32LeWithRoleSaveValState()
+ItemSeqIter::_handleReadFixedLenUIntFieldBa64BeRevWithRoleState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::No>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldLeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa8RevSaveValState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa16LeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa16BeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa32LeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa32BeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa64LeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenUIntFieldBa64BeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::No, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
-ItemSeqIter::_handleReadFixedLenUEnumFieldBa32BeWithRoleSaveValState()
+ItemSeqIter::_handleReadFixedLenUIntFieldBeRevWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
-ItemSeqIter::_handleReadFixedLenUEnumFieldBa64LeWithRoleSaveValState()
+ItemSeqIter::_handleReadFixedLenUIntFieldLeRevWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::LITTLE,
-                                                         _WithRole::YES, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 0, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction
-ItemSeqIter::_handleReadFixedLenUEnumFieldBa64BeWithRoleSaveValState()
+ItemSeqIter::_handleReadFixedLenUIntFieldBa8RevWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ir::ByteOrder::BIG,
-                                                         _WithRole::YES, _SaveVal::YES>(
-        _mItems.fixedLenUEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 8, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBeState()
+ItemSeqIter::_StateHandlingReaction
+ItemSeqIter::_handleReadFixedLenUIntFieldBa16LeRevWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 0, ir::ByteOrder::BIG,
-                                                         _SaveVal::NO>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldLeState()
+ItemSeqIter::_StateHandlingReaction
+ItemSeqIter::_handleReadFixedLenUIntFieldBa16BeRevWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 0, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::NO>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 16, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa8State()
+ItemSeqIter::_StateHandlingReaction
+ItemSeqIter::_handleReadFixedLenUIntFieldBa32LeRevWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 8, ir::ByteOrder::BIG,
-                                                         _SaveVal::NO>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa16LeState()
+ItemSeqIter::_StateHandlingReaction
+ItemSeqIter::_handleReadFixedLenUIntFieldBa32BeRevWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 16, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::NO>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 32, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa16BeState()
+ItemSeqIter::_StateHandlingReaction
+ItemSeqIter::_handleReadFixedLenUIntFieldBa64LeRevWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 16, ir::ByteOrder::BIG,
-                                                         _SaveVal::NO>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Little,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa32LeState()
+ItemSeqIter::_StateHandlingReaction
+ItemSeqIter::_handleReadFixedLenUIntFieldBa64BeRevWithRoleSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 32, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::NO>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenUIntFieldState<FixedLenUIntFc, 64, ByteOrder::Big,
+                                                         internal::BitOrder::Reversed,
+                                                         _WithRole::Yes, _SaveVal::Yes>(
+        _mItems.fixedLenUIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa32BeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBeRevState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 32, ir::ByteOrder::BIG,
-                                                         _SaveVal::NO>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 0, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa64LeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldLeRevState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 64, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::NO>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 0, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa64BeState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa8RevState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 64, ir::ByteOrder::BIG,
-                                                         _SaveVal::NO>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 8, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa16LeRevState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 0, ir::ByteOrder::BIG,
-                                                         _SaveVal::YES>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 16, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldLeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa16BeRevState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 0, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::YES>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 16, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa8SaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa32LeRevState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 8, ir::ByteOrder::BIG,
-                                                         _SaveVal::YES>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 32, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa16LeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa32BeRevState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 16, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::YES>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 32, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa16BeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa64LeRevState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 16, ir::ByteOrder::BIG,
-                                                         _SaveVal::YES>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 64, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa32LeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa64BeRevState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 32, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::YES>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 64, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::No>(
+        _mItems.fixedLenSIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa32BeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBeRevSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 32, ir::ByteOrder::BIG,
-                                                         _SaveVal::YES>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 0, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa64LeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldLeRevSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 64, ir::ByteOrder::LITTLE,
-                                                         _SaveVal::YES>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 0, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
 }
 
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSEnumFieldBa64BeSaveValState()
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa8RevSaveValState()
 {
-    return this->_handleCommonReadFixedLenSIntFieldState<FixedLenSIntFc, 64, ir::ByteOrder::BIG,
-                                                         _SaveVal::YES>(_mItems.fixedLenSEnumField);
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 8, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa16LeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 16, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa16BeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 16, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa32LeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 32, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa32BeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 32, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa64LeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 64, ByteOrder::Little, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
+}
+
+ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadFixedLenSIntFieldBa64BeRevSaveValState()
+{
+    return this->_handleCommonReadFixedLenSIntFieldState<
+        FixedLenSIntFc, 64, ByteOrder::Big, internal::BitOrder::Reversed, _SaveVal::Yes>(
+        _mItems.fixedLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadVarLenUIntFieldState()
 {
-    return this->_handleCommonReadVarLenUIntFieldState<VarLenUIntFc, _WithRole::NO, _SaveVal::NO>(
+    return this->_handleCommonReadVarLenUIntFieldState<VarLenUIntFc, _WithRole::No, _SaveVal::No>(
         _mItems.varLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadVarLenUIntFieldWithRoleState()
 {
-    return this->_handleCommonReadVarLenUIntFieldState<VarLenUIntFc, _WithRole::YES, _SaveVal::NO>(
+    return this->_handleCommonReadVarLenUIntFieldState<VarLenUIntFc, _WithRole::Yes, _SaveVal::No>(
         _mItems.varLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadVarLenUIntFieldSaveValState()
 {
-    return this->_handleCommonReadVarLenUIntFieldState<VarLenUIntFc, _WithRole::NO, _SaveVal::YES>(
+    return this->_handleCommonReadVarLenUIntFieldState<VarLenUIntFc, _WithRole::No, _SaveVal::Yes>(
         _mItems.varLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadVarLenUIntFieldWithRoleSaveValState()
 {
-    return this->_handleCommonReadVarLenUIntFieldState<VarLenUIntFc, _WithRole::YES, _SaveVal::YES>(
+    return this->_handleCommonReadVarLenUIntFieldState<VarLenUIntFc, _WithRole::Yes, _SaveVal::Yes>(
         _mItems.varLenUIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadVarLenSIntFieldState()
 {
-    return this->_handleCommonReadVarLenSIntFieldState<VarLenSIntFc, _SaveVal::NO>(
+    return this->_handleCommonReadVarLenSIntFieldState<VarLenSIntFc, _SaveVal::No>(
         _mItems.varLenSIntField);
 }
 
 ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadVarLenSIntFieldSaveValState()
 {
-    return this->_handleCommonReadVarLenSIntFieldState<VarLenSIntFc, _SaveVal::YES>(
+    return this->_handleCommonReadVarLenSIntFieldState<VarLenSIntFc, _SaveVal::Yes>(
         _mItems.varLenSIntField);
-}
-
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadVarLenUEnumFieldState()
-{
-    return this->_handleCommonReadVarLenUIntFieldState<VarLenUIntFc, _WithRole::NO, _SaveVal::NO>(
-        _mItems.varLenUEnumField);
-}
-
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadVarLenUEnumFieldWithRoleState()
-{
-    return this->_handleCommonReadVarLenUIntFieldState<VarLenUIntFc, _WithRole::YES, _SaveVal::NO>(
-        _mItems.varLenUEnumField);
-}
-
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadVarLenUEnumFieldSaveValState()
-{
-    return this->_handleCommonReadVarLenUIntFieldState<VarLenUIntFc, _WithRole::NO, _SaveVal::YES>(
-        _mItems.varLenUEnumField);
-}
-
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadVarLenUEnumFieldWithRoleSaveValState()
-{
-    return this->_handleCommonReadVarLenUIntFieldState<VarLenUIntFc, _WithRole::YES, _SaveVal::YES>(
-        _mItems.varLenUEnumField);
-}
-
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadVarLenSEnumFieldState()
-{
-    return this->_handleCommonReadVarLenSIntFieldState<VarLenSIntFc, _SaveVal::NO>(
-        _mItems.varLenSEnumField);
-}
-
-ItemSeqIter::_StateHandlingReaction ItemSeqIter::_handleReadVarLenSEnumFieldSaveValState()
-{
-    return this->_handleCommonReadVarLenSIntFieldState<VarLenSIntFc, _SaveVal::YES>(
-        _mItems.varLenSEnumField);
 }
 
 ItemSeqIter::_StateHandlingReaction
@@ -2116,13 +2419,6 @@ ItemSeqIter::_handleReadFixedLenMetadataStreamUuidByteUIntFieldBa8State()
 {
     return this->_handleCommonFixedLenMetadataStreamUuidByteUIntFieldBa8State(
         _mItems.fixedLenUIntField);
-}
-
-ItemSeqIter::_StateHandlingReaction
-ItemSeqIter::_handleReadFixedLenMetadataStreamUuidByteUEnumFieldBa8State()
-{
-    return this->_handleCommonFixedLenMetadataStreamUuidByteUIntFieldBa8State(
-        _mItems.fixedLenUEnumField);
 }
 
 } /* namespace src */

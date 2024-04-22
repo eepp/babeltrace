@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2022-2024 Philippe Proulx <pproulx@efficios.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -12,10 +12,11 @@
 #include <unordered_set>
 
 #include "common/assert.h"
+#include "cpp-common/bt2c/c-string-view.hpp"
+#include "cpp-common/bt2s/string-view.hpp"
 
 #include "exc.hpp"
 #include "str-scanner.hpp"
-#include "text-loc-str.hpp"
 #include "text-loc.hpp"
 
 namespace bt2c {
@@ -34,11 +35,11 @@ namespace internal {
  *     void onScalarVal(unsigned long long, const TextLoc&);
  *     void onScalarVal(long long, const TextLoc&);
  *     void onScalarVal(double, const TextLoc&);
- *     void onScalarVal(const std::string&, const TextLoc&);
+ *     void onScalarVal(bt2s::string_view, const TextLoc&);
  *     void onArrayBegin(const TextLoc&);
  *     void onArrayEnd(const TextLoc&);
  *     void onObjBegin(const TextLoc&);
- *     void onObjKey(const std::string&, const TextLoc&);
+ *     void onObjKey(bt2s::string_view, const TextLoc&);
  *     void onObjEnd(const TextLoc&);
  *
  * The received text location always indicate the location of the
@@ -53,19 +54,17 @@ class JsonParser final
 {
 public:
     /*
-     * Builds a JSON text parser, wrapping a string between `begin`
-     * (included) and `end` (excluded), and parses it, calling the
-     * methods of the JSON event listener `listener`.
+     * Builds a JSON text parser, wrapping the string `str`, and parses
+     * it, calling the methods of the JSON event listener `listener`.
      *
      * Adds to the text location offset for all error messages.
      *
      * When the JSON parser logs or appends a cause to the error of the
-     * current thread, it uses `baseOffset` and `textLocStrFmt` to
-     * format the text location part of the message.
+     * current thread, it uses `baseOffset` to format the text location
+     * part of the message.
      */
-    explicit JsonParser(const char *begin, const char *end, ListenerT& listener,
-                        std::size_t baseOffset, const bt2c::Logger& parentLogger,
-                        TextLocStrFmt textLocStrFmt = TextLocStrFmt::LineColNosAndOffset);
+    explicit JsonParser(bt2s::string_view str, ListenerT& listener, std::size_t baseOffset,
+                        const Logger& parentLogger);
 
 private:
     /*
@@ -124,11 +123,11 @@ private:
      * Expects the specific token `token`, appending a cause to the
      * error of the current thread and throwing `Error` if not found.
      */
-    void _expectToken(const char * const token)
+    void _expectToken(const bt2s::string_view token)
     {
         if (!_mSs.tryScanToken(token)) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW(Error, "[{}] Expecting `{}`.", this->_locStr(),
-                                              token);
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW(Error, _mSs.loc(), "Expecting `{}`.",
+                                                       token.to_string());
         }
     }
 
@@ -136,7 +135,7 @@ private:
      * Calls StrScanner::tryScanLitStr() with the JSON-specific escape
      * sequence starting characters.
      */
-    const std::string *_tryScanLitStr()
+    bt2s::string_view _tryScanLitStr()
     {
         return _mSs.tryScanLitStr("/bfnrtu");
     }
@@ -151,15 +150,6 @@ private:
         return *_mSs.at() == '.' || *_mSs.at() == 'E' || *_mSs.at() == 'e';
     }
 
-    /*
-     * Returns the current text location of the underlying string
-     * scanner as a string, following `_mTextLocStrFmt`.
-     */
-    std::string _locStr() const
-    {
-        return textLocStr(_mSs.loc(), _mTextLocStrFmt);
-    }
-
 private:
     /* Logging configuration */
     Logger _mLogger;
@@ -172,21 +162,14 @@ private:
 
     /* Object key sets, one for each JSON object level, to detect duplicates */
     std::vector<std::unordered_set<std::string>> _mKeys;
-
-    /* Text location string format */
-    TextLocStrFmt _mTextLocStrFmt;
 };
 
 template <typename ListenerT>
-JsonParser<ListenerT>::JsonParser(const char * const begin, const char * const end,
-                                  ListenerT& listener, const std::size_t baseOffset,
-                                  const bt2c::Logger& parentLogger,
-                                  const TextLocStrFmt textLocStrFmt) :
+JsonParser<ListenerT>::JsonParser(const bt2s::string_view str, ListenerT& listener,
+                                  const std::size_t baseOffset, const Logger& parentLogger) :
     _mLogger {parentLogger, "PARSE-JSON"},
-    _mSs {begin, end, baseOffset, parentLogger, textLocStrFmt}, _mListener {&listener},
-    _mTextLocStrFmt {textLocStrFmt}
+    _mSs {str, baseOffset, parentLogger}, _mListener {&listener}
 {
-    BT_ASSERT(end >= begin);
     this->_parse();
 }
 
@@ -217,12 +200,11 @@ void JsonParser<ListenerT>::_expectVal()
         return;
     }
 
-    BT_CPPLOGE_APPEND_CAUSE_AND_THROW(
-        Error,
-        "[{}] Expecting a JSON value: `null`, `true`, `false`, a supported number "
+    BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW(
+        Error, _mSs.loc(),
+        "Expecting a JSON value: `null`, `true`, `false`, a supported number "
         "(for an integer: -9,223,372,036,854,775,808 to 18,446,744,073,709,551,615), "
-        "`\"` (a string), `[` (an array), or `{` (an object).",
-        this->_locStr());
+        "`\"` (a string), `[` (an array), or `{{` (an object).");
 }
 
 template <typename ListenerT>
@@ -236,8 +218,8 @@ void JsonParser<ListenerT>::_parse()
 
     /* Make sure all the text is consumed */
     if (!_mSs.isDone()) {
-        BT_CPPLOGE_APPEND_CAUSE_AND_THROW(Error, "[{}] Extra data after parsed JSON value.",
-                                          this->_locStr());
+        BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW(Error, _mSs.loc(),
+                                                   "Extra data after parsed JSON value.");
     }
 }
 
@@ -338,9 +320,10 @@ bool JsonParser<ListenerT>::_tryParseStr()
     _mSs.skipWhitespaces();
 
     const auto loc = _mSs.loc();
+    const auto str = this->_tryScanLitStr();
 
-    if (const auto str = this->_tryScanLitStr()) {
-        _mListener->onScalarVal(*str, loc);
+    if (str.data()) {
+        _mListener->onScalarVal(str, loc);
         return true;
     }
 
@@ -353,18 +336,19 @@ bool JsonParser<ListenerT>::_tryParseObjKey()
     _mSs.skipWhitespaces();
 
     const auto loc = _mSs.loc();
+    const auto str = this->_tryScanLitStr();
 
-    if (const auto str = this->_tryScanLitStr()) {
+    if (!str.empty()) {
         /* _tryParseObj() pushes */
         BT_ASSERT(!_mKeys.empty());
 
         /* Insert, checking for duplicate key */
-        if (!_mKeys.back().insert(*str).second) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW(Error, "[{}] Duplicate JSON object key `{}`.",
-                                              this->_locStr(), *str);
+        if (!_mKeys.back().insert(str.to_string()).second) {
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW(
+                Error, _mSs.loc(), "Duplicate JSON object key `{}`.", str.to_string());
         }
 
-        _mListener->onObjKey(*str, loc);
+        _mListener->onObjKey(str, loc);
         return true;
     }
 
@@ -435,8 +419,8 @@ bool JsonParser<ListenerT>::_tryParseObj()
         _mSs.skipWhitespaces();
 
         if (!this->_tryParseObjKey()) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_THROW(
-                Error, "[{}] Expecting a JSON object key (double-quoted string).", this->_locStr());
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW(
+                Error, _mSs.loc(), "Expecting a JSON object key (double-quoted string).");
         }
 
         /* Expect colon */
@@ -462,77 +446,25 @@ bool JsonParser<ListenerT>::_tryParseObj()
 } /* namespace internal */
 
 /*
- * Parses the JSON text between `begin` and `end` (excluded), calling
- * the methods of `listener` for each JSON event (see
- * `internal::JsonParser` for the requirements of `ListenerT`).
- *
- * When the function logs or appends a cause to the error of the current
- * thread, it uses `baseOffset` and `textLocStrFmt` to format the text
- * location part of the message.
- */
-template <typename ListenerT>
-void parseJson(const char * const begin, const char * const end, ListenerT& listener,
-               const std::size_t baseOffset, const bt2c::Logger& parentLogger,
-               const TextLocStrFmt textLocStrFmt = TextLocStrFmt::LineColNosAndOffset)
-{
-    internal::JsonParser<ListenerT> {begin, end, listener, baseOffset, parentLogger, textLocStrFmt};
-}
-
-template <typename ListenerT>
-void parseJson(const char * const begin, const char * const end, ListenerT& listener,
-               const bt2c::Logger& parentLogger,
-               const TextLocStrFmt textLocStrFmt = TextLocStrFmt::LineColNosAndOffset)
-{
-    parseJson(begin, end, listener, 0, parentLogger, textLocStrFmt);
-}
-
-/*
- * Parses the null-terminated JSON text `str`, calling the methods of
- * `listener` for each JSON event (see `internal::JsonParser` for the
- * requirements of `ListenerT`).
- *
- * When the function logs or appends a cause to the error of the current
- * thread, it uses `baseOffset` and `textLocStrFmt` to format the text
- * location part of the message.
- */
-template <typename ListenerT>
-void parseJson(const char * const str, ListenerT& listener, const std::size_t baseOffset,
-               const bt2c::Logger& parentLogger,
-               const TextLocStrFmt textLocStrFmt = TextLocStrFmt::LineColNosAndOffset)
-{
-    parseJson(str, str + std::strlen(str), listener, baseOffset, parentLogger, textLocStrFmt);
-}
-
-template <typename ListenerT>
-void parseJson(const char * const str, ListenerT& listener, const bt2c::Logger& parentLogger,
-               const TextLocStrFmt textLocStrFmt = TextLocStrFmt::LineColNosAndOffset)
-{
-    parseJson(str, listener, 0, parentLogger, 0, textLocStrFmt);
-}
-
-/*
  * Parses the JSON text `str`, calling the methods of `listener` for
- * each JSON event (see `internal::JsonParser` for the requirements of
- * `ListenerT`).
+ * each JSON event (see `internal::JsonParser` for the requirements
+ * of `ListenerT`).
  *
  * When the function logs or appends a cause to the error of the current
- * thread, it uses `baseOffset` and `textLocStrFmt` to format the text
- * location part of the message.
+ * thread, it uses `baseOffset` to format the text location part of the
+ * message.
  */
 template <typename ListenerT>
-void parseJson(const std::string& str, ListenerT& listener, const std::size_t baseOffset,
-               const bt2c::Logger& parentLogger,
-               const TextLocStrFmt textLocStrFmt = TextLocStrFmt::LineColNosAndOffset)
+void parseJson(const bt2s::string_view str, ListenerT& listener, const std::size_t baseOffset,
+               const Logger& parentLogger)
 {
-    parseJson(str.data(), str.data() + str.size(), listener, baseOffset, parentLogger,
-              textLocStrFmt);
+    internal::JsonParser<ListenerT> {str, listener, baseOffset, parentLogger};
 }
 
 template <typename ListenerT>
-void parseJson(const std::string& str, ListenerT& listener, const bt2c::Logger& parentLogger,
-               const TextLocStrFmt textLocStrFmt = TextLocStrFmt::LineColNosAndOffset)
+void parseJson(const bt2s::string_view str, ListenerT& listener, const Logger& parentLogger)
 {
-    parseJson(str, listener, 0, parentLogger, textLocStrFmt);
+    parseJson(str, listener, 0, parentLogger);
 }
 
 } /* namespace bt2c */

@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef _CTF_SRC_ITEM_SEQ_MEDIUM_HPP
-#define _CTF_SRC_ITEM_SEQ_MEDIUM_HPP
+#ifndef CTF_COMMON_SRC_ITEM_SEQ_MEDIUM_HPP
+#define CTF_COMMON_SRC_ITEM_SEQ_MEDIUM_HPP
 
 #include <cstdint>
 #include <memory>
@@ -133,4 +133,4 @@ public:
 } /* namespace src */
 } /* namespace ctf */
 
-#endif /* _CTF_SRC_ITEM_SEQ_MEDIUM_HPP */
+#endif /* CTF_COMMON_SRC_ITEM_SEQ_MEDIUM_HPP */

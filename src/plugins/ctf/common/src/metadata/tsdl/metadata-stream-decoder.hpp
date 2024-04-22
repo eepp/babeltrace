@@ -2,16 +2,18 @@
  * SPDX-License-Identifier: MIT
  *
  * Copyright 2022 Francis Deslauriers <francis.deslauriers@efficios.com>
+ * Copyright 2024 Philippe Proulx <pproulx@efficios.com>
  */
 
-#ifndef _CTF_SRC_METADATA_TSDL_METADATA_STREAM_DECODER_HPP
-#define _CTF_SRC_METADATA_TSDL_METADATA_STREAM_DECODER_HPP
+#ifndef CTF_COMMON_SRC_METADATA_TSDL_METADATA_STREAM_DECODER_HPP
+#define CTF_COMMON_SRC_METADATA_TSDL_METADATA_STREAM_DECODER_HPP
 
+#include "cpp-common/bt2c/aliases.hpp"
 #include "cpp-common/bt2c/data-len.hpp"
 #include "cpp-common/bt2c/logging.hpp"
 #include "cpp-common/bt2s/optional.hpp"
 
-#include "../../../metadata/ctf-ir.hpp"
+#include "../../metadata/ctf-ir.hpp"
 
 namespace ctf {
 namespace src {
@@ -22,7 +24,7 @@ namespace src {
 class MetadataStreamPacketInfo final
 {
 public:
-    explicit MetadataStreamPacketInfo(const ir::ByteOrder byteOrder, const unsigned int major,
+    explicit MetadataStreamPacketInfo(const ByteOrder byteOrder, const unsigned int major,
                                       const unsigned int minor, const bt2c::Uuid& uuid) noexcept :
         _mByteOrder {byteOrder},
         _mMajor {major}, _mMinor {minor}, _mUuid {uuid}
@@ -40,10 +42,11 @@ public:
         return !(*this == other);
     }
 
-    ir::ByteOrder byteOrder() const noexcept
+    ByteOrder byteOrder() const noexcept
     {
         return _mByteOrder;
     }
+
     unsigned int majorVersion() const noexcept
     {
         return _mMajor;
@@ -60,7 +63,7 @@ public:
     }
 
 private:
-    ir::ByteOrder _mByteOrder;
+    ByteOrder _mByteOrder;
     unsigned int _mMajor;
     unsigned int _mMinor;
     bt2c::Uuid _mUuid;
@@ -72,7 +75,7 @@ private:
  * packetized metadata stream to plain text.
  *
  * The first call to decode() determines the permanent mode, based on
- * the data, of the decoder, amongst:
+ * the data, of the decoder amongst:
  *
  * Plain text mode:
  *     The next calls to decode() only accept plain text metadata stream
@@ -96,12 +99,13 @@ public:
     explicit MetadataStreamDecoder(const bt2c::Logger& parentLogger) noexcept;
 
     /*
-     * Decodes the next metadata stream section in `buffer`, throwing
+     * Decodes the next metadata stream section `buffer`, appending a
+     * cause to the error of the current thread and throwing
      * `bt2c::Error` on error.
      *
      * `buffer.size()` must be greater than or equal to 4.
      */
-    std::string decode(bt2s::span<const std::uint8_t> buffer);
+    std::string decode(bt2c::ConstBytes buffer);
 
     const bt2s::optional<MetadataStreamPacketInfo>& pktInfo() const noexcept
     {
@@ -112,10 +116,10 @@ private:
     /*
      * Type of metadata stream.
      */
-    enum _MetadataStreamType
+    enum class _MetadataStreamType
     {
-        PACKETIZED,
-        PLAIN_TEXT,
+        Packetized,
+        PlainText,
     };
 
     /*
@@ -137,8 +141,7 @@ private:
             return majorVersion == 1 && minorVersion == 8;
         }
 
-        static constexpr auto len = bt2c::DataLen::fromBits(37 * 8);
-
+        static const bt2c::DataLen len;
         std::uint32_t magic;
         bt2c::Uuid uuid;
         std::uint32_t checksum;
@@ -152,25 +155,24 @@ private:
     };
 
     /*
-     * Returns the byte order of the metadata stream in `buffer` or
+     * Returns the byte order of the metadata stream `buffer`, or
      * `bt2s::nullopt` if `buffer` doesn't look like a packet header.
      *
      * `buffer.size()` must be greater than or equal to 4.
      */
-    bt2s::optional<ir::ByteOrder>
-    _getByteOrder(const bt2s::span<const std::uint8_t> buffer) const noexcept;
+    bt2s::optional<ByteOrder> _getByteOrder(bt2c::ConstBytes buffer) const noexcept;
 
     /*
      * Reads and returns one metadata stream packet header having the
      * byte order `byteOrder` from `buf` at the offset `curOffset`
      * within some metadata stream section.
      *
-     * `buf` must offer at least `_PktHeader::len.bytes()` bytes of
-     * data.
+     * `buf` must offer at least `_PktHeader::len.bytes()` bytes
+     * of data.
      *
      * `curOffset.hasExtraBits()` must return false.
      */
-    _PktHeader _readPktHeader(const std::uint8_t *buf, ir::ByteOrder byteOrder,
+    _PktHeader _readPktHeader(const std::uint8_t *buf, ByteOrder byteOrder,
                               bt2c::DataLen curOffset) const;
 
     /*
@@ -180,16 +182,16 @@ private:
     void _validatePktHeader(const _PktHeader& header) const;
 
     /*
-     * Returns the plain text data from the packetized metadata stream
-     * in `buffer`.
+     * Returns the plain text data from the packetized metadata
+     * stream `buffer`.
      */
-    std::string _textFromPacketizedMetadata(bt2s::span<const std::uint8_t> buffer);
+    std::string _textFromPacketizedMetadata(bt2c::ConstBytes buffer);
 
     /*
      * Sets the current metadata stream type from `buffer` if not
      * already done.
      */
-    void _maybeSetMetadataStreamType(bt2s::span<const std::uint8_t> buffer);
+    void _maybeSetMetadataStreamType(bt2c::ConstBytes buffer);
 
     bt2c::Logger _mLogger;
     bt2s::optional<MetadataStreamPacketInfo> _mPktInfo;
@@ -200,4 +202,4 @@ private:
 } /* namespace src */
 } /* namespace ctf */
 
-#endif /* _CTF_SRC_METADATA_TSDL_METADATA_STREAM_DECODER_HPP */
+#endif /* CTF_COMMON_SRC_METADATA_TSDL_METADATA_STREAM_DECODER_HPP */

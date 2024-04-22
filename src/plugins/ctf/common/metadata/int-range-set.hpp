@@ -1,11 +1,11 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Copyright 2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright 2022-2024 Philippe Proulx <pproulx@efficios.com>
  */
 
-#ifndef _CTF_INT_RANGE_SET_HPP
-#define _CTF_INT_RANGE_SET_HPP
+#ifndef CTF_COMMON_METADATA_INT_RANGE_SET_HPP
+#define CTF_COMMON_METADATA_INT_RANGE_SET_HPP
 
 #include <set>
 #include <utility>
@@ -48,12 +48,6 @@ public:
     explicit IntRangeSet(Set ranges) : _mRanges {std::move(ranges)}
     {
     }
-
-    /* Default copy/move operations */
-    IntRangeSet(const IntRangeSet&) = default;
-    IntRangeSet(IntRangeSet&&) = default;
-    IntRangeSet& operator=(const IntRangeSet&) = default;
-    IntRangeSet& operator=(IntRangeSet&&) = default;
 
     /*
      * Ranges of this integer range set.
@@ -132,4 +126,4 @@ using SIntRangeSet = IntRangeSet<long long>;
 
 } /* namespace ctf */
 
-#endif /* _CTF_IR_HPP */
+#endif /* CTF_COMMON_METADATA_INT_RANGE_SET_HPP */

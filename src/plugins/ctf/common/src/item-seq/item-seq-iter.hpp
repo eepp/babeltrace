@@ -4,18 +4,14 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef _CTF_SRC_ITEM_SEQ_ITEM_SEQ_ITER_HPP
-#define _CTF_SRC_ITEM_SEQ_ITEM_SEQ_ITER_HPP
+#ifndef CTF_COMMON_SRC_ITEM_SEQ_ITEM_SEQ_ITER_HPP
+#define CTF_COMMON_SRC_ITEM_SEQ_ITEM_SEQ_ITER_HPP
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
-#include <memory>
-#include <numeric>
-#include <sstream>
-#include <stdexcept>
 #include <type_traits>
 #include <vector>
 
@@ -25,10 +21,39 @@
 #include "cpp-common/bt2c/align.hpp"
 #include "cpp-common/bt2c/logging.hpp"
 #include "cpp-common/bt2c/read-fixed-len-int.hpp"
+#include "cpp-common/bt2c/reverse-fixed-len-int-bits.hpp"
 #include "cpp-common/bt2c/std-int.hpp"
+#include "cpp-common/vendor/wise-enum/wise_enum.h"
 
+#include "../null-cp-finder.hpp"
 #include "item.hpp"
 #include "medium.hpp"
+
+/*
+ * Like BT_CPPLOGE_APPEND_CAUSE_AND_THROW(), but the message starts with
+ * the current item sequence offset and it always throws an instance
+ * of `bt2c::Error`.
+ *
+ * ┌──────────────────────────────────────────────────────────────┐
+ * │ IMPORTANT: Do NOT use an argument ID such as `{1}` in `_fmt` │
+ * │ because this macro prepends a format string to `_fmt`.       │
+ * └──────────────────────────────────────────────────────────────┘
+ */
+#define CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(_fmt, ...)                            \
+    BT_CPPLOGE_APPEND_CAUSE_AND_THROW(bt2c::Error, ("At {} bits: " _fmt),                          \
+                                      *this->_headOffsetInItemSeq(), ##__VA_ARGS__)
+
+/*
+ * Like BT_CPPLOGT(), but the message starts with the current item
+ * sequence offset.
+ *
+ * ┌──────────────────────────────────────────────────────────────┐
+ * │ IMPORTANT: Do NOT use an argument ID such as `{1}` in `_fmt` │
+ * │ because this macro prepends a format string to `_fmt`.       │
+ * └──────────────────────────────────────────────────────────────┘
+ */
+#define CTF_SRC_ITEM_SEQ_ITER_CPPLOGT(_fmt, ...)                                                   \
+    BT_CPPLOGT(("At {} bits: " _fmt), *this->_headOffsetInItemSeq(), ##__VA_ARGS__)
 
 namespace ctf {
 namespace src {
@@ -38,16 +63,26 @@ class ItemSeqIter;
 namespace internal {
 
 /*
- * Return type of ReadFixedLenIntFunc::read() depending on `IsSignedV`.
+ * Return type of ReadFixedLenIntFunc::read() depending on
+ * `SignednessV`.
  */
-template <bool IsSignedV>
-using ReadFixedLenIntFuncRetT =
-    typename std::conditional<IsSignedV, long long, unsigned long long>::type;
+template <bt2c::Signedness SignednessV>
+using ReadFixedLenIntFuncRet = typename std::conditional<SignednessV == bt2c::Signedness::Signed,
+                                                         long long, unsigned long long>::type;
+
+/*
+ * Whether or not the bits are reversed (unnatural).
+ */
+enum class BitOrder
+{
+    Natural,
+    Reversed,
+};
 
 /*
  * Provides the static read() method to read a fixed-length integer
- * having the byte order `ByteOrderV`, the signedness `IsSignedV`,
- * and the length `LenBitsV` from some buffer.
+ * having the signedness `SignednessV`, the length `LenBitsV`, the byte
+ * order `ByteOrderV`, and the bit order `BitOrderV` from some buffer.
  *
  * `LenBitsV` must be one of:
  *
@@ -55,8 +90,7 @@ using ReadFixedLenIntFuncRetT =
  *     Uses bt_bitfield_read_be() and bt_bitfield_read_le().
  *
  * 8, 16, 32, or 64:
- *     Uses bt2c::readFixedLenIntBe() or
- *     bt2c::readFixedLenIntLe().
+ *     Uses bt2c::readFixedLenIntBe() or bt2c::readFixedLenIntLe().
  *
  *     The alignment of the field must be a multiple of 8.
  *
@@ -64,19 +98,20 @@ using ReadFixedLenIntFuncRetT =
  * isn't allowed. Specializations are after the `ItemSeqIter` class
  * definition because they need to know it.
  */
-template <ir::ByteOrder ByteOrderV, bool IsSignedV, std::size_t LenBitsV>
+template <bt2c::Signedness SignednessV, std::size_t LenBitsV, ByteOrder ByteOrderV,
+          BitOrder BitOrderV>
 struct ReadFixedLenIntFunc;
 
 /*
  * Provides the static val() method to get the value (of which the
- * signedness is `IsSignedV`) of a variable-length integer field from
+ * signedness is `SignednessV`) of a variable-length integer field from
  * some LEB128-decoded unsigned value of a given length.
  */
-template <bool IsSignedV>
+template <bt2c::Signedness SignednessV>
 struct VarLenIntFieldVal;
 
 template <>
-struct VarLenIntFieldVal<false> final
+struct VarLenIntFieldVal<bt2c::Signedness::Unsigned> final
 {
     static unsigned long long val(const bt2c::DataLen, const unsigned long long v) noexcept
     {
@@ -85,7 +120,7 @@ struct VarLenIntFieldVal<false> final
 };
 
 template <>
-struct VarLenIntFieldVal<true> final
+struct VarLenIntFieldVal<bt2c::Signedness::Signed> final
 {
     static unsigned long long val(const bt2c::DataLen len, unsigned long long v) noexcept
     {
@@ -132,15 +167,15 @@ struct VarLenIntFieldVal<true> final
  * The rationale for having a Python-style iterator, where a next()
  * method both advances to the next item and returns it once, instead of
  * an STL-style one (operator++() and operator*()) is that it's
- * guaranteed that the constructors don't throw `bt2c::TryAgain`
- * or a medium error because they don't perform any initial decoding.
+ * guaranteed that the constructors don't throw `bt2c::TryAgain` or a
+ * medium error because they don't perform any initial decoding.
  *
  * This API and its implementation are inspired by the yactfr
  * (<https://github.com/eepp/yactfr>) element sequence iterator API,
  * conveniently written by the same author.
  *
- * Expected item sequence
- * ══════════════════════
+ * EXPECTED ITEM SEQUENCE
+ * ━━━━━━━━━━━━━━━━━━━━━━
  * Here's what you can expect when you iterate an item sequence with
  * such an iterator.
  *
@@ -152,12 +187,9 @@ struct VarLenIntFieldVal<true> final
  * `A | B`:
  *     Item of type A _or_ item of type B (single iteration).
  *
- * `A *`:
- *     Item of type A occuring zero or more times (zero or more
- *     iterations).
- *
- * `A ?`:
- *    Item of type A occuring zero or one time (zero or one iteration).
+ * `A*`:
+ *     Item of type A occuring zero or more times (zero or
+ *     more iterations).
  *
  * `A{N}`:
  *     Item of type A occuring N times (N iterations).
@@ -166,10 +198,10 @@ struct VarLenIntFieldVal<true> final
  *     Item of type `ScopeBeginItem` with specific scope SCOPE.
  *
  * `( ... )`:
- *     Group of items of the given types or other groups.
+ *     Group of items of the given types or of other groups.
  *
  * `[ ... ]`:
- *     Group of optional items of the given types or other groups.
+ *     Group of optional items of the given types or of other groups.
  *
  * When a name is written in UPPERCASE, then it's a named group of items
  * having specific types. This is used to make the descriptions below
@@ -179,21 +211,15 @@ struct VarLenIntFieldVal<true> final
  * ───────────
  *     (
  *       (
- *         (
- *           FixedLenUIntFieldItem |
- *           FixedLenUEnumFieldItem |
- *           VarLenUIntFieldItem |
- *           VarLenUEnumFieldItem
- *         )
- *         DefClkValItem ?
+ *         (FixedLenUIntFieldItem | VarLenUIntFieldItem)
+ *         [DefClkValItem]
  *       ) |
  *       FixedLenBitArrayFieldItem |
+ *       FixedLenBitMapFieldItem |
  *       FixedLenBoolFieldItem |
  *       FixedLenSIntFieldItem |
- *       FixedLenSEnumFieldItem |
  *       FixedLenFloatFieldItem |
  *       VarLenSIntFieldItem |
- *       VarLenSEnumFieldItem |
  *       (
  *         NullTerminatedStrFieldBeginItem
  *         StrFieldSubstrItem StrFieldSubstrItem *
@@ -201,44 +227,44 @@ struct VarLenIntFieldVal<true> final
  *       ) |
  *       (
  *         StaticLenArrayFieldBeginItem
- *         FIELD *
+ *         FIELD*
  *         StaticLenArrayFieldEndItem
  *       ) |
  *       (
  *         StaticLenArrayFieldBeginItem
- *         (FixedLenUIntFieldItem | FixedLenUEnumFieldItem){16}
+ *         FixedLenUIntFieldItem{16}
  *         MetadataStreamUuidItem
  *         StaticLenArrayFieldEndItem
  *       ) |
  *       (
  *         DynLenArrayFieldBeginItem
- *         FIELD *
+ *         FIELD*
  *         DynLenArrayFieldEndItem
  *       ) |
  *       (
  *         StaticLenStrFieldBeginItem
- *         StrFieldSubstrItem *
+ *         RawDataItem*
  *         StaticLenStrFieldEndItem
  *       ) |
  *       (
  *         DynLenStrFieldBeginItem
- *         StrFieldSubstrItem *
+ *         RawDataItem*
  *         DynLenStrFieldEndItem
  *       ) |
  *       (
  *         StaticLenBlobFieldBeginItem
- *         BlobFieldSectionItem *
- *         MetadataStreamUuidItem ?
+ *         RawDataItem*
+ *         [MetadataStreamUuidItem]
  *         StaticLenBlobFieldEndItem
  *       ) |
  *       (
  *         DynLenBlobFieldBeginItem
- *         BlobFieldSectionItem *
+ *         RawDataItem*
  *         DynLenBlobFieldEndItem
  *       ) |
  *       (
  *         StructFieldBeginItem
- *         FIELD *
+ *         FIELD*
  *         StructFieldEndItem
  *       ) |
  *       (
@@ -253,17 +279,17 @@ struct VarLenIntFieldVal<true> final
  *       ) |
  *       (
  *         OptionalFieldWithBoolSelBeginItem
- *         FIELD ?
+ *         [FIELD]
  *         OptionalFieldWithBoolSelEndItem
  *       ) |
  *       (
  *         OptionalFieldWithUIntSelBeginItem
- *         FIELD ?
+ *         [FIELD]
  *         OptionalFieldWithUIntSelEndItem
  *       ) |
  *       (
  *         OptionalFieldWithSIntSelBeginItem
- *         FIELD ?
+ *         [FIELD]
  *         OptionalFieldWithSIntSelEndItem
  *       )
  *     )
@@ -271,37 +297,37 @@ struct VarLenIntFieldVal<true> final
  * Note that:
  *
  * • A `DefClkValItem` item may only follow an unsigned integer field
- *   item when it's within the `FieldLocScope::PKT_CTX` or
- *   `FieldLocScope::EVENT_RECORD_HEADER` scope.
+ *   item when it's within the `Scope::PktCtx` or
+ *   `Scope::EventRecordHeader` scope.
  *
  * • A `MetadataStreamUuidItem` item may only precede a
  *   `StaticLenArrayFieldEndItem` or a `StaticLenBlobFieldEndItem` item
- *   when it's within the `FieldLocScope::PKT_HEADER` scope.
+ *   when it's within the `Scope::PktHeader` scope.
  *
  * EVENT-RECORD group
  * ──────────────────
  *     (
  *       EventRecordBeginItem
  *       [
- *         ScopeBeginItem<EVENT_RECORD_HEADER>
- *         StructFieldBeginItem FIELD * StructFieldEndItem
- *         ScopeEndItem<EVENT_RECORD_HEADER>
+ *         ScopeBeginItem<Scope::EventRecordHeader>
+ *         StructFieldBeginItem FIELD* StructFieldEndItem
+ *         ScopeEndItem<Scope::EventRecordHeader>
  *       ]
  *       EventRecordInfoItem
  *       [
- *         ScopeBeginItem<EVENT_RECORD_COMMON_CTX>
- *         StructFieldBeginItem FIELD * StructFieldEndItem
- *         ScopeEndItem<EVENT_RECORD_COMMON_CTX>
+ *         ScopeBeginItem<Scope::CommonEventRecordCtx>
+ *         StructFieldBeginItem FIELD* StructFieldEndItem
+ *         ScopeEndItem<Scope::CommonEventRecordCtx>
  *       ]
  *       [
- *         ScopeBeginItem<EVENT_RECORD_SPEC_CTX>
- *         StructFieldBeginItem FIELD * StructFieldEndItem
- *         ScopeEndItem<EVENT_RECORD_SPEC_CTX>
+ *         ScopeBeginItem<Scope::SpecEventRecordCtx>
+ *         StructFieldBeginItem FIELD* StructFieldEndItem
+ *         ScopeEndItem<Scope::SpecEventRecordCtx>
  *       ]
  *       [
- *         ScopeBeginItem<EVENT_RECORD_PAYLOAD>
- *         StructFieldBeginItem FIELD * StructFieldEndItem
- *         ScopeEndItem<EVENT_RECORD_PAYLOAD>
+ *         ScopeBeginItem<Scope::EventRecordPayload>
+ *         StructFieldBeginItem FIELD* StructFieldEndItem
+ *         ScopeEndItem<Scope::EventRecordPayload>
  *       ]
  *       EventRecordEndItem
  *     )
@@ -314,26 +340,26 @@ struct VarLenIntFieldVal<true> final
  *     (
  *       PktBeginItem PktContentBeginItem
  *       [
- *         ScopeBeginItem<PKT_HEADER>
+ *         ScopeBeginItem<Scope::PktHeader>
  *         StructFieldBeginItem
  *         (
  *           (
- *             (FixedLenUIntFieldItem | FixedLenUEnumFieldItem)
+ *             FixedLenUIntFieldItem
  *             PktMagicNumberItem
  *           ) |
- *           StructFieldBeginItem FIELD * StructFieldEndItem
- *         ) *
+ *           StructFieldBeginItem FIELD* StructFieldEndItem
+ *         )*
  *         StructFieldEndItem
- *         ScopeEndItem<PKT_HEADER>
+ *         ScopeEndItem<Scope::PktHeader>
  *       ]
  *       DataStreamInfoItem
  *       [
- *         ScopeBeginItem<PKT_CONTEXT>
- *         StructFieldBeginItem FIELD * StructFieldEndItem
- *         ScopeEndItem<PKT_CONTEXT>
+ *         ScopeBeginItem<Scope::PktCtx>
+ *         StructFieldBeginItem FIELD* StructFieldEndItem
+ *         ScopeEndItem<Scope::PktCtx>
  *       ]
  *       PktInfoItem
- *       EVENT-RECORD *
+ *       EVENT-RECORD*
  *       PktContentEndItem PktEndItem
  *     )
  *
@@ -345,15 +371,15 @@ struct VarLenIntFieldVal<true> final
  * ─────────────
  * The whole item sequence is just a sequence of zero or more packets:
  *
- *     PACKET *
+ *     PACKET*
  *
- * Padding exclusion
- * ═════════════════
+ * PADDING EXCLUSION
+ * ━━━━━━━━━━━━━━━━━
  * The purpose of an item sequence iterator is to extract _data_ from
  * data streams. Considering this, an item sequence iterator doesn't
  * provide padding data. In other words, this API always _skips_ padding
- * bits so that the following field is aligned according to its
- * metadata.
+ * bits so that the following field is aligned according to
+ * its metadata.
  *
  * The guarantees of offset() are as follows, depending on the class of
  * the current item:
@@ -365,8 +391,8 @@ struct VarLenIntFieldVal<true> final
  * `PktEndItem`:
  *     The offset is the end of the packet, that is, following any
  *     padding following its content (the difference between the offset
- *     of this item and the offset at the prior `PktContentEndItem`, if
- *     any).
+ *     of this item and the offset at the prior `PktContentEndItem`,
+ *     if any).
  *
  *     It's the same as it will be at the next `PktBeginItem`.
  *
@@ -387,12 +413,12 @@ struct VarLenIntFieldVal<true> final
  *     It's the same as it was at the last `ScopeEndItem`.
  *
  * `ScopeBeginItem`:
- *     The offset is the same as it will be at the next
- *     `StructFieldBeginItem`.
+ *     The offset is the same as it will be at the
+ *     next `StructFieldBeginItem`.
  *
  * `ScopeEndItem`:
- *     The offset is the same as it was at the last
- *     `StructFieldEndItem`.
+ *     The offset is the same as it was at the
+ *     last `StructFieldEndItem`.
  *
  * `NullTerminatedStrFieldBeginItem`:
  * `StructFieldBeginItem`:
@@ -409,20 +435,20 @@ struct VarLenIntFieldVal<true> final
  *     Depending on the type of the previous item instance I:
  *
  *     `FixedLenBitArrayFieldItem`:
- *     `StrFieldSubstrItem`:
- *     `BlobFieldSectionItem`:
+ *     `RawDataItem`:
  *     `VarLenIntFieldItem`:
  *         The offset of I plus its length.
  *
  *     `EndItem`:
  *         The offset of I.
  *
- * Medium guarantees
- * ═════════════════
+ * MEDIUM GUARANTEES
+ * ━━━━━━━━━━━━━━━━━
  * When you iterate an item sequence with next(), it's _guaranteed_ that
  * the requested offsets, when calling Medium::buf(), increase
- * monotonically. However, it's possible that two consecutive returned
- * buffers contain overlapping data, for example:
+ * monotonically. However, it's possible that a message sequence
+ * iterator requests consecutive buffers containing overlapping data,
+ * for example:
  *
  *     ▓▓▓▓▓▓▓▓▓▓▓▓▓▓
  *                ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
@@ -430,23 +456,24 @@ struct VarLenIntFieldVal<true> final
  *                                   ▓▓▓▓▓▓▓▓▓▓▓▓▓
  *                                             ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
  *
- * The length of overlapping data is always less than ten bytes.
+ * The length of overlapping data is _always_ less than ten bytes.
  *
- * Implementation
- * ══════════════
- * An item sequence iterator is a state machine, its current state being
- * `_mState`.
+ * IMPLEMENTATION
+ * ━━━━━━━━━━━━━━
+ * An item sequence iterator is a state machine, its current state
+ * being `_mState`.
  *
  * When you call next(), the iterator handles the current state until
- * the reaction is to stop (`_StateHandlingReaction::STOP`). Stopping
- * means that either there's a current item (the method returns a valid
- * item pointer) or the iterator is ended (the method returns
- * `nullptr`).
+ * the reaction is to stop (`_StateHandlingReaction::Stop`). Stopping
+ * means that one of:
  *
- * The `_mItems` structure contains one instance of each concrete
- * item class. `_mCurItem` points to one of those instances. This is
- * why it's a single-pass input iterator: there's no dynamic item
- * allocation during the iteration process.
+ * • There's a current item (the method returns a valid item pointer).
+ * • The iterator is ended (the method returns `nullptr`).
+ *
+ * The `_mItems` structure contains one instance of each concrete item
+ * class. `_mCurItem` points to one of those instances. This is why it's
+ * a single-pass input iterator: there's no dynamic item allocation
+ * during the iteration process.
  *
  * _prepareToReadField() transforms a given field class into a field
  * reading state based on what's called its deep type. For fixed-length
@@ -454,10 +481,20 @@ struct VarLenIntFieldVal<true> final
  * important decoding information, for example:
  *
  * • Byte order.
+ *
+ * • Whether or not the bit order is reversed (unnatural), if it's a
+ *   "standard" fixed-length bit array.
+ *
  * • Length if it's a "standard" fixed-length bit array.
+ *
  * • Integer signedness.
+ *
  * • Whether or not the field has a role.
- * • Whether or not the value of the field has to be saved.
+ *
+ * • Whether or not the value of the field has to be saved as a
+ *   key value.
+ *
+ * • Encoding of a string field.
  *
  * Having a single `switch` statement in _prepareToReadField() to select
  * the next state makes it easier/possible for the compiler to optimize
@@ -466,26 +503,26 @@ struct VarLenIntFieldVal<true> final
  * For example, if it's known that the next field to read is a
  * little-endian, byte-aligned 32-bit unsigned integer field of which
  * the iterator needs to save the value, then its deep type is
- * `FcDeepType::FIXED_LEN_UINT_BA_32_LE_SAVE_VAL` which means the state
- * `_State::READ_FIXED_LEN_UINT_FIELD_BA_32_LE_SAVE_VAL`, so that
- * _handleState() will jump to
- * _handleReadFixedLenUIntFieldBa32LeSaveValState() directly. The latter
- * method does exactly what's needed to perform such a field reading
- * operation efficiently (using bt2c::readFixedLenIntLe()) and
- * saves the value without superfluous branches.
+ * `FcDeepType::FixedLenUIntBa32LeSaveVal` which means the state
+ * `_State::ReadFixedLenUIntFieldBa32LeSaveVal`, so that _handleState()
+ * will jump to _handleReadFixedLenUIntFieldBa32LeSaveValState()
+ * directly. The latter method does exactly what's needed to perform
+ * such a field reading operation efficiently (using
+ * bt2c::readFixedLenIntLe()) and saves the key value without
+ * superfluous branches.
  *
- * Speaking about value saving, this is the strategy to decode
+ * Speaking about key value saving, this is the strategy to decode
  * dynamic-length, optional, and variant fields (called dependend
  * fields) here. A field class FC of which the deep type contains
- * `SAVE_VAL` contains value saving indexes I (valSavingIndexes()
- * method). When decoding an instance of FC, the iterator saves the
- * value to `_mSavedVals` at the indexes I through _saveVal(). When
- * decoding a dependend field, its class contains an index in
- * `_mSavedVals` to retrieve a saved value (length or selector). The
- * state handler retrieves the value through _savedVal(). _savedVal()
- * casts the saved value (of type `unsigned long long` within
- * `_mSavedVals`) to a compatible type (`bool` or another integral
- * type).
+ * `SaveVal` contains key value saving indexes I (keyValSavingIndexes()
+ * method). When decoding an instance of FC (a key field), the iterator
+ * saves the value to `_mSavedKeyVals` at the indexes I through
+ * _saveKeyVal(). When decoding a dependend field, its class contains an
+ * index in `_mSavedKeyVals` to retrieve a saved key value (its length
+ * or selector). The state handler retrieves the key value through
+ * _savedKeyVal(). _savedKeyVal() casts the saved key value (of type
+ * `unsigned long long` within `_mSavedKeyVals`) to a compatible type
+ * (`bool` or another integral type).
  *
  * All the state handlers have the name _handle*State(), although there
  * are common state handling helpers which start with `_handleCommon`.
@@ -495,128 +532,145 @@ struct VarLenIntFieldVal<true> final
  * Here's a Graphviz DOT source which shows the state transitions:
  *
  *     digraph {
- *         node [
- *             fontname = "monospace"
- *             fontsize = 12
- *             shape = box
- *             style = "rounded, filled"
- *         ]
+ *       node [
+ *         fontname = monospace
+ *         fontsize = 12
+ *         shape = box
+ *         style = "rounded, filled"
+ *         margin = "1, 0"
+ *       ]
  *
- *         edge [
- *             fontname = "sans-serif"
- *             fontsize = 8
- *             fontcolor = "#16a085"
- *         ]
+ *       edge [
+ *         fontname = "sans-serif"
+ *         fontsize = 8
+ *         fontcolor = "#16a085"
+ *       ]
  *
- *         read_pkt_header_struct_field [
- *             label = "Read structure field"
- *             fillcolor = "#8e44ad"
- *             fontcolor = "white"
- *             width = 3
- *         ]
- *
- *         read_pkt_ctx_struct_field [
- *             label = "Read structure field"
- *             fillcolor = "#8e44ad"
- *             fontcolor = "white"
- *             width = 3
- *         ]
+ *       subgraph cluster_0 {
+ *         label = "Read event record"
+ *         color = "#cce5f6"
+ *         style = "rounded, filled"
+ *         fontname = "sans-serif bold"
+ *         margin = 25
  *
  *         read_event_record_header_struct_field [
- *             label = "Read structure field"
- *             fillcolor = "#8e44ad"
- *             fontcolor = "white"
- *             width = 3
+ *           label = "Read structure field"
+ *           fontname = "sans-serif"
+ *           fillcolor = "#8e44ad"
+ *           fontcolor = "white"
+ *           width = 3
  *         ]
  *
- *         read_event_record_common_ctx_struct_field [
- *             label = "Read structure field"
- *             fillcolor = "#8e44ad"
- *             fontcolor = "white"
- *             width = 3
+ *         read_common_event_record_ctx_struct_field [
+ *           label = "Read structure field"
+ *           fontname = "sans-serif"
+ *           fillcolor = "#8e44ad"
+ *           fontcolor = "white"
+ *           width = 3
  *         ]
  *
- *         read_event_record_spec_ctx_struct_field [
- *             label = "Read structure field"
- *             fillcolor = "#8e44ad"
- *             fontcolor = "white"
- *             width = 3
+ *         read_spec_event_record_ctx_struct_field [
+ *           label = "Read structure field"
+ *           fontname = "sans-serif"
+ *           fillcolor = "#8e44ad"
+ *           fontcolor = "white"
+ *           width = 3
  *         ]
  *
  *         read_event_record_payload_struct_field [
- *             label = "Read structure field"
- *             fillcolor = "#8e44ad"
- *             fontcolor = "white"
- *             width = 3
+ *           label = "Read structure field"
+ *           fontname = "sans-serif"
+ *           fillcolor = "#8e44ad"
+ *           fontcolor = "white"
+ *           width = 3
  *         ]
  *
- *         INIT [fillcolor = "#27ae60", fontcolor = white]
- *         DONE [fillcolor = "#c0392b", fontcolor = white]
- *         TRY_BEGIN_READ_PKT [fillcolor = "#d35400", fontcolor = white]
- *         BEGIN_READ_PKT_CONTENT [fillcolor = "#d35400", fontcolor = white]
- *         TRY_BEGIN_READ_EVENT_RECORD [fillcolor = "#d35400", fontcolor = white]
- *         TRY_BEGIN_READ_PKT_HEADER_SCOPE [fillcolor = "#f39c12", fontcolor = white]
- *         TRY_BEGIN_READ_PKT_CTX_SCOPE [fillcolor = "#f39c12", fontcolor = white]
- *         TRY_BEGIN_READ_EVENT_RECORD_HEADER_SCOPE [fillcolor = "#f39c12", fontcolor = white]
- *         TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE [fillcolor = "#f39c12", fontcolor = white]
- *         TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE [fillcolor = "#f39c12", fontcolor = white]
- *         TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE [fillcolor = "#f39c12", fontcolor = white]
- *         END_READ_PKT_HEADER_SCOPE [fillcolor = "#34495e", fontcolor = white]
- *         END_READ_PKT_CTX_SCOPE [fillcolor = "#34495e", fontcolor = white]
- *         END_READ_EVENT_RECORD_HEADER_SCOPE [fillcolor = "#34495e", fontcolor = white]
- *         END_READ_EVENT_RECORD_COMMON_CTX_SCOPE [fillcolor = "#34495e", fontcolor = white]
- *         END_READ_EVENT_RECORD_SPEC_CTX_SCOPE [fillcolor = "#34495e", fontcolor = white]
- *         END_READ_EVENT_RECORD_PAYLOAD_SCOPE [fillcolor = "#34495e", fontcolor = white]
- *         END_READ_EVENT_RECORD [fillcolor = "#2c3e50", fontcolor = white]
- *         END_READ_PKT_CONTENT [fillcolor = "#2c3e50", fontcolor = white]
- *         END_READ_PKT [fillcolor = "#2c3e50", fontcolor = white]
- *         SET_DATA_STREAM_INFO_ITEM [fillcolor = "#2980b9", fontcolor = white]
- *         SET_PKT_INFO_ITEM [fillcolor = "#2980b9", fontcolor = white]
- *         SET_EVENT_RECORD_INFO_ITEM [fillcolor = "#2980b9", fontcolor = white]
- *         SKIP_PADDING [fillcolor = "#ecf0f1", fontcolor = black]
+ *         EndReadEventRecord [fillcolor = "#2c3e50", fontcolor = white]
+ *         EndReadCommonEventRecordCtxScope [fillcolor = "#34495e", fontcolor = white]
+ *         EndReadEventRecordHeaderScope [fillcolor = "#34495e", fontcolor = white]
+ *         EndReadEventRecordPayloadScope [fillcolor = "#34495e", fontcolor = white]
+ *         EndReadSpecEventRecordCtxScope [fillcolor = "#34495e", fontcolor = white]
+ *         SetEventRecordInfoItem [fillcolor = "#2980b9", fontcolor = white]
+ *         TryBeginReadEventRecord [fillcolor = "#d35400", fontcolor = white]
+ *         TryBeginReadCommonEventRecordCtxScope [fillcolor = "#f39c12", fontcolor = white]
+ *         TryBeginReadEventRecordHeaderScope [fillcolor = "#f39c12", fontcolor = white]
+ *         TryBeginReadEventRecordPayloadScope [fillcolor = "#f39c12", fontcolor = white]
+ *         TryBeginReadSpecEventRecordCtxScope [fillcolor = "#f39c12", fontcolor = white]
  *
- *         INIT -> TRY_BEGIN_READ_PKT
- *         TRY_BEGIN_READ_PKT -> DONE [label = "No more data"]
- *         TRY_BEGIN_READ_PKT -> BEGIN_READ_PKT_CONTENT
- *         BEGIN_READ_PKT_CONTENT -> TRY_BEGIN_READ_PKT_HEADER_SCOPE
- *         TRY_BEGIN_READ_PKT_HEADER_SCOPE -> SET_DATA_STREAM_INFO_ITEM [label = "No field"]
- *         TRY_BEGIN_READ_PKT_HEADER_SCOPE -> read_pkt_header_struct_field
- *         read_pkt_header_struct_field -> END_READ_PKT_HEADER_SCOPE
- *         END_READ_PKT_HEADER_SCOPE -> SET_DATA_STREAM_INFO_ITEM
- *         SET_DATA_STREAM_INFO_ITEM -> TRY_BEGIN_READ_PKT_CTX_SCOPE
- *         SET_DATA_STREAM_INFO_ITEM -> SET_PKT_INFO_ITEM [label = "No data\nstream class"]
- *         TRY_BEGIN_READ_PKT_CTX_SCOPE -> SET_PKT_INFO_ITEM [label = "No field"]
- *         TRY_BEGIN_READ_PKT_CTX_SCOPE -> read_pkt_ctx_struct_field
- *         read_pkt_ctx_struct_field -> END_READ_PKT_CTX_SCOPE
- *         END_READ_PKT_CTX_SCOPE -> SET_PKT_INFO_ITEM
- *         SET_PKT_INFO_ITEM -> TRY_BEGIN_READ_EVENT_RECORD
- *         TRY_BEGIN_READ_EVENT_RECORD -> END_READ_PKT_CONTENT [label = "No more data"]
- *         TRY_BEGIN_READ_EVENT_RECORD -> TRY_BEGIN_READ_EVENT_RECORD_HEADER_SCOPE
- *         TRY_BEGIN_READ_EVENT_RECORD_HEADER_SCOPE -> SET_EVENT_RECORD_INFO_ITEM [label = "No field"]
- *         TRY_BEGIN_READ_EVENT_RECORD_HEADER_SCOPE -> read_event_record_header_struct_field
- *         read_event_record_header_struct_field -> END_READ_EVENT_RECORD_HEADER_SCOPE
- *         END_READ_EVENT_RECORD_HEADER_SCOPE -> SET_EVENT_RECORD_INFO_ITEM
- *         SET_EVENT_RECORD_INFO_ITEM -> TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE
- *         TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE -> END_READ_EVENT_RECORD [label = "No field,\nno event record class"]
- *         TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE -> TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE [label = "No field"]
- *         TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE -> read_event_record_common_ctx_struct_field
- *         read_event_record_common_ctx_struct_field -> END_READ_EVENT_RECORD_COMMON_CTX_SCOPE
- *         END_READ_EVENT_RECORD_COMMON_CTX_SCOPE -> END_READ_EVENT_RECORD [label = "No event record class"]
- *         END_READ_EVENT_RECORD_COMMON_CTX_SCOPE -> TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE
- *         TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE -> TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE [label = "No field"]
- *         TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE -> read_event_record_spec_ctx_struct_field
- *         read_event_record_spec_ctx_struct_field -> END_READ_EVENT_RECORD_SPEC_CTX_SCOPE
- *         END_READ_EVENT_RECORD_SPEC_CTX_SCOPE -> TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE
- *         TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE -> END_READ_EVENT_RECORD [label = "No field"]
- *         TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE -> read_event_record_payload_struct_field
- *         read_event_record_payload_struct_field -> END_READ_EVENT_RECORD_PAYLOAD_SCOPE
- *         END_READ_EVENT_RECORD_PAYLOAD_SCOPE -> END_READ_EVENT_RECORD
- *         END_READ_EVENT_RECORD -> TRY_BEGIN_READ_EVENT_RECORD
- *         END_READ_PKT_CONTENT -> END_READ_PKT [label="No padding"]
- *         END_READ_PKT_CONTENT -> SKIP_PADDING
- *         SKIP_PADDING -> SKIP_PADDING
- *         SKIP_PADDING -> END_READ_PKT
- *         END_READ_PKT -> TRY_BEGIN_READ_PKT
+ *         TryBeginReadEventRecord -> TryBeginReadEventRecordHeaderScope
+ *         TryBeginReadEventRecordHeaderScope -> SetEventRecordInfoItem [label = "No field"]
+ *         TryBeginReadEventRecordHeaderScope -> read_event_record_header_struct_field
+ *         read_event_record_header_struct_field -> EndReadEventRecordHeaderScope
+ *         EndReadEventRecordHeaderScope -> SetEventRecordInfoItem
+ *         SetEventRecordInfoItem -> TryBeginReadCommonEventRecordCtxScope
+ *         TryBeginReadCommonEventRecordCtxScope -> EndReadEventRecord [label = "No field,\nno event record class"]
+ *         TryBeginReadCommonEventRecordCtxScope -> TryBeginReadSpecEventRecordCtxScope [label = "No field"]
+ *         TryBeginReadCommonEventRecordCtxScope -> read_common_event_record_ctx_struct_field
+ *         read_common_event_record_ctx_struct_field -> EndReadCommonEventRecordCtxScope
+ *         EndReadCommonEventRecordCtxScope -> EndReadEventRecord [label = "No event record class"]
+ *         EndReadCommonEventRecordCtxScope -> TryBeginReadSpecEventRecordCtxScope
+ *         TryBeginReadSpecEventRecordCtxScope -> TryBeginReadEventRecordPayloadScope [label = "No field"]
+ *         TryBeginReadSpecEventRecordCtxScope -> read_spec_event_record_ctx_struct_field
+ *         read_spec_event_record_ctx_struct_field -> EndReadSpecEventRecordCtxScope
+ *         EndReadSpecEventRecordCtxScope -> TryBeginReadEventRecordPayloadScope
+ *         TryBeginReadEventRecordPayloadScope -> EndReadEventRecord [label = "No field"]
+ *         TryBeginReadEventRecordPayloadScope -> read_event_record_payload_struct_field
+ *         read_event_record_payload_struct_field -> EndReadEventRecordPayloadScope
+ *         EndReadEventRecordPayloadScope -> EndReadEventRecord
+ *         EndReadEventRecord -> TryBeginReadEventRecord
+ *       }
+ *
+ *       read_pkt_header_struct_field [
+ *         label = "Read structure field"
+ *         fontname = "sans-serif"
+ *         fillcolor = "#8e44ad"
+ *         fontcolor = "white"
+ *         width = 3
+ *       ]
+ *
+ *       read_pkt_ctx_struct_field [
+ *         label = "Read structure field"
+ *         fontname = "sans-serif"
+ *         fillcolor = "#8e44ad"
+ *         fontcolor = "white"
+ *         width = 3
+ *       ]
+ *
+ *       Init [fillcolor = "#27ae60", fontcolor = white]
+ *       Done [fillcolor = "#c0392b", fontcolor = white]
+ *       TryBeginReadPkt [fillcolor = "#d35400", fontcolor = white]
+ *       BeginReadPktContent [fillcolor = "#d35400", fontcolor = white]
+ *       TryBeginReadPktHeaderScope [fillcolor = "#f39c12", fontcolor = white]
+ *       TryBeginReadPktCtxScope [fillcolor = "#f39c12", fontcolor = white]
+ *       EndReadPktHeaderScope [fillcolor = "#34495e", fontcolor = white]
+ *       EndReadPktCtxScope [fillcolor = "#34495e", fontcolor = white]
+ *       EndReadPktContent [fillcolor = "#2c3e50", fontcolor = white]
+ *       EndReadPkt [fillcolor = "#2c3e50", fontcolor = white]
+ *       SetDataStreamInfoItem [fillcolor = "#2980b9", fontcolor = white]
+ *       SetPktInfoItem [fillcolor = "#2980b9", fontcolor = white]
+ *       SkipPadding [fillcolor = "#ecf0f1", fontcolor = black]
+ *
+ *       Init -> TryBeginReadPkt
+ *       TryBeginReadPkt -> Done [label = "No more data"]
+ *       TryBeginReadPkt -> BeginReadPktContent
+ *       BeginReadPktContent -> TryBeginReadPktHeaderScope
+ *       TryBeginReadPktHeaderScope -> SetDataStreamInfoItem [label = "No field"]
+ *       TryBeginReadPktHeaderScope -> read_pkt_header_struct_field
+ *       read_pkt_header_struct_field -> EndReadPktHeaderScope
+ *       EndReadPktHeaderScope -> SetDataStreamInfoItem
+ *       SetDataStreamInfoItem -> TryBeginReadPktCtxScope
+ *       SetDataStreamInfoItem -> SetPktInfoItem [label = "No data\nstream class"]
+ *       TryBeginReadPktCtxScope -> SetPktInfoItem [label = "No field"]
+ *       TryBeginReadPktCtxScope -> read_pkt_ctx_struct_field
+ *       read_pkt_ctx_struct_field -> EndReadPktCtxScope
+ *       EndReadPktCtxScope -> SetPktInfoItem
+ *       SetPktInfoItem -> TryBeginReadEventRecord
+ *       EndReadPktContent -> EndReadPkt [label="No padding"]
+ *       EndReadPktContent -> SkipPadding
+ *       SkipPadding -> SkipPadding
+ *       SkipPadding -> EndReadPkt
+ *       EndReadPkt -> TryBeginReadPkt
+ *       TryBeginReadEventRecord -> EndReadPktContent [label = "No more data"]
  *     }
  *
  * Buffer and offsets
@@ -624,7 +678,7 @@ struct VarLenIntFieldVal<true> final
  * The "decoding head" of a an item sequence iterator is a position
  * within some buffer to decode the next field.
  *
- * An item sequence iterator works with four offsets:
+ * An item sequence iterator works with three offsets:
  *
  * `_mBufOffsetInCurPkt`:
  *     The offset of the beginning of the buffer (`_mBuf`) within the
@@ -638,9 +692,8 @@ struct VarLenIntFieldVal<true> final
  *
  *     This is the only member which the iterator updates systematically
  *     when it reads data. It's relative to the beginning of the packet
- *     because CTF (all versions) says that the alignment requirement
- *     of any field is relative to the beginning of its containing
- *     packet.
+ *     because CTF (all versions) says that the alignment requirement of
+ *     any field is relative to the beginning of its containing packet.
  *
  * Note that `_mCurItemOffsetInItemSeq`, the offset of the current item
  * within the whole item sequence, is not strictly needed for the
@@ -650,24 +703,28 @@ struct VarLenIntFieldVal<true> final
  * field VF, its decoding head (`_mHeadOffsetInCurPkt`) is _after_ VF,
  * but offset() returns the offset at the _beginning_ of an item.
  *
- * The following illustration shows the meaning of the significant
- * decoding members in relation to a packet and a current buffer:
+ * The following diagram shows the meaning of the significant decoding
+ * members in relation to a packet and a current buffer:
  *
  * ╔═══════════════════════════════════════════════════════════════════════════╗
  * ║                                          Decoding head                    ║
  * ║                                          ▼                                ║
  * ║ Packet: ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ ║
+ * ║         ┊                                                               ┊ ║
  * ║ Buffer: ┊                         ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓          ┊ ║
  * ║         ┊                         ┊      ┊                   ┊          ┊ ║
  * ║         ┣┅┅ _mBufOffsetInCurPkt ┅┅┫      ┊                   ┊          ┊ ║
+ * ║         ┊                         ┊      ┊                   ┊          ┊ ║
  * ║         ┣┅┅┅┅┅ _mHeadOffsetInCurPkt ┅┅┅┅┅┫                   ┊          ┊ ║
+ * ║         ┊                         ┊                          ┊          ┊ ║
  * ║         ┊                         ┣┅┅┅┅┅┅ _mBuf.size() ┅┅┅┅┅┅┫          ┊ ║
+ * ║         ┊                                                               ┊ ║
  * ║         ┣┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅ _mCurPktExpectedLens.total ┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┫ ║
  * ╚═══════════════════════════════════════════════════════════════════════════╝
  */
 class ItemSeqIter final
 {
-    template <ir::ByteOrder, bool, std::size_t>
+    template <bt2c::Signedness, std::size_t, ByteOrder, internal::BitOrder>
     friend struct internal::ReadFixedLenIntFunc;
 
 public:
@@ -703,8 +760,8 @@ public:
      * Makes the underlying medium seek to `pktOffset` and resets the
      * state to decode a packet.
      *
-     * It's guaranteed that this method doesn't throw
-     * `bt2c::TryAgain` or a medium error.
+     * It's guaranteed that this method doesn't throw `bt2c::TryAgain`
+     * or a medium error.
      */
     void seekPkt(bt2c::DataLen pktOffset);
 
@@ -725,10 +782,12 @@ public:
      */
     const Item *next()
     {
-        BT_ASSERT_DBG(_mState != _State::DONE);
+        BT_ASSERT_DBG(_mState != _State::Done);
 
-        while (this->_handleState() == _StateHandlingReaction::CONTINUE)
-            ;
+        while (this->_handleState() == _StateHandlingReaction::Continue) {
+            continue;
+        }
+
         return _mCurItem;
     }
 
@@ -742,1129 +801,294 @@ public:
     }
 
 private:
+    /* clang-format off */
+
     /*
      * State.
+     *
+     * The enumerator names below use the following common parts:
+     *
+     * `Be`:
+     *     Big-endian.
+     *
+     * `Le`:
+     *     Little-endian.
+     *
+     * `Rev`:
+     *     Reversed (unnatural) bit order.
+     *
+     * `Ba`:
+     *     Byte-aligned (alignment of at least 8 bits).
+     *
+     * `8`, `16`, `32`, `64`:
+     *     Fixed 8-bit, 16-bit, 32-bit, or 64-bit length.
+     *
+     * `SaveVal`:
+     *     Save the value of the boolean/integer key field.
+     *
+     * `WithRole`:
+     *     Unsigned integer field with at least one role.
+     *
+     * `MetadataStreamUuid`:
+     *     Static-length array/BLOB field with the "metadata stream
+     *     UUID" role.
+     *
+     * `Utf*`:
+     *     String field with a specific UTF string encoding.
      */
-    enum class _State
-    {
-        /* Begin reading a dynamic-length array field */
-        BEGIN_READ_DYN_LEN_ARRAY_FIELD,
-
-        /* Begin reading a dynamic-length BLOB field */
-        BEGIN_READ_DYN_LEN_BLOB_FIELD,
-
-        /* Begin reading a dynamic-length string field */
-        BEGIN_READ_DYN_LEN_STR_FIELD,
-
-        /* Begin reading a null-terminated string field */
-        BEGIN_READ_NULL_TERMINATED_STR_FIELD,
-
-        /* Begin reading an optional field with a boolean selector */
-        BEGIN_READ_OPTIONAL_FIELD_WITH_BOOL_SEL,
-
-        /* Begin reading an optional field with a signed integer selector */
-        BEGIN_READ_OPTIONAL_FIELD_WITH_SINT_SEL,
-
-        /* Begin reading an optional field with an unsigned integer selector */
-        BEGIN_READ_OPTIONAL_FIELD_WITH_UINT_SEL,
-
-        /* Begin reading the content of a packet */
-        BEGIN_READ_PKT_CONTENT,
-
-        /* Begin reading a static-length array field */
-        BEGIN_READ_STATIC_LEN_ARRAY_FIELD,
-
-        /*
-         * Begin reading a static-length array field which contains the
-         * metadata stream UUID (16 fixed-length unsigned integer fields).
-         */
-        BEGIN_READ_STATIC_LEN_ARRAY_FIELD_METADATA_STREAM_UUID,
-
-        /* Begin reading a static-length BLOB field */
-        BEGIN_READ_STATIC_LEN_BLOB_FIELD,
-
-        /*
-         * Begin reading a static-length BLOB field which contains the
-         * metadata stream UUID (16 bytes).
-         */
-        BEGIN_READ_STATIC_LEN_BLOB_FIELD_METADATA_STREAM_UUID,
-
-        /* Begin reading a static-length string field */
-        BEGIN_READ_STATIC_LEN_STR_FIELD,
-
-        /* Begin reading a structure field */
-        BEGIN_READ_STRUCT_FIELD,
-
-        /* Begin reading a variant field with a signed integer selector */
-        BEGIN_READ_VARIANT_FIELD_WITH_SINT_SEL,
-
-        /* Begin reading a variant field with an unsigned integer selector */
-        BEGIN_READ_VARIANT_FIELD_WITH_UINT_SEL,
-
-        /* No more items to provide; exists for assertions */
-        DONE,
-
-        /* End reading a dynamic-length array field */
-        END_READ_DYN_LEN_ARRAY_FIELD,
-
-        /* End reading a dynamic-length BLOB field */
-        END_READ_DYN_LEN_BLOB_FIELD,
-
-        /* End reading a dynamic-length string field */
-        END_READ_DYN_LEN_STR_FIELD,
-
-        /* End reading an event record */
-        END_READ_EVENT_RECORD,
-
-        /* End reading a common event record context scope */
-        END_READ_EVENT_RECORD_COMMON_CTX_SCOPE,
-
-        /* End reading an event record header scope */
-        END_READ_EVENT_RECORD_HEADER_SCOPE,
-
-        /* End reading an event record payload scope */
-        END_READ_EVENT_RECORD_PAYLOAD_SCOPE,
-
-        /* End reading a specific event record context scope */
-        END_READ_EVENT_RECORD_SPEC_CTX_SCOPE,
-
-        /* End reading a null-terminated string field */
-        END_READ_NULL_TERMINATED_STR_FIELD,
-
-        /* Begin reading an optional field with a boolean selector */
-        END_READ_OPTIONAL_FIELD_WITH_BOOL_SEL,
-
-        /* End reading an optional field with a signed integer selector */
-        END_READ_OPTIONAL_FIELD_WITH_SINT_SEL,
-
-        /* End reading an optional field with an unsigned integer selector */
-        END_READ_OPTIONAL_FIELD_WITH_UINT_SEL,
-
-        /* End reading a packet */
-        END_READ_PKT,
-
-        /* End reading the content of a packet */
-        END_READ_PKT_CONTENT,
-
-        /* End reading a packet context scope */
-        END_READ_PKT_CTX_SCOPE,
-
-        /* End reading a packet header scope */
-        END_READ_PKT_HEADER_SCOPE,
-
-        /* End reading a static-length array field */
-        END_READ_STATIC_LEN_ARRAY_FIELD,
-
-        /* End reading a static-length BLOB field */
-        END_READ_STATIC_LEN_BLOB_FIELD,
-
-        /* End reading a static-length string field */
-        END_READ_STATIC_LEN_STR_FIELD,
-
-        /* End reading a structure field */
-        END_READ_STRUCT_FIELD,
-
-        /* End reading a variant field with a signed integer selector */
-        END_READ_VARIANT_FIELD_WITH_SINT_SEL,
-
-        /* End reading a variant field with an unsigned integer selector */
-        END_READ_VARIANT_FIELD_WITH_UINT_SEL,
-
-        /* Initial state */
-        INIT,
-
-        /* Read a BLOB field section */
-        READ_BLOB_FIELD_SECTION,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length bit array
-         * field.
-         */
-        READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_16_BE,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length bit
-         * array field.
-         */
-        READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_16_LE,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length bit array
-         * field.
-         */
-        READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_32_BE,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length bit
-         * array field.
-         */
-        READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_32_LE,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length bit array
-         * field.
-         */
-        READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_64_BE,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length bit
-         * array field.
-         */
-        READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_64_LE,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length bit
-         * array field.
-         */
-        READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_8,
-
-        /*
-         * Read a big-endian fixed-length bit array field.
-         */
-        READ_FIXED_LEN_BIT_ARRAY_FIELD_BE,
-
-        /*
-         * Read a little-endian fixed-length bit array field.
-         */
-        READ_FIXED_LEN_BIT_ARRAY_FIELD_LE,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length boolean
-         * field.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_16_BE,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length boolean
-         * field and save its value.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_16_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length
-         * boolean field.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_16_LE,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length
-         * boolean field and save its value.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_16_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length boolean
-         * field.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_32_BE,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length boolean
-         * field and save its value.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_32_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length
-         * boolean field.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_32_LE,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length
-         * boolean field and save its value.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_32_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length boolean
-         * field.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_64_BE,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length boolean
-         * field and save its value.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_64_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length
-         * boolean field.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_64_LE,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length
-         * boolean field and save its value.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_64_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length boolean
-         * field.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_8,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length boolean
-         * field and save its value.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BA_8_SAVE_VAL,
-
-        /*
-         * Read a big-endian fixed-length boolean field.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BE,
-
-        /*
-         * Read a big-endian fixed-length boolean field and save its
-         * value.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_BE_SAVE_VAL,
-
-        /*
-         * Read a little-endian fixed-length boolean field.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_LE,
-
-        /*
-         * Read a little-endian fixed-length boolean field and save its
-         * value.
-         */
-        READ_FIXED_LEN_BOOL_FIELD_LE_SAVE_VAL,
-
-        /*
-         * Read a 32-bit big-endian fixed-length floating-point number
-         * field.
-         */
-        READ_FIXED_LEN_FLOAT_FIELD_32_BE,
-
-        /*
-         * Read a 32-bit little-endian fixed-length floating-point
-         * number field.
-         */
-        READ_FIXED_LEN_FLOAT_FIELD_32_LE,
-
-        /*
-         * Read a 64-bit big-endian fixed-length floating-point number
-         * field.
-         */
-        READ_FIXED_LEN_FLOAT_FIELD_64_BE,
-
-        /*
-         * Read a 64-bit little-endian fixed-length floating-point
-         * number field.
-         */
-        READ_FIXED_LEN_FLOAT_FIELD_64_LE,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length
-         * floating-point number field.
-         */
-        READ_FIXED_LEN_FLOAT_FIELD_BA_32_BE,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length
-         * floating-point number field.
-         */
-        READ_FIXED_LEN_FLOAT_FIELD_BA_32_LE,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length
-         * floating-point number field.
-         */
-        READ_FIXED_LEN_FLOAT_FIELD_BA_64_BE,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length
-         * floating-point number field.
-         */
-        READ_FIXED_LEN_FLOAT_FIELD_BA_64_LE,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length signed
-         * enumeration field.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_16_BE,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length signed
-         * enumeration field and save its value.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_16_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length signed
-         * enumeration field.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_16_LE,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length signed
-         * enumeration field and save its value.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_16_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length signed
-         * enumeration field.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_32_BE,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length signed
-         * enumeration field and save its value.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_32_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length signed
-         * enumeration field.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_32_LE,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length signed
-         * enumeration field and save its value.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_32_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length signed
-         * enumeration field.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_64_BE,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length signed
-         * enumeration field and save its value.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_64_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length signed
-         * enumeration field.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_64_LE,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length signed
-         * enumeration field and save its value.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_64_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length signed
-         * enumeration field.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_8,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length signed
-         * enumeration field and save its value.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BA_8_SAVE_VAL,
-
-        /*
-         * Read a big-endian fixed-length signed enumeration field.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BE,
-
-        /*
-         * Read a big-endian fixed-length signed enumeration field and
-         * save its value.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_BE_SAVE_VAL,
-
-        /*
-         * Read a little-endian fixed-length signed enumeration field.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_LE,
-
-        /*
-         * Read a little-endian fixed-length signed enumeration field
-         * and save its value.
-         */
-        READ_FIXED_LEN_SENUM_FIELD_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length signed
-         * integer field.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_16_BE,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length signed
-         * integer field and save its value.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_16_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length signed
-         * integer field.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_16_LE,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length signed
-         * integer field and save its value.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_16_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length signed
-         * integer field.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_32_BE,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length signed
-         * integer field and save its value.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_32_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length signed
-         * integer field.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_32_LE,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length signed
-         * integer field and save its value.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_32_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length signed
-         * integer field.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_64_BE,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length signed
-         * integer field and save its value.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_64_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length signed
-         * integer field.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_64_LE,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length signed
-         * integer field and save its value.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_64_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length signed
-         * integer field.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_8,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length signed
-         * integer field and save its value.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BA_8_SAVE_VAL,
-
-        /*
-         * Read a big-endian fixed-length signed integer field.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BE,
-
-        /*
-         * Read a big-endian fixed-length signed integer field and save
-         * its value.
-         */
-        READ_FIXED_LEN_SINT_FIELD_BE_SAVE_VAL,
-
-        /*
-         * Read a little-endian fixed-length signed integer field.
-         */
-        READ_FIXED_LEN_SINT_FIELD_LE,
-
-        /*
-         * Read a little-endian fixed-length signed integer field and
-         * save its value.
-         */
-        READ_FIXED_LEN_SINT_FIELD_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length
-         * unsigned enumeration field.
-         */
-        READ_FIXED_LEN_METADATA_STREAM_UUID_BYTE_UENUM_FIELD_BA_8,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length
-         * unsigned integer field.
-         */
-        READ_FIXED_LEN_METADATA_STREAM_UUID_BYTE_UINT_FIELD_BA_8,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length unsigned
-         * enumeration field.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_16_BE,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length unsigned
-         * enumeration field and save its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_16_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length unsigned
-         * enumeration field having at least one role.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_16_BE_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length unsigned
-         * enumeration field having at least one role and save its
-         * value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_16_BE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length
-         * unsigned enumeration field.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_16_LE,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length
-         * unsigned enumeration field and save its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_16_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length
-         * unsigned enumeration field having at least one role.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_16_LE_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length
-         * unsigned enumeration field having at least one role and save
-         * its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_16_LE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length unsigned
-         * enumeration field.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_32_BE,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length unsigned
-         * enumeration field and save its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_32_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length unsigned
-         * enumeration field having at least one role.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_32_BE_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length unsigned
-         * enumeration field having at least one role and save its
-         * value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_32_BE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length
-         * unsigned enumeration field.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_32_LE,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length
-         * unsigned enumeration field and save its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_32_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length
-         * unsigned enumeration field having at least one role.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_32_LE_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length
-         * unsigned enumeration field having at least one role and save
-         * its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_32_LE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length unsigned
-         * enumeration field.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_64_BE,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length unsigned
-         * enumeration field and save its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_64_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length unsigned
-         * enumeration field having at least one role.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_64_BE_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length unsigned
-         * enumeration field having at least one role and save its
-         * value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_64_BE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length
-         * unsigned enumeration field.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_64_LE,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length
-         * unsigned enumeration field and save its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_64_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length
-         * unsigned enumeration field having at least one role.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_64_LE_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length
-         * unsigned enumeration field having at least one role and save
-         * its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_64_LE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length
-         * unsigned enumeration field.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_8,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length
-         * unsigned enumeration field and save its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_8_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length
-         * unsigned enumeration field having at least one role.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_8_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length
-         * unsigned enumeration field having at least one role and save
-         * its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BA_8_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a big-endian fixed-length unsigned enumeration field.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BE,
-
-        /*
-         * Read a big-endian fixed-length unsigned enumeration field and
-         * save its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BE_SAVE_VAL,
-
-        /*
-         * Read a big-endian fixed-length unsigned enumeration field
-         * having at least one role.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BE_WITH_ROLE,
-
-        /*
-         * Read a big-endian fixed-length unsigned enumeration field
-         * having at least one role and save its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_BE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a little-endian fixed-length unsigned enumeration field.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_LE,
-
-        /*
-         * Read a little-endian fixed-length unsigned enumeration field
-         * and save its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_LE_SAVE_VAL,
-
-        /*
-         * Read a little-endian fixed-length unsigned enumeration field
-         * having at least one role.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_LE_WITH_ROLE,
-
-        /*
-         * Read a little-endian fixed-length unsigned enumeration field
-         * having at least one role and save its value.
-         */
-        READ_FIXED_LEN_UENUM_FIELD_LE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length unsigned
-         * integer field.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_16_BE,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length unsigned
-         * integer field and save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_16_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length unsigned
-         * integer field having at least one role.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_16_BE_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 16-bit big-endian fixed-length unsigned
-         * integer field having at least one role and save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_16_BE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length
-         * unsigned integer field.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_16_LE,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length
-         * unsigned integer field and save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_16_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length
-         * unsigned integer field having at least one role.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_16_LE_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 16-bit little-endian fixed-length
-         * unsigned integer field having at least one role and save its
-         * value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_16_LE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length unsigned
-         * integer field.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_32_BE,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length unsigned
-         * integer field and save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_32_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length unsigned
-         * integer field having at least one role.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_32_BE_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 32-bit big-endian fixed-length unsigned
-         * integer field having at least one role and save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_32_BE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length
-         * unsigned integer field.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_32_LE,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length
-         * unsigned integer field and save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_32_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length
-         * unsigned integer field having at least one role.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_32_LE_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 32-bit little-endian fixed-length
-         * unsigned integer field having at least one role and save its
-         * value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_32_LE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length unsigned
-         * integer field.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_64_BE,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length unsigned
-         * integer field and save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_64_BE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length unsigned
-         * integer field having at least one role.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_64_BE_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 64-bit big-endian fixed-length unsigned
-         * integer field having at least one role and save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_64_BE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length
-         * unsigned integer field.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_64_LE,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length
-         * unsigned integer field and save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_64_LE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length
-         * unsigned integer field having at least one role.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_64_LE_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 64-bit little-endian fixed-length
-         * unsigned integer field having at least one role and save its
-         * value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_64_LE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length
-         * unsigned integer field.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_8,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length
-         * unsigned integer field and save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_8_SAVE_VAL,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length
-         * unsigned integer field having at least one role.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_8_WITH_ROLE,
-
-        /*
-         * Read a byte-aligned, 8-bit little-endian fixed-length
-         * unsigned integer field having at least one role and save its
-         * value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BA_8_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a big-endian fixed-length unsigned integer field.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BE,
-
-        /*
-         * Read a big-endian fixed-length unsigned integer field and
-         * save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BE_SAVE_VAL,
-
-        /*
-         * Read a big-endian fixed-length unsigned integer field having
-         * at least one role.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BE_WITH_ROLE,
-
-        /*
-         * Read a big-endian fixed-length unsigned integer field having
-         * at least one role and save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_BE_WITH_ROLE_SAVE_VAL,
-
-        /*
-         * Read a little-endian fixed-length unsigned integer field.
-         */
-        READ_FIXED_LEN_UINT_FIELD_LE,
-
-        /*
-         * Read a little-endian fixed-length unsigned integer field and
-         * save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_LE_SAVE_VAL,
-
-        /*
-         * Read a little-endian fixed-length unsigned integer field
-         * having at least one role.
-         */
-        READ_FIXED_LEN_UINT_FIELD_LE_WITH_ROLE,
-
-        /*
-         * Read a little-endian fixed-length unsigned integer field
-         * having at least one role and save its value.
-         */
-        READ_FIXED_LEN_UINT_FIELD_LE_WITH_ROLE_SAVE_VAL,
-
-        /* Read a substring */
-        READ_SUBSTR,
-
-        /* Read a null-terminated substring */
-        READ_SUBSTR_UNTIL_NULL_CHAR,
-
-        /* Read a metadata stream UUID BLOB field section */
-        READ_METADATA_STREAM_UUID_BLOB_FIELD_SECTION,
-
-        /* Read a UUID BLOB section */
-        READ_UUID_BLOB_SECTION,
-
-        /* Read a UUID byte */
-        READ_UUID_BYTE,
-
-        /* Read a variable-length signed enumeration field */
-        READ_VAR_LEN_SENUM_FIELD,
-
-        /*
-         * Read a variable-length signed enumeration field and save
-         * its value.
-         */
-        READ_VAR_LEN_SENUM_FIELD_SAVE_VAL,
-
-        /* Read a variable-length signed integer field */
-        READ_VAR_LEN_SINT_FIELD,
-
-        /* Read a variable-length signed integer field and save its value */
-        READ_VAR_LEN_SINT_FIELD_SAVE_VAL,
-
-        /* Read a variable-length unsigned enumeration field */
-        READ_VAR_LEN_UENUM_FIELD,
-
-        /*
-         * Read a variable-length unsigned enumeration field and save
-         * its value.
-         */
-        READ_VAR_LEN_UENUM_FIELD_SAVE_VAL,
-
-        /*
-         * Read a variable-length unsigned enumeration field having at least
-         * one role.
-         */
-        READ_VAR_LEN_UENUM_FIELD_WITH_ROLE,
-
-        /*
-         * Read a variable-length unsigned enumeration field having at
-         * least one role and save its value.
-         */
-        READ_VAR_LEN_UENUM_FIELD_WITH_ROLE_SAVE_VAL,
-
-        /* Read a variable-length unsigned enumeration field */
-        READ_VAR_LEN_UINT_FIELD,
-
-        /*
-         * Read a variable-length unsigned integer field and save its
-         * value.
-         */
-        READ_VAR_LEN_UINT_FIELD_SAVE_VAL,
-
-        /*
-         * Read a variable-length unsigned integer field having at least
-         * one role.
-         */
-        READ_VAR_LEN_UINT_FIELD_WITH_ROLE,
-
-        /*
-         * Read a variable-length unsigned integer field having at least
-         * one role and save its value.
-         */
-        READ_VAR_LEN_UINT_FIELD_WITH_ROLE_SAVE_VAL,
-
-        /* Set the data stream info item */
-        SET_DATA_STREAM_INFO_ITEM,
-
-        /* Set the event record info item */
-        SET_EVENT_RECORD_INFO_ITEM,
-
-        /* Set the packet info item */
-        SET_PKT_INFO_ITEM,
-
-        /* Set the packet magic number item */
-        SET_PKT_MAGIC_NUMBER_ITEM,
-
-        /* Set the default clock value item */
-        SET_DEF_CLK_VAL_ITEM,
-
-        /* Set the metadata stream UUID item */
-        SET_METADATA_STREAM_UUID_ITEM,
-
-        /* Skip some packet content padding */
-        SKIP_CONTENT_PADDING,
-
-        /* Skip some padding after the packet content */
-        SKIP_PADDING,
-
-        /* Try beginning reading an event record */
-        TRY_BEGIN_READ_EVENT_RECORD,
-
-        /* Try beginning reading a common event record context scope */
-        TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE,
-
-        /* Try beginning reading an event record header scope */
-        TRY_BEGIN_READ_EVENT_RECORD_HEADER_SCOPE,
-
-        /* Try beginning reading an event record payload scope */
-        TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE,
-
-        /* Try beginning reading a specific event record context scope */
-        TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE,
-
-        /* Try beginning reading a packet */
-        TRY_BEGIN_READ_PKT,
-
-        /* Try beginning reading a packet context scope */
-        TRY_BEGIN_READ_PKT_CTX_SCOPE,
-
-        /* Try beginning reading a packet header scope */
-        TRY_BEGIN_READ_PKT_HEADER_SCOPE,
-    };
+    WISE_ENUM_CLASS_MEMBER(_State,
+        BeginReadDynLenArrayField,
+        BeginReadDynLenBlobField,
+        BeginReadDynLenStrField,
+        BeginReadNullTerminatedStrFieldUtf16,
+        BeginReadNullTerminatedStrFieldUtf32,
+        BeginReadNullTerminatedStrFieldUtf8,
+        BeginReadOptionalFieldWithBoolSel,
+        BeginReadOptionalFieldWithSIntSel,
+        BeginReadOptionalFieldWithUIntSel,
+        BeginReadPktContent,
+        BeginReadStaticLenArrayField,
+        BeginReadStaticLenArrayFieldMetadataStreamUuid,
+        BeginReadStaticLenBlobField,
+        BeginReadStaticLenBlobFieldMetadataStreamUuid,
+        BeginReadStaticLenStrField,
+        BeginReadStructField,
+        BeginReadVariantFieldWithSIntSel,
+        BeginReadVariantFieldWithUIntSel,
+        Done,
+        EndReadCommonEventRecordCtxScope,
+        EndReadDynLenArrayField,
+        EndReadDynLenBlobField,
+        EndReadDynLenStrField,
+        EndReadEventRecord,
+        EndReadEventRecordHeaderScope,
+        EndReadEventRecordPayloadScope,
+        EndReadNullTerminatedStrField,
+        EndReadOptionalFieldWithBoolSel,
+        EndReadOptionalFieldWithSIntSel,
+        EndReadOptionalFieldWithUIntSel,
+        EndReadPkt,
+        EndReadPktContent,
+        EndReadPktCtxScope,
+        EndReadPktHeaderScope,
+        EndReadSpecEventRecordCtxScope,
+        EndReadStaticLenArrayField,
+        EndReadStaticLenBlobField,
+        EndReadStaticLenStrField,
+        EndReadStructField,
+        EndReadVariantFieldWithSIntSel,
+        EndReadVariantFieldWithUIntSel,
+        Init,
+        ReadFixedLenBitArrayFieldBa16Be,
+        ReadFixedLenBitArrayFieldBa16BeRev,
+        ReadFixedLenBitArrayFieldBa16Le,
+        ReadFixedLenBitArrayFieldBa16LeRev,
+        ReadFixedLenBitArrayFieldBa32Be,
+        ReadFixedLenBitArrayFieldBa32BeRev,
+        ReadFixedLenBitArrayFieldBa32Le,
+        ReadFixedLenBitArrayFieldBa32LeRev,
+        ReadFixedLenBitArrayFieldBa64Be,
+        ReadFixedLenBitArrayFieldBa64BeRev,
+        ReadFixedLenBitArrayFieldBa64Le,
+        ReadFixedLenBitArrayFieldBa64LeRev,
+        ReadFixedLenBitArrayFieldBa8,
+        ReadFixedLenBitArrayFieldBa8Rev,
+        ReadFixedLenBitArrayFieldBe,
+        ReadFixedLenBitArrayFieldBeRev,
+        ReadFixedLenBitArrayFieldLe,
+        ReadFixedLenBitArrayFieldLeRev,
+        ReadFixedLenBoolFieldBa16Be,
+        ReadFixedLenBoolFieldBa16BeRev,
+        ReadFixedLenBoolFieldBa16BeRevSaveVal,
+        ReadFixedLenBoolFieldBa16BeSaveVal,
+        ReadFixedLenBoolFieldBa16Le,
+        ReadFixedLenBoolFieldBa16LeRev,
+        ReadFixedLenBoolFieldBa16LeRevSaveVal,
+        ReadFixedLenBoolFieldBa16LeSaveVal,
+        ReadFixedLenBoolFieldBa32Be,
+        ReadFixedLenBoolFieldBa32BeRev,
+        ReadFixedLenBoolFieldBa32BeRevSaveVal,
+        ReadFixedLenBoolFieldBa32BeSaveVal,
+        ReadFixedLenBoolFieldBa32Le,
+        ReadFixedLenBoolFieldBa32LeRev,
+        ReadFixedLenBoolFieldBa32LeRevSaveVal,
+        ReadFixedLenBoolFieldBa32LeSaveVal,
+        ReadFixedLenBoolFieldBa64Be,
+        ReadFixedLenBoolFieldBa64BeRev,
+        ReadFixedLenBoolFieldBa64BeRevSaveVal,
+        ReadFixedLenBoolFieldBa64BeSaveVal,
+        ReadFixedLenBoolFieldBa64Le,
+        ReadFixedLenBoolFieldBa64LeRev,
+        ReadFixedLenBoolFieldBa64LeRevSaveVal,
+        ReadFixedLenBoolFieldBa64LeSaveVal,
+        ReadFixedLenBoolFieldBa8,
+        ReadFixedLenBoolFieldBa8Rev,
+        ReadFixedLenBoolFieldBa8RevSaveVal,
+        ReadFixedLenBoolFieldBa8SaveVal,
+        ReadFixedLenBoolFieldBe,
+        ReadFixedLenBoolFieldBeRev,
+        ReadFixedLenBoolFieldBeRevSaveVal,
+        ReadFixedLenBoolFieldBeSaveVal,
+        ReadFixedLenBoolFieldLe,
+        ReadFixedLenBoolFieldLeRev,
+        ReadFixedLenBoolFieldLeRevSaveVal,
+        ReadFixedLenBoolFieldLeSaveVal,
+        ReadFixedLenFloatField32Be,
+        ReadFixedLenFloatField32BeRev,
+        ReadFixedLenFloatField32Le,
+        ReadFixedLenFloatField32LeRev,
+        ReadFixedLenFloatField64Be,
+        ReadFixedLenFloatField64BeRev,
+        ReadFixedLenFloatField64Le,
+        ReadFixedLenFloatField64LeRev,
+        ReadFixedLenFloatFieldBa32Be,
+        ReadFixedLenFloatFieldBa32BeRev,
+        ReadFixedLenFloatFieldBa32Le,
+        ReadFixedLenFloatFieldBa32LeRev,
+        ReadFixedLenFloatFieldBa64Be,
+        ReadFixedLenFloatFieldBa64BeRev,
+        ReadFixedLenFloatFieldBa64Le,
+        ReadFixedLenFloatFieldBa64LeRev,
+        ReadFixedLenMetadataStreamUuidByteUIntFieldBa8,
+        ReadFixedLenSIntFieldBa16Be,
+        ReadFixedLenSIntFieldBa16BeRev,
+        ReadFixedLenSIntFieldBa16BeRevSaveVal,
+        ReadFixedLenSIntFieldBa16BeSaveVal,
+        ReadFixedLenSIntFieldBa16Le,
+        ReadFixedLenSIntFieldBa16LeRev,
+        ReadFixedLenSIntFieldBa16LeRevSaveVal,
+        ReadFixedLenSIntFieldBa16LeSaveVal,
+        ReadFixedLenSIntFieldBa32Be,
+        ReadFixedLenSIntFieldBa32BeRev,
+        ReadFixedLenSIntFieldBa32BeRevSaveVal,
+        ReadFixedLenSIntFieldBa32BeSaveVal,
+        ReadFixedLenSIntFieldBa32Le,
+        ReadFixedLenSIntFieldBa32LeRev,
+        ReadFixedLenSIntFieldBa32LeRevSaveVal,
+        ReadFixedLenSIntFieldBa32LeSaveVal,
+        ReadFixedLenSIntFieldBa64Be,
+        ReadFixedLenSIntFieldBa64BeRev,
+        ReadFixedLenSIntFieldBa64BeRevSaveVal,
+        ReadFixedLenSIntFieldBa64BeSaveVal,
+        ReadFixedLenSIntFieldBa64Le,
+        ReadFixedLenSIntFieldBa64LeRev,
+        ReadFixedLenSIntFieldBa64LeRevSaveVal,
+        ReadFixedLenSIntFieldBa64LeSaveVal,
+        ReadFixedLenSIntFieldBa8,
+        ReadFixedLenSIntFieldBa8Rev,
+        ReadFixedLenSIntFieldBa8RevSaveVal,
+        ReadFixedLenSIntFieldBa8SaveVal,
+        ReadFixedLenSIntFieldBe,
+        ReadFixedLenSIntFieldBeRev,
+        ReadFixedLenSIntFieldBeRevSaveVal,
+        ReadFixedLenSIntFieldBeSaveVal,
+        ReadFixedLenSIntFieldLe,
+        ReadFixedLenSIntFieldLeRev,
+        ReadFixedLenSIntFieldLeRevSaveVal,
+        ReadFixedLenSIntFieldLeSaveVal,
+        ReadFixedLenUIntFieldBa16Be,
+        ReadFixedLenUIntFieldBa16BeRev,
+        ReadFixedLenUIntFieldBa16BeRevSaveVal,
+        ReadFixedLenUIntFieldBa16BeRevWithRole,
+        ReadFixedLenUIntFieldBa16BeRevWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa16BeSaveVal,
+        ReadFixedLenUIntFieldBa16BeWithRole,
+        ReadFixedLenUIntFieldBa16BeWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa16Le,
+        ReadFixedLenUIntFieldBa16LeRev,
+        ReadFixedLenUIntFieldBa16LeRevSaveVal,
+        ReadFixedLenUIntFieldBa16LeRevWithRole,
+        ReadFixedLenUIntFieldBa16LeRevWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa16LeSaveVal,
+        ReadFixedLenUIntFieldBa16LeWithRole,
+        ReadFixedLenUIntFieldBa16LeWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa32Be,
+        ReadFixedLenUIntFieldBa32BeRev,
+        ReadFixedLenUIntFieldBa32BeRevSaveVal,
+        ReadFixedLenUIntFieldBa32BeRevWithRole,
+        ReadFixedLenUIntFieldBa32BeRevWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa32BeSaveVal,
+        ReadFixedLenUIntFieldBa32BeWithRole,
+        ReadFixedLenUIntFieldBa32BeWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa32Le,
+        ReadFixedLenUIntFieldBa32LeRev,
+        ReadFixedLenUIntFieldBa32LeRevSaveVal,
+        ReadFixedLenUIntFieldBa32LeRevWithRole,
+        ReadFixedLenUIntFieldBa32LeRevWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa32LeSaveVal,
+        ReadFixedLenUIntFieldBa32LeWithRole,
+        ReadFixedLenUIntFieldBa32LeWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa64Be,
+        ReadFixedLenUIntFieldBa64BeRev,
+        ReadFixedLenUIntFieldBa64BeRevSaveVal,
+        ReadFixedLenUIntFieldBa64BeRevWithRole,
+        ReadFixedLenUIntFieldBa64BeRevWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa64BeSaveVal,
+        ReadFixedLenUIntFieldBa64BeWithRole,
+        ReadFixedLenUIntFieldBa64BeWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa64Le,
+        ReadFixedLenUIntFieldBa64LeRev,
+        ReadFixedLenUIntFieldBa64LeRevSaveVal,
+        ReadFixedLenUIntFieldBa64LeRevWithRole,
+        ReadFixedLenUIntFieldBa64LeRevWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa64LeSaveVal,
+        ReadFixedLenUIntFieldBa64LeWithRole,
+        ReadFixedLenUIntFieldBa64LeWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa8,
+        ReadFixedLenUIntFieldBa8Rev,
+        ReadFixedLenUIntFieldBa8RevSaveVal,
+        ReadFixedLenUIntFieldBa8RevWithRole,
+        ReadFixedLenUIntFieldBa8RevWithRoleSaveVal,
+        ReadFixedLenUIntFieldBa8SaveVal,
+        ReadFixedLenUIntFieldBa8WithRole,
+        ReadFixedLenUIntFieldBa8WithRoleSaveVal,
+        ReadFixedLenUIntFieldBe,
+        ReadFixedLenUIntFieldBeRev,
+        ReadFixedLenUIntFieldBeRevSaveVal,
+        ReadFixedLenUIntFieldBeRevWithRole,
+        ReadFixedLenUIntFieldBeRevWithRoleSaveVal,
+        ReadFixedLenUIntFieldBeSaveVal,
+        ReadFixedLenUIntFieldBeWithRole,
+        ReadFixedLenUIntFieldBeWithRoleSaveVal,
+        ReadFixedLenUIntFieldLe,
+        ReadFixedLenUIntFieldLeRev,
+        ReadFixedLenUIntFieldLeRevSaveVal,
+        ReadFixedLenUIntFieldLeRevWithRole,
+        ReadFixedLenUIntFieldLeRevWithRoleSaveVal,
+        ReadFixedLenUIntFieldLeSaveVal,
+        ReadFixedLenUIntFieldLeWithRole,
+        ReadFixedLenUIntFieldLeWithRoleSaveVal,
+        ReadMetadataStreamUuidBlobFieldSection,
+        ReadRawData,
+        ReadSubstrUntilNullCodepointUtf16,
+        ReadSubstrUntilNullCodepointUtf32,
+        ReadSubstrUntilNullCodepointUtf8,
+        ReadUuidByte,
+        ReadVarLenSIntField,
+        ReadVarLenSIntFieldSaveVal,
+        ReadVarLenUIntField,
+        ReadVarLenUIntFieldSaveVal,
+        ReadVarLenUIntFieldWithRole,
+        ReadVarLenUIntFieldWithRoleSaveVal,
+        SetDataStreamInfoItem,
+        SetDefClkValItem,
+        SetEventRecordInfoItem,
+        SetMetadataStreamUuidItem,
+        SetPktInfoItem,
+        SetPktMagicNumberItem,
+        SkipContentPadding,
+        SkipPadding,
+        TryBeginReadCommonEventRecordCtxScope,
+        TryBeginReadEventRecord,
+        TryBeginReadEventRecordHeaderScope,
+        TryBeginReadEventRecordPayloadScope,
+        TryBeginReadPkt,
+        TryBeginReadPktCtxScope,
+        TryBeginReadPktHeaderScope,
+        TryBeginReadSpecEventRecordCtxScope
+    )
+
+    /* clang-format on */
 
     /*
      * Reaction of a state handling method.
@@ -1872,7 +1096,7 @@ private:
     enum class _StateHandlingReaction
     {
         /* Continue executing the state machine */
-        CONTINUE,
+        Continue,
 
         /*
          * Stop the state machine, returning control to the user.
@@ -1884,7 +1108,7 @@ private:
          *
          * • The iterator is ended (next() will return `nullptr`).
          */
-        STOP,
+        Stop,
     };
 
     /*
@@ -1913,27 +1137,27 @@ private:
         const Fc *fc = nullptr;
 
         /*
-         * Index of current "element" to decode.
+         * Index of the current "element" to decode.
          *
-         * The meaning of this field depends on the type of `fc`:
+         * The meaning of this field depends on the type of `*fc` above:
          *
-         * `Fc::Type::STRUCT`:
+         * `Fc::Type::Struct`:
          *     Member index.
          *
-         * `Fc::Type::STATIC_LEN_ARRAY`:
-         * `Fc::Type::DYN_LEN_ARRAY`:
+         * `Fc::Type::StaticLenArray`:
+         * `Fc::Type::DynLenArray`:
          *     Element index.
          *
-         * `Fc::Type::OPTIONAL_WITH_BOOL_SEL`:
-         * `Fc::Type::OPTIONAL_WITH_UINT_SEL`:
-         * `Fc::Type::OPTIONAL_WITH_SINT_SEL`:
-         * `Fc::Type::VARIANT_WITH_UINT_SEL`:
-         * `Fc::Type::VARIANT_WITH_SINT_SEL`:
+         * `Fc::Type::OptionalWithBoolSel`:
+         * `Fc::Type::OptionalWithUIntSel`:
+         * `Fc::Type::OptionalWithSIntSel`:
+         * `Fc::Type::VariantWithUIntSel`:
+         * `Fc::Type::VariantWithSIntSel`:
          *     1 means we're done.
          *
-         * `FcType::NULL_TERMINATED_STR`:
-         * `FcType::STATIC_LEN_BLOB`:
-         * `FcType::DYN_LEN_BLOB`:
+         * `FcType::NullTerminatedStr`:
+         * `FcType::StaticLenBlob`:
+         * `FcType::DynLenBlob`:
          *     Byte index.
          *
          * Other:
@@ -1944,25 +1168,25 @@ private:
         /*
          * Length of containing field.
          *
-         * The meaning of this field depends on the type of `fc`:
+         * The meaning of this field depends on the type of `*fc` above:
          *
-         * `Fc::Type::STRUCT`:
+         * `Fc::Type::Struct`:
          *     Member count.
          *
-         * `Fc::Type::STATIC_LEN_ARRAY`:
-         * `Fc::Type::DYN_LEN_ARRAY`:
+         * `Fc::Type::StaticLenArray`:
+         * `Fc::Type::DynLenArray`:
          *     Element count.
          *
-         * `FcType::NULL_TERMINATED_STR`:
-         * `FcType::STATIC_LEN_BLOB`:
-         * `FcType::DYN_LEN_BLOB`:
+         * `FcType::NullTerminatedStr`:
+         * `FcType::StaticLenBlob`:
+         * `FcType::DynLenBlob`:
          *     Byte count.
          *
-         * `Fc::Type::OPTIONAL_WITH_BOOL_SEL`:
-         * `Fc::Type::OPTIONAL_WITH_UINT_SEL`:
-         * `Fc::Type::OPTIONAL_WITH_SINT_SEL`:
-         * `Fc::Type::VARIANT_WITH_UINT_SEL`:
-         * `Fc::Type::VARIANT_WITH_SINT_SEL`:
+         * `Fc::Type::OptionalWithBoolSel`:
+         * `Fc::Type::OptionalWithUIntSel`:
+         * `Fc::Type::OptionalWithSIntSel`:
+         * `Fc::Type::VariantWithUIntSel`:
+         * `Fc::Type::VariantWithSIntSel`:
          *     Always 1.
          *
          * Other:
@@ -2014,6 +1238,8 @@ private:
      */
     void _stackPush(const _State restoringState)
     {
+        CTF_SRC_ITEM_SEQ_ITER_CPPLOGT("Pushing onto stack: restoring-state={}, new-stack-len={}",
+                                      wise_enum::to_string(restoringState), _mStack.size() + 1);
         _mStack.push_back(_StackFrame {restoringState});
     }
 
@@ -2033,12 +1259,16 @@ private:
      */
     void _stackPush(const _State restoringState, const Fc& fc)
     {
+        CTF_SRC_ITEM_SEQ_ITER_CPPLOGT(
+            "Pushing onto stack: restoring-state={}, fc-deep-type={}, new-stack-len={}",
+            wise_enum::to_string(restoringState), wise_enum::to_string(fc.deepType()),
+            _mStack.size() + 1);
         _mStack.push_back(_StackFrame {restoringState, fc});
     }
 
     /*
      * Pushes a frame onto the stack, `fc` being the class of some
-     * containing field, so that _restoreState() restores the current
+     * containing field, so that _restoreState() restores the _current_
      * state.
      */
     void _stackPush(const Fc& fc)
@@ -2053,6 +1283,7 @@ private:
     void _stackPop()
     {
         BT_ASSERT_DBG(!_mStack.empty());
+        CTF_SRC_ITEM_SEQ_ITER_CPPLOGT("Popping stack: new-stack-len={}", _mStack.size() - 1);
         _mStack.pop_back();
     }
 
@@ -2074,38 +1305,40 @@ private:
     }
 
     /*
-     * Saves the value `val` to the saved value vector at the indexes
-     * `indexes`.
+     * Saves the key value `val` to the saved key value vector at the
+     * indexes `indexes`.
      */
-    template <typename ValT>
-    void _saveVal(const ValSavingIndexes& indexes, const ValT val) noexcept
+    template <typename KeyValT>
+    void _saveKeyVal(const KeyValSavingIndexes& indexes, const KeyValT val) noexcept
     {
+        CTF_SRC_ITEM_SEQ_ITER_CPPLOGT("Saving key value: val={}", val);
+
         for (const auto index : indexes) {
-            BT_ASSERT_DBG(index < _mSavedVals.size());
-            _mSavedVals[index] = static_cast<unsigned long long>(val);
+            BT_ASSERT_DBG(index < _mSavedKeyVals.size());
+            _mSavedKeyVals[index] = static_cast<unsigned long long>(val);
         }
     }
 
     /*
-     * Returns the saved value of type `ValT` from the saved value
-     * vector at index `index`.
+     * Returns the saved key value of type `KeyValT` from the saved key
+     * value vector at index `index`.
      */
-    template <typename ValT>
-    ValT _savedVal(const std::size_t index) const noexcept
+    template <typename KeyValT>
+    KeyValT _savedKeyVal(const std::size_t index) const noexcept
     {
-        BT_ASSERT_DBG(index < _mSavedVals.size());
-        return static_cast<ValT>(_mSavedVals[index]);
+        BT_ASSERT_DBG(index < _mSavedKeyVals.size());
+        return static_cast<KeyValT>(_mSavedKeyVals[index]);
     }
 
     /*
-     * Returns the saved unsigned integer value from the saved value
-     * vector at index `fc.savedDepValIndex()`.
+     * Returns the saved unsigned integer key value from the saved key
+     * value vector at index `fc.savedKeyValIndex()`.
      */
     template <typename FcT>
-    unsigned long long _savedUIntVal(const FcT& fc) const noexcept
+    unsigned long long _savedUIntKeyVal(const FcT& fc) const noexcept
     {
-        BT_ASSERT_DBG(fc.savedDepValIndex());
-        return this->_savedVal<unsigned long long>(*fc.savedDepValIndex());
+        BT_ASSERT_DBG(fc.savedKeyValIndex());
+        return this->_savedKeyVal<unsigned long long>(*fc.savedKeyValIndex());
     }
 
     /*
@@ -2127,13 +1360,6 @@ private:
         this->_updateForUser(item, this->_headOffsetInItemSeq());
     }
 
-    [[noreturn]] void _logAppendCauseAndThrow(const std::string& msg) const;
-
-    [[noreturn]] void _logAppendCauseAndThrow(const std::ostringstream& ss) const
-    {
-        this->_logAppendCauseAndThrow(ss.str());
-    }
-
     /*
      * Aligns the decoding head to `align` bits.
      *
@@ -2145,9 +1371,9 @@ private:
          * Compute new decoding head offset and how many bits we need to
          * skip to align.
          */
-        const auto newHeadOffsetBits =
+        const auto newHeadOffset =
             bt2c::DataLen::fromBits(bt2c::align(*_mHeadOffsetInCurPkt, align));
-        const auto lenToSkip = newHeadOffsetBits - _mHeadOffsetInCurPkt;
+        const auto lenToSkip = newHeadOffset - _mHeadOffsetInCurPkt;
 
         /* Already aligned? */
         if (lenToSkip == bt2c::DataLen::fromBits(0)) {
@@ -2155,16 +1381,21 @@ private:
             return;
         }
 
+        /* Do align */
+        CTF_SRC_ITEM_SEQ_ITER_CPPLOGT(
+            "Aligning decoding head: "
+            "head-offset-in-cur-packet-bits={}, new-head-offset-in-cur-packet-bits={}, len-to-skip-bits={}",
+            *_mHeadOffsetInCurPkt, *newHeadOffset, *lenToSkip);
+
         /*
          * Validate that we're not skipping more than the packet content
          * that's left.
          */
         if (lenToSkip > this->_remainingPktContentLen()) {
-            std::ostringstream ss;
-
-            ss << *lenToSkip << " bits of packet content required at this point, but only "
-               << *this->_remainingPktContentLen() << " bits of packet content remain.";
-            this->_logAppendCauseAndThrow(ss);
+            CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(
+                "{} bits of packet content required at this point, "
+                "but only {} bits of packet content remain.",
+                *lenToSkip, *this->_remainingPktContentLen());
         }
 
         /*
@@ -2173,7 +1404,7 @@ private:
          */
         _mRemainingLenToSkip = lenToSkip;
         _mPostSkipPaddingState = _mState;
-        this->_state(_State::SKIP_CONTENT_PADDING);
+        this->_state(_State::SkipContentPadding);
         this->_skipPadding<true>();
     }
 
@@ -2216,6 +1447,10 @@ private:
             const auto lenToSkip = std::min(_mRemainingLenToSkip, this->_remainingBufLen());
 
             /* Skip, marking the padding bits as consumed */
+            CTF_SRC_ITEM_SEQ_ITER_CPPLOGT("Skipping padding bits: "
+                                          "len-bits={}",
+                                          *lenToSkip);
+
             _mRemainingLenToSkip -= lenToSkip;
             this->_consumeAvailData(lenToSkip);
         }
@@ -2253,7 +1488,7 @@ private:
          *   is 75, then `*reqSize` is 80 (10 bytes), that is,
          *   mathematically (result in bytes):
          *
-         *       floor((75 + 7 + (1963 % 8)) / 8)
+         *       floor((75 + 7 + (1963 mod 8)) / 8)
          */
         const auto reqOffsetInElemSeq = bt2c::DataLen::fromBytes(_mCurPktOffsetInItemSeq.bytes() +
                                                                  _mHeadOffsetInCurPkt.bytes());
@@ -2275,10 +1510,8 @@ private:
     void _requireData(const bt2c::DataLen len)
     {
         if (!this->_tryHaveData(len)) {
-            std::ostringstream ss;
-
-            ss << *len << " bits of data required at this point.";
-            this->_logAppendCauseAndThrow(ss);
+            CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(
+                "{} bits of data required at this point.", *len);
         }
     }
 
@@ -2289,11 +1522,10 @@ private:
     {
         if (len > this->_remainingPktContentLen()) {
             /* Going past the packet content */
-            std::ostringstream ss;
-
-            ss << *len << " bits of packet content required at this point, but only "
-               << *this->_remainingPktContentLen() << " bits of packet content remain.";
-            this->_logAppendCauseAndThrow(ss);
+            CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(
+                "{} bits of packet content required at this point, "
+                "but only {} bits of packet content remain.",
+                *len, *this->_remainingPktContentLen());
         }
 
         this->_requireData(len);
@@ -2326,6 +1558,9 @@ private:
     void _consumeAvailData(const bt2c::DataLen len) noexcept
     {
         BT_ASSERT_DBG(len <= this->_remainingBufLen());
+        CTF_SRC_ITEM_SEQ_ITER_CPPLOGT("Marking data as consumed: "
+                                      "len-bits={}",
+                                      *len);
         _mHeadOffsetInCurPkt += len;
     }
 
@@ -2353,15 +1588,22 @@ private:
     /*
      * Sets the state to `tryBeginReadState`.
      *
-     * If `fc` is `nullptr`, this method returns immediately.
+     * Afterwards, if `fc` is `nullptr`, this method returns
+     * immediately.
      *
      * Otherwise, this method prepares to read the scope `scope` of
      * which the structure field class is `fc`, setting the state to
      * restore afterwards to `endReadState`.
      */
     void _prepareToTryReadScope(const _State tryBeginReadState, const _State endReadState,
-                                const ir::FieldLocScope scope, const StructFc * const fc)
+                                const Scope scope, const StructFc * const fc)
     {
+        CTF_SRC_ITEM_SEQ_ITER_CPPLOGT("Preparing to read scope: "
+                                      "scope={}, try-begin-read-state={}, end-read-state={}",
+                                      wise_enum::to_string(scope),
+                                      wise_enum::to_string(tryBeginReadState),
+                                      wise_enum::to_string(endReadState));
+
         /* Next: try beginning to read scope */
         this->_state(tryBeginReadState);
 
@@ -2378,6 +1620,8 @@ private:
          * pushing anything onto the stack.
          */
         if (!fc) {
+            CTF_SRC_ITEM_SEQ_ITER_CPPLOGT("Field class doesn't exist: scope={}",
+                                          wise_enum::to_string(scope));
             return;
         }
 
@@ -2406,6 +1650,10 @@ private:
      */
     void _prepareToReadContainerField(const _State state, const _State restoringState, const Fc& fc)
     {
+        CTF_SRC_ITEM_SEQ_ITER_CPPLOGT(
+            "Preparing to read container field: state={}, restoring-state={}, fc-deep-type={}",
+            wise_enum::to_string(state), wise_enum::to_string(restoringState),
+            wise_enum::to_string(fc.deepType()));
         this->_stackPush(restoringState, fc);
         this->_state(state);
     }
@@ -2416,8 +1664,8 @@ private:
      */
     void _prepareToReadStructField(const StructFc& fc)
     {
-        this->_prepareToReadContainerField(_State::BEGIN_READ_STRUCT_FIELD,
-                                           _State::END_READ_STRUCT_FIELD, fc);
+        this->_prepareToReadContainerField(_State::BeginReadStructField, _State::EndReadStructField,
+                                           fc);
     }
 
     /*
@@ -2426,6 +1674,9 @@ private:
      */
     void _prepareToReadScalarField(const _State state, const Fc& fc) noexcept
     {
+        CTF_SRC_ITEM_SEQ_ITER_CPPLOGT("Preparing to read scalar field: state={}, fc-deep-type={}",
+                                      wise_enum::to_string(state),
+                                      wise_enum::to_string(fc.deepType()));
         _mCurScalarFc = &fc;
         this->_state(state);
     }
@@ -2438,592 +1689,632 @@ private:
     void _prepareToReadField(const Fc& fc)
     {
         switch (fc.deepType()) {
-        case FcDeepType::FIXED_LEN_BIT_ARRAY_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BE, fc);
+        case FcDeepType::FixedLenBitArrayBe:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBe, fc);
             break;
-        case FcDeepType::FIXED_LEN_BIT_ARRAY_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BIT_ARRAY_FIELD_LE, fc);
+        case FcDeepType::FixedLenBitArrayLe:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldLe, fc);
             break;
-        case FcDeepType::FIXED_LEN_BIT_ARRAY_BA_8:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_8, fc);
+        case FcDeepType::FixedLenBitArrayBa8:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa8, fc);
             break;
-        case FcDeepType::FIXED_LEN_BIT_ARRAY_BA_16_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_16_LE, fc);
+        case FcDeepType::FixedLenBitArrayBa16Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa16Le, fc);
             break;
-        case FcDeepType::FIXED_LEN_BIT_ARRAY_BA_16_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_16_BE, fc);
+        case FcDeepType::FixedLenBitArrayBa16Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa16Be, fc);
             break;
-        case FcDeepType::FIXED_LEN_BIT_ARRAY_BA_32_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_32_LE, fc);
+        case FcDeepType::FixedLenBitArrayBa32Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa32Le, fc);
             break;
-        case FcDeepType::FIXED_LEN_BIT_ARRAY_BA_32_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_32_BE, fc);
+        case FcDeepType::FixedLenBitArrayBa32Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa32Be, fc);
             break;
-        case FcDeepType::FIXED_LEN_BIT_ARRAY_BA_64_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_64_LE, fc);
+        case FcDeepType::FixedLenBitArrayBa64Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa64Le, fc);
             break;
-        case FcDeepType::FIXED_LEN_BIT_ARRAY_BA_64_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_64_BE, fc);
+        case FcDeepType::FixedLenBitArrayBa64Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa64Be, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BE, fc);
+        case FcDeepType::FixedLenBoolBe:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBe, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_LE, fc);
+        case FcDeepType::FixedLenBoolLe:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldLe, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_8:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_8, fc);
+        case FcDeepType::FixedLenBoolBa8:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa8, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_16_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_16_LE, fc);
+        case FcDeepType::FixedLenBoolBa16Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa16Le, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_16_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_16_BE, fc);
+        case FcDeepType::FixedLenBoolBa16Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa16Be, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_32_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_32_LE, fc);
+        case FcDeepType::FixedLenBoolBa32Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa32Le, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_32_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_32_BE, fc);
+        case FcDeepType::FixedLenBoolBa32Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa32Be, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_64_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_64_LE, fc);
+        case FcDeepType::FixedLenBoolBa64Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa64Le, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_64_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_64_BE, fc);
+        case FcDeepType::FixedLenBoolBa64Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa64Be, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BE_SAVE_VAL, fc);
+        case FcDeepType::FixedLenBoolBeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBeSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_LE_SAVE_VAL, fc);
+        case FcDeepType::FixedLenBoolLeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldLeSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_8_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_8_SAVE_VAL, fc);
+        case FcDeepType::FixedLenBoolBa8SaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa8SaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_16_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_16_LE_SAVE_VAL,
+        case FcDeepType::FixedLenBoolBa16LeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa16LeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa16BeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa16BeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa32LeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa32LeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa32BeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa32BeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa64LeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa64LeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa64BeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa64BeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenFloat32Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatField32Be, fc);
+            break;
+        case FcDeepType::FixedLenFloat32Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatField32Le, fc);
+            break;
+        case FcDeepType::FixedLenFloat64Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatField64Be, fc);
+            break;
+        case FcDeepType::FixedLenFloat64Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatField64Le, fc);
+            break;
+        case FcDeepType::FixedLenFloatBa32Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatFieldBa32Le, fc);
+            break;
+        case FcDeepType::FixedLenFloatBa32Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatFieldBa32Be, fc);
+            break;
+        case FcDeepType::FixedLenFloatBa64Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatFieldBa64Le, fc);
+            break;
+        case FcDeepType::FixedLenFloatBa64Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatFieldBa64Be, fc);
+            break;
+        case FcDeepType::FixedLenUIntBe:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBe, fc);
+            break;
+        case FcDeepType::FixedLenUIntLe:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldLe, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa8:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa8, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16Le, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16Be, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32Le, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32Be, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64Le, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64Be, fc);
+            break;
+        case FcDeepType::FixedLenUIntBeWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBeWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntLeWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldLeWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa8WithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa8WithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16LeWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16LeWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16BeWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16BeWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32LeWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32LeWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32BeWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32BeWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64LeWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64LeWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64BeWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64BeWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntLeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldLeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa8SaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa8SaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16LeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16LeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16BeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16BeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32LeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32LeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32BeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32BeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64LeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64LeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64BeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64BeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBeWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBeWithRoleSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntLeWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldLeWithRoleSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa8WithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa8WithRoleSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16LeWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16LeWithRoleSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16BeWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16BeWithRoleSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32LeWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32LeWithRoleSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32BeWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32BeWithRoleSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64LeWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64LeWithRoleSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64BeWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64BeWithRoleSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenSIntBe:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBe, fc);
+            break;
+        case FcDeepType::FixedLenSIntLe:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldLe, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa8:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa8, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa16Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa16Le, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa16Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa16Be, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa32Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa32Le, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa32Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa32Be, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa64Le:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa64Le, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa64Be:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa64Be, fc);
+            break;
+        case FcDeepType::FixedLenSIntBeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenSIntLeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldLeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa8SaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa8SaveVal, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa16LeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa16LeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa16BeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa16BeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa32LeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa32LeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa32BeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa32BeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa64LeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa64LeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenSIntBa64BeSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa64BeSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBitArrayBeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBeRev, fc);
+            break;
+        case FcDeepType::FixedLenBitArrayLeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldLeRev, fc);
+            break;
+        case FcDeepType::FixedLenBitArrayBa8Rev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa8Rev, fc);
+            break;
+        case FcDeepType::FixedLenBitArrayBa16LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa16LeRev, fc);
+            break;
+        case FcDeepType::FixedLenBitArrayBa16BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa16BeRev, fc);
+            break;
+        case FcDeepType::FixedLenBitArrayBa32LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa32LeRev, fc);
+            break;
+        case FcDeepType::FixedLenBitArrayBa32BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa32BeRev, fc);
+            break;
+        case FcDeepType::FixedLenBitArrayBa64LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa64LeRev, fc);
+            break;
+        case FcDeepType::FixedLenBitArrayBa64BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBitArrayFieldBa64BeRev, fc);
+            break;
+        case FcDeepType::FixedLenBoolBeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBeRev, fc);
+            break;
+        case FcDeepType::FixedLenBoolLeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldLeRev, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa8Rev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa8Rev, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa16LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa16LeRev, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa16BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa16BeRev, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa32LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa32LeRev, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa32BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa32BeRev, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa64LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa64LeRev, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa64BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa64BeRev, fc);
+            break;
+        case FcDeepType::FixedLenBoolBeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolLeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldLeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa8RevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa8RevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa16LeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa16LeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa16BeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa16BeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa32LeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa32LeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa32BeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa32BeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa64LeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa64LeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenBoolBa64BeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenBoolFieldBa64BeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenFloat32BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatField32BeRev, fc);
+            break;
+        case FcDeepType::FixedLenFloat32LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatField32LeRev, fc);
+            break;
+        case FcDeepType::FixedLenFloat64BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatField64BeRev, fc);
+            break;
+        case FcDeepType::FixedLenFloat64LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatField64LeRev, fc);
+            break;
+        case FcDeepType::FixedLenFloatBa32LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatFieldBa32LeRev, fc);
+            break;
+        case FcDeepType::FixedLenFloatBa32BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatFieldBa32BeRev, fc);
+            break;
+        case FcDeepType::FixedLenFloatBa64LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatFieldBa64LeRev, fc);
+            break;
+        case FcDeepType::FixedLenFloatBa64BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenFloatFieldBa64BeRev, fc);
+            break;
+        case FcDeepType::FixedLenUIntBeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBeRev, fc);
+            break;
+        case FcDeepType::FixedLenUIntLeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldLeRev, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa8Rev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa8Rev, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16LeRev, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16BeRev, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32LeRev, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32BeRev, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64LeRev, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64BeRev, fc);
+            break;
+        case FcDeepType::FixedLenUIntBeRevWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBeRevWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntLeRevWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldLeRevWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa8RevWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa8RevWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16LeRevWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16LeRevWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16BeRevWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16BeRevWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32LeRevWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32LeRevWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32BeRevWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32BeRevWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64LeRevWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64LeRevWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64BeRevWithRole:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64BeRevWithRole, fc);
+            break;
+        case FcDeepType::FixedLenUIntBeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntLeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldLeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa8RevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa8RevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16LeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16LeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16BeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16BeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32LeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32LeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa32BeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32BeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64LeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64LeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa64BeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64BeRevSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBeRevWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBeRevWithRoleSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntLeRevWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldLeRevWithRoleSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa8RevWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa8RevWithRoleSaveVal, fc);
+            break;
+        case FcDeepType::FixedLenUIntBa16LeRevWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16LeRevWithRoleSaveVal,
                                             fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_16_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_16_BE_SAVE_VAL,
+        case FcDeepType::FixedLenUIntBa16BeRevWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa16BeRevWithRoleSaveVal,
                                             fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_32_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_32_LE_SAVE_VAL,
+        case FcDeepType::FixedLenUIntBa32LeRevWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32LeRevWithRoleSaveVal,
                                             fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_32_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_32_BE_SAVE_VAL,
+        case FcDeepType::FixedLenUIntBa32BeRevWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa32BeRevWithRoleSaveVal,
                                             fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_64_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_64_LE_SAVE_VAL,
+        case FcDeepType::FixedLenUIntBa64LeRevWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64LeRevWithRoleSaveVal,
                                             fc);
             break;
-        case FcDeepType::FIXED_LEN_BOOL_BA_64_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_BOOL_FIELD_BA_64_BE_SAVE_VAL,
+        case FcDeepType::FixedLenUIntBa64BeRevWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenUIntFieldBa64BeRevWithRoleSaveVal,
                                             fc);
             break;
-        case FcDeepType::FIXED_LEN_FLOAT_32_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_FLOAT_FIELD_32_BE, fc);
+        case FcDeepType::FixedLenSIntBeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBeRev, fc);
             break;
-        case FcDeepType::FIXED_LEN_FLOAT_32_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_FLOAT_FIELD_32_LE, fc);
+        case FcDeepType::FixedLenSIntLeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldLeRev, fc);
             break;
-        case FcDeepType::FIXED_LEN_FLOAT_64_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_FLOAT_FIELD_64_BE, fc);
+        case FcDeepType::FixedLenSIntBa8Rev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa8Rev, fc);
             break;
-        case FcDeepType::FIXED_LEN_FLOAT_64_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_FLOAT_FIELD_64_LE, fc);
+        case FcDeepType::FixedLenSIntBa16LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa16LeRev, fc);
             break;
-        case FcDeepType::FIXED_LEN_FLOAT_BA_32_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_FLOAT_FIELD_BA_32_LE, fc);
+        case FcDeepType::FixedLenSIntBa16BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa16BeRev, fc);
             break;
-        case FcDeepType::FIXED_LEN_FLOAT_BA_32_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_FLOAT_FIELD_BA_32_BE, fc);
+        case FcDeepType::FixedLenSIntBa32LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa32LeRev, fc);
             break;
-        case FcDeepType::FIXED_LEN_FLOAT_BA_64_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_FLOAT_FIELD_BA_64_LE, fc);
+        case FcDeepType::FixedLenSIntBa32BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa32BeRev, fc);
             break;
-        case FcDeepType::FIXED_LEN_FLOAT_BA_64_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_FLOAT_FIELD_BA_64_BE, fc);
+        case FcDeepType::FixedLenSIntBa64LeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa64LeRev, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BE, fc);
+        case FcDeepType::FixedLenSIntBa64BeRev:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa64BeRev, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_LE, fc);
+        case FcDeepType::FixedLenSIntBeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBeRevSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_8:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_8, fc);
+        case FcDeepType::FixedLenSIntLeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldLeRevSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_16_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_16_LE, fc);
+        case FcDeepType::FixedLenSIntBa8RevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa8RevSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_16_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_16_BE, fc);
+        case FcDeepType::FixedLenSIntBa16LeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa16LeRevSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_32_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_32_LE, fc);
+        case FcDeepType::FixedLenSIntBa16BeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa16BeRevSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_32_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_32_BE, fc);
+        case FcDeepType::FixedLenSIntBa32LeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa32LeRevSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_64_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_64_LE, fc);
+        case FcDeepType::FixedLenSIntBa32BeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa32BeRevSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_64_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_64_BE, fc);
+        case FcDeepType::FixedLenSIntBa64LeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa64LeRevSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BE_WITH_ROLE, fc);
+        case FcDeepType::FixedLenSIntBa64BeRevSaveVal:
+            this->_prepareToReadScalarField(_State::ReadFixedLenSIntFieldBa64BeRevSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_LE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_LE_WITH_ROLE, fc);
+        case FcDeepType::VarLenUInt:
+            this->_prepareToReadScalarField(_State::ReadVarLenUIntField, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_8_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_8_WITH_ROLE, fc);
+        case FcDeepType::VarLenUIntWithRole:
+            this->_prepareToReadScalarField(_State::ReadVarLenUIntFieldWithRole, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_16_LE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_16_LE_WITH_ROLE,
-                                            fc);
+        case FcDeepType::VarLenUIntSaveVal:
+            this->_prepareToReadScalarField(_State::ReadVarLenUIntFieldSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_16_BE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_16_BE_WITH_ROLE,
-                                            fc);
+        case FcDeepType::VarLenUIntWithRoleSaveVal:
+            this->_prepareToReadScalarField(_State::ReadVarLenUIntFieldWithRoleSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_32_LE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_32_LE_WITH_ROLE,
-                                            fc);
+        case FcDeepType::VarLenSInt:
+            this->_prepareToReadScalarField(_State::ReadVarLenSIntField, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_32_BE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_32_BE_WITH_ROLE,
-                                            fc);
+        case FcDeepType::VarLenSIntSaveVal:
+            this->_prepareToReadScalarField(_State::ReadVarLenSIntFieldSaveVal, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_64_LE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_64_LE_WITH_ROLE,
-                                            fc);
+        case FcDeepType::NullTerminatedStrUtf8:
+            this->_prepareToReadContainerField(_State::BeginReadNullTerminatedStrFieldUtf8,
+                                               _State::EndReadNullTerminatedStrField, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_64_BE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_64_BE_WITH_ROLE,
-                                            fc);
+        case FcDeepType::NullTerminatedStrUtf16:
+            this->_prepareToReadContainerField(_State::BeginReadNullTerminatedStrFieldUtf16,
+                                               _State::EndReadNullTerminatedStrField, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BE_SAVE_VAL, fc);
+        case FcDeepType::NullTerminatedStrUtf32:
+            this->_prepareToReadContainerField(_State::BeginReadNullTerminatedStrFieldUtf32,
+                                               _State::EndReadNullTerminatedStrField, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_LE_SAVE_VAL, fc);
+        case FcDeepType::StaticLenStr:
+            this->_prepareToReadContainerField(_State::BeginReadStaticLenStrField,
+                                               _State::EndReadStaticLenStrField, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_8_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_8_SAVE_VAL, fc);
+        case FcDeepType::DynLenStr:
+            this->_prepareToReadContainerField(_State::BeginReadDynLenStrField,
+                                               _State::EndReadDynLenStrField, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_16_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_16_LE_SAVE_VAL,
-                                            fc);
+        case FcDeepType::StaticLenBlob:
+            this->_prepareToReadContainerField(_State::BeginReadStaticLenBlobField,
+                                               _State::EndReadStaticLenBlobField, fc);
             break;
-        case FcDeepType::FIXED_LEN_UINT_BA_16_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_16_BE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_BA_32_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_32_LE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_BA_32_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_32_BE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_BA_64_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_64_LE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_BA_64_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BA_64_BE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_BE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_BE_WITH_ROLE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_LE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UINT_FIELD_LE_WITH_ROLE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_BA_8_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UINT_FIELD_BA_8_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_BA_16_LE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UINT_FIELD_BA_16_LE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_BA_16_BE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UINT_FIELD_BA_16_BE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_BA_32_LE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UINT_FIELD_BA_32_LE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_BA_32_BE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UINT_FIELD_BA_32_BE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_BA_64_LE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UINT_FIELD_BA_64_LE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UINT_BA_64_BE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UINT_FIELD_BA_64_BE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_LE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_8:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_8, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_16_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_16_LE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_16_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_16_BE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_32_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_32_LE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_32_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_32_BE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_64_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_64_LE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_64_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_64_BE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_LE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_8_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_8_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_16_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_16_LE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_16_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_16_BE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_32_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_32_LE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_32_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_32_BE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_64_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_64_LE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_SINT_BA_64_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SINT_FIELD_BA_64_BE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_LE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_8:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_8, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_16_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_16_LE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_16_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_16_BE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_32_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_32_LE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_32_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_32_BE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_64_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_64_LE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_64_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_64_BE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BE_WITH_ROLE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_LE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_LE_WITH_ROLE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_8_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_8_WITH_ROLE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_16_LE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_16_LE_WITH_ROLE,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_16_BE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_16_BE_WITH_ROLE,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_32_LE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_32_LE_WITH_ROLE,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_32_BE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_32_BE_WITH_ROLE,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_64_LE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_64_LE_WITH_ROLE,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_64_BE_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_64_BE_WITH_ROLE,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_LE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_8_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_8_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_16_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_16_LE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_16_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_16_BE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_32_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_32_LE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_32_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_32_BE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_64_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_64_LE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_64_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_UENUM_FIELD_BA_64_BE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UENUM_FIELD_BE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_LE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UENUM_FIELD_LE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_8_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UENUM_FIELD_BA_8_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_16_LE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UENUM_FIELD_BA_16_LE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_16_BE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UENUM_FIELD_BA_16_BE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_32_LE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UENUM_FIELD_BA_32_LE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_32_BE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UENUM_FIELD_BA_32_BE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_64_LE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UENUM_FIELD_BA_64_LE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_UENUM_BA_64_BE_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(
-                _State::READ_FIXED_LEN_UENUM_FIELD_BA_64_BE_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_LE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_8:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_8, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_16_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_16_LE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_16_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_16_BE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_32_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_32_LE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_32_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_32_BE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_64_LE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_64_LE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_64_BE:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_64_BE, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_LE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_8_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_8_SAVE_VAL, fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_16_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_16_LE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_16_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_16_BE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_32_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_32_LE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_32_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_32_BE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_64_LE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_64_LE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::FIXED_LEN_SENUM_BA_64_BE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_FIXED_LEN_SENUM_FIELD_BA_64_BE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::VAR_LEN_UINT:
-            this->_prepareToReadScalarField(_State::READ_VAR_LEN_UINT_FIELD, fc);
-            break;
-        case FcDeepType::VAR_LEN_UINT_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_VAR_LEN_UINT_FIELD_WITH_ROLE, fc);
-            break;
-        case FcDeepType::VAR_LEN_UINT_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_VAR_LEN_UINT_FIELD_SAVE_VAL, fc);
-            break;
-        case FcDeepType::VAR_LEN_UINT_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_VAR_LEN_UINT_FIELD_WITH_ROLE_SAVE_VAL, fc);
-            break;
-        case FcDeepType::VAR_LEN_SINT:
-            this->_prepareToReadScalarField(_State::READ_VAR_LEN_SINT_FIELD, fc);
-            break;
-        case FcDeepType::VAR_LEN_SINT_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_VAR_LEN_SINT_FIELD_SAVE_VAL, fc);
-            break;
-        case FcDeepType::VAR_LEN_UENUM:
-            this->_prepareToReadScalarField(_State::READ_VAR_LEN_UENUM_FIELD, fc);
-            break;
-        case FcDeepType::VAR_LEN_UENUM_WITH_ROLE:
-            this->_prepareToReadScalarField(_State::READ_VAR_LEN_UENUM_FIELD_WITH_ROLE, fc);
-            break;
-        case FcDeepType::VAR_LEN_UENUM_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_VAR_LEN_UENUM_FIELD_SAVE_VAL, fc);
-            break;
-        case FcDeepType::VAR_LEN_UENUM_WITH_ROLE_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_VAR_LEN_UENUM_FIELD_WITH_ROLE_SAVE_VAL,
-                                            fc);
-            break;
-        case FcDeepType::VAR_LEN_SENUM:
-            this->_prepareToReadScalarField(_State::READ_VAR_LEN_SENUM_FIELD, fc);
-            break;
-        case FcDeepType::VAR_LEN_SENUM_SAVE_VAL:
-            this->_prepareToReadScalarField(_State::READ_VAR_LEN_SENUM_FIELD_SAVE_VAL, fc);
-            break;
-        case FcDeepType::NULL_TERMINATED_STR:
-            this->_prepareToReadContainerField(_State::BEGIN_READ_NULL_TERMINATED_STR_FIELD,
-                                               _State::END_READ_NULL_TERMINATED_STR_FIELD, fc);
-            break;
-        case FcDeepType::STATIC_LEN_STR:
-            this->_prepareToReadContainerField(_State::BEGIN_READ_STATIC_LEN_STR_FIELD,
-                                               _State::END_READ_STATIC_LEN_STR_FIELD, fc);
-            break;
-        case FcDeepType::DYN_LEN_STR:
-            this->_prepareToReadContainerField(_State::BEGIN_READ_DYN_LEN_STR_FIELD,
-                                               _State::END_READ_DYN_LEN_STR_FIELD, fc);
-            break;
-        case FcDeepType::STATIC_LEN_BLOB:
-            this->_prepareToReadContainerField(_State::BEGIN_READ_STATIC_LEN_BLOB_FIELD,
-                                               _State::END_READ_STATIC_LEN_BLOB_FIELD, fc);
-            break;
-        case FcDeepType::STATIC_LEN_BLOB_WITH_METADATA_STREAM_UUID_ROLE:
+        case FcDeepType::StaticLenBlobWithMetadataStreamUuidRole:
             this->_prepareToReadContainerField(
-                _State::BEGIN_READ_STATIC_LEN_BLOB_FIELD_METADATA_STREAM_UUID,
-                _State::END_READ_STATIC_LEN_BLOB_FIELD, fc);
+                _State::BeginReadStaticLenBlobFieldMetadataStreamUuid,
+                _State::EndReadStaticLenBlobField, fc);
             break;
-        case FcDeepType::DYN_LEN_BLOB:
-            this->_prepareToReadContainerField(_State::BEGIN_READ_DYN_LEN_BLOB_FIELD,
-                                               _State::END_READ_DYN_LEN_BLOB_FIELD, fc);
+        case FcDeepType::DynLenBlob:
+            this->_prepareToReadContainerField(_State::BeginReadDynLenBlobField,
+                                               _State::EndReadDynLenBlobField, fc);
             break;
-        case FcDeepType::STRUCT:
+        case FcDeepType::Struct:
             this->_prepareToReadStructField(fc.asStruct());
             break;
-        case FcDeepType::STATIC_LEN_ARRAY:
-            this->_prepareToReadContainerField(_State::BEGIN_READ_STATIC_LEN_ARRAY_FIELD,
-                                               _State::END_READ_STATIC_LEN_ARRAY_FIELD, fc);
+        case FcDeepType::StaticLenArray:
+            this->_prepareToReadContainerField(_State::BeginReadStaticLenArrayField,
+                                               _State::EndReadStaticLenArrayField, fc);
             break;
-        case FcDeepType::STATIC_LEN_ARRAY_WITH_METADATA_STREAM_UUID_ROLE:
+        case FcDeepType::StaticLenArrayWithMetadataStreamUuidRole:
             this->_prepareToReadContainerField(
-                _State::BEGIN_READ_STATIC_LEN_ARRAY_FIELD_METADATA_STREAM_UUID,
-                _State::END_READ_STATIC_LEN_ARRAY_FIELD, fc);
+                _State::BeginReadStaticLenArrayFieldMetadataStreamUuid,
+                _State::EndReadStaticLenArrayField, fc);
             break;
-        case FcDeepType::DYN_LEN_ARRAY:
-            this->_prepareToReadContainerField(_State::BEGIN_READ_DYN_LEN_ARRAY_FIELD,
-                                               _State::END_READ_DYN_LEN_ARRAY_FIELD, fc);
+        case FcDeepType::DynLenArray:
+            this->_prepareToReadContainerField(_State::BeginReadDynLenArrayField,
+                                               _State::EndReadDynLenArrayField, fc);
             break;
-        case FcDeepType::OPTIONAL_WITH_BOOL_SEL:
-            this->_prepareToReadContainerField(_State::BEGIN_READ_OPTIONAL_FIELD_WITH_BOOL_SEL,
-                                               _State::END_READ_OPTIONAL_FIELD_WITH_BOOL_SEL, fc);
+        case FcDeepType::OptionalWithBoolSel:
+            this->_prepareToReadContainerField(_State::BeginReadOptionalFieldWithBoolSel,
+                                               _State::EndReadOptionalFieldWithBoolSel, fc);
             break;
-        case FcDeepType::OPTIONAL_WITH_UINT_SEL:
-            this->_prepareToReadContainerField(_State::BEGIN_READ_OPTIONAL_FIELD_WITH_UINT_SEL,
-                                               _State::END_READ_OPTIONAL_FIELD_WITH_UINT_SEL, fc);
+        case FcDeepType::OptionalWithUIntSel:
+            this->_prepareToReadContainerField(_State::BeginReadOptionalFieldWithUIntSel,
+                                               _State::EndReadOptionalFieldWithUIntSel, fc);
             break;
-        case FcDeepType::OPTIONAL_WITH_SINT_SEL:
-            this->_prepareToReadContainerField(_State::BEGIN_READ_OPTIONAL_FIELD_WITH_SINT_SEL,
-                                               _State::END_READ_OPTIONAL_FIELD_WITH_SINT_SEL, fc);
+        case FcDeepType::OptionalWithSIntSel:
+            this->_prepareToReadContainerField(_State::BeginReadOptionalFieldWithSIntSel,
+                                               _State::EndReadOptionalFieldWithSIntSel, fc);
             break;
-        case FcDeepType::VARIANT_WITH_UINT_SEL:
-            this->_prepareToReadContainerField(_State::BEGIN_READ_VARIANT_FIELD_WITH_UINT_SEL,
-                                               _State::END_READ_VARIANT_FIELD_WITH_UINT_SEL, fc);
+        case FcDeepType::VariantWithUIntSel:
+            this->_prepareToReadContainerField(_State::BeginReadVariantFieldWithUIntSel,
+                                               _State::EndReadVariantFieldWithUIntSel, fc);
             break;
-        case FcDeepType::VARIANT_WITH_SINT_SEL:
-            this->_prepareToReadContainerField(_State::BEGIN_READ_VARIANT_FIELD_WITH_SINT_SEL,
-                                               _State::END_READ_VARIANT_FIELD_WITH_SINT_SEL, fc);
+        case FcDeepType::VariantWithSIntSel:
+            this->_prepareToReadContainerField(_State::BeginReadVariantFieldWithSIntSel,
+                                               _State::EndReadVariantFieldWithSIntSel, fc);
             break;
         default:
             bt_common_abort();
@@ -3073,6 +2364,9 @@ private:
      */
     void _state(const _State state) noexcept
     {
+        CTF_SRC_ITEM_SEQ_ITER_CPPLOGT("Changing state `{}` → `{}`: cur-state={}, new-state={}",
+                                      wise_enum::to_string(_mState), wise_enum::to_string(state),
+                                      wise_enum::to_string(_mState), wise_enum::to_string(state));
         _mState = state;
     }
 
@@ -3081,438 +2375,504 @@ private:
      */
     _StateHandlingReaction _handleState()
     {
+        CTF_SRC_ITEM_SEQ_ITER_CPPLOGT("Handling state `{}`: state={}, stack-len={}",
+                                      wise_enum::to_string(_mState), wise_enum::to_string(_mState),
+                                      _mStack.size());
+
         switch (_mState) {
-        case _State::INIT:
+        case _State::Init:
             return this->_handleInitState();
-        case _State::TRY_BEGIN_READ_PKT:
+        case _State::TryBeginReadPkt:
             return this->_handleTryBeginReadPktState();
-        case _State::BEGIN_READ_PKT_CONTENT:
+        case _State::BeginReadPktContent:
             return this->_handleBeginReadPktContentState();
-        case _State::TRY_BEGIN_READ_PKT_HEADER_SCOPE:
+        case _State::TryBeginReadPktHeaderScope:
             return this->_handleTryBeginReadPktHeaderScopeState();
-        case _State::TRY_BEGIN_READ_PKT_CTX_SCOPE:
+        case _State::TryBeginReadPktCtxScope:
             return this->_handleTryBeginReadPktCtxScopeState();
-        case _State::TRY_BEGIN_READ_EVENT_RECORD_HEADER_SCOPE:
+        case _State::TryBeginReadEventRecordHeaderScope:
             return this->_handleTryBeginReadEventRecordHeaderScopeState();
-        case _State::TRY_BEGIN_READ_EVENT_RECORD_COMMON_CTX_SCOPE:
-            return this->_handleTryBeginReadEventRecordCommonCtxScopeState();
-        case _State::TRY_BEGIN_READ_EVENT_RECORD_SPEC_CTX_SCOPE:
-            return this->_handleTryBeginReadEventRecordSpecCtxScopeState();
-        case _State::TRY_BEGIN_READ_EVENT_RECORD_PAYLOAD_SCOPE:
+        case _State::TryBeginReadCommonEventRecordCtxScope:
+            return this->_handleTryBeginReadCommonEventRecordCtxScopeState();
+        case _State::TryBeginReadSpecEventRecordCtxScope:
+            return this->_handleTryBeginReadSpecEventRecordCtxScopeState();
+        case _State::TryBeginReadEventRecordPayloadScope:
             return this->_handleTryBeginReadEventRecordPayloadScopeState();
-        case _State::END_READ_PKT_HEADER_SCOPE:
+        case _State::EndReadPktHeaderScope:
             return this->_handleEndReadPktHeaderScopeState();
-        case _State::END_READ_PKT_CTX_SCOPE:
+        case _State::EndReadPktCtxScope:
             return this->_handleEndReadPktCtxScopeState();
-        case _State::END_READ_EVENT_RECORD_HEADER_SCOPE:
+        case _State::EndReadEventRecordHeaderScope:
             return this->_handleEndReadEventRecordHeaderScopeState();
-        case _State::END_READ_EVENT_RECORD_COMMON_CTX_SCOPE:
-            return this->_handleEndReadEventRecordCommonCtxScopeState();
-        case _State::END_READ_EVENT_RECORD_SPEC_CTX_SCOPE:
-            return this->_handleEndReadEventRecordSpecCtxScopeState();
-        case _State::END_READ_EVENT_RECORD_PAYLOAD_SCOPE:
+        case _State::EndReadCommonEventRecordCtxScope:
+            return this->_handleEndReadCommonEventRecordCtxScopeState();
+        case _State::EndReadSpecEventRecordCtxScope:
+            return this->_handleEndReadSpecEventRecordCtxScopeState();
+        case _State::EndReadEventRecordPayloadScope:
             return this->_handleEndReadEventRecordPayloadScopeState();
-        case _State::TRY_BEGIN_READ_EVENT_RECORD:
+        case _State::TryBeginReadEventRecord:
             return this->_handleTryBeginReadEventRecordState();
-        case _State::END_READ_EVENT_RECORD:
+        case _State::EndReadEventRecord:
             return this->_handleEndReadEventRecordState();
-        case _State::BEGIN_READ_STRUCT_FIELD:
+        case _State::BeginReadStructField:
             return this->_handleBeginReadStructFieldState();
-        case _State::END_READ_STRUCT_FIELD:
+        case _State::EndReadStructField:
             return this->_handleEndReadStructFieldState();
-        case _State::BEGIN_READ_STATIC_LEN_ARRAY_FIELD:
+        case _State::BeginReadStaticLenArrayField:
             return this->_handleBeginReadStaticLenArrayFieldState();
-        case _State::BEGIN_READ_STATIC_LEN_ARRAY_FIELD_METADATA_STREAM_UUID:
+        case _State::BeginReadStaticLenArrayFieldMetadataStreamUuid:
             return this->_handleBeginReadStaticLenArrayFieldMetadataStreamUuidState();
-        case _State::SET_METADATA_STREAM_UUID_ITEM:
+        case _State::SetMetadataStreamUuidItem:
             return this->_handleSetMetadataStreamUuidItemState();
-        case _State::END_READ_STATIC_LEN_ARRAY_FIELD:
+        case _State::EndReadStaticLenArrayField:
             return this->_handleEndReadStaticLenArrayFieldState();
-        case _State::BEGIN_READ_DYN_LEN_ARRAY_FIELD:
+        case _State::BeginReadDynLenArrayField:
             return this->_handleBeginReadDynLenArrayFieldState();
-        case _State::END_READ_DYN_LEN_ARRAY_FIELD:
+        case _State::EndReadDynLenArrayField:
             return this->_handleEndReadDynLenArrayFieldState();
-        case _State::BEGIN_READ_NULL_TERMINATED_STR_FIELD:
-            return this->_handleBeginReadNullTerminatedStrFieldState();
-        case _State::END_READ_NULL_TERMINATED_STR_FIELD:
+        case _State::BeginReadNullTerminatedStrFieldUtf8:
+            return this->_handleBeginReadNullTerminatedStrFieldUtf8State();
+        case _State::BeginReadNullTerminatedStrFieldUtf16:
+            return this->_handleBeginReadNullTerminatedStrFieldUtf16State();
+        case _State::BeginReadNullTerminatedStrFieldUtf32:
+            return this->_handleBeginReadNullTerminatedStrFieldUtf32State();
+        case _State::EndReadNullTerminatedStrField:
             return this->_handleEndReadNullTerminatedStrFieldState();
-        case _State::READ_SUBSTR_UNTIL_NULL_CHAR:
-            return this->_handleReadSubstrUntilNullCharState();
-        case _State::BEGIN_READ_STATIC_LEN_STR_FIELD:
+        case _State::ReadSubstrUntilNullCodepointUtf8:
+            return this->_handleReadSubstrUntilNullCodepointUtf8State();
+        case _State::ReadSubstrUntilNullCodepointUtf16:
+            return this->_handleReadSubstrUntilNullCodepointUtf16State();
+        case _State::ReadSubstrUntilNullCodepointUtf32:
+            return this->_handleReadSubstrUntilNullCodepointUtf32State();
+        case _State::BeginReadStaticLenStrField:
             return this->_handleBeginReadStaticLenStrFieldState();
-        case _State::END_READ_STATIC_LEN_STR_FIELD:
+        case _State::EndReadStaticLenStrField:
             return this->_handleEndReadStaticLenStrFieldState();
-        case _State::BEGIN_READ_DYN_LEN_STR_FIELD:
+        case _State::BeginReadDynLenStrField:
             return this->_handleBeginReadDynLenStrFieldState();
-        case _State::END_READ_DYN_LEN_STR_FIELD:
+        case _State::EndReadDynLenStrField:
             return this->_handleEndReadDynLenStrFieldState();
-        case _State::READ_SUBSTR:
-            return this->_handleReadSubstrState();
-        case _State::BEGIN_READ_STATIC_LEN_BLOB_FIELD:
+        case _State::ReadRawData:
+            return this->_handleReadRawDataState();
+        case _State::BeginReadStaticLenBlobField:
             return this->_handleBeginReadStaticLenBlobFieldState();
-        case _State::BEGIN_READ_STATIC_LEN_BLOB_FIELD_METADATA_STREAM_UUID:
+        case _State::BeginReadStaticLenBlobFieldMetadataStreamUuid:
             return this->_handleBeginReadStaticLenBlobFieldMetadataStreamUuidState();
-        case _State::END_READ_STATIC_LEN_BLOB_FIELD:
+        case _State::EndReadStaticLenBlobField:
             return this->_handleEndReadStaticLenBlobFieldState();
-        case _State::BEGIN_READ_DYN_LEN_BLOB_FIELD:
+        case _State::BeginReadDynLenBlobField:
             return this->_handleBeginReadDynLenBlobFieldState();
-        case _State::END_READ_DYN_LEN_BLOB_FIELD:
+        case _State::EndReadDynLenBlobField:
             return this->_handleEndReadDynLenBlobFieldState();
-        case _State::READ_BLOB_FIELD_SECTION:
-            return this->_handleReadBlobFieldSectionState();
-        case _State::READ_METADATA_STREAM_UUID_BLOB_FIELD_SECTION:
+        case _State::ReadMetadataStreamUuidBlobFieldSection:
             return this->_handleReadMetadataStreamUuidBlobFieldSectionState();
-        case _State::BEGIN_READ_VARIANT_FIELD_WITH_UINT_SEL:
+        case _State::BeginReadVariantFieldWithUIntSel:
             return this->_handleBeginReadVariantFieldWithUIntSelState();
-        case _State::END_READ_VARIANT_FIELD_WITH_UINT_SEL:
+        case _State::EndReadVariantFieldWithUIntSel:
             return this->_handleEndReadVariantFieldWithUIntSelState();
-        case _State::BEGIN_READ_VARIANT_FIELD_WITH_SINT_SEL:
+        case _State::BeginReadVariantFieldWithSIntSel:
             return this->_handleBeginReadVariantFieldWithSIntSelState();
-        case _State::END_READ_VARIANT_FIELD_WITH_SINT_SEL:
+        case _State::EndReadVariantFieldWithSIntSel:
             return this->_handleEndReadVariantFieldWithSIntSelState();
-        case _State::BEGIN_READ_OPTIONAL_FIELD_WITH_BOOL_SEL:
+        case _State::BeginReadOptionalFieldWithBoolSel:
             return this->_handleBeginReadOptionalFieldWithBoolSelState();
-        case _State::END_READ_OPTIONAL_FIELD_WITH_BOOL_SEL:
+        case _State::EndReadOptionalFieldWithBoolSel:
             return this->_handleEndReadOptionalFieldWithBoolSelState();
-        case _State::BEGIN_READ_OPTIONAL_FIELD_WITH_UINT_SEL:
+        case _State::BeginReadOptionalFieldWithUIntSel:
             return this->_handleBeginReadOptionalFieldWithUIntSelState();
-        case _State::END_READ_OPTIONAL_FIELD_WITH_UINT_SEL:
+        case _State::EndReadOptionalFieldWithUIntSel:
             return this->_handleEndReadOptionalFieldWithUIntSelState();
-        case _State::BEGIN_READ_OPTIONAL_FIELD_WITH_SINT_SEL:
+        case _State::BeginReadOptionalFieldWithSIntSel:
             return this->_handleBeginReadOptionalFieldWithSIntSelState();
-        case _State::END_READ_OPTIONAL_FIELD_WITH_SINT_SEL:
+        case _State::EndReadOptionalFieldWithSIntSel:
             return this->_handleEndReadOptionalFieldWithSIntSelState();
-        case _State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BE:
+        case _State::ReadFixedLenBitArrayFieldBe:
             return this->_handleReadFixedLenBitArrayFieldBeState();
-        case _State::READ_FIXED_LEN_BIT_ARRAY_FIELD_LE:
+        case _State::ReadFixedLenBitArrayFieldLe:
             return this->_handleReadFixedLenBitArrayFieldLeState();
-        case _State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_8:
+        case _State::ReadFixedLenBitArrayFieldBa8:
             return this->_handleReadFixedLenBitArrayFieldBa8State();
-        case _State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_16_LE:
+        case _State::ReadFixedLenBitArrayFieldBa16Le:
             return this->_handleReadFixedLenBitArrayFieldBa16LeState();
-        case _State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_16_BE:
+        case _State::ReadFixedLenBitArrayFieldBa16Be:
             return this->_handleReadFixedLenBitArrayFieldBa16BeState();
-        case _State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_32_LE:
+        case _State::ReadFixedLenBitArrayFieldBa32Le:
             return this->_handleReadFixedLenBitArrayFieldBa32LeState();
-        case _State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_32_BE:
+        case _State::ReadFixedLenBitArrayFieldBa32Be:
             return this->_handleReadFixedLenBitArrayFieldBa32BeState();
-        case _State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_64_LE:
+        case _State::ReadFixedLenBitArrayFieldBa64Le:
             return this->_handleReadFixedLenBitArrayFieldBa64LeState();
-        case _State::READ_FIXED_LEN_BIT_ARRAY_FIELD_BA_64_BE:
+        case _State::ReadFixedLenBitArrayFieldBa64Be:
             return this->_handleReadFixedLenBitArrayFieldBa64BeState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BE:
+        case _State::ReadFixedLenBoolFieldBe:
             return this->_handleReadFixedLenBoolFieldBeState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_LE:
+        case _State::ReadFixedLenBoolFieldLe:
             return this->_handleReadFixedLenBoolFieldLeState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_8:
+        case _State::ReadFixedLenBoolFieldBa8:
             return this->_handleReadFixedLenBoolFieldBa8State();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_16_LE:
+        case _State::ReadFixedLenBoolFieldBa16Le:
             return this->_handleReadFixedLenBoolFieldBa16LeState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_16_BE:
+        case _State::ReadFixedLenBoolFieldBa16Be:
             return this->_handleReadFixedLenBoolFieldBa16BeState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_32_LE:
+        case _State::ReadFixedLenBoolFieldBa32Le:
             return this->_handleReadFixedLenBoolFieldBa32LeState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_32_BE:
+        case _State::ReadFixedLenBoolFieldBa32Be:
             return this->_handleReadFixedLenBoolFieldBa32BeState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_64_LE:
+        case _State::ReadFixedLenBoolFieldBa64Le:
             return this->_handleReadFixedLenBoolFieldBa64LeState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_64_BE:
+        case _State::ReadFixedLenBoolFieldBa64Be:
             return this->_handleReadFixedLenBoolFieldBa64BeState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BE_SAVE_VAL:
+        case _State::ReadFixedLenBoolFieldBeSaveVal:
             return this->_handleReadFixedLenBoolFieldBeSaveValState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_LE_SAVE_VAL:
+        case _State::ReadFixedLenBoolFieldLeSaveVal:
             return this->_handleReadFixedLenBoolFieldLeSaveValState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_8_SAVE_VAL:
+        case _State::ReadFixedLenBoolFieldBa8SaveVal:
             return this->_handleReadFixedLenBoolFieldBa8SaveValState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_16_LE_SAVE_VAL:
+        case _State::ReadFixedLenBoolFieldBa16LeSaveVal:
             return this->_handleReadFixedLenBoolFieldBa16LeSaveValState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_16_BE_SAVE_VAL:
+        case _State::ReadFixedLenBoolFieldBa16BeSaveVal:
             return this->_handleReadFixedLenBoolFieldBa16BeSaveValState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_32_LE_SAVE_VAL:
+        case _State::ReadFixedLenBoolFieldBa32LeSaveVal:
             return this->_handleReadFixedLenBoolFieldBa32LeSaveValState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_32_BE_SAVE_VAL:
+        case _State::ReadFixedLenBoolFieldBa32BeSaveVal:
             return this->_handleReadFixedLenBoolFieldBa32BeSaveValState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_64_LE_SAVE_VAL:
+        case _State::ReadFixedLenBoolFieldBa64LeSaveVal:
             return this->_handleReadFixedLenBoolFieldBa64LeSaveValState();
-        case _State::READ_FIXED_LEN_BOOL_FIELD_BA_64_BE_SAVE_VAL:
+        case _State::ReadFixedLenBoolFieldBa64BeSaveVal:
             return this->_handleReadFixedLenBoolFieldBa64BeSaveValState();
-        case _State::READ_FIXED_LEN_FLOAT_FIELD_32_BE:
+        case _State::ReadFixedLenFloatField32Be:
             return this->_handleReadFixedLenFloatField32BeState();
-        case _State::READ_FIXED_LEN_FLOAT_FIELD_32_LE:
+        case _State::ReadFixedLenFloatField32Le:
             return this->_handleReadFixedLenFloatField32LeState();
-        case _State::READ_FIXED_LEN_FLOAT_FIELD_64_BE:
+        case _State::ReadFixedLenFloatField64Be:
             return this->_handleReadFixedLenFloatField64BeState();
-        case _State::READ_FIXED_LEN_FLOAT_FIELD_64_LE:
+        case _State::ReadFixedLenFloatField64Le:
             return this->_handleReadFixedLenFloatField64LeState();
-        case _State::READ_FIXED_LEN_FLOAT_FIELD_BA_32_LE:
+        case _State::ReadFixedLenFloatFieldBa32Le:
             return this->_handleReadFixedLenFloatFieldBa32LeState();
-        case _State::READ_FIXED_LEN_FLOAT_FIELD_BA_32_BE:
+        case _State::ReadFixedLenFloatFieldBa32Be:
             return this->_handleReadFixedLenFloatFieldBa32BeState();
-        case _State::READ_FIXED_LEN_FLOAT_FIELD_BA_64_LE:
+        case _State::ReadFixedLenFloatFieldBa64Le:
             return this->_handleReadFixedLenFloatFieldBa64LeState();
-        case _State::READ_FIXED_LEN_FLOAT_FIELD_BA_64_BE:
+        case _State::ReadFixedLenFloatFieldBa64Be:
             return this->_handleReadFixedLenFloatFieldBa64BeState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BE:
+        case _State::ReadFixedLenUIntFieldBe:
             return this->_handleReadFixedLenUIntFieldBeState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_LE:
+        case _State::ReadFixedLenUIntFieldLe:
             return this->_handleReadFixedLenUIntFieldLeState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_8:
+        case _State::ReadFixedLenUIntFieldBa8:
             return this->_handleReadFixedLenUIntFieldBa8State();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_16_LE:
+        case _State::ReadFixedLenUIntFieldBa16Le:
             return this->_handleReadFixedLenUIntFieldBa16LeState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_16_BE:
+        case _State::ReadFixedLenUIntFieldBa16Be:
             return this->_handleReadFixedLenUIntFieldBa16BeState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_32_LE:
+        case _State::ReadFixedLenUIntFieldBa32Le:
             return this->_handleReadFixedLenUIntFieldBa32LeState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_32_BE:
+        case _State::ReadFixedLenUIntFieldBa32Be:
             return this->_handleReadFixedLenUIntFieldBa32BeState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_64_LE:
+        case _State::ReadFixedLenUIntFieldBa64Le:
             return this->_handleReadFixedLenUIntFieldBa64LeState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_64_BE:
+        case _State::ReadFixedLenUIntFieldBa64Be:
             return this->_handleReadFixedLenUIntFieldBa64BeState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BE_WITH_ROLE:
+        case _State::ReadFixedLenUIntFieldBeWithRole:
             return this->_handleReadFixedLenUIntFieldBeWithRoleState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_LE_WITH_ROLE:
+        case _State::ReadFixedLenUIntFieldLeWithRole:
             return this->_handleReadFixedLenUIntFieldLeWithRoleState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_8_WITH_ROLE:
+        case _State::ReadFixedLenUIntFieldBa8WithRole:
             return this->_handleReadFixedLenUIntFieldBa8WithRoleState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_16_LE_WITH_ROLE:
+        case _State::ReadFixedLenUIntFieldBa16LeWithRole:
             return this->_handleReadFixedLenUIntFieldBa16LeWithRoleState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_16_BE_WITH_ROLE:
+        case _State::ReadFixedLenUIntFieldBa16BeWithRole:
             return this->_handleReadFixedLenUIntFieldBa16BeWithRoleState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_32_LE_WITH_ROLE:
+        case _State::ReadFixedLenUIntFieldBa32LeWithRole:
             return this->_handleReadFixedLenUIntFieldBa32LeWithRoleState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_32_BE_WITH_ROLE:
+        case _State::ReadFixedLenUIntFieldBa32BeWithRole:
             return this->_handleReadFixedLenUIntFieldBa32BeWithRoleState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_64_LE_WITH_ROLE:
+        case _State::ReadFixedLenUIntFieldBa64LeWithRole:
             return this->_handleReadFixedLenUIntFieldBa64LeWithRoleState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_64_BE_WITH_ROLE:
+        case _State::ReadFixedLenUIntFieldBa64BeWithRole:
             return this->_handleReadFixedLenUIntFieldBa64BeWithRoleState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBeSaveVal:
             return this->_handleReadFixedLenUIntFieldBeSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_LE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldLeSaveVal:
             return this->_handleReadFixedLenUIntFieldLeSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_8_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa8SaveVal:
             return this->_handleReadFixedLenUIntFieldBa8SaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_16_LE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa16LeSaveVal:
             return this->_handleReadFixedLenUIntFieldBa16LeSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_16_BE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa16BeSaveVal:
             return this->_handleReadFixedLenUIntFieldBa16BeSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_32_LE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa32LeSaveVal:
             return this->_handleReadFixedLenUIntFieldBa32LeSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_32_BE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa32BeSaveVal:
             return this->_handleReadFixedLenUIntFieldBa32BeSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_64_LE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa64LeSaveVal:
             return this->_handleReadFixedLenUIntFieldBa64LeSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_64_BE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa64BeSaveVal:
             return this->_handleReadFixedLenUIntFieldBa64BeSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BE_WITH_ROLE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBeWithRoleSaveVal:
             return this->_handleReadFixedLenUIntFieldBeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_LE_WITH_ROLE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldLeWithRoleSaveVal:
             return this->_handleReadFixedLenUIntFieldLeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_8_WITH_ROLE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa8WithRoleSaveVal:
             return this->_handleReadFixedLenUIntFieldBa8WithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_16_LE_WITH_ROLE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa16LeWithRoleSaveVal:
             return this->_handleReadFixedLenUIntFieldBa16LeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_16_BE_WITH_ROLE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa16BeWithRoleSaveVal:
             return this->_handleReadFixedLenUIntFieldBa16BeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_32_LE_WITH_ROLE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa32LeWithRoleSaveVal:
             return this->_handleReadFixedLenUIntFieldBa32LeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_32_BE_WITH_ROLE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa32BeWithRoleSaveVal:
             return this->_handleReadFixedLenUIntFieldBa32BeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_64_LE_WITH_ROLE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa64LeWithRoleSaveVal:
             return this->_handleReadFixedLenUIntFieldBa64LeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UINT_FIELD_BA_64_BE_WITH_ROLE_SAVE_VAL:
+        case _State::ReadFixedLenUIntFieldBa64BeWithRoleSaveVal:
             return this->_handleReadFixedLenUIntFieldBa64BeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BE:
+        case _State::ReadFixedLenSIntFieldBe:
             return this->_handleReadFixedLenSIntFieldBeState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_LE:
+        case _State::ReadFixedLenSIntFieldLe:
             return this->_handleReadFixedLenSIntFieldLeState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_8:
+        case _State::ReadFixedLenSIntFieldBa8:
             return this->_handleReadFixedLenSIntFieldBa8State();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_16_LE:
+        case _State::ReadFixedLenSIntFieldBa16Le:
             return this->_handleReadFixedLenSIntFieldBa16LeState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_16_BE:
+        case _State::ReadFixedLenSIntFieldBa16Be:
             return this->_handleReadFixedLenSIntFieldBa16BeState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_32_LE:
+        case _State::ReadFixedLenSIntFieldBa32Le:
             return this->_handleReadFixedLenSIntFieldBa32LeState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_32_BE:
+        case _State::ReadFixedLenSIntFieldBa32Be:
             return this->_handleReadFixedLenSIntFieldBa32BeState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_64_LE:
+        case _State::ReadFixedLenSIntFieldBa64Le:
             return this->_handleReadFixedLenSIntFieldBa64LeState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_64_BE:
+        case _State::ReadFixedLenSIntFieldBa64Be:
             return this->_handleReadFixedLenSIntFieldBa64BeState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BE_SAVE_VAL:
+        case _State::ReadFixedLenSIntFieldBeSaveVal:
             return this->_handleReadFixedLenSIntFieldBeSaveValState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_LE_SAVE_VAL:
+        case _State::ReadFixedLenSIntFieldLeSaveVal:
             return this->_handleReadFixedLenSIntFieldLeSaveValState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_8_SAVE_VAL:
+        case _State::ReadFixedLenSIntFieldBa8SaveVal:
             return this->_handleReadFixedLenSIntFieldBa8SaveValState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_16_LE_SAVE_VAL:
+        case _State::ReadFixedLenSIntFieldBa16LeSaveVal:
             return this->_handleReadFixedLenSIntFieldBa16LeSaveValState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_16_BE_SAVE_VAL:
+        case _State::ReadFixedLenSIntFieldBa16BeSaveVal:
             return this->_handleReadFixedLenSIntFieldBa16BeSaveValState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_32_LE_SAVE_VAL:
+        case _State::ReadFixedLenSIntFieldBa32LeSaveVal:
             return this->_handleReadFixedLenSIntFieldBa32LeSaveValState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_32_BE_SAVE_VAL:
+        case _State::ReadFixedLenSIntFieldBa32BeSaveVal:
             return this->_handleReadFixedLenSIntFieldBa32BeSaveValState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_64_LE_SAVE_VAL:
+        case _State::ReadFixedLenSIntFieldBa64LeSaveVal:
             return this->_handleReadFixedLenSIntFieldBa64LeSaveValState();
-        case _State::READ_FIXED_LEN_SINT_FIELD_BA_64_BE_SAVE_VAL:
+        case _State::ReadFixedLenSIntFieldBa64BeSaveVal:
             return this->_handleReadFixedLenSIntFieldBa64BeSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BE:
-            return this->_handleReadFixedLenUEnumFieldBeState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_LE:
-            return this->_handleReadFixedLenUEnumFieldLeState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_8:
-            return this->_handleReadFixedLenUEnumFieldBa8State();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_16_LE:
-            return this->_handleReadFixedLenUEnumFieldBa16LeState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_16_BE:
-            return this->_handleReadFixedLenUEnumFieldBa16BeState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_32_LE:
-            return this->_handleReadFixedLenUEnumFieldBa32LeState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_32_BE:
-            return this->_handleReadFixedLenUEnumFieldBa32BeState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_64_LE:
-            return this->_handleReadFixedLenUEnumFieldBa64LeState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_64_BE:
-            return this->_handleReadFixedLenUEnumFieldBa64BeState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BE_WITH_ROLE:
-            return this->_handleReadFixedLenUEnumFieldBeWithRoleState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_LE_WITH_ROLE:
-            return this->_handleReadFixedLenUEnumFieldLeWithRoleState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_8_WITH_ROLE:
-            return this->_handleReadFixedLenUEnumFieldBa8WithRoleState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_16_LE_WITH_ROLE:
-            return this->_handleReadFixedLenUEnumFieldBa16LeWithRoleState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_16_BE_WITH_ROLE:
-            return this->_handleReadFixedLenUEnumFieldBa16BeWithRoleState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_32_LE_WITH_ROLE:
-            return this->_handleReadFixedLenUEnumFieldBa32LeWithRoleState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_32_BE_WITH_ROLE:
-            return this->_handleReadFixedLenUEnumFieldBa32BeWithRoleState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_64_LE_WITH_ROLE:
-            return this->_handleReadFixedLenUEnumFieldBa64LeWithRoleState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_64_BE_WITH_ROLE:
-            return this->_handleReadFixedLenUEnumFieldBa64BeWithRoleState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBeSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_LE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldLeSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_8_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa8SaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_16_LE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa16LeSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_16_BE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa16BeSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_32_LE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa32LeSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_32_BE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa32BeSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_64_LE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa64LeSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_64_BE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa64BeSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BE_WITH_ROLE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_LE_WITH_ROLE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldLeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_8_WITH_ROLE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa8WithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_16_LE_WITH_ROLE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa16LeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_16_BE_WITH_ROLE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa16BeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_32_LE_WITH_ROLE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa32LeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_32_BE_WITH_ROLE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa32BeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_64_LE_WITH_ROLE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa64LeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_UENUM_FIELD_BA_64_BE_WITH_ROLE_SAVE_VAL:
-            return this->_handleReadFixedLenUEnumFieldBa64BeWithRoleSaveValState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BE:
-            return this->_handleReadFixedLenSEnumFieldBeState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_LE:
-            return this->_handleReadFixedLenSEnumFieldLeState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_8:
-            return this->_handleReadFixedLenSEnumFieldBa8State();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_16_LE:
-            return this->_handleReadFixedLenSEnumFieldBa16LeState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_16_BE:
-            return this->_handleReadFixedLenSEnumFieldBa16BeState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_32_LE:
-            return this->_handleReadFixedLenSEnumFieldBa32LeState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_32_BE:
-            return this->_handleReadFixedLenSEnumFieldBa32BeState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_64_LE:
-            return this->_handleReadFixedLenSEnumFieldBa64LeState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_64_BE:
-            return this->_handleReadFixedLenSEnumFieldBa64BeState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BE_SAVE_VAL:
-            return this->_handleReadFixedLenSEnumFieldBeSaveValState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_LE_SAVE_VAL:
-            return this->_handleReadFixedLenSEnumFieldLeSaveValState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_8_SAVE_VAL:
-            return this->_handleReadFixedLenSEnumFieldBa8SaveValState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_16_LE_SAVE_VAL:
-            return this->_handleReadFixedLenSEnumFieldBa16LeSaveValState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_16_BE_SAVE_VAL:
-            return this->_handleReadFixedLenSEnumFieldBa16BeSaveValState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_32_LE_SAVE_VAL:
-            return this->_handleReadFixedLenSEnumFieldBa32LeSaveValState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_32_BE_SAVE_VAL:
-            return this->_handleReadFixedLenSEnumFieldBa32BeSaveValState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_64_LE_SAVE_VAL:
-            return this->_handleReadFixedLenSEnumFieldBa64LeSaveValState();
-        case _State::READ_FIXED_LEN_SENUM_FIELD_BA_64_BE_SAVE_VAL:
-            return this->_handleReadFixedLenSEnumFieldBa64BeSaveValState();
-        case _State::READ_VAR_LEN_UINT_FIELD:
+        case _State::ReadFixedLenBitArrayFieldBeRev:
+            return this->_handleReadFixedLenBitArrayFieldBeRevState();
+        case _State::ReadFixedLenBitArrayFieldLeRev:
+            return this->_handleReadFixedLenBitArrayFieldLeRevState();
+        case _State::ReadFixedLenBitArrayFieldBa8Rev:
+            return this->_handleReadFixedLenBitArrayFieldBa8RevState();
+        case _State::ReadFixedLenBitArrayFieldBa16LeRev:
+            return this->_handleReadFixedLenBitArrayFieldBa16LeRevState();
+        case _State::ReadFixedLenBitArrayFieldBa16BeRev:
+            return this->_handleReadFixedLenBitArrayFieldBa16BeRevState();
+        case _State::ReadFixedLenBitArrayFieldBa32LeRev:
+            return this->_handleReadFixedLenBitArrayFieldBa32LeRevState();
+        case _State::ReadFixedLenBitArrayFieldBa32BeRev:
+            return this->_handleReadFixedLenBitArrayFieldBa32BeRevState();
+        case _State::ReadFixedLenBitArrayFieldBa64LeRev:
+            return this->_handleReadFixedLenBitArrayFieldBa64LeRevState();
+        case _State::ReadFixedLenBitArrayFieldBa64BeRev:
+            return this->_handleReadFixedLenBitArrayFieldBa64BeRevState();
+        case _State::ReadFixedLenBoolFieldBeRev:
+            return this->_handleReadFixedLenBoolFieldBeRevState();
+        case _State::ReadFixedLenBoolFieldLeRev:
+            return this->_handleReadFixedLenBoolFieldLeRevState();
+        case _State::ReadFixedLenBoolFieldBa8Rev:
+            return this->_handleReadFixedLenBoolFieldBa8RevState();
+        case _State::ReadFixedLenBoolFieldBa16LeRev:
+            return this->_handleReadFixedLenBoolFieldBa16LeRevState();
+        case _State::ReadFixedLenBoolFieldBa16BeRev:
+            return this->_handleReadFixedLenBoolFieldBa16BeRevState();
+        case _State::ReadFixedLenBoolFieldBa32LeRev:
+            return this->_handleReadFixedLenBoolFieldBa32LeRevState();
+        case _State::ReadFixedLenBoolFieldBa32BeRev:
+            return this->_handleReadFixedLenBoolFieldBa32BeRevState();
+        case _State::ReadFixedLenBoolFieldBa64LeRev:
+            return this->_handleReadFixedLenBoolFieldBa64LeRevState();
+        case _State::ReadFixedLenBoolFieldBa64BeRev:
+            return this->_handleReadFixedLenBoolFieldBa64BeRevState();
+        case _State::ReadFixedLenBoolFieldBeRevSaveVal:
+            return this->_handleReadFixedLenBoolFieldBeRevSaveValState();
+        case _State::ReadFixedLenBoolFieldLeRevSaveVal:
+            return this->_handleReadFixedLenBoolFieldLeRevSaveValState();
+        case _State::ReadFixedLenBoolFieldBa8RevSaveVal:
+            return this->_handleReadFixedLenBoolFieldBa8RevSaveValState();
+        case _State::ReadFixedLenBoolFieldBa16LeRevSaveVal:
+            return this->_handleReadFixedLenBoolFieldBa16LeRevSaveValState();
+        case _State::ReadFixedLenBoolFieldBa16BeRevSaveVal:
+            return this->_handleReadFixedLenBoolFieldBa16BeRevSaveValState();
+        case _State::ReadFixedLenBoolFieldBa32LeRevSaveVal:
+            return this->_handleReadFixedLenBoolFieldBa32LeRevSaveValState();
+        case _State::ReadFixedLenBoolFieldBa32BeRevSaveVal:
+            return this->_handleReadFixedLenBoolFieldBa32BeRevSaveValState();
+        case _State::ReadFixedLenBoolFieldBa64LeRevSaveVal:
+            return this->_handleReadFixedLenBoolFieldBa64LeRevSaveValState();
+        case _State::ReadFixedLenBoolFieldBa64BeRevSaveVal:
+            return this->_handleReadFixedLenBoolFieldBa64BeRevSaveValState();
+        case _State::ReadFixedLenFloatField32BeRev:
+            return this->_handleReadFixedLenFloatField32BeRevState();
+        case _State::ReadFixedLenFloatField32LeRev:
+            return this->_handleReadFixedLenFloatField32LeRevState();
+        case _State::ReadFixedLenFloatField64BeRev:
+            return this->_handleReadFixedLenFloatField64BeRevState();
+        case _State::ReadFixedLenFloatField64LeRev:
+            return this->_handleReadFixedLenFloatField64LeRevState();
+        case _State::ReadFixedLenFloatFieldBa32LeRev:
+            return this->_handleReadFixedLenFloatFieldBa32LeRevState();
+        case _State::ReadFixedLenFloatFieldBa32BeRev:
+            return this->_handleReadFixedLenFloatFieldBa32BeRevState();
+        case _State::ReadFixedLenFloatFieldBa64LeRev:
+            return this->_handleReadFixedLenFloatFieldBa64LeRevState();
+        case _State::ReadFixedLenFloatFieldBa64BeRev:
+            return this->_handleReadFixedLenFloatFieldBa64BeRevState();
+        case _State::ReadFixedLenUIntFieldBeRev:
+            return this->_handleReadFixedLenUIntFieldBeRevState();
+        case _State::ReadFixedLenUIntFieldLeRev:
+            return this->_handleReadFixedLenUIntFieldLeRevState();
+        case _State::ReadFixedLenUIntFieldBa8Rev:
+            return this->_handleReadFixedLenUIntFieldBa8RevState();
+        case _State::ReadFixedLenUIntFieldBa16LeRev:
+            return this->_handleReadFixedLenUIntFieldBa16LeRevState();
+        case _State::ReadFixedLenUIntFieldBa16BeRev:
+            return this->_handleReadFixedLenUIntFieldBa16BeRevState();
+        case _State::ReadFixedLenUIntFieldBa32LeRev:
+            return this->_handleReadFixedLenUIntFieldBa32LeRevState();
+        case _State::ReadFixedLenUIntFieldBa32BeRev:
+            return this->_handleReadFixedLenUIntFieldBa32BeRevState();
+        case _State::ReadFixedLenUIntFieldBa64LeRev:
+            return this->_handleReadFixedLenUIntFieldBa64LeRevState();
+        case _State::ReadFixedLenUIntFieldBa64BeRev:
+            return this->_handleReadFixedLenUIntFieldBa64BeRevState();
+        case _State::ReadFixedLenUIntFieldBeRevWithRole:
+            return this->_handleReadFixedLenUIntFieldBeRevWithRoleState();
+        case _State::ReadFixedLenUIntFieldLeRevWithRole:
+            return this->_handleReadFixedLenUIntFieldLeRevWithRoleState();
+        case _State::ReadFixedLenUIntFieldBa8RevWithRole:
+            return this->_handleReadFixedLenUIntFieldBa8RevWithRoleState();
+        case _State::ReadFixedLenUIntFieldBa16LeRevWithRole:
+            return this->_handleReadFixedLenUIntFieldBa16LeRevWithRoleState();
+        case _State::ReadFixedLenUIntFieldBa16BeRevWithRole:
+            return this->_handleReadFixedLenUIntFieldBa16BeRevWithRoleState();
+        case _State::ReadFixedLenUIntFieldBa32LeRevWithRole:
+            return this->_handleReadFixedLenUIntFieldBa32LeRevWithRoleState();
+        case _State::ReadFixedLenUIntFieldBa32BeRevWithRole:
+            return this->_handleReadFixedLenUIntFieldBa32BeRevWithRoleState();
+        case _State::ReadFixedLenUIntFieldBa64LeRevWithRole:
+            return this->_handleReadFixedLenUIntFieldBa64LeRevWithRoleState();
+        case _State::ReadFixedLenUIntFieldBa64BeRevWithRole:
+            return this->_handleReadFixedLenUIntFieldBa64BeRevWithRoleState();
+        case _State::ReadFixedLenUIntFieldBeRevSaveVal:
+            return this->_handleReadFixedLenUIntFieldBeRevSaveValState();
+        case _State::ReadFixedLenUIntFieldLeRevSaveVal:
+            return this->_handleReadFixedLenUIntFieldLeRevSaveValState();
+        case _State::ReadFixedLenUIntFieldBa8RevSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa8RevSaveValState();
+        case _State::ReadFixedLenUIntFieldBa16LeRevSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa16LeRevSaveValState();
+        case _State::ReadFixedLenUIntFieldBa16BeRevSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa16BeRevSaveValState();
+        case _State::ReadFixedLenUIntFieldBa32LeRevSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa32LeRevSaveValState();
+        case _State::ReadFixedLenUIntFieldBa32BeRevSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa32BeRevSaveValState();
+        case _State::ReadFixedLenUIntFieldBa64LeRevSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa64LeRevSaveValState();
+        case _State::ReadFixedLenUIntFieldBa64BeRevSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa64BeRevSaveValState();
+        case _State::ReadFixedLenUIntFieldBeRevWithRoleSaveVal:
+            return this->_handleReadFixedLenUIntFieldBeRevWithRoleSaveValState();
+        case _State::ReadFixedLenUIntFieldLeRevWithRoleSaveVal:
+            return this->_handleReadFixedLenUIntFieldLeRevWithRoleSaveValState();
+        case _State::ReadFixedLenUIntFieldBa8RevWithRoleSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa8RevWithRoleSaveValState();
+        case _State::ReadFixedLenUIntFieldBa16LeRevWithRoleSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa16LeRevWithRoleSaveValState();
+        case _State::ReadFixedLenUIntFieldBa16BeRevWithRoleSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa16BeRevWithRoleSaveValState();
+        case _State::ReadFixedLenUIntFieldBa32LeRevWithRoleSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa32LeRevWithRoleSaveValState();
+        case _State::ReadFixedLenUIntFieldBa32BeRevWithRoleSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa32BeRevWithRoleSaveValState();
+        case _State::ReadFixedLenUIntFieldBa64LeRevWithRoleSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa64LeRevWithRoleSaveValState();
+        case _State::ReadFixedLenUIntFieldBa64BeRevWithRoleSaveVal:
+            return this->_handleReadFixedLenUIntFieldBa64BeRevWithRoleSaveValState();
+        case _State::ReadFixedLenSIntFieldBeRev:
+            return this->_handleReadFixedLenSIntFieldBeRevState();
+        case _State::ReadFixedLenSIntFieldLeRev:
+            return this->_handleReadFixedLenSIntFieldLeRevState();
+        case _State::ReadFixedLenSIntFieldBa8Rev:
+            return this->_handleReadFixedLenSIntFieldBa8RevState();
+        case _State::ReadFixedLenSIntFieldBa16LeRev:
+            return this->_handleReadFixedLenSIntFieldBa16LeRevState();
+        case _State::ReadFixedLenSIntFieldBa16BeRev:
+            return this->_handleReadFixedLenSIntFieldBa16BeRevState();
+        case _State::ReadFixedLenSIntFieldBa32LeRev:
+            return this->_handleReadFixedLenSIntFieldBa32LeRevState();
+        case _State::ReadFixedLenSIntFieldBa32BeRev:
+            return this->_handleReadFixedLenSIntFieldBa32BeRevState();
+        case _State::ReadFixedLenSIntFieldBa64LeRev:
+            return this->_handleReadFixedLenSIntFieldBa64LeRevState();
+        case _State::ReadFixedLenSIntFieldBa64BeRev:
+            return this->_handleReadFixedLenSIntFieldBa64BeRevState();
+        case _State::ReadFixedLenSIntFieldBeRevSaveVal:
+            return this->_handleReadFixedLenSIntFieldBeRevSaveValState();
+        case _State::ReadFixedLenSIntFieldLeRevSaveVal:
+            return this->_handleReadFixedLenSIntFieldLeRevSaveValState();
+        case _State::ReadFixedLenSIntFieldBa8RevSaveVal:
+            return this->_handleReadFixedLenSIntFieldBa8RevSaveValState();
+        case _State::ReadFixedLenSIntFieldBa16LeRevSaveVal:
+            return this->_handleReadFixedLenSIntFieldBa16LeRevSaveValState();
+        case _State::ReadFixedLenSIntFieldBa16BeRevSaveVal:
+            return this->_handleReadFixedLenSIntFieldBa16BeRevSaveValState();
+        case _State::ReadFixedLenSIntFieldBa32LeRevSaveVal:
+            return this->_handleReadFixedLenSIntFieldBa32LeRevSaveValState();
+        case _State::ReadFixedLenSIntFieldBa32BeRevSaveVal:
+            return this->_handleReadFixedLenSIntFieldBa32BeRevSaveValState();
+        case _State::ReadFixedLenSIntFieldBa64LeRevSaveVal:
+            return this->_handleReadFixedLenSIntFieldBa64LeRevSaveValState();
+        case _State::ReadFixedLenSIntFieldBa64BeRevSaveVal:
+            return this->_handleReadFixedLenSIntFieldBa64BeRevSaveValState();
+        case _State::ReadVarLenUIntField:
             return this->_handleReadVarLenUIntFieldState();
-        case _State::READ_VAR_LEN_UINT_FIELD_WITH_ROLE:
+        case _State::ReadVarLenUIntFieldWithRole:
             return this->_handleReadVarLenUIntFieldWithRoleState();
-        case _State::READ_VAR_LEN_UINT_FIELD_SAVE_VAL:
+        case _State::ReadVarLenUIntFieldSaveVal:
             return this->_handleReadVarLenUIntFieldSaveValState();
-        case _State::READ_VAR_LEN_UINT_FIELD_WITH_ROLE_SAVE_VAL:
+        case _State::ReadVarLenUIntFieldWithRoleSaveVal:
             return this->_handleReadVarLenUIntFieldWithRoleSaveValState();
-        case _State::READ_VAR_LEN_SINT_FIELD:
+        case _State::ReadVarLenSIntField:
             return this->_handleReadVarLenSIntFieldState();
-        case _State::READ_VAR_LEN_SINT_FIELD_SAVE_VAL:
+        case _State::ReadVarLenSIntFieldSaveVal:
             return this->_handleReadVarLenSIntFieldSaveValState();
-        case _State::READ_VAR_LEN_UENUM_FIELD:
-            return this->_handleReadVarLenUEnumFieldState();
-        case _State::READ_VAR_LEN_UENUM_FIELD_WITH_ROLE:
-            return this->_handleReadVarLenUEnumFieldWithRoleState();
-        case _State::READ_VAR_LEN_UENUM_FIELD_SAVE_VAL:
-            return this->_handleReadVarLenUEnumFieldSaveValState();
-        case _State::READ_VAR_LEN_UENUM_FIELD_WITH_ROLE_SAVE_VAL:
-            return this->_handleReadVarLenUEnumFieldWithRoleSaveValState();
-        case _State::READ_VAR_LEN_SENUM_FIELD:
-            return this->_handleReadVarLenSEnumFieldState();
-        case _State::READ_VAR_LEN_SENUM_FIELD_SAVE_VAL:
-            return this->_handleReadVarLenSEnumFieldSaveValState();
-        case _State::READ_FIXED_LEN_METADATA_STREAM_UUID_BYTE_UINT_FIELD_BA_8:
+        case _State::ReadFixedLenMetadataStreamUuidByteUIntFieldBa8:
             return this->_handleReadFixedLenMetadataStreamUuidByteUIntFieldBa8State();
-        case _State::READ_FIXED_LEN_METADATA_STREAM_UUID_BYTE_UENUM_FIELD_BA_8:
-            return this->_handleReadFixedLenMetadataStreamUuidByteUEnumFieldBa8State();
-        case _State::SET_DATA_STREAM_INFO_ITEM:
+        case _State::SetDataStreamInfoItem:
             return this->_handleSetDataStreamInfoItemState();
-        case _State::SET_PKT_INFO_ITEM:
+        case _State::SetPktInfoItem:
             return this->_handleSetPktInfoItemState();
-        case _State::SET_EVENT_RECORD_INFO_ITEM:
+        case _State::SetEventRecordInfoItem:
             return this->_handleSetEventRecordInfoItemState();
-        case _State::SET_PKT_MAGIC_NUMBER_ITEM:
+        case _State::SetPktMagicNumberItem:
             return this->_handleSetPktMagicNumberItem();
-        case _State::SET_DEF_CLK_VAL_ITEM:
+        case _State::SetDefClkValItem:
             return this->_handleSetDefClkValItem();
-        case _State::END_READ_PKT_CONTENT:
+        case _State::EndReadPktContent:
             return this->_handleEndReadPktContentState();
-        case _State::END_READ_PKT:
+        case _State::EndReadPkt:
             return this->_handleEndReadPktState();
-        case _State::SKIP_PADDING:
+        case _State::SkipPadding:
             return this->_handleSkipPaddingState();
-        case _State::SKIP_CONTENT_PADDING:
+        case _State::SkipContentPadding:
             return this->_handleSkipContentPaddingState();
         default:
             bt_common_abort();
@@ -3532,14 +2892,14 @@ private:
     _StateHandlingReaction _handleTryBeginReadPktHeaderScopeState();
     _StateHandlingReaction _handleTryBeginReadPktCtxScopeState();
     _StateHandlingReaction _handleTryBeginReadEventRecordHeaderScopeState();
-    _StateHandlingReaction _handleTryBeginReadEventRecordCommonCtxScopeState();
-    _StateHandlingReaction _handleTryBeginReadEventRecordSpecCtxScopeState();
+    _StateHandlingReaction _handleTryBeginReadCommonEventRecordCtxScopeState();
+    _StateHandlingReaction _handleTryBeginReadSpecEventRecordCtxScopeState();
     _StateHandlingReaction _handleTryBeginReadEventRecordPayloadScopeState();
     _StateHandlingReaction _handleEndReadPktHeaderScopeState();
     _StateHandlingReaction _handleEndReadPktCtxScopeState();
     _StateHandlingReaction _handleEndReadEventRecordHeaderScopeState();
-    _StateHandlingReaction _handleEndReadEventRecordCommonCtxScopeState();
-    _StateHandlingReaction _handleEndReadEventRecordSpecCtxScopeState();
+    _StateHandlingReaction _handleEndReadCommonEventRecordCtxScopeState();
+    _StateHandlingReaction _handleEndReadSpecEventRecordCtxScopeState();
     _StateHandlingReaction _handleEndReadEventRecordPayloadScopeState();
     _StateHandlingReaction _handleTryBeginReadEventRecordState();
     _StateHandlingReaction _handleEndReadEventRecordState();
@@ -3554,20 +2914,23 @@ private:
     _StateHandlingReaction _handleEndReadStaticLenArrayFieldState();
     _StateHandlingReaction _handleBeginReadDynLenArrayFieldState();
     _StateHandlingReaction _handleEndReadDynLenArrayFieldState();
-    _StateHandlingReaction _handleBeginReadNullTerminatedStrFieldState();
+    _StateHandlingReaction _handleBeginReadNullTerminatedStrFieldUtf8State();
+    _StateHandlingReaction _handleBeginReadNullTerminatedStrFieldUtf16State();
+    _StateHandlingReaction _handleBeginReadNullTerminatedStrFieldUtf32State();
     _StateHandlingReaction _handleEndReadNullTerminatedStrFieldState();
-    _StateHandlingReaction _handleReadSubstrUntilNullCharState();
+    _StateHandlingReaction _handleReadSubstrUntilNullCodepointUtf8State();
+    _StateHandlingReaction _handleReadSubstrUntilNullCodepointUtf16State();
+    _StateHandlingReaction _handleReadSubstrUntilNullCodepointUtf32State();
     _StateHandlingReaction _handleBeginReadStaticLenStrFieldState();
     _StateHandlingReaction _handleEndReadStaticLenStrFieldState();
     _StateHandlingReaction _handleBeginReadDynLenStrFieldState();
     _StateHandlingReaction _handleEndReadDynLenStrFieldState();
-    _StateHandlingReaction _handleReadSubstrState();
+    _StateHandlingReaction _handleReadRawDataState();
     _StateHandlingReaction _handleBeginReadStaticLenBlobFieldState();
     _StateHandlingReaction _handleBeginReadStaticLenBlobFieldMetadataStreamUuidState();
     _StateHandlingReaction _handleEndReadStaticLenBlobFieldState();
     _StateHandlingReaction _handleBeginReadDynLenBlobFieldState();
     _StateHandlingReaction _handleEndReadDynLenBlobFieldState();
-    _StateHandlingReaction _handleReadBlobFieldSectionState();
     _StateHandlingReaction _handleReadMetadataStreamUuidBlobFieldSectionState();
     _StateHandlingReaction _handleBeginReadVariantFieldWithUIntSelState();
     _StateHandlingReaction _handleEndReadVariantFieldWithUIntSelState();
@@ -3668,78 +3031,106 @@ private:
     _StateHandlingReaction _handleReadFixedLenSIntFieldBa32BeSaveValState();
     _StateHandlingReaction _handleReadFixedLenSIntFieldBa64LeSaveValState();
     _StateHandlingReaction _handleReadFixedLenSIntFieldBa64BeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBeState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldLeState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa8State();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa16LeState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa16BeState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa32LeState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa32BeState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa64LeState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa64BeState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBeWithRoleState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldLeWithRoleState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa8WithRoleState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa16LeWithRoleState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa16BeWithRoleState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa32LeWithRoleState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa32BeWithRoleState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa64LeWithRoleState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa64BeWithRoleState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldLeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa8SaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa16LeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa16BeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa32LeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa32BeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa64LeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa64BeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBeWithRoleSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldLeWithRoleSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa8WithRoleSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa16LeWithRoleSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa16BeWithRoleSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa32LeWithRoleSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa32BeWithRoleSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa64LeWithRoleSaveValState();
-    _StateHandlingReaction _handleReadFixedLenUEnumFieldBa64BeWithRoleSaveValState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBeState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldLeState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa8State();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa16LeState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa16BeState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa32LeState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa32BeState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa64LeState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa64BeState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldLeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa8SaveValState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa16LeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa16BeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa32LeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa32BeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa64LeSaveValState();
-    _StateHandlingReaction _handleReadFixedLenSEnumFieldBa64BeSaveValState();
+    _StateHandlingReaction _handleReadFixedLenBitArrayFieldBeRevState();
+    _StateHandlingReaction _handleReadFixedLenBitArrayFieldLeRevState();
+    _StateHandlingReaction _handleReadFixedLenBitArrayFieldBa8RevState();
+    _StateHandlingReaction _handleReadFixedLenBitArrayFieldBa16LeRevState();
+    _StateHandlingReaction _handleReadFixedLenBitArrayFieldBa16BeRevState();
+    _StateHandlingReaction _handleReadFixedLenBitArrayFieldBa32LeRevState();
+    _StateHandlingReaction _handleReadFixedLenBitArrayFieldBa32BeRevState();
+    _StateHandlingReaction _handleReadFixedLenBitArrayFieldBa64LeRevState();
+    _StateHandlingReaction _handleReadFixedLenBitArrayFieldBa64BeRevState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBeRevState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldLeRevState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa8RevState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa16LeRevState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa16BeRevState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa32LeRevState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa32BeRevState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa64LeRevState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa64BeRevState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldLeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa8RevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa16LeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa16BeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa32LeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa32BeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa64LeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenBoolFieldBa64BeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenFloatField32BeRevState();
+    _StateHandlingReaction _handleReadFixedLenFloatField32LeRevState();
+    _StateHandlingReaction _handleReadFixedLenFloatField64BeRevState();
+    _StateHandlingReaction _handleReadFixedLenFloatField64LeRevState();
+    _StateHandlingReaction _handleReadFixedLenFloatFieldBa32LeRevState();
+    _StateHandlingReaction _handleReadFixedLenFloatFieldBa32BeRevState();
+    _StateHandlingReaction _handleReadFixedLenFloatFieldBa64LeRevState();
+    _StateHandlingReaction _handleReadFixedLenFloatFieldBa64BeRevState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBeRevState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldLeRevState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa8RevState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa16LeRevState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa16BeRevState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa32LeRevState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa32BeRevState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa64LeRevState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa64BeRevState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBeRevWithRoleState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldLeRevWithRoleState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa8RevWithRoleState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa16LeRevWithRoleState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa16BeRevWithRoleState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa32LeRevWithRoleState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa32BeRevWithRoleState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa64LeRevWithRoleState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa64BeRevWithRoleState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldLeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa8RevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa16LeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa16BeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa32LeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa32BeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa64LeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa64BeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBeRevWithRoleSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldLeRevWithRoleSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa8RevWithRoleSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa16LeRevWithRoleSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa16BeRevWithRoleSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa32LeRevWithRoleSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa32BeRevWithRoleSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa64LeRevWithRoleSaveValState();
+    _StateHandlingReaction _handleReadFixedLenUIntFieldBa64BeRevWithRoleSaveValState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBeRevState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldLeRevState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa8RevState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa16LeRevState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa16BeRevState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa32LeRevState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa32BeRevState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa64LeRevState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa64BeRevState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldLeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa8RevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa16LeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa16BeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa32LeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa32BeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa64LeRevSaveValState();
+    _StateHandlingReaction _handleReadFixedLenSIntFieldBa64BeRevSaveValState();
     _StateHandlingReaction _handleReadVarLenUIntFieldState();
     _StateHandlingReaction _handleReadVarLenUIntFieldWithRoleState();
     _StateHandlingReaction _handleReadVarLenUIntFieldSaveValState();
     _StateHandlingReaction _handleReadVarLenUIntFieldWithRoleSaveValState();
     _StateHandlingReaction _handleReadVarLenSIntFieldState();
     _StateHandlingReaction _handleReadVarLenSIntFieldSaveValState();
-    _StateHandlingReaction _handleReadVarLenUEnumFieldState();
-    _StateHandlingReaction _handleReadVarLenUEnumFieldWithRoleState();
-    _StateHandlingReaction _handleReadVarLenUEnumFieldSaveValState();
-    _StateHandlingReaction _handleReadVarLenUEnumFieldWithRoleSaveValState();
-    _StateHandlingReaction _handleReadVarLenSEnumFieldState();
-    _StateHandlingReaction _handleReadVarLenSEnumFieldSaveValState();
     _StateHandlingReaction _handleReadFixedLenMetadataStreamUuidByteUIntFieldBa8State();
-    _StateHandlingReaction _handleReadFixedLenMetadataStreamUuidByteUEnumFieldBa8State();
 
     /* Helpers for state handlers */
-    _StateHandlingReaction _handleCommonBeginReadScopeState(ir::FieldLocScope scope);
-    _StateHandlingReaction _handleCommonEndReadScopeState(ir::FieldLocScope scope);
+    _StateHandlingReaction _handleCommonBeginReadScopeState(Scope scope);
+    _StateHandlingReaction _handleCommonEndReadScopeState(Scope scope);
     void _handleCommonBeginReadStructFieldState();
     _StateHandlingReaction _handleCommonBeginReadArrayFieldState(unsigned long long len,
                                                                  const ArrayFc& arrayFc);
@@ -3747,8 +3138,10 @@ private:
                                                                    _State contentState,
                                                                    const Fc& fc);
     _StateHandlingReaction _handleCommonBeginReadStaticLenBlobFieldState(_State contentState);
-    void _handleCommonAfterEventRecordCommonCtxScopeState();
-    void _handleCommonAfterEventRecordSpecCtxScopeState();
+    void _handleCommonReadRawDataNoNextState();
+    void _handleCommonBeginReadNullTerminatedStrFieldState(_State dataState);
+    void _handleCommonAfterCommonEventRecordCtxScopeState();
+    void _handleCommonAfterSpecEventRecordCtxScopeState();
 
     /*
      * Common compound field reading end state handler using `item`.
@@ -3765,80 +3158,88 @@ private:
 
         /* Next: read next field */
         this->_prepareToReadNextField();
-        return _StateHandlingReaction::STOP;
+        return _StateHandlingReaction::Stop;
+    }
+
+    template <typename NullCpFinderT>
+    void _handleCommonBeginReadNullTerminatedStrFieldState(NullCpFinderT& nullCpFinder,
+                                                           const _State dataState)
+    {
+        /* Update for user */
+        this->_setFieldItemFcAndUpdateForUser(_mItems.nullTerminatedStrFieldBegin,
+                                              *this->_stackTop().fc);
+
+        /* Align head for string field */
+        this->_alignHead(*this->_stackTop().fc);
+
+        /* Reset null-terminated string code unit buffer */
+        nullCpFinder = NullCpFinderT {};
+
+        /* Next: read substring until (and including) a null character */
+        this->_state(dataState);
     }
 
     /*
-     * Reads the next bytes, setting the beginning and end pointers to
-     * `ByteT` of `item` to the result.
-     *
-     * This method doesn't modify the current state and number of stack
-     * frames.
+     * Reads the next buffer bytes until it finds the U+0000 codepoint
+     * using the null codepoint finder `nullCpFinder` (one of the
+     * `_mUtf*NullCpFinder` members).
      */
-    template <typename ByteT, typename ItemT>
-    void _handleCommonReadBytesNoNextState(ItemT& item)
+    template <typename NullCpFinderT>
+    _StateHandlingReaction
+    _handleCommonReadSubstrUntilNullCodepointState(NullCpFinderT& nullCpFinder)
     {
         using namespace bt2c::literals::datalen;
 
         BT_ASSERT_DBG(!_mHeadOffsetInCurPkt.hasExtraBits());
 
-        auto& top = this->_stackTop();
-
-        BT_ASSERT_DBG(top.elemIndex < top.len);
-
         /* Require at least one byte of packet content */
         this->_requireContentData(1_bytes);
-        BT_ASSERT_DBG(this->_remainingBufLen() >= 1_bytes);
 
-        /* Set beginning and end pointers */
+        const auto bufLen = this->_remainingBufLen();
+
+        BT_ASSERT_DBG(bufLen >= 1_bytes);
+
+        /* Find any null character within the current buffer */
         const auto begin = this->_bufAtHead();
-        const auto end = begin + std::min(this->_remainingBufLen().bytes(),
-                                          static_cast<unsigned long long>(top.len - top.elemIndex));
+        auto end = begin + bufLen.bytes();
+        auto foundNullCodepoint = false;
 
-        /* Make sure the section is completely part of the packet content */
-        const auto sectionLen = bt2c::DataLen::fromBytes(end - begin);
+        /* Try to find a first U+0000 codepoint */
+        if (const auto afterNullCpIt = nullCpFinder.findNullCp(bt2c::ConstBytes {begin, end})) {
+            foundNullCodepoint = true;
+            end = &(**afterNullCpIt);
+        }
 
-        if (sectionLen > this->_remainingPktContentLen()) {
-            std::ostringstream ss;
+        /*
+         * Make sure the string data is completely part of the
+         * packet content.
+         */
+        {
+            const auto strDataLen = bt2c::DataLen::fromBytes(end - begin);
 
-            ss << sectionLen.bytes() << " string field substring or BLOB field section bytes "
-               << " required at this point, but only " << *this->_remainingPktContentLen()
-               << " bits of packet content remain.";
-            this->_logAppendCauseAndThrow(ss);
+            if (strDataLen > this->_remainingPktContentLen()) {
+                CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(
+                    "{} null-terminated string field bytes required at this point, "
+                    "but only {} bits of packet content remain.",
+                    strDataLen.bytes(), *this->_remainingPktContentLen());
+            }
         }
 
         /* Update for user */
-        item._mBegin = reinterpret_cast<const ByteT *>(begin);
-        item._mEnd = reinterpret_cast<const ByteT *>(end);
-        BT_ASSERT_DBG(sectionLen >= 1_bytes);
-        this->_updateForUser(item);
+        _mItems.rawData._assign(begin, end);
+        BT_ASSERT_DBG(_mItems.rawData.len() >= 1_bytes);
+        this->_updateForUser(_mItems.rawData);
 
-        /* Mark the section as consumed */
-        this->_consumeAvailData(sectionLen);
+        /* Mark the string data as consumed */
+        this->_consumeAvailData(_mItems.rawData.len());
 
-        /* Update `top.elemIndex` */
-        top.elemIndex += sectionLen.bytes();
-        BT_ASSERT_DBG(top.elemIndex <= top.len);
-    }
-
-    /*
-     * Reads the next bytes, setting the beginning and end pointers to
-     * `ByteT` of `item` to the result.
-     *
-     * This method calls _restoreState() when there aren't any more
-     * bytes to read.
-     */
-    template <typename ByteT, typename ItemT>
-    _StateHandlingReaction _handleCommonReadBytesState(ItemT& item)
-    {
-        this->_handleCommonReadBytesNoNextState<ByteT>(item);
-
-        if (this->_stackTop().elemIndex == this->_stackTop().len) {
-            /* Next: end reading string/BLOB field */
+        /* End found yet? */
+        if (foundNullCodepoint) {
+            /* Next: end reading null-terminated string field */
             this->_restoreState();
         }
 
-        return _StateHandlingReaction::STOP;
+        return _StateHandlingReaction::Stop;
     }
 
     /*
@@ -3857,23 +3258,21 @@ private:
         this->_setFieldItemFcAndUpdateForUser(item, varFc);
 
         /* Find selected option */
-        BT_ASSERT_DBG(varFc.savedDepValIndex());
-        item._mSelVal = this->_savedVal<typename VarFcT::SelVal>(*varFc.savedDepValIndex());
+        BT_ASSERT_DBG(varFc.savedKeyValIndex());
+        item._mSelVal = this->_savedKeyVal<typename VarFcT::SelVal>(*varFc.savedKeyValIndex());
 
         const auto optIt = varFc.findOptBySelVal(item._mSelVal);
 
         if (optIt == varFc.end()) {
-            std::ostringstream ss;
-
-            ss << "no variant field option selected by the selector value " << item._mSelVal << '.';
-            this->_logAppendCauseAndThrow(ss);
+            CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(
+                "no variant field option selected by the selector value {}.", item._mSelVal);
         }
 
         item._mSelectedOptIndex = optIt - varFc.begin();
 
         /* Next: read the selected field */
         this->_prepareToReadField(optIt->fc());
-        return _StateHandlingReaction::STOP;
+        return _StateHandlingReaction::Stop;
     }
 
     /*
@@ -3889,8 +3288,8 @@ private:
         this->_setFieldItemFcAndUpdateForUser(item, optFc);
 
         /* Check whether or not the optional field is enabled */
-        BT_ASSERT_DBG(optFc.savedDepValIndex());
-        item._mSelVal = this->_savedVal<typename OptFcT::SelVal>(*optFc.savedDepValIndex());
+        BT_ASSERT_DBG(optFc.savedKeyValIndex());
+        item._mSelVal = this->_savedKeyVal<typename OptFcT::SelVal>(*optFc.savedKeyValIndex());
         item._mIsEnabled = optFc.isEnabledBySelVal(item._mSelVal);
 
         if (item._mIsEnabled) {
@@ -3908,12 +3307,12 @@ private:
             this->_restoreState();
         }
 
-        return _StateHandlingReaction::STOP;
+        return _StateHandlingReaction::Stop;
     }
 
-    static constexpr const char *_byteOrderStr(const ir::ByteOrder byteOrder) noexcept
+    static constexpr const char *_byteOrderStr(const ByteOrder byteOrder) noexcept
     {
-        return byteOrder == ir::ByteOrder::BIG ? "big-endian" : "little-endian";
+        return byteOrder == ByteOrder::Big ? "big-endian" : "little-endian";
     }
 
     /*
@@ -3921,23 +3320,20 @@ private:
      * `fc.byteOrder` and `iter._mLastFixedLenBitArrayFieldByteOrder`
      * aren't compatible, this method throws `DecodingError`.
      */
-    static void _checkLastFixedLenBitArrayFieldByteOrder(const ItemSeqIter& iter,
-                                                         const FixedLenBitArrayFc& fc)
+    void _checkLastFixedLenBitArrayFieldByteOrder(const FixedLenBitArrayFc& fc) const
     {
-        if (iter._mHeadOffsetInCurPkt.hasExtraBits() && iter._mLastFixedLenBitArrayFieldByteOrder &&
-            fc.byteOrder() != *iter._mLastFixedLenBitArrayFieldByteOrder) {
+        if (_mHeadOffsetInCurPkt.hasExtraBits() && _mLastFixedLenBitArrayFieldByteOrder &&
+            fc.byteOrder() != *_mLastFixedLenBitArrayFieldByteOrder) {
             /*
              * A fixed-length bit array field which doesn't start on a
              * byte boundary must have the same byte order as the
              * previous fixed-length bit array field.
              */
-            std::ostringstream ss;
-
-            ss << "two contiguous fixed-length bit array fields which aren't "
-               << "byte-aligned don't share the same byte order: "
-               << ItemSeqIter::_byteOrderStr(*iter._mLastFixedLenBitArrayFieldByteOrder)
-               << " followed with " << ItemSeqIter::_byteOrderStr(fc.byteOrder()) << '.';
-            iter._logAppendCauseAndThrow(ss);
+            CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(
+                "two contiguous fixed-length bit array fields which aren't "
+                "byte-aligned don't share the same byte order: {} followed with {}.",
+                ItemSeqIter::_byteOrderStr(*_mLastFixedLenBitArrayFieldByteOrder),
+                ItemSeqIter::_byteOrderStr(fc.byteOrder()));
         }
     }
 
@@ -3959,6 +3355,9 @@ private:
      * `ByteOrderV` is the byte order of the integer field to read. It
      * must be equal to `fc.byteOrder()`.
      *
+     * `BitOrder` is whether or not the bits of the field are reversed
+     * (unnatural).
+     *
      * Checks and updates `_mLastFixedLenBitArrayFieldByteOrder` if
      * needed.
      *
@@ -3967,8 +3366,10 @@ private:
      * Returns the decoded value, of type `unsigned long long` or `long
      * long`.
      */
-    template <bool IsSignedV, std::size_t LenBitsV, ir::ByteOrder ByteOrderV>
-    internal::ReadFixedLenIntFuncRetT<IsSignedV> _readFixedLenIntField(const FixedLenBitArrayFc& fc)
+    template <bt2c::Signedness SignednessV, std::size_t LenBitsV, ByteOrder ByteOrderV,
+              internal::BitOrder BitOrderV>
+    internal::ReadFixedLenIntFuncRet<SignednessV>
+    _readFixedLenIntField(const FixedLenBitArrayFc& fc)
     {
         static_assert(LenBitsV == 0 || LenBitsV == 8 || LenBitsV == 16 || LenBitsV == 32 ||
                           LenBitsV == 64,
@@ -3989,7 +3390,8 @@ private:
 
         /* Read the field */
         const auto val =
-            internal::ReadFixedLenIntFunc<ByteOrderV, IsSignedV, LenBitsV>::read(*this, fc);
+            internal::ReadFixedLenIntFunc<SignednessV, LenBitsV, ByteOrderV, BitOrderV>::read(*this,
+                                                                                              fc);
 
         /* Set last fixed-length bit array field byte order */
         _mLastFixedLenBitArrayFieldByteOrder = fc.byteOrder();
@@ -4006,17 +3408,20 @@ private:
      *
      * This method doesn't update the _value_ of `item`.
      *
-     * The `IsSignedV`, `LenBitsV`, and `ByteOrderV` template parameters
-     * are the same as for the _readFixedLenIntField() method template.
+     * The `SignednessV`, `LenBitsV`, `ByteOrderV`, and `BitOrderV`
+     * template parameters are the same as for the
+     * _readFixedLenIntField() method template.
      *
      * Returns the decoded value, of type `unsigned long long` or `long
      * long`.
      */
-    template <bool IsSignedV, std::size_t LenBitsV, ir::ByteOrder ByteOrderV, typename ItemT>
-    internal::ReadFixedLenIntFuncRetT<IsSignedV> _handleCommonReadFixedLenIntFieldState(ItemT& item)
+    template <bt2c::Signedness SignednessV, std::size_t LenBitsV, ByteOrder ByteOrderV,
+              internal::BitOrder BitOrderV, typename ItemT>
+    internal::ReadFixedLenIntFuncRet<SignednessV>
+    _handleCommonReadFixedLenIntFieldState(ItemT& item)
     {
         /* Read the fixed-length integer field */
-        const auto val = this->_readFixedLenIntField<IsSignedV, LenBitsV, ByteOrderV>(
+        const auto val = this->_readFixedLenIntField<SignednessV, LenBitsV, ByteOrderV, BitOrderV>(
             _mCurScalarFc->asFixedLenBitArray());
 
         /* Update for user */
@@ -4029,12 +3434,13 @@ private:
     /*
      * Same as the one above, but also prepares to read the next field.
      */
-    template <bool IsSignedV, std::size_t LenBitsV, ir::ByteOrder ByteOrderV, typename ItemT>
-    internal::ReadFixedLenIntFuncRetT<IsSignedV>
+    template <bt2c::Signedness SignednessV, std::size_t LenBitsV, ByteOrder ByteOrderV,
+              internal::BitOrder BitOrderV, typename ItemT>
+    internal::ReadFixedLenIntFuncRet<SignednessV>
     _handleCommonReadFixedLenIntFieldStateAndPrepareToReadNextField(ItemT& item)
     {
-        const auto val =
-            this->_handleCommonReadFixedLenIntFieldState<IsSignedV, LenBitsV, ByteOrderV>(item);
+        const auto val = this->_handleCommonReadFixedLenIntFieldState<SignednessV, LenBitsV,
+                                                                      ByteOrderV, BitOrderV>(item);
 
         /* Next: read next field */
         this->_prepareToReadNextField();
@@ -4048,36 +3454,36 @@ private:
      * decoded unsigned integer value `val` having the length `len`.
      *
      * This method may change the current state to
-     * `_State::SET_PKT_MAGIC_NUMBER_ITEM` or
-     * `_State::SET_DEF_CLK_VAL_ITEM`.
+     * `_State::SetPktMagicNumberItem` or
+     * `_State::SetDefClkValItem`.
      */
-    void _handleUIntFieldRole(const ir::UIntFieldRole role, const bt2c::DataLen len,
+    void _handleUIntFieldRole(const UIntFieldRole role, const bt2c::DataLen len,
                               const unsigned long long val)
     {
         switch (role) {
-        case ir::UIntFieldRole::PKT_MAGIC_NUMBER:
+        case UIntFieldRole::PktMagicNumber:
             /* Update for user */
             _mItems.pktMagicNumber._mVal = val;
 
             /* Next: set packet magic number item */
-            this->_state(_State::SET_PKT_MAGIC_NUMBER_ITEM);
+            this->_state(_State::SetPktMagicNumberItem);
             break;
-        case ir::UIntFieldRole::DATA_STREAM_CLS_ID:
-        case ir::UIntFieldRole::EVENT_RECORD_CLS_ID:
+        case UIntFieldRole::DataStreamClsId:
+        case UIntFieldRole::EventRecordClsId:
             _mCurClsId = val;
             break;
-        case ir::UIntFieldRole::DATA_STREAM_ID:
+        case UIntFieldRole::DataStreamId:
             _mItems.dataStreamInfo._mId = val;
             break;
-        case ir::UIntFieldRole::PKT_TOTAL_LEN:
+        case UIntFieldRole::PktTotalLen:
             _mCurPktExpectedLens.total = bt2c::DataLen::fromBits(val);
             _mItems.pktInfo._mExpectedTotalLen = _mCurPktExpectedLens.total;
             break;
-        case ir::UIntFieldRole::PKT_CONTENT_LEN:
+        case UIntFieldRole::PktContentLen:
             _mCurPktExpectedLens.content = bt2c::DataLen::fromBits(val);
             _mItems.pktInfo._mExpectedContentLen = _mCurPktExpectedLens.content;
             break;
-        case ir::UIntFieldRole::DEF_CLK_TS:
+        case UIntFieldRole::DefClkTs:
             /* Update clock value */
             this->_updateDefClkVal(val, len);
 
@@ -4085,15 +3491,15 @@ private:
             _mItems.defClkVal._mCycles = _mDefClkVal;
 
             /* Next: set default clock value item */
-            this->_state(_State::SET_DEF_CLK_VAL_ITEM);
+            this->_state(_State::SetDefClkValItem);
             break;
-        case ir::UIntFieldRole::PKT_END_DEF_CLK_TS:
+        case UIntFieldRole::PktEndDefClkTs:
             _mItems.pktInfo._mEndDefClkVal = val;
             break;
-        case ir::UIntFieldRole::DISC_EVENT_RECORD_COUNTER_SNAP:
+        case UIntFieldRole::DiscEventRecordCounterSnap:
             _mItems.pktInfo._mDiscErCounterSnap = val;
             break;
-        case ir::UIntFieldRole::PKT_SEQ_NUM:
+        case UIntFieldRole::PktSeqNum:
             _mItems.pktInfo._mSeqNum = val;
             break;
         default:
@@ -4110,10 +3516,10 @@ private:
     }
 
     /*
-     * Returns the length of the current variable-length integer
-     * instance.
+     * Returns the length of the current variable-length unsigned
+     * integer instance.
      */
-    bt2c::DataLen _uIntFieldLen(const VarLenIntFc&) const noexcept
+    bt2c::DataLen _uIntFieldLen(const VarLenUIntFc&) const noexcept
     {
         /* Variable-length integer field length is dynamic */
         return _mCurVarLenInt.len;
@@ -4124,8 +3530,8 @@ private:
      */
     enum class _SaveVal
     {
-        YES,
-        NO,
+        Yes,
+        No,
     };
 
     /*
@@ -4133,8 +3539,8 @@ private:
      */
     enum class _WithRole
     {
-        YES,
-        NO,
+        Yes,
+        No,
     };
 
     /*
@@ -4157,12 +3563,12 @@ private:
          * May be a length/selector of some upcoming dynamic length,
          * optional, or variant field.
          */
-        if (SaveValV == _SaveVal::YES) {
-            this->_saveVal(intFc.valSavingIndexes(), val);
+        if (SaveValV == _SaveVal::Yes) {
+            this->_saveKeyVal(intFc.keyValSavingIndexes(), val);
         }
 
         /* Role? */
-        if (WithRoleV == _WithRole::YES) {
+        if (WithRoleV == _WithRole::Yes) {
             /* Keep the current state to detect a change */
             const auto prevState = _mState;
 
@@ -4173,8 +3579,8 @@ private:
 
             /*
              * _handleUIntFieldRole() may change the state to
-             * `_State::SET_PKT_MAGIC_NUMBER_ITEM` or
-             * `_State::SET_DEF_CLK_VAL_ITEM`.
+             * `_State::SetPktMagicNumberItem` or
+             * `_State::SetDefClkValItem`.
              */
             if (_mState == prevState) {
                 /* State didn't change; next: read next field */
@@ -4185,15 +3591,15 @@ private:
             this->_prepareToReadNextField();
         }
 
-        return _StateHandlingReaction::STOP;
+        return _StateHandlingReaction::Stop;
     }
 
     /*
      * Common fixed-length unsigned integer field state handler.
      *
-     * The `LenBitsV`, `ByteOrderV`, and `ItemT` template parameters are
-     * the same as for the _handleCommonReadFixedLenIntFieldState()
-     * method template.
+     * The `LenBitsV`, `ByteOrderV`, `BitOrderV`, and `ItemT` template
+     * parameters are the same as for the
+     * _handleCommonReadFixedLenIntFieldState() method template.
      *
      * `WithRoleV` indicates whether or not the unsigned integer
      * field has at least one role.
@@ -4201,13 +3607,14 @@ private:
      * `SaveValV` indicates whether or not to save the unsigned integer
      * field value.
      */
-    template <typename FcT, std::size_t LenBitsV, ir::ByteOrder ByteOrderV, _WithRole WithRoleV,
-              _SaveVal SaveValV, typename ItemT>
+    template <typename FcT, std::size_t LenBitsV, ByteOrder ByteOrderV,
+              internal::BitOrder BitOrderV, _WithRole WithRoleV, _SaveVal SaveValV, typename ItemT>
     _StateHandlingReaction _handleCommonReadFixedLenUIntFieldState(ItemT& item)
     {
         /* Decode the unsigned integer value */
         const auto val =
-            this->_handleCommonReadFixedLenIntFieldState<false, LenBitsV, ByteOrderV>(item);
+            this->_handleCommonReadFixedLenIntFieldState<bt2c::Signedness::Unsigned, LenBitsV,
+                                                         ByteOrderV, BitOrderV>(item);
 
         /* Update for user */
         item._val(val);
@@ -4219,72 +3626,72 @@ private:
     /*
      * Common fixed-length signed integer field state handler.
      *
-     * The `LenBitsV`, `ByteOrderV`, and `ItemT` template parameters are
-     * the same as for the _handleCommonReadFixedLenIntFieldState()
-     * method template.
+     * The `LenBitsV`, `ByteOrderV`, `BitOrderV`, and `ItemT` template
+     * parameters are the same as for the
+     * _handleCommonReadFixedLenIntFieldState() method template.
      *
      * `SaveValV` indicates whether or not to save the signed integer
      * field value.
      */
-    template <typename FcT, std::size_t LenBitsV, ir::ByteOrder ByteOrderV, _SaveVal SaveValV,
-              typename ItemT>
+    template <typename FcT, std::size_t LenBitsV, ByteOrder ByteOrderV,
+              internal::BitOrder BitOrderV, _SaveVal SaveValV, typename ItemT>
     _StateHandlingReaction _handleCommonReadFixedLenSIntFieldState(ItemT& item)
     {
         /* Decode the signed integer value */
-        const auto val =
-            this->_handleCommonReadFixedLenIntFieldStateAndPrepareToReadNextField<true, LenBitsV,
-                                                                                  ByteOrderV>(item);
+        const auto val = this->_handleCommonReadFixedLenIntFieldStateAndPrepareToReadNextField<
+            bt2c::Signedness::Signed, LenBitsV, ByteOrderV, BitOrderV>(item);
 
         /* Update for user */
         item._val(val);
 
         /* May be a selector of some upcoming optional/variant field */
-        if (SaveValV == _SaveVal::YES) {
-            this->_saveVal(static_cast<const FcT&>(*_mCurScalarFc).valSavingIndexes(), val);
+        if (SaveValV == _SaveVal::Yes) {
+            this->_saveKeyVal(static_cast<const FcT&>(*_mCurScalarFc).keyValSavingIndexes(), val);
         }
 
-        return _StateHandlingReaction::STOP;
+        return _StateHandlingReaction::Stop;
     }
 
     /*
      * Common fixed-length boolean field state handler.
      *
-     * The `LenBitsV`, `ByteOrderV`, and `ItemT` template parameters are
-     * the same as for the _handleCommonReadFixedLenIntFieldState()
-     * method template.
+     * The `LenBitsV`, `ByteOrderV`, `BitOrderV`, and `ItemT` template
+     * parameters are the same as for the
+     * _handleCommonReadFixedLenIntFieldState() method template.
      *
      * `SaveValV` indicates whether or not to save the boolean field
      * value.
      */
-    template <std::size_t LenBitsV, ir::ByteOrder ByteOrderV, _SaveVal SaveValV, typename ItemT>
+    template <std::size_t LenBitsV, ByteOrder ByteOrderV, internal::BitOrder BitOrderV,
+              _SaveVal SaveValV, typename ItemT>
     _StateHandlingReaction _handleCommonReadFixedLenBoolFieldState(ItemT& item)
     {
         /* Decode the boolean value as an unsigned integer */
-        const auto val =
-            this->_handleCommonReadFixedLenIntFieldStateAndPrepareToReadNextField<false, LenBitsV,
-                                                                                  ByteOrderV>(item);
+        const auto val = this->_handleCommonReadFixedLenIntFieldStateAndPrepareToReadNextField<
+            bt2c::Signedness::Unsigned, LenBitsV, ByteOrderV, BitOrderV>(item);
 
         /* Update for user */
         item._val(val);
 
         /* May be a selector of some upcoming optional field */
-        if (SaveValV == _SaveVal::YES) {
-            this->_saveVal(_mCurScalarFc->asFixedLenBool().valSavingIndexes(), val);
+        if (SaveValV == _SaveVal::Yes) {
+            this->_saveKeyVal(_mCurScalarFc->asFixedLenBool().keyValSavingIndexes(), val);
         }
 
-        return _StateHandlingReaction::STOP;
+        return _StateHandlingReaction::Stop;
     }
 
     /*
      * Common fixed-length floating-point number field state handler.
      *
-     * The `LenBitsV` and `ByteOrderV` template parameters are the same
-     * as for the _handleCommonReadFixedLenIntFieldState() method
-     * template.
+     * The `LenBitsV`, `ByteOrderV`, and `BitOrderV` template parameters
+     * are the same as for the _handleCommonReadFixedLenIntFieldState()
+     * method template.
      *
      * `FloatT` must be either `float` or `double`.
      */
-    template <std::size_t LenBitsV, ir::ByteOrder ByteOrderV, typename FloatT>
+    template <std::size_t LenBitsV, ByteOrder ByteOrderV, internal::BitOrder BitOrderV,
+              typename FloatT>
     _StateHandlingReaction _handleCommonReadFixedLenFloatFieldState()
     {
         static_assert(std::is_same<FloatT, float>::value || std::is_same<FloatT, double>::value,
@@ -4292,7 +3699,8 @@ private:
 
         /* Decode the floating-point number value as an unsigned integer */
         const auto val = this->_handleCommonReadFixedLenIntFieldStateAndPrepareToReadNextField<
-            false, LenBitsV, ByteOrderV>(_mItems.fixedLenFloatField);
+            bt2c::Signedness::Unsigned, LenBitsV, ByteOrderV, BitOrderV>(
+            _mItems.fixedLenFloatField);
 
         /* Update for user */
         {
@@ -4321,28 +3729,28 @@ private:
             _mItems.fixedLenFloatField._val(static_cast<double>(u.f));
         }
 
-        return _StateHandlingReaction::STOP;
+        return _StateHandlingReaction::Stop;
     }
 
     /*
      * Common fixed-length bit array field state handler.
      *
-     * The `LenBitsV`, `ByteOrderV`, and `ItemT` template parameters are
-     * the same as for the _handleCommonReadFixedLenIntFieldState()
-     * method template.
+     * The `LenBitsV`, `ByteOrderV`, `BitOrderV`, and `ItemT` template
+     * parameters are the same as for the
+     * _handleCommonReadFixedLenIntFieldState() method template.
      */
-    template <std::size_t LenBitsV, ir::ByteOrder ByteOrderV, typename ItemT>
+    template <std::size_t LenBitsV, ByteOrder ByteOrderV, internal::BitOrder BitOrderV,
+              typename ItemT>
     _StateHandlingReaction _handleCommonReadFixedLenBitArrayFieldState(ItemT& item)
     {
         /* Read bit array value as an unsigned integer */
-        const auto val =
-            this->_handleCommonReadFixedLenIntFieldStateAndPrepareToReadNextField<false, LenBitsV,
-                                                                                  ByteOrderV>(item);
+        const auto val = this->_handleCommonReadFixedLenIntFieldStateAndPrepareToReadNextField<
+            bt2c::Signedness::Unsigned, LenBitsV, ByteOrderV, BitOrderV>(item);
 
         /* Update for user */
         item._val(val);
 
-        return _StateHandlingReaction::STOP;
+        return _StateHandlingReaction::Stop;
     }
 
     /*
@@ -4350,14 +3758,14 @@ private:
      * field state handler updating `item`.
      *
      * When there aren't any more fields to read, this method sets the
-     * current state to `_State::SET_METADATA_STREAM_UUID_ITEM`.
+     * current state to `_State::SetMetadataStreamUuidItem`.
      */
     template <typename ItemT>
     _StateHandlingReaction _handleCommonFixedLenMetadataStreamUuidByteUIntFieldBa8State(ItemT& item)
     {
         /* Read byte as an unsigned integer */
-        const auto val =
-            this->_handleCommonReadFixedLenIntFieldState<false, 8, ir::ByteOrder::BIG>(item);
+        const auto val = this->_handleCommonReadFixedLenIntFieldState<
+            bt2c::Signedness::Unsigned, 8, ByteOrder::Big, internal::BitOrder::Natural>(item);
 
         /* Update for user */
         item._val(val);
@@ -4379,17 +3787,17 @@ private:
             _mItems.metadataStreamUuid._mUuid = bt2c::Uuid {_mCurMetadataStreamUuid.data()};
 
             /* Next: set metadata stream UUID item */
-            this->_state(_State::SET_METADATA_STREAM_UUID_ITEM);
+            this->_state(_State::SetMetadataStreamUuidItem);
         }
 
-        return _StateHandlingReaction::STOP;
+        return _StateHandlingReaction::Stop;
     }
 
     /*
      * Appends the single LEB128 byte `byte` to `_mCurVarLenInt.val` and
      * updates `_mCurVarLenInt.len` accordingly.
      */
-    template <bool IsSignedV>
+    template <bt2c::Signedness SignednessV>
     void _appendVarLenIntByte(const std::uint8_t byte)
     {
         using namespace bt2c::literals::datalen;
@@ -4407,20 +3815,21 @@ private:
              *
              * * It's the last byte of the variable-length integer.
              *
-             * * If `IsSignedV` is false:
+             * * If `SignednessV` is `bt2c::Signedness::Unsigned`:
              *       Its 7-bit value (`byteVal`) must be 1.
              *
-             *   If `IsSignedV` is true:
+             *   If `SignednessV` is `bt2c::Signedness::Signed`:
              *       Its 7-bit value must be 0 (positive) or 127
              *       (negative).
              */
             const auto isLastByte = (byte & 0x80) == 0;
             const auto hasValidValAsSigned = byteVal == 0 || byteVal == 0x7f;
             const auto hasValidValAsUnsigned = byteVal == 1;
+            constexpr auto isSigned = SignednessV == bt2c::Signedness::Signed;
 
-            if (!isLastByte || (IsSignedV && !hasValidValAsSigned) ||
-                (!IsSignedV && !hasValidValAsUnsigned)) {
-                this->_logAppendCauseAndThrow(
+            if (!isLastByte || (isSigned && !hasValidValAsSigned) ||
+                (!isSigned && !hasValidValAsUnsigned)) {
+                CTF_SRC_ITEM_SEQ_ITER_CPPLOGE_APPEND_CAUSE_AND_THROW(
                     "unsupported oversized (more than 64 bits of data) variable-length integer field.");
             }
 
@@ -4441,7 +3850,7 @@ private:
      * Common variable-length unsigned integer field state handler
      * updating `item`.
      */
-    template <bool IsSignedV, typename ItemT>
+    template <bt2c::Signedness SignednessV, typename ItemT>
     void _handleCommonVarLenIntFieldState(ItemT& item)
     {
         BT_ASSERT_DBG(_mCurScalarFc);
@@ -4470,7 +3879,7 @@ private:
 
             if ((byte & 0x80) == 0) {
                 /* This is the last byte */
-                this->_appendVarLenIntByte<IsSignedV>(byte);
+                this->_appendVarLenIntByte<SignednessV>(byte);
 
                 /*
                  * Update for user.
@@ -4479,9 +3888,10 @@ private:
                  * the _end_ of the variable-length integer; the
                  * iterator user expects its beginning offset.
                  */
-                item._val(internal::VarLenIntFieldVal<IsSignedV>::val(_mCurVarLenInt.len,
-                                                                      _mCurVarLenInt.val));
+                item._val(internal::VarLenIntFieldVal<SignednessV>::val(_mCurVarLenInt.len,
+                                                                        _mCurVarLenInt.val));
                 item._mLen = _mCurVarLenInt.len;
+                this->_setFieldItemFc(item, *_mCurScalarFc);
                 this->_updateForUser(item, this->_headOffsetInItemSeq() - item.fieldLen());
 
                 /*
@@ -4513,7 +3923,7 @@ private:
             }
 
             /* Not the last byte */
-            this->_appendVarLenIntByte<IsSignedV>(byte);
+            this->_appendVarLenIntByte<SignednessV>(byte);
         }
 
         bt_common_abort();
@@ -4532,7 +3942,7 @@ private:
     _StateHandlingReaction _handleCommonReadVarLenUIntFieldState(ItemT& item)
     {
         /* This call sets the value of `item` */
-        this->_handleCommonVarLenIntFieldState<false>(item);
+        this->_handleCommonVarLenIntFieldState<bt2c::Signedness::Unsigned>(item);
 
         /*
          * Handle role and value saving.
@@ -4554,19 +3964,20 @@ private:
     _StateHandlingReaction _handleCommonReadVarLenSIntFieldState(ItemT& item)
     {
         /* This call sets the value of `item` */
-        this->_handleCommonVarLenIntFieldState<true>(item);
+        this->_handleCommonVarLenIntFieldState<bt2c::Signedness::Signed>(item);
 
         /* May be a selector of some upcoming optional/variant field */
-        if (SaveValV == _SaveVal::YES) {
+        if (SaveValV == _SaveVal::Yes) {
             /*
              * We can't use `_mCurVarLenInt.val` here because the
              * successful _handleCommonVarLenIntFieldState() call above
              * reset it.
              */
-            this->_saveVal(static_cast<const FcT&>(*_mCurScalarFc).valSavingIndexes(), item.val());
+            this->_saveKeyVal(static_cast<const FcT&>(*_mCurScalarFc).keyValSavingIndexes(),
+                              item.val());
         }
 
-        return _StateHandlingReaction::STOP;
+        return _StateHandlingReaction::Stop;
     }
 
     /*
@@ -4582,12 +3993,12 @@ private:
     }
 
     /*
-     * Observer notified when the number of saved values required by
+     * Observer notified when the number of saved key values required by
      * `*_mTraceCls` changes.
      */
-    void _savedValCountUpdated(const size_t savedValCount)
+    void _savedKeyValCountUpdated(const size_t savedKeyValCount)
     {
-        _mSavedVals.resize(savedValCount);
+        _mSavedKeyVals.resize(savedKeyValCount);
     }
 
     /* Underlying medium to request data from */
@@ -4597,12 +4008,13 @@ private:
     const TraceCls *_mTraceCls;
 
     /*
-     * Token of the _savedValCountUpdated() observer.
+     * Token of the _savedKeyValCountUpdated() observer.
      */
-    TraceCls::SavedValCountUpdatedObservable::Token _mTraceClsSavedValueCountUpdatedObservableToken;
+    TraceCls::SavedKeyValCountUpdatedObservable::Token
+        _mTraceClsSavedKeyValCountUpdatedObservableToken;
 
     /* Current state */
-    _State _mState = _State::INIT;
+    _State _mState = _State::Init;
 
     /* State to restore after having skipped padding bits */
     _State _mPostSkipPaddingState;
@@ -4643,20 +4055,16 @@ private:
         EventRecordInfoItem eventRecordInfo;
         DefClkValItem defClkVal;
         FixedLenBitArrayFieldItem fixedLenBitArrayField;
+        FixedLenBitMapFieldItem fixedLenBitMapField;
         FixedLenBoolFieldItem fixedLenBoolField;
         FixedLenSIntFieldItem fixedLenSIntField;
         FixedLenUIntFieldItem fixedLenUIntField;
-        FixedLenSEnumFieldItem fixedLenSEnumField;
-        FixedLenUEnumFieldItem fixedLenUEnumField;
         FixedLenFloatFieldItem fixedLenFloatField;
         VarLenSIntFieldItem varLenSIntField;
         VarLenUIntFieldItem varLenUIntField;
-        VarLenSEnumFieldItem varLenSEnumField;
-        VarLenUEnumFieldItem varLenUEnumField;
         NullTerminatedStrFieldBeginItem nullTerminatedStrFieldBegin;
         NullTerminatedStrFieldEndItem nullTerminatedStrFieldEnd;
-        StrFieldSubstrItem strFieldSubstr;
-        BlobFieldSectionItem blobFieldSection;
+        RawDataItem rawData;
         StaticLenArrayFieldBeginItem staticLenArrayFieldBegin;
         StaticLenArrayFieldEndItem staticLenArrayFieldEnd;
         DynLenArrayFieldBeginItem dynLenArrayFieldBegin;
@@ -4684,7 +4092,7 @@ private:
     } _mItems;
 
     /* Last fixed-length bit array field byte order */
-    bt2s::optional<ir::ByteOrder> _mLastFixedLenBitArrayFieldByteOrder;
+    bt2s::optional<ByteOrder> _mLastFixedLenBitArrayFieldByteOrder;
 
     /* Remaining padding bits to skip for alignment */
     bt2c::DataLen _mRemainingLenToSkip = bt2c::DataLen::fromBits(0);
@@ -4705,13 +4113,20 @@ private:
         bt2c::DataLen len = bt2c::DataLen::fromBits(0);
     } _mCurVarLenInt;
 
+    /*
+     * Null codepoint finders.
+     */
+    NullCpFinder<1> _mUtf8NullCpFinder;
+    NullCpFinder<2> _mUtf16NullCpFinder;
+    NullCpFinder<4> _mUtf32NullCpFinder;
+
     /* Current scalar field class */
     const Fc *_mCurScalarFc = nullptr;
 
     /* Current scope */
     struct
     {
-        ir::FieldLocScope scope;
+        Scope scope;
         const StructFc *fc = nullptr;
     } _mCurScope;
 
@@ -4728,10 +4143,10 @@ private:
     std::vector<_StackFrame> _mStack;
 
     /*
-     * Saved values (dynamic-length field lengths and variant/optional
-     * field selectors).
+     * Saved key values (dynamic-length field lengths and
+     * variant/optional field selectors).
      */
-    std::vector<unsigned long long> _mSavedVals;
+    std::vector<unsigned long long> _mSavedKeyVals;
 
     /* Current default clock value, if any */
     unsigned long long _mDefClkVal = 0;
@@ -4743,68 +4158,88 @@ private:
 namespace internal {
 
 /*
+ * Reverses `*len` bits of `val` if `BitOrderV` is `BitOrder::Natural`;
+ * no op otherwise.
+ */
+template <bt2c::Signedness SignednessV, BitOrder BitOrderV>
+ReadFixedLenIntFuncRet<SignednessV>
+reverseFixedLenIntBitsIfNeeded(const ReadFixedLenIntFuncRet<SignednessV> val,
+                               const bt2c::DataLen len) noexcept
+{
+    if (BitOrderV == BitOrder::Natural) {
+        return val;
+    } else {
+        return bt2c::reverseFixedLenIntBits(val, len);
+    }
+}
+
+/*
  * Byte-aligned, byte-sized, big-endian specialization.
  */
-template <bool IsSignedV, std::size_t LenBitsV>
-struct ReadFixedLenIntFunc<ir::ByteOrder::BIG, IsSignedV, LenBitsV> final
+template <bt2c::Signedness SignednessV, std::size_t LenBitsV, BitOrder BitOrderV>
+struct ReadFixedLenIntFunc<SignednessV, LenBitsV, ByteOrder::Big, BitOrderV> final
 {
-    static ReadFixedLenIntFuncRetT<IsSignedV> read(const ItemSeqIter& iter,
-                                                   const FixedLenBitArrayFc&) noexcept
+    static ReadFixedLenIntFuncRet<SignednessV> read(const ItemSeqIter& iter,
+                                                    const FixedLenBitArrayFc&) noexcept
     {
-        return static_cast<ReadFixedLenIntFuncRetT<IsSignedV>>(
-            bt2c::readFixedLenIntBe<bt2c::StdIntT<LenBitsV, IsSignedV>>(iter._bufAtHead()));
+        return reverseFixedLenIntBitsIfNeeded<SignednessV, BitOrderV>(
+            static_cast<ReadFixedLenIntFuncRet<SignednessV>>(
+                bt2c::readFixedLenIntBe<bt2c::StdIntT<LenBitsV, SignednessV>>(iter._bufAtHead())),
+            bt2c::DataLen::fromBits(LenBitsV));
     }
 };
 
 /*
  * Byte-aligned, byte-sized, little-endian specialization.
  */
-template <bool IsSignedV, std::size_t LenBitsV>
-struct ReadFixedLenIntFunc<ir::ByteOrder::LITTLE, IsSignedV, LenBitsV> final
+template <bt2c::Signedness SignednessV, std::size_t LenBitsV, BitOrder BitOrderV>
+struct ReadFixedLenIntFunc<SignednessV, LenBitsV, ByteOrder::Little, BitOrderV> final
 {
-    static ReadFixedLenIntFuncRetT<IsSignedV> read(const ItemSeqIter& iter,
-                                                   const FixedLenBitArrayFc&) noexcept
+    static ReadFixedLenIntFuncRet<SignednessV> read(const ItemSeqIter& iter,
+                                                    const FixedLenBitArrayFc&) noexcept
     {
-        return static_cast<ReadFixedLenIntFuncRetT<IsSignedV>>(
-            bt2c::readFixedLenIntLe<bt2c::StdIntT<LenBitsV, IsSignedV>>(iter._bufAtHead()));
+        return reverseFixedLenIntBitsIfNeeded<SignednessV, BitOrderV>(
+            static_cast<ReadFixedLenIntFuncRet<SignednessV>>(
+                bt2c::readFixedLenIntLe<bt2c::StdIntT<LenBitsV, SignednessV>>(iter._bufAtHead())),
+            bt2c::DataLen::fromBits(LenBitsV));
     }
 };
 
 /*
  * Any alignment, any length, big-endian specialization.
  */
-template <bool IsSignedV>
-struct ReadFixedLenIntFunc<ir::ByteOrder::BIG, IsSignedV, 0> final
+template <bt2c::Signedness SignednessV, BitOrder BitOrderV>
+struct ReadFixedLenIntFunc<SignednessV, 0, ByteOrder::Big, BitOrderV> final
 {
-    static ReadFixedLenIntFuncRetT<IsSignedV> read(const ItemSeqIter& iter,
-                                                   const FixedLenBitArrayFc& fc) noexcept
+    static ReadFixedLenIntFuncRet<SignednessV> read(const ItemSeqIter& iter,
+                                                    const FixedLenBitArrayFc& fc) noexcept
     {
-        ItemSeqIter::_checkLastFixedLenBitArrayFieldByteOrder(iter, fc);
+        iter._checkLastFixedLenBitArrayFieldByteOrder(fc);
 
-        ReadFixedLenIntFuncRetT<IsSignedV> val;
+        ReadFixedLenIntFuncRet<SignednessV> val;
 
         bt_bitfield_read_be(iter._bufAtHead(), std::uint8_t,
                             iter._mHeadOffsetInCurPkt.extraBitCount(), *fc.len(), &val);
-        return val;
+        return reverseFixedLenIntBitsIfNeeded<SignednessV, BitOrderV>(val, fc.len());
     }
 };
 
 /*
  * Any alignment, any length, little-endian specialization.
  */
-template <bool IsSignedV>
-struct ReadFixedLenIntFunc<ir::ByteOrder::LITTLE, IsSignedV, 0> final
+template <bt2c::Signedness SignednessV, BitOrder BitOrderV>
+struct ReadFixedLenIntFunc<SignednessV, 0, ByteOrder::Little, BitOrderV> final
 {
-    static ReadFixedLenIntFuncRetT<IsSignedV> read(const ItemSeqIter& iter,
-                                                   const FixedLenBitArrayFc& fc) noexcept
+    static ReadFixedLenIntFuncRet<SignednessV> read(const ItemSeqIter& iter,
+                                                    const FixedLenBitArrayFc& fc) noexcept
     {
-        ItemSeqIter::_checkLastFixedLenBitArrayFieldByteOrder(iter, fc);
+        iter._checkLastFixedLenBitArrayFieldByteOrder(fc);
 
-        ReadFixedLenIntFuncRetT<IsSignedV> val;
+        ReadFixedLenIntFuncRet<SignednessV> val;
 
         bt_bitfield_read_le(iter._bufAtHead(), std::uint8_t,
                             iter._mHeadOffsetInCurPkt.extraBitCount(), *fc.len(), &val);
-        return val;
+        return reverseFixedLenIntBitsIfNeeded<SignednessV, BitOrderV>(val, fc.len());
     }
 };
 
@@ -4812,4 +4247,4 @@ struct ReadFixedLenIntFunc<ir::ByteOrder::LITTLE, IsSignedV, 0> final
 } /* namespace src */
 } /* namespace ctf */
 
-#endif /* _CTF_SRC_ITEM_SEQ_ITEM_SEQ_ITER_HPP */
+#endif /* CTF_COMMON_SRC_ITEM_SEQ_ITEM_SEQ_ITER_HPP */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2022-2024 Philippe Proulx <pproulx@efficios.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -70,7 +70,7 @@ void JsonVal::accept(JsonValVisitor& visitor) const
     this->_accept(visitor);
 }
 
-JsonNullVal::JsonNullVal(TextLoc loc) noexcept : JsonVal {Type::NUL, std::move(loc)}
+JsonNullVal::JsonNullVal(TextLoc loc) noexcept : JsonVal {Type::Null, std::move(loc)}
 {
 }
 
@@ -80,6 +80,8 @@ void JsonNullVal::_accept(JsonValVisitor& visitor) const
 }
 
 #ifdef BT_DEBUG_MODE
+
+namespace {
 
 /*
  * Returns `true` if no JSON value unique pointer within `vals` is
@@ -97,6 +99,8 @@ bool valsNotNull(const ContainerT& vals, GetValueFuncT&& getValueFunc)
                            return static_cast<bool>(getValueFunc(elem));
                        });
 }
+
+} /* namespace */
 
 #endif /* BT_DEBUG_MODE */
 

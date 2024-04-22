@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Copyright (c) 2022 EfficiOS, Inc
+ * Copyright (c) 2022-2024 EfficiOS, Inc
  */
 
 #ifndef CTF_COMMON_SRC_MSG_ITER_HPP
@@ -14,11 +14,16 @@
 
 #include "common/assert.h"
 #include "cpp-common/bt2/message.hpp"
+#include "cpp-common/bt2/self-message-iterator.hpp"
 #include "cpp-common/bt2/trace-ir.hpp"
+#include "cpp-common/bt2c/aliases.hpp"
+#include "cpp-common/bt2c/unicode-conv.hpp"
 
 #include "item-seq/item-seq-iter.hpp"
 #include "item-seq/item-visitor.hpp"
 #include "item-seq/logging-item-visitor.hpp"
+#include "null-cp-finder.hpp"
+#include "plugins/ctf/common/src/metadata/ctf-ir.hpp"
 
 namespace ctf {
 namespace src {
@@ -52,22 +57,22 @@ struct MsgIterQuirks final
  *
  * Therefore, as a user, you provide:
  *
- * • A medium, which provides binary stream data to the iterator.
+ * • A medium, which provides data stream data to the iterator.
  *
  * • A CTF IR trace class, which describes how to decode said data.
  *
  * • A libbabeltrace2 self message iterator and stream, which the
  *   iterator needs to create libbabeltrace2 messages.
  *
- * A CTF message iterator may automatically fix some common quirks (see
- * `MsgIterQuirks`).
+ * A CTF message iterator may automatically fix some common quirks
+ * (see `MsgIterQuirks`).
  */
 class MsgIter final
 {
 public:
     /*
-     * Builds a CTF message iterator, using `traceCls` and `medium`
-     * to decode a data stream identified by `stream`, and `selfMsgIter`
+     * Builds a CTF message iterator, using `traceCls` and `medium` to
+     * decode a data stream identified by `stream`, and `selfMsgIter`
      * and `stream` to create libbabeltrace2 messages.
      *
      * `quirks` indicates which quirks to fix.
@@ -75,7 +80,7 @@ public:
      * It's guaranteed that this constructor doesn't throw
      * `bt2c::TryAgain` or a medium error.
      */
-    explicit MsgIter(bt_self_message_iterator *selfMsgIter, const ctf::src::TraceCls& traceCls,
+    explicit MsgIter(bt2::SelfMessageIterator selfMsgIter, const ctf::src::TraceCls& traceCls,
                      bt2s::optional<bt2c::Uuid> expectedMetadataStreamUuid, bt2::Stream stream,
                      Medium::UP medium, const MsgIterQuirks& quirks,
                      const bt2c::Logger& parentLogger);
@@ -93,8 +98,8 @@ public:
      * `bt2s::nullopt`:
      *     The iterator is ended.
      *
-     * May throw whatever Medium::buf() may throw as well as
-     * `bt2c::Error`.
+     * May throw whatever Medium::buf() may throw as well
+     * as `bt2c::Error`.
      */
     bt2::ConstMessage::Shared next();
 
@@ -107,46 +112,46 @@ private:
     {
     public:
         explicit _StackFrame(const bt2::StructureField field) noexcept :
-            _mFieldType {_FieldType::STRUCT}, _mField {field}
+            _mFieldType {_FieldType::Struct}, _mField {field}
         {
         }
 
         explicit _StackFrame(const bt2::VariantField field) noexcept :
-            _mFieldType {_FieldType::VARIANT}, _mField(field)
+            _mFieldType {_FieldType::Variant}, _mField(field)
         {
         }
 
         explicit _StackFrame(const bt2::OptionField field) noexcept :
-            _mFieldType {_FieldType::OPTION}, _mField(field)
+            _mFieldType {_FieldType::Option}, _mField(field)
         {
         }
 
         explicit _StackFrame(const bt2::ArrayField field) noexcept :
-            _mFieldType(_FieldType::ARRAY), _mField(field)
+            _mFieldType(_FieldType::Array), _mField(field)
         {
         }
 
         bt2::StructureField structureField() const noexcept
         {
-            BT_ASSERT_DBG(_mFieldType == _FieldType::STRUCT);
+            BT_ASSERT_DBG(_mFieldType == _FieldType::Struct);
             return _mField.structure;
         }
 
         bt2::VariantField variantField() const noexcept
         {
-            BT_ASSERT_DBG(_mFieldType == _FieldType::VARIANT);
+            BT_ASSERT_DBG(_mFieldType == _FieldType::Variant);
             return _mField.variant;
         }
 
         bt2::OptionField optionField() const noexcept
         {
-            BT_ASSERT_DBG(_mFieldType == _FieldType::OPTION);
+            BT_ASSERT_DBG(_mFieldType == _FieldType::Option);
             return _mField.option;
         }
 
         bt2::ArrayField arrayField() const noexcept
         {
-            BT_ASSERT_DBG(_mFieldType == _FieldType::ARRAY);
+            BT_ASSERT_DBG(_mFieldType == _FieldType::Array);
             return _mField.array;
         }
 
@@ -165,8 +170,8 @@ private:
              *
              * In practice, `_mSubFieldIndex` will reach one with a
              * variant/option field, but curSubField() will never be
-             * called with `_mSubFieldIndex` being something else than
-             * zero.
+             * called with `_mSubFieldIndex` being something else
+             * than zero.
              */
             ++_mSubFieldIndex;
         }
@@ -174,20 +179,20 @@ private:
         bt2::Field curSubField() noexcept
         {
             switch (_mFieldType) {
-            case _FieldType::STRUCT:
+            case _FieldType::Struct:
                 BT_ASSERT_DBG(_mSubFieldIndex < _mField.structure.cls().length());
                 return _mField.structure[_mSubFieldIndex];
 
-            case _FieldType::VARIANT:
+            case _FieldType::Variant:
                 BT_ASSERT_DBG(_mSubFieldIndex == 0);
                 return _mField.variant.selectedOptionField();
 
-            case _FieldType::OPTION:
+            case _FieldType::Option:
                 BT_ASSERT_DBG(_mSubFieldIndex == 0);
                 BT_ASSERT_DBG(_mField.option.hasField());
                 return *_mField.option.field();
 
-            case _FieldType::ARRAY:
+            case _FieldType::Array:
                 BT_ASSERT_DBG(_mSubFieldIndex < _mField.array.length());
                 return _mField.array[_mSubFieldIndex];
 
@@ -209,16 +214,16 @@ private:
         enum class _FieldType
         {
             /* Selects `structure` */
-            STRUCT = 1,
+            Struct = 1,
 
             /* Selects `variant` */
-            VARIANT,
+            Variant,
 
             /* Selects `option` */
-            OPTION,
+            Option,
 
             /* Selects `array` */
-            ARRAY,
+            Array,
         } _mFieldType;
 
         /* Field of this frame, selected by `_mFieldType` above */
@@ -262,14 +267,14 @@ private:
         /*
          * Index of, depending on `_mFieldType` above:
          *
-         * `_FieldType::STRUCT`:
+         * `_FieldType::Struct`:
          *     The current member of `_mField.structure`.
          *
-         * `_FieldType::ARRAY`:
+         * `_FieldType::Array`:
          *     The current element field of `_mField.array`.
          *
-         * `_FieldType::VARIANT`:
-         * `_FieldType::OPTION`:
+         * `_FieldType::Variant`:
+         * `_FieldType::Option`:
          *     Not applicable.
          */
         unsigned long long _mSubFieldIndex = 0;
@@ -291,11 +296,10 @@ private:
 
     /* Specific item handlers below */
     void _handleItem(const ArrayFieldEndItem& item);
-    void _handleItem(const BlobFieldSectionItem& item);
+    void _handleItem(const BlobFieldEndItem& item);
     void _handleItem(const DataStreamInfoItem& item);
     void _handleItem(const DynLenArrayFieldBeginItem& item);
     void _handleItem(const DynLenBlobFieldBeginItem& item);
-    void _handleItem(const BlobFieldEndItem& item);
     void _handleItem(const EventRecordEndItem& item);
     void _handleItem(const EventRecordInfoItem& item);
     void _handleItem(const FixedLenBitArrayFieldItem& item);
@@ -304,6 +308,8 @@ private:
     void _handleItem(const FixedLenSIntFieldItem& item);
     void _handleItem(const FixedLenUIntFieldItem& item);
     void _handleItem(const MetadataStreamUuidItem& item);
+    void _handleItem(const NonNullTerminatedStrFieldBeginItem& item);
+    void _handleItem(const NonNullTerminatedStrFieldEndItem& item);
     void _handleItem(const NullTerminatedStrFieldBeginItem& item);
     void _handleItem(const NullTerminatedStrFieldEndItem& item);
     void _handleItem(const OptionalFieldBeginItem& item);
@@ -313,22 +319,20 @@ private:
     void _handleItem(const PktEndItem& item);
     void _handleItem(const PktInfoItem& item);
     void _handleItem(const PktMagicNumberItem& item);
+    void _handleBlobRawDataItem(const RawDataItem& item);
+    void _handleStrRawDataItem(const RawDataItem& item);
+    void _handleItem(const RawDataItem& item);
     void _handleItem(const ScopeBeginItem& item);
     void _handleItem(const ScopeEndItem& item);
     void _handleItem(const StaticLenArrayFieldBeginItem& item);
     void _handleItem(const StaticLenBlobFieldBeginItem& item);
-    void _handleItem(const NonNullTerminatedStrFieldBeginItem& item);
-    void _handleItem(const NonNullTerminatedStrFieldEndItem& item);
-    void _handleItem(const StrFieldSubstrItem& item);
     void _handleItem(const StructFieldBeginItem& item);
     void _handleItem(const StructFieldEndItem& item);
     void _handleItem(const VariantFieldBeginItem& item);
     void _handleItem(const VariantFieldEndItem& item);
-    void _handleItem(const VarLenSEnumFieldItem& item);
     void _handleItem(const VarLenSIntFieldItem& item);
-    void _handleItem(const VarLenUEnumFieldItem& item);
     void _handleItem(const VarLenUIntFieldItem& item);
-    void _handleStrFieldBeginItem();
+    void _handleStrFieldBeginItem(const FieldItem& item);
     void _handleStrFieldEndItem();
 
     template <typename ItemT>
@@ -401,24 +405,11 @@ private:
     }
 
     /*
-     * Returns the current packet (weak) if there's one, or `nullptr`
-     * otherwise.
-     */
-    bt_packet *_curPkt()
-    {
-        if (_mCurPkt) {
-            return _mCurPkt->libObjPtr();
-        }
-
-        return nullptr;
-    }
-
-    /*
      * Sets the current packet to `pkt`.
      */
     void _curPkt(bt2::Packet::Shared pkt)
     {
-        BT_ASSERT_DBG(!this->_curPkt());
+        BT_ASSERT_DBG(!_mCurPkt);
         _mCurPkt = std::move(pkt);
     }
 
@@ -427,7 +418,7 @@ private:
      */
     void _resetCurPkt()
     {
-        BT_ASSERT_DBG(this->_curPkt());
+        BT_ASSERT_DBG(_mCurPkt);
         _mCurPkt.reset();
     }
 
@@ -435,25 +426,25 @@ private:
      * Creates and returns an initial discarded events message, not
      * setting any specific count.
      */
-    bt_message *_createInitDiscEventsMsg(const _OptUll& prevPktEndDefClkVal);
+    bt2::Message::Shared _createInitDiscEventsMsg(const _OptUll& prevPktEndDefClkVal);
 
     /*
      * Creates and returns an initial discarded packets message, not
      * setting any specific count.
      */
-    bt_message *_createInitDiscPktsMsg(const _OptUll& prevPktEndDefClkVal);
+    bt2::Message::Shared _createInitDiscPktsMsg(const _OptUll& prevPktEndDefClkVal);
 
     /*
      * Creates a packet end message and, if needed, updates the current
      * timestamp.
      */
-    bt_message *_createPktEndMsgAndUpdateCurDefClkVal();
+    bt2::Message::Shared _createPktEndMsgAndUpdateCurDefClkVal();
 
     /*
      * Creates an event message using the class `cls` and having
      * `defClkVal` as its timestamp.
      */
-    bt_message *_createEventMsg(bt2::EventClass cls, const _OptUll& defClkVal);
+    bt2::Message::Shared _createEventMsg(bt2::EventClass cls, const _OptUll& defClkVal);
 
     /*
      * Emits a packet beginning message having `defClkVal`, if set, as
@@ -468,28 +459,27 @@ private:
     void _emitDelayedPktBeginMsg(const _OptUll& otherDefClkVal);
 
     /*
-     * Adds the message `msg` (ownership is transfered to this method)
-     * to the message queue.
+     * Adds the message `msg` to the message queue.
      */
-    void _addMsgToQueue(bt_message *msg);
+    void _addMsgToQueue(bt2::ConstMessage::Shared msg);
 
     /*
      * Returns one of:
      *
      * A shared libbabeltrace2 message:
-     *     The next available message from the message queue,
-     *     removing it from the queue.
+     *     The next available message from the message queue, removing
+     *     it from the queue.
      *
      * `bt2s::nullopt`:
      *     The message queue is empty.
      */
     bt2::ConstMessage::Shared _releaseNextMsg();
 
-    /* Logging configuration */
+    /* Logger */
     bt2c::Logger _mLogger;
 
     /* libbabeltrace2 self message iterator to create messages (weak) */
-    bt_self_message_iterator *_mSelfMsgIter;
+    bt2::SelfMessageIterator _mSelfMsgIter;
 
     /* Corresponding libbabeltrace2 stream */
     bt2::Stream _mStream;
@@ -519,7 +509,7 @@ private:
     std::stack<_StackFrame> _mStack;
 
     /* Root field of current scope */
-    bt2s::optional<bt2::StructureField> _mCurScopeField;
+    bt2::OptionalBorrowedObject<bt2::StructureField> _mCurScopeField;
 
     /*
      * Whether or not to skip items until reaching the end of the
@@ -572,16 +562,31 @@ private:
     bool _mDelayPktBeginMsgEmission = false;
 
     /*
-     * Whether or not, while processing `StrFieldSubstrItem` items, we
-     * got a null character.
+     * Whether or not, while processing `RawDataItem` items, we got a
+     * null character.
      */
-    bool _mHaveStrFieldSubstrItemNullChar = false;
+    bool _mHaveNullChar = false;
+
+    /* Null codepoint finders for UTF-16 and UTF-32 */
+    NullCpFinder<2> _mUtf16NullCpFinder;
+    NullCpFinder<4> _mUtf32NullCpFinder;
+
+    /* Unicode converter to decode UTF-16 and UTF-32 strings */
+    bt2c::UnicodeConv _mUnicodeConv;
+
+    /* Buffer holding the string to convert to UTF-8 */
+    std::vector<std::uint8_t> _mStrBuf;
 
     /*
      * Current BLOB field data offset while processing BLOB field
      * section items.
      */
     std::size_t _mCurBlobFieldDataOffset = 0;
+
+    /*
+     * Current string field encoding, if any.
+     */
+    StrEncoding _mCurStrFieldEncoding = StrEncoding::Utf8;
 
     /* Helper to log items */
     LoggingItemVisitor _mLoggingVisitor;

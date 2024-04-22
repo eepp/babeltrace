@@ -12,6 +12,7 @@
 
 #include "common/assert.h"
 #include "common/common.h"
+#include "cpp-common/vendor/fmt/format.h"
 
 #include "item.hpp"
 #include "logging-item-visitor.hpp"
@@ -30,30 +31,19 @@ LoggingItemVisitor::LoggingItemVisitor(std::string intro, const bt2c::Logger& pa
 }
 
 template <typename ValT>
-void appendVal(std::ostringstream& ss, const ValT& val)
-{
-    ss << val;
-}
-
-template <>
-inline void appendVal<bool>(std::ostringstream& ss, const bool& val)
-{
-    ss << (val ? "true" : "false");
-}
-
-template <typename ValT>
 void appendField(std::ostringstream& ss, const char * const name, const ValT& val)
 {
-    ss << ", " << name << '=';
-    appendVal(ss, val);
+    ss << fmt::format(", {}={}", name, val);
 }
 
-static void appendDataLenBitsField(std::ostringstream& ss, const bt2c::DataLen& len)
+namespace {
+
+void appendDataLenBitsField(std::ostringstream& ss, const bt2c::DataLen& len)
 {
     appendField(ss, "len-bits", len.bits());
 }
 
-static void appendDataLenBytesField(std::ostringstream& ss, const bt2c::DataLen& len)
+void appendDataLenBytesField(std::ostringstream& ss, const bt2c::DataLen& len)
 {
     BT_ASSERT_DBG(!len.hasExtraBits());
     appendField(ss, "len-bytes", len.bytes());
@@ -77,22 +67,7 @@ void appendItemLenField(std::ostringstream& ss, const ItemT& item)
     appendField(ss, "len", item.len());
 }
 
-template <typename ItemT>
-void appendItemFirstBytesField(std::ostringstream& ss, const ItemT& item)
-{
-    if (item.size().bytes() > 0) {
-        const auto fill = ss.fill();
-
-        ss << ", first-bytes=";
-
-        for (std::size_t i = 0; i < std::min(item.size().bytes(), 8ULL); ++i) {
-            ss << std::setbase(16) << std::setw(2) << std::setfill('0')
-               << static_cast<unsigned int>(item.begin()[i]);
-        }
-
-        ss << std::setbase(0) << std::setw(0) << std::setfill(fill);
-    }
-}
+} /* namespace */
 
 void LoggingItemVisitor::visit(const Item& item)
 {
@@ -101,14 +76,46 @@ void LoggingItemVisitor::visit(const Item& item)
     this->_log(item, ss);
 }
 
-void LoggingItemVisitor::visit(const BlobFieldSectionItem& item)
+void LoggingItemVisitor::visit(const RawDataItem& item)
 {
     std::ostringstream ss;
 
-    appendDataLenBytesField(ss, item.size());
-    appendItemFirstBytesField(ss, item);
+    appendDataLenBytesField(ss, item.len());
+
+    if (item.data().size() > 0) {
+        ss << ", first-bytes=";
+
+        for (const auto byte : item.data()) {
+            ss << fmt::format("{:02x}", byte);
+        }
+    }
+
     this->_log(item, ss);
 }
+
+namespace {
+
+template <typename ClsT>
+void tryAppendClsNsNameUid(std::ostringstream& ss, const ClsT * const cls)
+{
+    if (cls) {
+        appendField(ss, "cls-id", cls->id());
+
+        if (cls->ns()) {
+            appendField(ss, "cls-ns", *cls->ns());
+        }
+
+        if (cls->name()) {
+            appendField(ss, "cls-name", *cls->name());
+        }
+
+        if (cls->uid()) {
+            appendField(ss, "cls-uid", *cls->uid());
+        }
+    }
+}
+
+} /* namespace */
 
 void LoggingItemVisitor::visit(const DataStreamInfoItem& item)
 {
@@ -118,7 +125,7 @@ void LoggingItemVisitor::visit(const DataStreamInfoItem& item)
         appendField(ss, "id", *item.id());
     }
 
-    appendField(ss, "cls-id", item.cls()->id());
+    tryAppendClsNsNameUid(ss, item.cls());
     this->_log(item, ss);
 }
 
@@ -130,11 +137,15 @@ void LoggingItemVisitor::visit(const DefClkValItem& item)
     this->_log(item, ss);
 }
 
+namespace {
+
 template <typename ItemT>
 void appendItemMinAlignField(std::ostringstream& ss, const ItemT& item)
 {
     appendField(ss, "min-align", item.cls().minAlign());
 }
+
+} /* namespace */
 
 void LoggingItemVisitor::visit(const DynLenArrayFieldBeginItem& item)
 {
@@ -145,11 +156,15 @@ void LoggingItemVisitor::visit(const DynLenArrayFieldBeginItem& item)
     this->_log(item, ss);
 }
 
+namespace {
+
 template <typename ItemT>
 void appendBlobFieldBeginItemMediaTypeField(std::ostringstream& ss, const ItemT& item)
 {
     appendField(ss, "media-type", item.cls().mediaType());
 }
+
+} /* namespace */
 
 void LoggingItemVisitor::visit(const DynLenBlobFieldBeginItem& item)
 {
@@ -176,28 +191,26 @@ void LoggingItemVisitor::visit(const EventRecordInfoItem& item)
         appendField(ss, "def-clk-val", *item.defClkVal());
     }
 
-    if (item.cls()) {
-        appendField(ss, "cls-id", item.cls()->id());
-
-        if (item.cls()->name()) {
-            appendField(ss, "cls-name", *item.cls()->name());
-        }
-
-        if (item.cls()->ns()) {
-            appendField(ss, "cls-ns", *item.cls()->ns());
-        }
-    }
-
+    tryAppendClsNsNameUid(ss, item.cls());
     this->_log(item, ss);
 }
 
-static void appendFixedLenBitArrayFieldItemFields(std::ostringstream& ss,
-                                                  const FixedLenBitArrayFieldItem& item)
+namespace {
+
+void appendFixedLenBitArrayFieldItemFields(std::ostringstream& ss,
+                                           const FixedLenBitArrayFieldItem& item)
 {
     appendDataLenBitsField(ss, item.cls().len());
-    appendField(ss, "byte-order", item.cls().byteOrder() == ir::ByteOrder::BIG ? "be" : "le");
+    appendField(ss, "byte-order", item.cls().byteOrder() == ByteOrder::Big ? "be" : "le");
+
+    if (item.cls().isRev()) {
+        appendField(ss, "bit-order-is-rev", true);
+    }
+
     appendField(ss, "align", item.cls().align());
 }
+
+} /* namespace */
 
 void LoggingItemVisitor::visit(const FixedLenBitArrayFieldItem& item)
 {
@@ -208,11 +221,15 @@ void LoggingItemVisitor::visit(const FixedLenBitArrayFieldItem& item)
     this->_log(item, ss);
 }
 
+namespace {
+
 template <typename ItemT>
 void appendItemValField(std::ostringstream& ss, const ItemT& item)
 {
     appendField(ss, "val", item.val());
 }
+
+} /* namespace */
 
 void LoggingItemVisitor::visit(const FixedLenBoolFieldItem& item)
 {
@@ -238,16 +255,17 @@ void appendIntFieldItemVal(std::ostringstream& ss, const ItemT& item)
     ss << ", val=";
 
     switch (item.cls().prefDispBase()) {
-    case ir::DispBase::OCT:
-        ss << '0' << std::setbase(8) << item.val() << std::setbase(0);
+    case DispBase::Oct:
+        ss << fmt::format("{:#o}", item.val());
         break;
-    case ir::DispBase::DEC:
-    case ir::DispBase::BIN:
-        /* TODO: Implement binary formatting */
+    case DispBase::Dec:
         ss << item.val();
         break;
-    case ir::DispBase::HEX:
-        ss << "0x" << std::setbase(16) << item.val() << std::setbase(0);
+    case DispBase::Bin:
+        ss << fmt::format("{:#b}", item.val());
+        break;
+    case DispBase::Hex:
+        ss << fmt::format("{:#x}", item.val());
         break;
     default:
         bt_common_abort();
@@ -263,34 +281,6 @@ void LoggingItemVisitor::visit(const FixedLenSIntFieldItem& item)
     this->_log(item, ss);
 }
 
-static const char *uIntFieldRoleStr(const ir::UIntFieldRole role) noexcept
-{
-    switch (role) {
-    case ir::UIntFieldRole::PKT_MAGIC_NUMBER:
-        return "PKT_MAGIC_NUMBER";
-    case ir::UIntFieldRole::DATA_STREAM_CLS_ID:
-        return "DATA_STREAM_CLS_ID";
-    case ir::UIntFieldRole::DATA_STREAM_ID:
-        return "DATA_STREAM_ID";
-    case ir::UIntFieldRole::PKT_TOTAL_LEN:
-        return "PKT_TOTAL_LEN";
-    case ir::UIntFieldRole::PKT_CONTENT_LEN:
-        return "PKT_CONTENT_LEN";
-    case ir::UIntFieldRole::DEF_CLK_TS:
-        return "DEF_CLK_TS";
-    case ir::UIntFieldRole::PKT_END_DEF_CLK_TS:
-        return "PKT_END_DEF_CLK_TS";
-    case ir::UIntFieldRole::DISC_EVENT_RECORD_COUNTER_SNAP:
-        return "DISC_EVENT_RECORD_COUNTER_SNAP";
-    case ir::UIntFieldRole::PKT_SEQ_NUM:
-        return "PKT_SEQ_NUM";
-    case ir::UIntFieldRole::EVENT_RECORD_CLS_ID:
-        return "EVENT_RECORD_CLS_ID";
-    default:
-        bt_common_abort();
-    }
-}
-
 template <typename ItemT>
 void appendUIntFieldItemRolesField(std::ostringstream& ss, const ItemT& item)
 {
@@ -300,15 +290,17 @@ void appendUIntFieldItemRolesField(std::ostringstream& ss, const ItemT& item)
 
     ss << ", roles=[";
 
-    auto prependComma = false;
+    {
+        auto prependComma = false;
 
-    for (const auto role : item.cls().roles()) {
-        if (prependComma) {
-            ss << ", ";
+        for (const auto role : item.cls().roles()) {
+            if (prependComma) {
+                ss << ", ";
+            }
+
+            ss << wise_enum::to_string(role);
+            prependComma = true;
         }
-
-        ss << uIntFieldRoleStr(role);
-        prependComma = true;
     }
 
     ss << ']';
@@ -328,9 +320,11 @@ void LoggingItemVisitor::visit(const MetadataStreamUuidItem& item)
 {
     std::ostringstream ss;
 
-    appendField(ss, "uuid", item.uuid().str().c_str());
+    appendField(ss, "uuid", item.uuid());
     this->_log(item, ss);
 }
+
+namespace {
 
 template <typename ItemT>
 void appendItemSelValField(std::ostringstream& ss, const ItemT& item)
@@ -344,6 +338,8 @@ void appendOptionalFieldBeginItemFields(std::ostringstream& ss, const ItemT& ite
     appendItemSelValField(ss, item);
     appendField(ss, "is-enabled", item.isEnabled());
 }
+
+} /* namespace */
 
 void LoggingItemVisitor::visit(const OptionalFieldWithBoolSelBeginItem& item)
 {
@@ -408,30 +404,14 @@ void LoggingItemVisitor::visit(const PktMagicNumberItem& item)
     this->_log(item, ss);
 }
 
-static const char *fieldLocScopeStr(const ir::FieldLocScope scope) noexcept
+namespace {
+
+void appendScopeItemScopeField(std::ostringstream& ss, const ScopeItem& item)
 {
-    switch (scope) {
-    case ir::FieldLocScope::PKT_HEADER:
-        return "PKT_HEADER";
-    case ir::FieldLocScope::PKT_CTX:
-        return "PKT_CTX";
-    case ir::FieldLocScope::EVENT_RECORD_HEADER:
-        return "EVENT_RECORD_HEADER";
-    case ir::FieldLocScope::EVENT_RECORD_COMMON_CTX:
-        return "EVENT_RECORD_COMMON_CTX";
-    case ir::FieldLocScope::EVENT_RECORD_SPEC_CTX:
-        return "EVENT_RECORD_SPEC_CTX";
-    case ir::FieldLocScope::EVENT_RECORD_PAYLOAD:
-        return "EVENT_RECORD_PAYLOAD";
-    default:
-        bt_common_abort();
-    }
+    appendField(ss, "scope", wise_enum::to_string(item.scope()));
 }
 
-static void appendScopeItemScopeField(std::ostringstream& ss, const ScopeItem& item)
-{
-    appendField(ss, "scope", fieldLocScopeStr(item.scope()));
-}
+} /* namespace */
 
 void LoggingItemVisitor::visit(const ScopeBeginItem& item)
 {
@@ -475,15 +455,6 @@ void LoggingItemVisitor::visit(const StaticLenStrFieldBeginItem& item)
     this->_log(item, ss);
 }
 
-void LoggingItemVisitor::visit(const StrFieldSubstrItem& item)
-{
-    std::ostringstream ss;
-
-    appendDataLenBytesField(ss, item.size());
-    appendItemFirstBytesField(ss, item);
-    this->_log(item, ss);
-}
-
 void LoggingItemVisitor::visit(const StructFieldBeginItem& item)
 {
     std::ostringstream ss;
@@ -493,11 +464,15 @@ void LoggingItemVisitor::visit(const StructFieldBeginItem& item)
     this->_log(item, ss);
 }
 
-static void appendVariantFieldBeginItemSelOptIndexField(std::ostringstream& ss,
-                                                        const VariantFieldBeginItem& item)
+namespace {
+
+void appendVariantFieldBeginItemSelOptIndexField(std::ostringstream& ss,
+                                                 const VariantFieldBeginItem& item)
 {
     appendField(ss, "sel-opt-index", item.selectedOptIndex());
 }
+
+} /* namespace */
 
 void LoggingItemVisitor::visit(const VariantFieldWithSIntSelBeginItem& item)
 {
@@ -538,7 +513,7 @@ void LoggingItemVisitor::visit(const VarLenUIntFieldItem& item)
 
 void LoggingItemVisitor::_log(const Item& item, const std::ostringstream& extra)
 {
-    BT_CPPLOGT("{}: type={}{}", _mIntro, item.type(), extra.str());
+    BT_CPPLOGT("{}: type={}{}", _mIntro, wise_enum::to_string(item.type()), extra.str());
 }
 
 } /* namespace src */

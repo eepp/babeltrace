@@ -1,10 +1,13 @@
 /*
- * Copyright (c) 2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2022-2024 Philippe Proulx <pproulx@efficios.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
 #include <cstring>
+
+#include "common/assert.h"
+#include "cpp-common/bt2c/call.hpp"
 
 #include "metadata-stream-parser.hpp"
 #include "normalize-clk-offset.hpp"
@@ -16,29 +19,30 @@ namespace {
 using namespace bt2c::literals::datalen;
 
 /*
- * Map of variant field class to the index of the currently visited
- * option.
+ * Map of variant field class to the index of the currently
+ * visited option.
  *
  * This is used to provide a visiting context to an `FcFinder` instance.
- * For example, consider this scope field class:
+ * For example:
  *
- * Root: Structure FC                                       [0]
- *   `len`: Fixed-length unsigned integer FC                [1]
- *   `meow`: Dynamic-length array FC                        [2]
- *     Element FC: Structure FC                             [3]
- *       `tag`: Fixed-length signed integer FC              [4]
- *       `val`: Variant FC                                  [5]
- *         `boss`: Null-terminated string FC                [6]
- *         `zoom`: Structure FC                             [7]
- *           `len`: Variable-length unsigned integer FC     [8]
- *           `data`: Dynamic-length BLOB FC                 [9]
- *         `line6`: Structure FC                            [10]
- *           `len`: Fixed-length unsigned integer FC        [11]
+ *     Root: Structure FC                                       [0]
+ *       `len`: Fixed-length unsigned integer FC                [1]
+ *       `meow`: Dynamic-length array FC                        [2]
+ *         Element FC: Structure FC                             [3]
+ *           `tag`: Fixed-length signed integer FC              [4]
+ *           `val`: Variant FC                                  [5]
+ *             `boss`: Null-terminated string FC                [6]
+ *             `zoom`: Structure FC                             [7]
+ *               `len`: Variable-length unsigned integer FC     [8]
+ *               `data`: Dynamic-length BLOB FC                 [9]
+ *             `line6`: Structure FC                            [10]
+ *               `len`: Fixed-length unsigned integer FC        [11]
  *
- * If we're currently visiting [9] to find its dependencies, then the
- * current dynamic indexes would be:
+ * If we're currently visiting [9] to find its keys, then the map
+ * would contain:
  *
- *     [5] -> 1     (visiting second option (`zoom`) of `/meow/val`)
+ *     [2] → 0     (visiting current element of `/meow`)
+ *     [5] → 1     (visiting second option (`zoom`) of `/meow/val`)
  *
  * This means that, if the length field location of [9] is
  * `/meow/val/len`, then we must only consider the `zoom` option, not
@@ -82,32 +86,12 @@ public:
         this->_addFc(fc);
     }
 
-    void visit(FixedLenSEnumFc& fc) override
-    {
-        this->_addFc(fc);
-    }
-
-    void visit(FixedLenUEnumFc& fc) override
-    {
-        this->_addFc(fc);
-    }
-
     void visit(VarLenSIntFc& fc) override
     {
         this->_addFc(fc);
     }
 
     void visit(VarLenUIntFc& fc) override
-    {
-        this->_addFc(fc);
-    }
-
-    void visit(VarLenSEnumFc& fc) override
-    {
-        this->_addFc(fc);
-    }
-
-    void visit(VarLenUEnumFc& fc) override
     {
         this->_addFc(fc);
     }
@@ -126,7 +110,7 @@ public:
     {
         BT_ASSERT(_mPathIter != _mPath->end());
 
-        const auto memberCls = structFc[*_mPathIter];
+        const auto memberCls = structFc[**_mPathIter];
 
         BT_ASSERT(memberCls);
 
@@ -216,28 +200,28 @@ private:
  * `traceCls`, `dataStreamCls`, and `eventRecordCls`.
  */
 Fc& scopeFc(TraceCls& traceCls, DataStreamCls * const dataStreamCls,
-            EventRecordCls * const eventRecordCls, const ir::FieldLocScope scope) noexcept
+            EventRecordCls * const eventRecordCls, const Scope scope) noexcept
 {
     switch (scope) {
-    case ir::FieldLocScope::PKT_HEADER:
+    case Scope::PktHeader:
         return *traceCls.pktHeaderFc();
-    case ir::FieldLocScope::PKT_CTX:
+    case Scope::PktCtx:
         BT_ASSERT(dataStreamCls);
         BT_ASSERT(dataStreamCls->pktCtxFc());
         return *dataStreamCls->pktCtxFc();
-    case ir::FieldLocScope::EVENT_RECORD_HEADER:
+    case Scope::EventRecordHeader:
         BT_ASSERT(dataStreamCls);
         BT_ASSERT(dataStreamCls->eventRecordHeaderFc());
         return *dataStreamCls->eventRecordHeaderFc();
-    case ir::FieldLocScope::EVENT_RECORD_COMMON_CTX:
+    case Scope::CommonEventRecordCtx:
         BT_ASSERT(dataStreamCls);
-        BT_ASSERT(dataStreamCls->eventRecordCommonCtxFc());
-        return *dataStreamCls->eventRecordCommonCtxFc();
-    case ir::FieldLocScope::EVENT_RECORD_SPEC_CTX:
+        BT_ASSERT(dataStreamCls->commonEventRecordCtxFc());
+        return *dataStreamCls->commonEventRecordCtxFc();
+    case Scope::SpecEventRecordCtx:
         BT_ASSERT(eventRecordCls);
         BT_ASSERT(eventRecordCls->specCtxFc());
         return *eventRecordCls->specCtxFc();
-    case ir::FieldLocScope::EVENT_RECORD_PAYLOAD:
+    case Scope::EventRecordPayload:
         BT_ASSERT(eventRecordCls);
         BT_ASSERT(eventRecordCls->payloadFc());
         return *eventRecordCls->payloadFc();
@@ -247,15 +231,15 @@ Fc& scopeFc(TraceCls& traceCls, DataStreamCls * const dataStreamCls,
 }
 
 /*
- * Sets the value saving indexes of dependencies and the saved value
- * index of dependent field classes.
+ * Sets the value saving indexes of keys and the saved key value index
+ * of dependent field classes.
  */
-class DependentFcSavedValIndexSetter final : public FcVisitor
+class DependentFcSavedKeyValIndexSetter final : public FcVisitor
 {
 public:
-    explicit DependentFcSavedValIndexSetter(TraceCls& traceCls,
-                                            DataStreamCls * const curDataStreamCls,
-                                            EventRecordCls * const curEventRecordCls) :
+    explicit DependentFcSavedKeyValIndexSetter(TraceCls& traceCls,
+                                               DataStreamCls * const curDataStreamCls,
+                                               EventRecordCls * const curEventRecordCls) :
         _mTraceCls {&traceCls},
         _mCurDataStreamCls {curDataStreamCls}, _mCurEventRecordCls {curEventRecordCls}
     {
@@ -268,18 +252,18 @@ public:
 
     void visit(DynLenArrayFc& fc) override
     {
-        this->_setSavedValIndex(fc, fc.lenFieldLoc());
+        this->_setSavedKeyValIndex(fc, fc.lenFieldLoc());
         this->_visit(fc);
     }
 
     void visit(DynLenStrFc& fc) override
     {
-        this->_setSavedValIndex(fc, fc.lenFieldLoc());
+        this->_setSavedKeyValIndex(fc, fc.lenFieldLoc());
     }
 
     void visit(DynLenBlobFc& fc) override
     {
-        this->_setSavedValIndex(fc, fc.lenFieldLoc());
+        this->_setSavedKeyValIndex(fc, fc.lenFieldLoc());
     }
 
     void visit(StructFc& structFc) override
@@ -316,41 +300,41 @@ public:
 
 private:
     /*
-     * Sets the saved value index of the dependent field class `fc`,
-     * finding the dependencies with `fieldLoc`.
+     * Sets the saved key value index of the dependent field class `fc`,
+     * finding the key field classes with `fieldLoc`.
      */
     template <typename FcT>
-    void _setSavedValIndex(FcT& fc, const FieldLoc& fieldLoc)
+    void _setSavedKeyValIndex(FcT& fc, const FieldLoc& fieldLoc)
     {
-        /* Find the dependencies */
+        /* Find the key field class */
         FcFinder finder {fieldLoc.items(), _mCurVariantOptIndexes};
 
-        scopeFc(*_mTraceCls, _mCurDataStreamCls, _mCurEventRecordCls, fieldLoc.scope())
+        scopeFc(*_mTraceCls, _mCurDataStreamCls, _mCurEventRecordCls, *fieldLoc.origin())
             .accept(finder);
 
-        /* Value saving index to use */
-        const auto valSavingIndex = _mTraceCls->savedValCount();
+        /* Key value saving index to use */
+        const auto keyValSavingIndex = _mTraceCls->savedKeyValCount();
 
-        /* Update maximum number of saved values of `*_mTraceCls` */
-        _mTraceCls->savedValCount(valSavingIndex + 1);
+        /* Update maximum number of saved key values of `*_mTraceCls` */
+        _mTraceCls->savedKeyValCount(keyValSavingIndex + 1);
 
-        /* Add value saving index to all dependencies */
+        /* Add key value saving index to all key field classes */
         for (const auto foundFc : finder.fcs()) {
             if (foundFc->isFixedLenBool()) {
-                foundFc->asFixedLenBool().addValSavingIndex(valSavingIndex);
+                foundFc->asFixedLenBool().addKeyValSavingIndex(keyValSavingIndex);
             } else if (foundFc->isFixedLenInt()) {
-                foundFc->asFixedLenInt().addValSavingIndex(valSavingIndex);
+                foundFc->asFixedLenInt().addKeyValSavingIndex(keyValSavingIndex);
             } else {
                 BT_ASSERT(foundFc->isVarLenInt());
-                foundFc->asVarLenInt().addValSavingIndex(valSavingIndex);
+                foundFc->asVarLenInt().addKeyValSavingIndex(keyValSavingIndex);
             }
         }
 
-        /* Set saved value index of dependent field class `fc` */
-        fc.savedDepValIndex(valSavingIndex);
+        /* Set saved key value index of dependent field class `fc` */
+        fc.savedKeyValIndex(keyValSavingIndex);
 
-        /* Set dependencies of dependent field class `fc` */
-        fc.deps(finder.fcs());
+        /* Set key field classes of dependent field class `fc` */
+        fc.keyFcs(finder.fcs());
     }
 
     void _visit(ArrayFc& arrayFc)
@@ -360,14 +344,14 @@ private:
 
     void _visit(OptionalFc& optFc)
     {
-        this->_setSavedValIndex(optFc, optFc.selFieldLoc());
+        this->_setSavedKeyValIndex(optFc, optFc.selFieldLoc());
         optFc.fc().accept(*this);
     }
 
     template <typename VariantFcT>
     void _visitVariantFc(VariantFcT& variantFc)
     {
-        this->_setSavedValIndex(variantFc, variantFc.selFieldLoc());
+        this->_setSavedKeyValIndex(variantFc, variantFc.selFieldLoc());
 
         for (std::size_t i = 0; i < variantFc.size(); ++i) {
             /*
@@ -390,21 +374,21 @@ private:
 /*
  * Helper containing context to implement setSavedValIndexes().
  */
-class SavedValIndexesSetter final
+class SavedKeyValIndexesSetter final
 {
 public:
-    explicit SavedValIndexesSetter(TraceCls& traceCls) : _mTraceCls {&traceCls}
+    explicit SavedKeyValIndexesSetter(TraceCls& traceCls) : _mTraceCls {&traceCls}
     {
-        /* Process whole trace class */
-        this->_setSavedValIndexes();
+        /* Process the whole trace class */
+        this->_setSavedKeyValIndexes();
     }
 
 private:
     /*
-     * Sets the saved value indexes within the scope field class
+     * Sets the saved key value indexes within the scope field class
      * `structFc`, if it exists.
      */
-    void _setSavedValIndexes(StructFc * const structFc)
+    void _setSavedKeyValIndexes(StructFc * const structFc)
     {
         if (!structFc) {
             /* Scope doesn't exist */
@@ -412,23 +396,23 @@ private:
         }
 
         /* Create setter for dependent field classes */
-        DependentFcSavedValIndexSetter setter {*_mTraceCls, _mCurDataStreamCls,
-                                               _mCurEventRecordCls};
+        DependentFcSavedKeyValIndexSetter setter {*_mTraceCls, _mCurDataStreamCls,
+                                                  _mCurEventRecordCls};
 
         /*
          * Visit scope field class.
          *
-         * During the visit, `setter` calls savedDepValIndex() for each
-         * dependent field class as well as TraceCls::savedValCount() to
-         * update the total count of saved values.
+         * During the visit, `setter` calls savedKeyValIndex() for each
+         * dependent field class as well as TraceCls::savedKeyValCount()
+         * to update the total count of saved values.
          */
         structFc->accept(setter);
     }
 
     /*
-     * Sets the saved value indexes within `eventRecordCls`.
+     * Sets the saved key value indexes within `eventRecordCls`.
      */
-    void _setSavedValIndexes(EventRecordCls& eventRecordCls)
+    void _setSavedKeyValIndexes(EventRecordCls& eventRecordCls)
     {
         if (eventRecordCls.libCls()) {
             /* Already done */
@@ -438,36 +422,36 @@ private:
         _mCurEventRecordCls = &eventRecordCls;
 
         /* Process specific context field class */
-        this->_setSavedValIndexes(eventRecordCls.specCtxFc());
+        this->_setSavedKeyValIndexes(eventRecordCls.specCtxFc());
 
         /* Process payload field class */
-        this->_setSavedValIndexes(eventRecordCls.payloadFc());
+        this->_setSavedKeyValIndexes(eventRecordCls.payloadFc());
 
         /* Not visiting anymore */
         _mCurEventRecordCls = nullptr;
     }
 
     /*
-     * Sets the saved value indexes within `dataStreamCls`.
+     * Sets the saved key value indexes within `dataStreamCls`.
      */
-    void _setSavedValIndexes(DataStreamCls& dataStreamCls)
+    void _setSavedKeyValIndexes(DataStreamCls& dataStreamCls)
     {
         _mCurDataStreamCls = &dataStreamCls;
 
         if (!dataStreamCls.libCls()) {
             /* Process packet context field class */
-            this->_setSavedValIndexes(dataStreamCls.pktCtxFc());
+            this->_setSavedKeyValIndexes(dataStreamCls.pktCtxFc());
 
             /* Process event record header field class */
-            this->_setSavedValIndexes(dataStreamCls.eventRecordHeaderFc());
+            this->_setSavedKeyValIndexes(dataStreamCls.eventRecordHeaderFc());
 
             /* Process common event record context field class */
-            this->_setSavedValIndexes(dataStreamCls.eventRecordCommonCtxFc());
+            this->_setSavedKeyValIndexes(dataStreamCls.commonEventRecordCtxFc());
         }
 
         /* Process event record classes */
         for (auto& eventRecordCls : dataStreamCls) {
-            this->_setSavedValIndexes(*eventRecordCls);
+            this->_setSavedKeyValIndexes(*eventRecordCls);
         }
 
         /* Not visiting anymore */
@@ -475,18 +459,18 @@ private:
     }
 
     /*
-     * Sets the saved value indexes within `*_mTraceCls`.
+     * Sets the saved key value indexes within `*_mTraceCls`.
      */
-    void _setSavedValIndexes()
+    void _setSavedKeyValIndexes()
     {
         if (!_mTraceCls->libCls()) {
             /* Process packet header field class */
-            this->_setSavedValIndexes(_mTraceCls->pktHeaderFc());
+            this->_setSavedKeyValIndexes(_mTraceCls->pktHeaderFc());
         }
 
         /* Process data stream classes */
         for (auto& dataStreamCls : *_mTraceCls) {
-            this->_setSavedValIndexes(*dataStreamCls);
+            this->_setSavedKeyValIndexes(*dataStreamCls);
         }
     }
 
@@ -500,9 +484,9 @@ private:
     EventRecordCls *_mCurEventRecordCls = nullptr;
 };
 
-void setSavedValIndexes(TraceCls& traceCls)
+void setSavedKeyValIndexes(TraceCls& traceCls)
 {
-    SavedValIndexesSetter {traceCls};
+    SavedKeyValIndexesSetter {traceCls};
 }
 
 /*
@@ -512,7 +496,7 @@ void setSavedValIndexes(TraceCls& traceCls)
 class FcContainsUIntFcWithRole final : public ConstFcVisitor
 {
 public:
-    explicit FcContainsUIntFcWithRole(const ir::UIntFieldRole role) noexcept : _mRole {role}
+    explicit FcContainsUIntFcWithRole(const UIntFieldRole role) noexcept : _mRole {role}
     {
     }
 
@@ -526,17 +510,7 @@ public:
         this->_updateHasRole(fc);
     }
 
-    void visit(const FixedLenUEnumFc& fc) override
-    {
-        this->_updateHasRole(fc);
-    }
-
     void visit(const VarLenUIntFc& fc) override
-    {
-        this->_updateHasRole(fc);
-    }
-
-    void visit(const VarLenUEnumFc& fc) override
     {
         this->_updateHasRole(fc);
     }
@@ -608,11 +582,11 @@ private:
         }
     }
 
-    ir::UIntFieldRole _mRole;
+    UIntFieldRole _mRole;
     bool _mHasRole = false;
 };
 
-bool fcContainsUIntFcWithRole(const Fc& fc, const ir::UIntFieldRole role) noexcept
+bool fcContainsUIntFcWithRole(const Fc& fc, const UIntFieldRole role) noexcept
 {
     FcContainsUIntFcWithRole visitor {role};
 
@@ -621,21 +595,21 @@ bool fcContainsUIntFcWithRole(const Fc& fc, const ir::UIntFieldRole role) noexce
 }
 
 bool pktCtxFcContainsUIntFcWithRole(const DataStreamCls& dataStreamCls,
-                                    const ir::UIntFieldRole role) noexcept
+                                    const UIntFieldRole role) noexcept
 {
     return dataStreamCls.pktCtxFc() && fcContainsUIntFcWithRole(*dataStreamCls.pktCtxFc(), role);
 }
 
 /*
  * Sets the user attributes of the equivalent trace IR object of `obj`
- * (`obj.libCls()`) to the user attributes of `obj`.
+ * (`obj.libCls()`) to the attributes of `obj`.
  */
 template <typename ObjT>
 void setLibUserAttrs(ObjT& obj) noexcept
 {
-    if (obj.userAttrs()) {
+    if (obj.attrs()) {
         BT_ASSERT(obj.libCls());
-        obj.libCls()->userAttributes(*obj.userAttrs());
+        obj.libCls()->userAttributes(*obj.attrs());
     }
 }
 
@@ -687,6 +661,18 @@ public:
         this->_setLibFc(fc, _mTraceCls->libCls()->createBitArrayFieldClass(*fc.len()));
     }
 
+    void visit(FixedLenBitMapFc& fc) override
+    {
+        BT_ASSERT(_mMipVersion >= 1);
+        this->_setLibFc(fc, _mTraceCls->libCls()->createBitArrayFieldClass(*fc.len()));
+
+        /* Set flags */
+        for (auto& flag : fc.flags()) {
+            _mLastTranslatedLibFc->asBitArray().addFlag(
+                flag.first, *libIntRangeSetFromIntRangeSet(flag.second));
+        }
+    }
+
     void visit(FixedLenBoolFc& fc) override
     {
         this->_setLibFc(fc, _mTraceCls->libCls()->createBoolFieldClass());
@@ -704,42 +690,42 @@ public:
 
     void visit(FixedLenSIntFc& fc) override
     {
-        this->_setLibIntFc<_CreateLibSIntFcFunc>(fc, fc.len());
+        if (fc.mappings().empty()) {
+            this->_setLibIntFc<_CreateLibSIntFcFunc>(fc, fc.len());
+        } else {
+            this->_setLibSEnumFc(fc, fc.len());
+        }
     }
 
     void visit(FixedLenUIntFc& fc) override
     {
-        this->_setLibUIntFc<_CreateLibUIntFcFunc>(fc, fc.len());
-    }
-
-    void visit(FixedLenUEnumFc& fc) override
-    {
-        this->_setLibUEnumFc(fc, fc.len());
-    }
-
-    void visit(FixedLenSEnumFc& fc) override
-    {
-        this->_setLibSEnumFc(fc, fc.len());
+        if (fc.mappings().empty()) {
+            this->_setLibUIntFc<_CreateLibUIntFcFunc>(fc, fc.len());
+        } else {
+            this->_setLibUEnumFc(fc, fc.len());
+        }
     }
 
     void visit(VarLenSIntFc& fc) override
     {
-        this->_setLibIntFc<_CreateLibSIntFcFunc>(fc, 64_bits);
+        static const auto len = 64_bits;
+
+        if (fc.mappings().empty()) {
+            this->_setLibIntFc<_CreateLibSIntFcFunc>(fc, len);
+        } else {
+            this->_setLibSEnumFc(fc, len);
+        }
     }
 
     void visit(VarLenUIntFc& fc) override
     {
-        this->_setLibUIntFc<_CreateLibUIntFcFunc>(fc, 64_bits);
-    }
+        static const auto len = 64_bits;
 
-    void visit(VarLenUEnumFc& fc) override
-    {
-        this->_setLibUEnumFc(fc, 64_bits);
-    }
-
-    void visit(VarLenSEnumFc& fc) override
-    {
-        this->_setLibSEnumFc(fc, 64_bits);
+        if (fc.mappings().empty()) {
+            this->_setLibUIntFc<_CreateLibUIntFcFunc>(fc, len);
+        } else {
+            this->_setLibUEnumFc(fc, len);
+        }
     }
 
     void visit(NullTerminatedStrFc& fc) override
@@ -846,8 +832,8 @@ public:
             libStructFc->appendMember(memberCls.name(), *_mLastTranslatedLibFc);
 
             /* Set user attributes of member class, if any */
-            if (memberCls.userAttrs()) {
-                (*libStructFc)[libStructFc->length() - 1].userAttributes(*memberCls.userAttrs());
+            if (memberCls.attrs()) {
+                (*libStructFc)[libStructFc->length() - 1].userAttributes(*memberCls.attrs());
             }
         }
 
@@ -930,7 +916,8 @@ public:
 private:
     /*
      * If the scope of `fieldLoc` is the packet header, the packet
-     * context, or the event record header: returns an empty `Shared`.
+     * context, or the event record header: returns an
+     * empty `bt2::ConstFieldLocation::Shared`.
      *
      * Otherwise, translates `fieldLoc` to its trace IR equivalent and
      * returns it.
@@ -939,9 +926,8 @@ private:
     {
         BT_ASSERT(_mMipVersion >= 1);
 
-        if (fieldLoc.scope() == ir::FieldLocScope::PKT_HEADER ||
-            fieldLoc.scope() == ir::FieldLocScope::PKT_CTX ||
-            fieldLoc.scope() == ir::FieldLocScope::EVENT_RECORD_HEADER) {
+        if (fieldLoc.origin() == Scope::PktHeader || fieldLoc.origin() == Scope::PktCtx ||
+            fieldLoc.origin() == Scope::EventRecordHeader) {
             /*
              * We could support referring to a packet context field, but
              * because such a field could have a role and therefore not
@@ -950,20 +936,28 @@ private:
             return bt2::ConstFieldLocation::Shared {};
         }
 
-        const auto scope = [&fieldLoc] {
-            switch (fieldLoc.scope()) {
-            case ir::FieldLocScope::EVENT_RECORD_COMMON_CTX:
-                return bt2::ConstFieldLocation::Scope::EVENT_COMMON_CONTEXT;
-            case ir::FieldLocScope::EVENT_RECORD_SPEC_CTX:
-                return bt2::ConstFieldLocation::Scope::EVENT_SPECIFIC_CONTEXT;
-            case ir::FieldLocScope::EVENT_RECORD_PAYLOAD:
-                return bt2::ConstFieldLocation::Scope::EVENT_PAYLOAD;
-            default:
-                bt_common_abort();
-            }
-        }();
+        return _mTraceCls->libCls()->createFieldLocation(
+            bt2c::call([&fieldLoc] {
+                switch (*fieldLoc.origin()) {
+                case Scope::CommonEventRecordCtx:
+                    return bt2::ConstFieldLocation::Scope::CommonEventContext;
+                case Scope::SpecEventRecordCtx:
+                    return bt2::ConstFieldLocation::Scope::SpecificEventContext;
+                case Scope::EventRecordPayload:
+                    return bt2::ConstFieldLocation::Scope::EventPayload;
+                default:
+                    bt_common_abort();
+                }
+            }),
+            bt2c::call([&fieldLoc] {
+                std::vector<std::string> items;
 
-        return _mTraceCls->libCls()->createFieldLocation(scope, fieldLoc.items());
+                for (auto& item : fieldLoc.items()) {
+                    items.push_back(*item);
+                }
+
+                return items;
+            }));
     }
 
     /*
@@ -1016,14 +1010,14 @@ private:
      * have a maximum length of `len`, to its trace IR equivalent, and
      * then moves it as the last translated trace IR field class.
      *
-     * Uses `CreateLibFcFuncT::create()` to create a trace IR integer
+     * Uses `CreateLibIntFcFuncT::create()` to create a trace IR integer
      * field class.
      */
-    template <typename CreateLibFcFuncT, typename FcT>
+    template <typename CreateLibIntFcFuncT, typename FcT>
     void _setLibIntFc(FcT& fc, const bt2c::DataLen len)
     {
         /* Create trace IR field class */
-        auto libFc = CreateLibFcFuncT::create(*_mTraceCls->libCls());
+        auto libFc = CreateLibIntFcFuncT::create(*_mTraceCls->libCls());
 
         /* Set field value range (bits) */
         libFc->fieldValueRange(*len);
@@ -1031,13 +1025,13 @@ private:
         /* Set preferred display base */
         libFc->preferredDisplayBase([&fc] {
             switch (fc.prefDispBase()) {
-            case ir::DispBase::BIN:
+            case DispBase::Bin:
                 return bt2::DisplayBase::Binary;
-            case ir::DispBase::OCT:
+            case DispBase::Oct:
                 return bt2::DisplayBase::Octal;
-            case ir::DispBase::DEC:
+            case DispBase::Dec:
                 return bt2::DisplayBase::Decimal;
-            case ir::DispBase::HEX:
+            case DispBase::Hex:
                 return bt2::DisplayBase::Hexadecimal;
             default:
                 bt_common_abort();
@@ -1049,17 +1043,17 @@ private:
     }
 
     /*
-     * If `fc`, an unsigned integer field class, has at least one
-     * role: returns immediately.
+     * If `fc`, an unsigned integer field class, has at least one role:
+     * returns immediately (no translation).
      *
      * Otherwise, translates `fc`, of which the instances have a maximum
      * length of `len`, to its trace IR equivalent, and then moves it as
      * the last translated trace IR field class.
      *
-     * Uses `CreateLibFcFuncT::create()` to create a trace IR unsigned
-     * integer field class.
+     * Uses `CreateLibIntFcFuncT::create()` to create a trace IR
+     * unsigned integer field class.
      */
-    template <typename CreateLibFcFuncT, typename FcT>
+    template <typename CreateLibIntFcFuncT, typename FcT>
     void _setLibUIntFc(FcT& fc, const bt2c::DataLen len)
     {
         if (!fc.roles().empty()) {
@@ -1068,26 +1062,28 @@ private:
             return;
         }
 
-        this->_setLibIntFc<CreateLibFcFuncT>(fc, len);
+        this->_setLibIntFc<CreateLibIntFcFuncT>(fc, len);
     }
 
     /*
      * Sets the mappings of `libFc`, a trace IR enumeration field class,
-     * to the mappings of `fc`, a CTF IR enumeration field class.
+     * to the mappings of `fc`, a CTF IR integer field class with at
+     * least one mapping.
      */
     template <typename FcT, typename LibFcT>
     void _setLibEnumFcMappings(const FcT& fc, LibFcT libFc)
     {
-        for (auto& mapping : fc.mappings()) {
-            const auto libRanges = libIntRangeSetFromIntRangeSet(mapping.second);
+        BT_ASSERT(!fc.mappings().empty());
 
-            libFc.addMapping(mapping.first, *libRanges);
+        for (auto& mapping : fc.mappings()) {
+            libFc.addMapping(mapping.first, *libIntRangeSetFromIntRangeSet(mapping.second));
         }
     }
 
     /*
-     * If `fc`, an unsigned enumeration field class, has at least one
-     * role: returns immediately.
+     * If `fc`, an unsigned integer field class having at least one
+     * mapping, has at least one role: returns immediately
+     * (no translation).
      *
      * Otherwise, translates `fc`, of which the instances have a maximum
      * length of `len`, to its trace IR equivalent, and then moves it as
@@ -1107,10 +1103,10 @@ private:
     }
 
     /*
-     * Translates `fc`, a signed enumeration field class of which the
-     * instances have a maximum length of `len`, to its trace IR
-     * equivalent, and then moves it as the last translated trace IR
-     * field class.
+     * Translates `fc`, a signed integer field class having at least one
+     * mapping and of which the instances have a maximum length of
+     * `len`, to its trace IR equivalent, and then moves it as the last
+     * translated trace IR field class.
      */
     template <typename FcT>
     void _setLibSEnumFc(FcT& fc, const bt2c::DataLen len)
@@ -1230,11 +1226,10 @@ private:
                                 const bt2::FieldClass::Shared& lastTranslatedLibFc,
                                 const bt2::FieldClass libDepFc)
         {
-            const auto libRangeSet = libIntRangeSetFromIntRangeSet(fc.selFieldRanges());
-
             BT_ASSERT(lastTranslatedLibFc);
             return traceCls.libCls()->createOptionWithUnsignedIntegerSelectorFieldClass(
-                *lastTranslatedLibFc, libDepFc.asInteger(), *libRangeSet);
+                *lastTranslatedLibFc, libDepFc.asInteger(),
+                *libIntRangeSetFromIntRangeSet(fc.selFieldRanges()));
         }
 
         static RetWithout mip1Without(TraceCls& traceCls, OptionalFc&,
@@ -1249,12 +1244,11 @@ private:
                                 const bt2::FieldClass::Shared& lastTranslatedLibFc,
                                 const bt2::ConstFieldLocation libFieldLoc)
         {
-            const auto libRangeSet = libIntRangeSetFromIntRangeSet(fc.selFieldRanges());
-
             BT_ASSERT(lastTranslatedLibFc);
             return traceCls.libCls()
                 ->createOptionWithUnsignedIntegerSelectorFieldLocationFieldClass(
-                    *lastTranslatedLibFc, libFieldLoc, *libRangeSet);
+                    *lastTranslatedLibFc, libFieldLoc,
+                    *libIntRangeSetFromIntRangeSet(fc.selFieldRanges()));
         }
     };
 
@@ -1274,11 +1268,10 @@ private:
                                 const bt2::FieldClass::Shared& lastTranslatedLibFc,
                                 const bt2::FieldClass libDepFc)
         {
-            const auto libRangeSet = libIntRangeSetFromIntRangeSet(fc.selFieldRanges());
-
             BT_ASSERT(lastTranslatedLibFc);
             return traceCls.libCls()->createOptionWithSignedIntegerSelectorFieldClass(
-                *lastTranslatedLibFc, libDepFc.asInteger(), *libRangeSet);
+                *lastTranslatedLibFc, libDepFc.asInteger(),
+                *libIntRangeSetFromIntRangeSet(fc.selFieldRanges()));
         }
 
         static RetWithout mip1Without(TraceCls& traceCls, OptionalFc&,
@@ -1293,11 +1286,10 @@ private:
                                 const bt2::FieldClass::Shared& lastTranslatedLibFc,
                                 const bt2::ConstFieldLocation libFieldLoc)
         {
-            const auto libRangeSet = libIntRangeSetFromIntRangeSet(fc.selFieldRanges());
-
             BT_ASSERT(lastTranslatedLibFc);
             return traceCls.libCls()->createOptionWithSignedIntegerSelectorFieldLocationFieldClass(
-                *lastTranslatedLibFc, libFieldLoc, *libRangeSet);
+                *lastTranslatedLibFc, libFieldLoc,
+                *libIntRangeSetFromIntRangeSet(fc.selFieldRanges()));
         }
     };
 
@@ -1366,26 +1358,26 @@ private:
     /*
      * Finishes translating a dynamic field class `fc` to its trace IR
      * equivalent using, depending on the effective MIP version and on
-     * the dependencies, one of the following static methods of
-     * `CreateLibFcFuncsT`:
+     * the dependencies, one of the following static methods
+     * of `CreateLibFcFuncsT`:
      *
      * mip0Without():
-     *    Creates and returns a shared dynamic field class for MIP 0
-     *    without a length/selector.
+     *     Creates and returns a shared dynamic field class for MIP 0
+     *     without a length/selector.
      *
      * mip0With():
-     *    Creates and returns a shared dynamic field class for MIP 0
-     *    with a length/selector (libbabeltrace2 uses a single field
-     *    class to deduce the field path).
+     *     Creates and returns a shared dynamic field class for MIP 0
+     *     with a length/selector (libbabeltrace2 uses a single field
+     *     class to deduce the field path).
      *
      * mip1Without():
-     *    Creates and returns a shared dynamic field class for MIP 1
-     *    without a length/selector.
+     *     Creates and returns a shared dynamic field class for MIP 1+
+     *     without a length/selector.
      *
      * mip1With():
-     *    Creates and returns a shared dynamic field class for MIP 1
-     *    without a length/selector (libbabeltrace2 uses a field
-     *    location).
+     *     Creates and returns a shared dynamic field class for MIP 1+
+     *     without a length/selector (libbabeltrace2 uses a
+     *     field location).
      *
      * This method template always calls _setLibFc(). Therefore, after
      * calling this method template, you may modify the created trace IR
@@ -1396,13 +1388,13 @@ private:
     {
         if (_mMipVersion == 0) {
             /* MIP 0 only knows field paths */
-            BT_ASSERT(fc.deps().size() == 1);
+            BT_ASSERT(fc.keyFcs().size() == 1);
 
-            const auto depFc = *fc.deps().begin();
+            const auto keyFc = *fc.keyFcs().begin();
 
-            if (depFc->libCls()) {
+            if (keyFc->libCls()) {
                 this->_setLibFc(fc, CreateLibFcFuncsT::mip0With(
-                                        *_mTraceCls, fc, _mLastTranslatedLibFc, *depFc->libCls()));
+                                        *_mTraceCls, fc, _mLastTranslatedLibFc, *keyFc->libCls()));
             } else {
                 /*
                  * Length/selector field class has no trace IR
@@ -1413,10 +1405,8 @@ private:
                     fc, CreateLibFcFuncsT::mip0Without(*_mTraceCls, fc, _mLastTranslatedLibFc));
             }
         } else {
-            /* MIP 1 knows field locations */
-            const auto libFieldLoc = this->_libFieldLocFromFieldLoc(fieldLoc);
-
-            if (libFieldLoc) {
+            /* MIP 1+ only knows field locations */
+            if (const auto libFieldLoc = this->_libFieldLocFromFieldLoc(fieldLoc)) {
                 this->_setLibFc(fc, CreateLibFcFuncsT::mip1With(
                                         *_mTraceCls, fc, _mLastTranslatedLibFc, *libFieldLoc));
             } else {
@@ -1445,19 +1435,17 @@ private:
             if (opt.fc().libCls()) {
                 /* Translated to trace IR */
                 if (libVariantFc.isVariantWithoutSelector()) {
-                    auto specLibVariantFc = libVariantFc.asVariantWithoutSelector();
-
-                    specLibVariantFc.appendOption(opt.name(), *opt.fc().libCls());
+                    libVariantFc.asVariantWithoutSelector().appendOption(opt.name(),
+                                                                         *opt.fc().libCls());
                 } else {
-                    auto specLibVariantFc = libVariantFc.as<LibVariantWithSelectorFcT>();
-                    const auto libRanges = libIntRangeSetFromIntRangeSet(opt.selFieldRanges());
-
-                    specLibVariantFc.appendOption(opt.name(), *opt.fc().libCls(), *libRanges);
+                    libVariantFc.as<LibVariantWithSelectorFcT>().appendOption(
+                        opt.name(), *opt.fc().libCls(),
+                        *libIntRangeSetFromIntRangeSet(opt.selFieldRanges()));
                 }
 
                 /* Set user attributes of option, if any */
-                if (opt.userAttrs()) {
-                    libVariantFc[libVariantFc.length() - 1].userAttributes(*opt.userAttrs());
+                if (opt.attrs()) {
+                    libVariantFc[libVariantFc.length() - 1].userAttributes(*opt.attrs());
                 }
             }
         }
@@ -1469,8 +1457,8 @@ private:
         /*
          * Translate options first.
          *
-         * If all options have no translation, then `fc` has no
-         * translation.
+         * If all options have no translation, then `fc` has
+         * no translation.
          *
          * The only purpose of `libOpts` is to keep the translated field
          * classes alive until we append the options to the translated
@@ -1484,11 +1472,11 @@ private:
             opt.fc().accept(*this);
 
             /*
-             * `_mLastTranslatedLibFc` is the field class of this
-             * option.
+             * `_mLastTranslatedLibFc` is the field class of
+             * this option.
              *
-             * If it's not set, then the option itself has no trace IR
-             * translation.
+             * If it's not set, then the option itself has no trace
+             * IR translation.
              */
             if (!_mLastTranslatedLibFc) {
                 continue;
@@ -1517,8 +1505,8 @@ private:
 };
 
 /*
- * Returns the equivalent trace IR field class of `fc` within
- * `traceCls` and considering the effective MIP version `mipVersion`.
+ * Returns the equivalent trace IR field class of `fc` within `traceCls`
+ * considering the effective MIP version `mipVersion`.
  *
  * If the return value of this function is set, then for all the field
  * classes recursively contained in `fc` which have an equivalent trace
@@ -1594,13 +1582,13 @@ private:
     static bt2::OptionalBorrowedObject<bt2::ConstStringValue>
     _strUserAttr(const bt2::ConstMapValue userAttrs, const char * const name) noexcept
     {
-        const auto val = LibTraceClsFromTraceClsTranslator::_strUserAttr(
-            userAttrs, LibTraceClsFromTraceClsTranslator::_btUserAttrsNs, name);
-
-        if (val) {
+        if (const auto val = LibTraceClsFromTraceClsTranslator::_strUserAttr(
+                userAttrs, LibTraceClsFromTraceClsTranslator::_btUserAttrsNs, name)) {
+            /* From Babeltrace 2 namespace */
             return val;
         }
 
+        /* From LTTng namespace */
         return LibTraceClsFromTraceClsTranslator::_strUserAttr(
             userAttrs, LibTraceClsFromTraceClsTranslator::_lttngUserAttrsNs, name);
     }
@@ -1631,60 +1619,75 @@ private:
             libEventRecordCls->name(*eventRecordCls.name());
         }
 
+        /* Set UID */
+        if (eventRecordCls.uid()) {
+            libEventRecordCls->uid(*eventRecordCls.uid());
+        }
+
         /* Set log level and EMF URI */
-        if (eventRecordCls.userAttrs()) {
+        if (eventRecordCls.attrs()) {
             /* Set log level */
-            {
-                const auto userAttr = this->_strUserAttr(*eventRecordCls.userAttrs(), "log-level");
-
-                if (userAttr) {
-                    bt2s::optional<bt2::EventClassLogLevel> logLevel;
-
-                    if (std::strcmp(userAttr->value(), "emergency") == 0) {
-                        logLevel = bt2::EventClassLogLevel::Emergency;
-                    } else if (std::strcmp(userAttr->value(), "alert") == 0) {
-                        logLevel = bt2::EventClassLogLevel::Alert;
-                    } else if (std::strcmp(userAttr->value(), "critical") == 0) {
-                        logLevel = bt2::EventClassLogLevel::Critical;
-                    } else if (std::strcmp(userAttr->value(), "error") == 0) {
-                        logLevel = bt2::EventClassLogLevel::Error;
-                    } else if (std::strcmp(userAttr->value(), "warning") == 0) {
-                        logLevel = bt2::EventClassLogLevel::Warning;
-                    } else if (std::strcmp(userAttr->value(), "notice") == 0) {
-                        logLevel = bt2::EventClassLogLevel::Notice;
-                    } else if (std::strcmp(userAttr->value(), "info") == 0) {
-                        logLevel = bt2::EventClassLogLevel::Info;
-                    } else if (std::strcmp(userAttr->value(), "debug:system") == 0) {
-                        logLevel = bt2::EventClassLogLevel::DebugSystem;
-                    } else if (std::strcmp(userAttr->value(), "debug:program") == 0) {
-                        logLevel = bt2::EventClassLogLevel::DebugProgram;
-                    } else if (std::strcmp(userAttr->value(), "debug:process") == 0) {
-                        logLevel = bt2::EventClassLogLevel::DebugProcess;
-                    } else if (std::strcmp(userAttr->value(), "debug:module") == 0) {
-                        logLevel = bt2::EventClassLogLevel::DebugModule;
-                    } else if (std::strcmp(userAttr->value(), "debug:unit") == 0) {
-                        logLevel = bt2::EventClassLogLevel::DebugUnit;
-                    } else if (std::strcmp(userAttr->value(), "debug:function") == 0) {
-                        logLevel = bt2::EventClassLogLevel::DebugFunction;
-                    } else if (std::strcmp(userAttr->value(), "debug:line") == 0) {
-                        logLevel = bt2::EventClassLogLevel::DebugLine;
-                    } else if (std::strcmp(userAttr->value(), "debug") == 0) {
-                        logLevel = bt2::EventClassLogLevel::Debug;
+            if (const auto userAttr = this->_strUserAttr(*eventRecordCls.attrs(), "log-level")) {
+                const auto logLevel = bt2c::call([&userAttr]()
+                                                     -> bt2s::optional<bt2::EventClassLogLevel> {
+                    if (std::strcmp(userAttr->value(),
+                                    MetadataStreamParser::logLevelEmergencyName) == 0) {
+                        return bt2::EventClassLogLevel::Emergency;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelAlertName) == 0) {
+                        return bt2::EventClassLogLevel::Alert;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelCriticalName) == 0) {
+                        return bt2::EventClassLogLevel::Critical;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelErrorName) == 0) {
+                        return bt2::EventClassLogLevel::Error;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelWarningName) == 0) {
+                        return bt2::EventClassLogLevel::Warning;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelNoticeName) == 0) {
+                        return bt2::EventClassLogLevel::Notice;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelInfoName) == 0) {
+                        return bt2::EventClassLogLevel::Info;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelDebugSystemName) == 0) {
+                        return bt2::EventClassLogLevel::DebugSystem;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelDebugProgramName) == 0) {
+                        return bt2::EventClassLogLevel::DebugProgram;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelDebugProcessName) == 0) {
+                        return bt2::EventClassLogLevel::DebugProcess;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelDebugModuleName) == 0) {
+                        return bt2::EventClassLogLevel::DebugModule;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelDebugUnitName) == 0) {
+                        return bt2::EventClassLogLevel::DebugUnit;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelDebugFunctionName) == 0) {
+                        return bt2::EventClassLogLevel::DebugFunction;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelDebugLineName) == 0) {
+                        return bt2::EventClassLogLevel::DebugLine;
+                    } else if (std::strcmp(userAttr->value(),
+                                           MetadataStreamParser::logLevelDebugName) == 0) {
+                        return bt2::EventClassLogLevel::Debug;
                     }
 
-                    if (logLevel) {
-                        libEventRecordCls->logLevel(*logLevel);
-                    }
+                    return {};
+                });
+
+                if (logLevel) {
+                    libEventRecordCls->logLevel(*logLevel);
                 }
             }
 
             /* Set EMF URI */
-            {
-                const auto userAttr = this->_strUserAttr(*eventRecordCls.userAttrs(), "emf-uri");
-
-                if (userAttr) {
-                    libEventRecordCls->emfUri(userAttr->value().data());
-                }
+            if (const auto userAttr = this->_strUserAttr(*eventRecordCls.attrs(), "emf-uri")) {
+                libEventRecordCls->emfUri(userAttr->value().data());
             }
         }
 
@@ -1719,27 +1722,60 @@ private:
         /* Set frequency */
         clkCls.libCls()->frequency(clkCls.freq());
 
-        /* Set offset from origin */
-        clkCls.libCls()->offsetFromOrigin(
-            bt2::ClockOffset {clkCls.offset().seconds(), clkCls.offset().cycles()});
-
-        /* Set precision */
-        clkCls.libCls()->precision(clkCls.precision());
-
-        /* Set origin is Unix epoch flag */
-        clkCls.libCls()->originIsUnixEpoch(clkCls.originIsUnixEpoch());
+        /* Set namespace (MIP 1+) */
+        if (_mMipVersion >= 1 && clkCls.ns()) {
+            clkCls.libCls()->nameSpace(*clkCls.ns());
+        }
 
         /* Set name */
-        clkCls.libCls()->name(clkCls.name());
+        if (clkCls.name()) {
+            clkCls.libCls()->name(*clkCls.name());
+        }
+
+        /* Set UID (MIP 1+)*/
+        if (_mMipVersion >= 1 && clkCls.uid()) {
+            clkCls.libCls()->uid(*clkCls.uid());
+        }
+
+        /* Set UUID (MIP 0) */
+        if (_mMipVersion == 0 && clkCls.origin() && !clkCls.origin()->isUnixEpoch()) {
+            /*
+             * MIP 0 means only CTF 1.8; therefore the UID _is_ a
+             * UUID string.
+             */
+            BT_ASSERT(clkCls.uid());
+            clkCls.libCls()->uuid(bt2c::Uuid {*clkCls.uid()});
+        }
+
+        /* Set offset from origin */
+        clkCls.libCls()->offsetFromOrigin(bt2::ClockOffset {clkCls.offsetFromOrigin().seconds(),
+                                                            clkCls.offsetFromOrigin().cycles()});
+
+        /* Set origin */
+        if (clkCls.origin()) {
+            if (clkCls.origin()->isUnixEpoch()) {
+                /* Unix epoch */
+                clkCls.libCls()->setOriginIsUnixEpoch();
+            } else if (_mMipVersion >= 1) {
+                /* Custom (MIP 1+) */
+                clkCls.libCls()->origin(clkCls.origin()->ns() ? *clkCls.origin()->ns() : nullptr,
+                                        clkCls.origin()->name(), clkCls.origin()->uid());
+            }
+        }
+
+        /* Set precision */
+        if (clkCls.precision()) {
+            clkCls.libCls()->precision(*clkCls.precision());
+        }
+
+        /* Set accuracy (MIP 1+) */
+        if (clkCls.accuracy()) {
+            clkCls.libCls()->accuracy(*clkCls.accuracy());
+        }
 
         /* Set description */
         if (clkCls.descr()) {
             clkCls.libCls()->description(*clkCls.descr());
-        }
-
-        /* Set UUID */
-        if (clkCls.uuid()) {
-            clkCls.libCls()->uuid(*clkCls.uuid());
         }
 
         /* Set user attributes */
@@ -1760,7 +1796,7 @@ private:
 
             dataStreamCls.libCls(*libDataStreamCls);
 
-            /* Set namespace */
+            /* Set namespace (MIP 1+) */
             if (_mMipVersion >= 1 && dataStreamCls.ns()) {
                 libDataStreamCls->nameSpace(*dataStreamCls.ns());
             }
@@ -1768,6 +1804,11 @@ private:
             /* Set name */
             if (dataStreamCls.name()) {
                 libDataStreamCls->name(*dataStreamCls.name());
+            }
+
+            /* Set UID (MIP 1+) */
+            if (_mMipVersion >= 1 && dataStreamCls.uid()) {
+                libDataStreamCls->uid(*dataStreamCls.uid());
             }
 
             /* Set default clock class, making sure it's translated */
@@ -1784,17 +1825,16 @@ private:
 
             /* We always support packets */
             libDataStreamCls->supportsPackets(
-                true, pktCtxFcContainsUIntFcWithRole(dataStreamCls, ir::UIntFieldRole::DEF_CLK_TS),
-                pktCtxFcContainsUIntFcWithRole(dataStreamCls,
-                                               ir::UIntFieldRole::PKT_END_DEF_CLK_TS));
+                true, pktCtxFcContainsUIntFcWithRole(dataStreamCls, UIntFieldRole::DefClkTs),
+                pktCtxFcContainsUIntFcWithRole(dataStreamCls, UIntFieldRole::PktEndDefClkTs));
 
             if (pktCtxFcContainsUIntFcWithRole(dataStreamCls,
-                                               ir::UIntFieldRole::DISC_EVENT_RECORD_COUNTER_SNAP)) {
+                                               UIntFieldRole::DiscEventRecordCounterSnap)) {
                 /* Set that there's discarded event record support */
                 libDataStreamCls->supportsDiscardedEvents(true, dataStreamCls.defClkCls());
             }
 
-            if (pktCtxFcContainsUIntFcWithRole(dataStreamCls, ir::UIntFieldRole::PKT_SEQ_NUM)) {
+            if (pktCtxFcContainsUIntFcWithRole(dataStreamCls, UIntFieldRole::PktSeqNum)) {
                 /* Set that there's discarded packet support */
                 libDataStreamCls->supportsDiscardedPackets(true, dataStreamCls.defClkCls());
             }
@@ -1812,9 +1852,9 @@ private:
             }
 
             /* Translate common event record context field class, if any */
-            if (dataStreamCls.eventRecordCommonCtxFc()) {
-                libDataStreamCls->eventCommonContextFieldClass(
-                    *this->_translate(*dataStreamCls.eventRecordCommonCtxFc()));
+            if (dataStreamCls.commonEventRecordCtxFc()) {
+                libDataStreamCls->commonEventContextFieldClass(
+                    *this->_translate(*dataStreamCls.commonEventRecordCtxFc()));
             }
         }
 
@@ -1825,8 +1865,8 @@ private:
     }
 
     /*
-     * Translate `*_mTraceCls`, setting `_mTraceCls->libCls()` if
-     * missing.
+     * Translate `*_mTraceCls`, setting `_mTraceCls->libCls()`
+     * if missing.
      *
      * Also tries to translate all the contained data stream classes.
      */
@@ -1875,31 +1915,47 @@ unsigned long long cyclesFromNs(const unsigned long long freq, const unsigned lo
  * Normalizes the offset of `clkCls` so that the cycle part is less than
  * the frequency of `clkCls`.
  */
-void normalizeClkClsOffset(ClkCls& clkCls) noexcept
+void normalizeClkClsOffsetFromOrigin(ClkCls& clkCls) noexcept
 {
-    const auto offsetParts =
-        normalizeClkOffset(clkCls.offset().seconds(), clkCls.offset().cycles(), clkCls.freq());
+    const auto offsetParts = normalizeClkOffset(clkCls.offsetFromOrigin().seconds(),
+                                                clkCls.offsetFromOrigin().cycles(), clkCls.freq());
 
-    clkCls.offset(ir::ClkOffset {offsetParts.first, offsetParts.second});
+    clkCls.offsetFromOrigin(ClkOffset {offsetParts.first, offsetParts.second});
 }
 
 } /* namespace */
 
+constexpr const char *MetadataStreamParser::logLevelEmergencyName = "emergency";
+constexpr const char *MetadataStreamParser::logLevelAlertName = "alert";
+constexpr const char *MetadataStreamParser::logLevelCriticalName = "critical";
+constexpr const char *MetadataStreamParser::logLevelErrorName = "error";
+constexpr const char *MetadataStreamParser::logLevelWarningName = "warning";
+constexpr const char *MetadataStreamParser::logLevelNoticeName = "notice";
+constexpr const char *MetadataStreamParser::logLevelInfoName = "info";
+constexpr const char *MetadataStreamParser::logLevelDebugSystemName = "debug:system";
+constexpr const char *MetadataStreamParser::logLevelDebugProgramName = "debug:program";
+constexpr const char *MetadataStreamParser::logLevelDebugProcessName = "debug:process";
+constexpr const char *MetadataStreamParser::logLevelDebugModuleName = "debug:module";
+constexpr const char *MetadataStreamParser::logLevelDebugUnitName = "debug:unit";
+constexpr const char *MetadataStreamParser::logLevelDebugFunctionName = "debug:function";
+constexpr const char *MetadataStreamParser::logLevelDebugLineName = "debug:line";
+constexpr const char *MetadataStreamParser::logLevelDebugName = "debug";
+
 MetadataStreamParser::MetadataStreamParser(
-    const ClkClsCfg& clkClsCfg,
-    const bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp) noexcept :
+    const bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp,
+    const ClkClsCfg& clkClsCfg) noexcept :
     _mClkClsCfg(clkClsCfg),
     _mSelfComp {selfComp}
 {
 }
 
-void MetadataStreamParser::parseSection(const bt2s::span<const std::uint8_t> buffer)
+void MetadataStreamParser::parseSection(const bt2c::ConstBytes buffer)
 {
     this->_parseSection(buffer);
     this->_finalizeTraceCls();
 }
 
-void MetadataStreamParser::_adjustClkClsOffset(ClkCls& clkCls) noexcept
+void MetadataStreamParser::_adjustClkClsOffsetFromOrigin(ClkCls& clkCls) noexcept
 {
     auto offsetSeconds = static_cast<long long>(_mClkClsCfg.offsetSec);
     auto offsetNs = static_cast<long long>(_mClkClsCfg.offsetNanoSec);
@@ -1909,42 +1965,39 @@ void MetadataStreamParser::_adjustClkClsOffset(ClkCls& clkCls) noexcept
     }
 
     /* Transfer nanoseconds to seconds as much as possible */
-    static constexpr auto nsPerSecond = 1000000000LL;
+    {
+        static constexpr auto nsPerSecond = 1000000000LL;
 
-    if (offsetNs < 0) {
-        const auto absNs = -offsetNs;
-        const auto absExtraSeconds = absNs / nsPerSecond + 1;
-        const auto extraSeconds = -absExtraSeconds;
+        if (offsetNs < 0) {
+            const auto absNs = -offsetNs;
+            const auto absExtraSeconds = absNs / nsPerSecond + 1;
+            const auto extraSeconds = -absExtraSeconds;
 
-        offsetNs -= extraSeconds * nsPerSecond;
-        BT_ASSERT(offsetNs > 0);
-        offsetSeconds += extraSeconds;
-    } else {
-        const auto extraSeconds = offsetNs / nsPerSecond;
+            offsetNs -= extraSeconds * nsPerSecond;
+            BT_ASSERT(offsetNs > 0);
+            offsetSeconds += extraSeconds;
+        } else {
+            const auto extraSeconds = offsetNs / nsPerSecond;
 
-        offsetNs -= (extraSeconds * nsPerSecond);
-        BT_ASSERT(offsetNs >= 0);
-        offsetSeconds += extraSeconds;
+            offsetNs -= (extraSeconds * nsPerSecond);
+            BT_ASSERT(offsetNs >= 0);
+            offsetSeconds += extraSeconds;
+        }
     }
 
-    auto curOffsetSeconds = clkCls.offset().seconds();
-    auto curOffsetCycles = clkCls.offset().cycles();
-
-    /* Apply offsets */
-    curOffsetSeconds += offsetSeconds;
-    curOffsetCycles += cyclesFromNs(clkCls.freq(), offsetNs);
-
     /* Set final offsets */
-    clkCls.offset(ir::ClkOffset {curOffsetSeconds, curOffsetCycles});
+    clkCls.offsetFromOrigin(
+        ClkOffset {clkCls.offsetFromOrigin().seconds() + offsetSeconds,
+                   clkCls.offsetFromOrigin().cycles() + cyclesFromNs(clkCls.freq(), offsetNs)});
 }
 
 void MetadataStreamParser::_adjustClkCls(ClkCls& clkCls) noexcept
 {
     if (_mClkClsCfg.forceOriginIsUnixEpoch) {
-        clkCls.originIsUnixEpoch(true);
+        clkCls.origin(ClkOrigin {});
     }
 
-    this->_adjustClkClsOffset(clkCls);
+    this->_adjustClkClsOffsetFromOrigin(clkCls);
 }
 
 void MetadataStreamParser::_finalizeTraceCls()
@@ -1955,11 +2008,11 @@ void MetadataStreamParser::_finalizeTraceCls()
     }
 
     /*
-     * Set the value saving indexes of dependencies (field classes) and
-     * the saved value index of dependent (dynamic-length, optional, and
+     * Set the key value saving indexes of key field classes and the
+     * saved key value index of dependent (dynamic-length, optional, and
      * variant) field classes.
      */
-    setSavedValIndexes(*_mTraceCls);
+    setSavedKeyValIndexes(*_mTraceCls);
 
     /* Adjust clock classes, if needed */
     for (const auto& dataStreamCls : *_mTraceCls) {
@@ -1977,7 +2030,7 @@ void MetadataStreamParser::_finalizeTraceCls()
 
         /* Adjust and normalize */
         this->_adjustClkCls(*clkCls);
-        normalizeClkClsOffset(*clkCls);
+        normalizeClkClsOffsetFromOrigin(*clkCls);
 
         /* This one is now done */
         _mAdjustedClkClasses.insert(clkCls);

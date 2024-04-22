@@ -1,18 +1,18 @@
 /*
- * Copyright (c) 2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2022-2024 Philippe Proulx <pproulx@efficios.com>
  *
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef _CTF_SRC_METADATA_JSON_VAL_REQ_HPP
-#define _CTF_SRC_METADATA_JSON_VAL_REQ_HPP
+#ifndef CTF_COMMON_SRC_METADATA_JSON_VAL_REQ_HPP
+#define CTF_COMMON_SRC_METADATA_JSON_VAL_REQ_HPP
 
 #include <memory>
 
 #include "cpp-common/bt2c/exc.hpp"
 #include "cpp-common/bt2c/json-val-req.hpp"
 #include "cpp-common/bt2c/json-val.hpp"
-#include "cpp-common/bt2c/text-loc-str.hpp"
+#include "cpp-common/bt2c/logging.hpp"
 
 namespace ctf {
 namespace src {
@@ -28,25 +28,14 @@ template <typename JsonIntValReqT>
 class Ctf2JsonIntRangeValReq final : public bt2c::JsonArrayValReq
 {
 public:
-    explicit Ctf2JsonIntRangeValReq(const bt2c::ValReqLogCfg& logCfg) :
-        bt2c::JsonArrayValReq {2, JsonIntValReqT::shared(logCfg), logCfg}
+    explicit Ctf2JsonIntRangeValReq(const bt2c::Logger& parentLogger) :
+        bt2c::JsonArrayValReq {2, JsonIntValReqT::shared(parentLogger), parentLogger}
     {
     }
 
-    explicit Ctf2JsonIntRangeValReq(const bt2c::Logger& parentLogger,
-                                    const bt2c::TextLocStrFmt textLocStrFmt) :
-        Ctf2JsonIntRangeValReq {bt2c::ValReqLogCfg {parentLogger, textLocStrFmt}}
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-    }
-
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
-    {
-        return std::make_shared<Ctf2JsonIntRangeValReq>(logCfg);
-    }
-
-    static SP shared(const bt2c::Logger& parentLogger, const bt2c::TextLocStrFmt textLocStrFmt)
-    {
-        return std::make_shared<Ctf2JsonIntRangeValReq>(parentLogger, textLocStrFmt);
+        return std::make_shared<Ctf2JsonIntRangeValReq>(parentLogger);
     }
 
 private:
@@ -54,9 +43,8 @@ private:
     void _throwLowerGtUpper(const LowerT lower, const UpperT upper,
                             const bt2c::JsonVal& jsonVal) const
     {
-        BT_CPPLOGE_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error,
-                                               "[{}] {} is greater than {}.",
-                                               this->_locStr(jsonVal), lower, upper);
+        BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_THROW_SPEC(this->_logger(), bt2c::Error, jsonVal.loc(),
+                                                        "{} is greater than {}.", lower, upper);
     }
 
     void _validate(const bt2c::JsonVal& jsonVal) const override
@@ -124,8 +112,8 @@ private:
                 }
             }
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), "[{}] Invalid integer range.",
-                                                     this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid integer range.");
         }
     }
 };
@@ -141,26 +129,16 @@ template <typename JsonIntValReqT>
 class Ctf2JsonIntRangeSetValReqBase final : public bt2c::JsonArrayValReq
 {
 public:
-    explicit Ctf2JsonIntRangeSetValReqBase(const bt2c::ValReqLogCfg& logCfg) :
+    explicit Ctf2JsonIntRangeSetValReqBase(const bt2c::Logger& parentLogger) :
         bt2c::JsonArrayValReq {1, bt2s::nullopt,
-                               Ctf2JsonIntRangeValReq<JsonIntValReqT>::shared(logCfg), logCfg}
+                               Ctf2JsonIntRangeValReq<JsonIntValReqT>::shared(parentLogger),
+                               parentLogger}
     {
     }
 
-    explicit Ctf2JsonIntRangeSetValReqBase(const bt2c::Logger& parentLogger,
-                                           const bt2c::TextLocStrFmt textLocStrFmt) :
-        Ctf2JsonIntRangeSetValReqBase {bt2c::ValReqLogCfg {parentLogger, textLocStrFmt}}
+    static SP shared(const bt2c::Logger& parentLogger)
     {
-    }
-
-    static SP shared(const bt2c::ValReqLogCfg& logCfg)
-    {
-        return std::make_shared<Ctf2JsonIntRangeSetValReqBase>(logCfg);
-    }
-
-    static SP shared(const bt2c::Logger& parentLogger, const bt2c::TextLocStrFmt textLocStrFmt)
-    {
-        return std::make_shared<Ctf2JsonIntRangeSetValReqBase>(parentLogger, textLocStrFmt);
+        return std::make_shared<Ctf2JsonIntRangeSetValReqBase>(parentLogger);
     }
 
 private:
@@ -169,8 +147,8 @@ private:
         try {
             bt2c::JsonArrayValReq::_validate(jsonVal);
         } catch (const bt2c::Error&) {
-            BT_CPPLOGE_APPEND_CAUSE_AND_RETHROW_SPEC(
-                this->_logger(), "[{}] Invalid integer range set.", this->_locStr(jsonVal));
+            BT_CPPLOGE_TEXT_LOC_APPEND_CAUSE_AND_RETHROW_SPEC(this->_logger(), jsonVal.loc(),
+                                                              "Invalid integer range set.");
         }
     }
 };
@@ -201,21 +179,23 @@ class Ctf2JsonAnyFragmentValReqImpl;
  *
  * This value requirement doesn't validate:
  *
- * • The dependencies of the dependent (dynamic-length, optional, and
- *   variant) field classes.
+ * • The keys of the dependent (dynamic-length, optional, and variant)
+ *   field classes.
  *
  *   In other words, it validates the form of field locations, but
- *   doesn't use them to find dependencies because there's not enough
- *   context.
+ *   doesn't use them to find key field classes because there's not
+ *   enough context.
+ *
+ * • Relative field locations.
+ *
+ * • Field roles.
  *
  * • Overlaps of integer ranges between variant field class options.
- *
  */
 class Ctf2JsonAnyFragmentValReq : public bt2c::JsonValReq
 {
 public:
-    explicit Ctf2JsonAnyFragmentValReq(const bt2c::Logger& parentLogger,
-                                       bt2c::TextLocStrFmt textLocStrFmt);
+    explicit Ctf2JsonAnyFragmentValReq(const bt2c::Logger& parentLogger);
     ~Ctf2JsonAnyFragmentValReq();
 
 private:
@@ -228,4 +208,4 @@ private:
 } /* namespace src */
 } /* namespace ctf */
 
-#endif /* _CTF_SRC_METADATA_JSON_VAL_REQ_HPP */
+#endif /* CTF_COMMON_SRC_METADATA_JSON_VAL_REQ_HPP */

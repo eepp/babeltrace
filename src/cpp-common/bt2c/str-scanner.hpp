@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2022 Philippe Proulx <pproulx@efficios.com>
+ * Copyright (c) 2015-2024 Philippe Proulx <pproulx@efficios.com>
  *
  * SPDX-License-Identifier: MIT
  */
@@ -14,8 +14,8 @@
 
 #include "common/assert.h"
 #include "cpp-common/bt2c/logging.hpp"
+#include "cpp-common/bt2s/string-view.hpp"
 
-#include "text-loc-str.hpp"
 #include "text-loc.hpp"
 
 namespace bt2c {
@@ -23,9 +23,9 @@ namespace bt2c {
 /*
  * String scanner.
  *
- * A string scanner (lexer) wraps an input string using two `const char`
- * pointers and scans specific characters and sequences of characters,
- * managing a current character pointer.
+ * A string scanner (lexer) wraps an input string view scans specific
+ * characters and sequences of characters, managing a current character
+ * pointer.
  *
  * When you call the various tryScan*() methods to try to scan some
  * contents, the methods advance the current character pointer on
@@ -35,32 +35,18 @@ class StrScanner final
 {
 public:
     /*
-     * Builds a string scanner, wrapping a string between `begin`
-     * (inclusive) and `end` (exclusive).
-     *
-     * NOTE: This string scanner does NOT own the string between `begin`
-     * and `end`, so you must make sure that it's still alive when you
-     * call its scanning methods.
+     * Builds a string scanner, wrapping the string `str`.
      *
      * When the string scanner logs or appends a cause to the error of
-     * the current thread, it uses `baseOffset` and `textLocStrFmt` to
-     * format the text location part of the message.
+     * the current thread, it uses `baseOffset` to format the text
+     * location part of the message.
      */
-    explicit StrScanner(const char *begin, const char *end, std::size_t baseOffset,
-                        const bt2c::Logger& logger,
-                        TextLocStrFmt textLocStrFmt = TextLocStrFmt::LineColNosAndOffset);
+    explicit StrScanner(bt2s::string_view str, std::size_t baseOffset, const Logger& logger);
 
     /*
      * Alternative constructor setting the `baseOffset` parameter to 0.
      */
-    explicit StrScanner(const char *begin, const char *end, const bt2c::Logger& logger,
-                        TextLocStrFmt textLocStrFmt = TextLocStrFmt::LineColNosAndOffset);
-
-    /* Default move/copy constructor/assignment operator */
-    StrScanner(const StrScanner&) = default;
-    StrScanner(StrScanner&&) = default;
-    StrScanner& operator=(const StrScanner&) = default;
-    StrScanner& operator=(StrScanner&&) = default;
+    explicit StrScanner(bt2s::string_view str, const Logger& logger);
 
     /*
      * Returns the current character pointer.
@@ -73,40 +59,30 @@ public:
     /*
      * Sets the current character pointer.
      *
-     * NOTE: This may corrupt the current location (location()) if the
-     * string between at() and `at` includes one or more newline
-     * characters.
+     * NOTE: This may corrupt the current location (loc()) if the string
+     * between at() and `at` includes one or more newline characters.
      */
     void at(const char * const at) noexcept
     {
-        BT_ASSERT_DBG(at >= _mBegin && at <= _mEnd);
+        BT_ASSERT_DBG(at >= _mStr.begin() && at <= _mStr.end());
         _mAt = at;
     }
 
     /*
-     * Returns the beginning character pointer, the one with which this
-     * string scanner was built.
+     * Returns the viewed string, the one with which this string scanner
+     * was built.
      */
-    const char *begin() const noexcept
+    bt2s::string_view str() const noexcept
     {
-        return _mBegin;
+        return _mStr;
     }
 
     /*
-     * Returns the ending character pointer, the one with which this
-     * string scanner was built.
-     */
-    const char *end() const noexcept
-    {
-        return _mEnd;
-    }
-
-    /*
-     * Returns the number of characters left until end().
+     * Returns the number of characters left until `str().end()`.
      */
     std::size_t charsLeft() const noexcept
     {
-        return _mEnd - _mAt;
+        return _mStr.end() - _mAt;
     }
 
     /*
@@ -114,7 +90,7 @@ public:
      */
     TextLoc loc() const noexcept
     {
-        return TextLoc {_mBaseOffset + static_cast<std::size_t>(_mAt - _mBegin), _mNbLines,
+        return TextLoc {_mBaseOffset + static_cast<std::size_t>(_mAt - _mStr.begin()), _mNbLines,
                         static_cast<std::size_t>(_mAt - _mLineBegin)};
     }
 
@@ -123,12 +99,12 @@ public:
      */
     bool isDone() const noexcept
     {
-        return _mAt == _mEnd;
+        return _mAt == _mStr.end();
     }
 
     /*
      * Resets this string scanner, setting the current character pointer
-     * to begin().
+     * to `str().begin()`.
      */
     void reset();
 
@@ -148,18 +124,19 @@ public:
      *     "en circulation\nYves?"
      *     "\u03c9 often represents angular velocity in physics"
      *
-     * Returns the escaped string, without beginning/end double quotes,
-     * on success, or `nullptr` if there's no double-quoted literal
-     * string (or if the method reaches end() before a closing `"`).
+     * Returns a view of the escaped string, without beginning/end
+     * double quotes, on success, or an empty view if there's no
+     * double-quoted literal string (or if the method reaches
+     * `str().end()` before a closing `"`).
      *
      * Logs and appends a cause to the error of the current thread,
      * throwing `Error`, if the scanning method finds an invalid escape
      * sequence or an illegal control character.
      *
-     * The returned string remains valid as long as you don't call any
-     * method of this object.
+     * The returned string view remains valid as long as you don't call
+     * any method of this object.
      */
-    const std::string *tryScanLitStr(const char *escapeSeqStartList);
+    bt2s::string_view tryScanLitStr(bt2s::string_view escapeSeqStartList);
 
     /*
      * Tries to scan and decode a constant integer string, possibly
@@ -241,7 +218,7 @@ public:
      * character pointer after this string and returning `true` on
      * success.
      */
-    bool tryScanToken(const char *token) noexcept;
+    bool tryScanToken(bt2s::string_view token) noexcept;
 
     /*
      * Skips the next whitespaces, updating the current character
@@ -275,18 +252,12 @@ private:
      * the characters of `escapeSeqStartList`, `\`, and `"` as escape
      * sequence starting characters.
      */
-    bool _tryAppendEscapedChar(const char *escapeSeqStartList);
-
-    /*
-     * Returns the current text location as a string, using
-     * `_mBaseOffset` and following `_mTextLocStrFmt`.
-     */
-    std::string _locStr() const;
+    bool _tryAppendEscapedChar(bt2s::string_view escapeSeqStartList);
 
     /*
      * Tries to scan any character, returning it and advancing the
      * current character pointer on success, or returning -1 if the
-     * current character pointer is end().
+     * current character pointer is `str().end()`.
      */
     int _tryScanAnyChar() noexcept
     {
@@ -318,7 +289,7 @@ private:
     void _incrAt(const std::size_t count = 1) noexcept
     {
         _mAt += count;
-        BT_ASSERT_DBG(_mAt <= _mEnd);
+        BT_ASSERT_DBG(_mAt <= _mStr.end());
     }
 
     /*
@@ -327,15 +298,12 @@ private:
     void _decrAt(const std::size_t count = 1) noexcept
     {
         _mAt -= count;
-        BT_ASSERT_DBG(_mAt >= _mBegin);
+        BT_ASSERT_DBG(_mAt >= _mStr.begin());
     }
 
 private:
-    /* Beginning of the substring to scan, given by user */
-    const char *_mBegin;
-
-    /* End of the substring to scan, given by user */
-    const char *_mEnd;
+    /* Viewed string, given by user */
+    bt2s::string_view _mStr;
 
     /* Current character */
     const char *_mAt;
@@ -350,16 +318,13 @@ private:
     std::string _mStrBuf;
 
     /* Real number string regex */
-    static const std::regex _mRealRegex;
+    static const std::regex _realRegex;
 
     /* Base offset for error messages */
     std::size_t _mBaseOffset;
 
     /* Logging configuration */
-    bt2c::Logger _mLogger;
-
-    /* Text location string format */
-    TextLocStrFmt _mTextLocStrFmt;
+    Logger _mLogger;
 };
 
 template <typename ValT>

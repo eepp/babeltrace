@@ -2,11 +2,13 @@
  * SPDX-License-Identifier: MIT
  *
  * Copyright 2022 Francis Deslauriers <francis.deslauriers@efficios.com>
+ * Copyright 2024 Philippe Proulx <pproulx@efficios.com>
  */
 
-#ifndef _CTF_SRC_METADATA_TSDL_CTF_1_METADATA_STREAM_PARSER_HPP
-#define _CTF_SRC_METADATA_TSDL_CTF_1_METADATA_STREAM_PARSER_HPP
+#ifndef CTF_COMMON_SRC_METADATA_TSDL_CTF_1_METADATA_STREAM_PARSER_HPP
+#define CTF_COMMON_SRC_METADATA_TSDL_CTF_1_METADATA_STREAM_PARSER_HPP
 
+#include "cpp-common/bt2c/aliases.hpp"
 #include "cpp-common/bt2c/libc-up.hpp"
 
 #include "../../../metadata/ctf-ir.hpp"
@@ -23,8 +25,74 @@ namespace src {
  * CTF 1 metadata stream (TSDL) parser.
  *
  * Build an instance of `Ctf1MetadataStreamParser`, and then call
- * parseSection() as often as needed with one or more complete TSDL root
- * blocks.
+ * parseSection() as often as needed with one or more complete
+ * packetized or plain text TSDL root blocks.
+ *
+ * You may also call the static Ctf1MetadataStreamParser::parse() method
+ * to parse a whole packetized or plain text CTF 1 metadata stream.
+ *
+ * IMPLEMENTATION
+ * ━━━━━━━━━━━━━━
+ * The current parsing strategy is to reuse the C parser, which was
+ * written for Babeltrace 2.0, almost as is.
+ *
+ * The output of said legacy parser is a `ctf_trace_class` instance.
+ * When parsing more metadata stream data, the current legacy (original)
+ * trace class (`_mOrigCtfIrGenerator->ctf_tc`) gets updated. This means
+ * potentially adding more clock classes, data classes, and event
+ * classes to `_mOrigCtfIrGenerator->ctf_tc`.
+ *
+ * The top-level legacy structures contain an `is_translated` member
+ * which indicates whether or not a `Ctf1MetadataStreamParser` instance
+ * translated from legacy CTF IR to woke CTF IR (the classes
+ * of `ctf::src`).
+ *
+ * All in all, this is the data flow from packetized or plain text
+ * metadata stream bytes to woke CTF IR instances:
+ *
+ *          ┌───────────────────────┐
+ *          │ Metadata stream bytes │
+ *          │ (possibly packetized) │
+ *          └───────────────────────┘
+ *                      ↓
+ *         ╔═════════════════════════╗
+ *         ║ Metadata stream decoder ║
+ *         ║   (`_mStreamDecoder`)   ║
+ *         ╚═════════════════════════╝
+ *                      ↓
+ *     ┌──────────────────────────────────┐
+ *     │ Plain text metadata stream bytes │
+ *     └──────────────────────────────────┘
+ *                      ↓
+ *              ╔═══════════════╗ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┐
+ *              ║  AST scanner  ║               ┊
+ *              ║ (`*_mScanner`)║               ┊
+ *              ╚═══════════════╝               ┊
+ *                      ↓                       ┊
+ *          ┌───────────────────────┐           ┊
+ *          │       AST nodes       │           ┊
+ *          │ (within `*_mScanner`) │           ┊
+ *          └───────────────────────┘           ┊
+ *                      ↓                       ├┈ Legacy code
+ *        ╔═══════════════════════════╗         ┊
+ *        ║      AST node parser      ║         ┊
+ *        ║ (`*_mOrigCtfIrGenerator`) ║         ┊
+ *        ╚═══════════════════════════╝         ┊
+ *                      ↓                       ┊
+ *     ┌──────────────────────────────────┐     ┊
+ *     │         Original CTF IR          │     ┊
+ *     │ (`_mOrigCtfIrGenerator->ctf_tc`) │     ┊
+ *     └──────────────────────────────────┘ ┈┈┈┈┘
+ *                      ↓
+ *       ╔══════════════════════════════╗
+ *       ║         This parser          ║
+ *       ║ (`Ctf1MetadataStreamParser`) ║
+ *       ╚══════════════════════════════╝
+ *                      ↓
+ *              ┏━━━━━━━━━━━━━━┓
+ *              ┃ Woke CTF IR  ┃
+ *              ┃ (traceCls()) ┃
+ *              ┗━━━━━━━━━━━━━━┛
  */
 class Ctf1MetadataStreamParser final : public MetadataStreamParser
 {
@@ -32,25 +100,24 @@ public:
     /*
      * Builds a CTF 1 metadata stream parser.
      *
-     * If `selfComp` isn't `nullptr`, then the parser uses it each time
-     * you call parseSection() to finalize its current trace class.
+     * If `selfComp` exists, then the parser uses it each time you call
+     * parseSection() to finalize its current trace class.
      */
-    explicit Ctf1MetadataStreamParser(const ClkClsCfg& clkClsCfg,
-                                      bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp,
-                                      const bt2c::Logger& parentLogger);
+    explicit Ctf1MetadataStreamParser(bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp,
+                                      const ClkClsCfg& clkClsCfg, const bt2c::Logger& parentLogger);
 
     /*
-     * Parses the whole CTF 1 metadata stream in `buffer` and returns
-     * the resulting trace class and optional metadata stream UUID on
-     * success, or appends a cause to the error of the current thread
-     * and throws `bt2c::Error` otherwise.
+     * Parses the whole packetized or plain text CTF 1 metadata stream
+     * in `buffer` and returns the resulting trace class and optional
+     * metadata stream UUID on success, or appends a cause to the error
+     * of the current thread and throws `bt2c::Error` otherwise.
      */
-    static ParseRet parse(const ClkClsCfg& clkClsCfg,
-                          bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp,
-                          bt2s::span<const std::uint8_t> buffer, const bt2c::Logger& parentLogger);
+    static ParseRet parse(bt2::OptionalBorrowedObject<bt2::SelfComponent> selfComp,
+                          const ClkClsCfg& clkClsCfg, bt2c::ConstBytes buffer,
+                          const bt2c::Logger& parentLogger);
 
 private:
-    void _parseSection(bt2s::span<const std::uint8_t> buffer) override;
+    void _parseSection(bt2c::ConstBytes buffer) override;
 
     /*
      * Translates the original CTF IR field class `origFc` and returns
@@ -218,4 +285,4 @@ private:
 } /* namespace src */
 } /* namespace ctf */
 
-#endif /* _CTF_SRC_METADATA_TSDL_CTF_1_METADATA_STREAM_PARSER_HPP */
+#endif /* CTF_COMMON_SRC_METADATA_TSDL_CTF_1_METADATA_STREAM_PARSER_HPP */
