@@ -20,6 +20,9 @@ Trace class:
       vtid: Signed integer (32-bit, Base 10)
       vpid: Signed integer (32-bit, Base 10)
     Event class `heartbeat:msg` (ID 0):
+      User attributes:
+        babeltrace.org,2020:
+          log-level: debug:line
       Log level: Debug (line)
       Payload field class: Structure (1 member):
         msg: String
