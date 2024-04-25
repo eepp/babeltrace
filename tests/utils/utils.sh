@@ -205,6 +205,12 @@ bt_remove_cr_inline() {
     "$BT_TESTS_SED_BIN" 's/\r//g' "$1"
 }
 
+# Remove CR and LF characters in file "$1", write to file "$2".
+
+bt_remove_crlf() {
+	tr -d '\r\n' < "$1" > "$2"
+}
+
 # Runs the `$BT_TESTS_BT2_BIN` command within an environment which can
 # import the `bt2` Python package, redirecting the standard output to
 # the `$1` file and the standard error to the `$2` file.
