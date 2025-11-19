@@ -31,3 +31,15 @@ length_sort = true
 
 [tool.pyright]
 reportPrivateUsage = false
+
+[tool.pytest.ini_options]
+python_files = [
+    "test_*.py",
+    "pytest_*.py",
+]
+norecursedirs = [
+    "*.egg",
+    ".*",
+    "venv",
+    "__py*",
+]
