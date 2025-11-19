@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+#
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Copyright (c) 2019 Michael Jeanson <mjeanson@efficios.com>
+# Copyright (C) 2019-2026 Philippe Proulx <pproulx@efficios.com>
+
+# Source this file to access an environment to run `pytest` directly
+# with the needed environment variables.
+#
+# For an out-of-tree build, use the `bt-pytest` function.
+#
+# Compatible with Bash and Zsh.
+
+# Prints the OS type.
+_bt_os_type() {
+    local os_type
+
+    os_type=$(uname -s)
+
+    case $os_type in
+    MINGW*)
+        os_type=mingw
+        ;;
+    Darwin)
+        os_type=darwin
+        ;;
+    Linux)
+        os_type=linux
+        ;;
+    CYGWIN*)
+        os_type=cygwin
+        ;;
+    *)
+        os_type=unsupported
+        ;;
+    esac
+
+    echo -n "$os_type"
+}
+
+# Sets the library search path based on OS type.
+_bt_set_lib_search_path() {
+    # Set from build configuration if not already set
+    if [[ -z ${BT_TESTS_BUILDDIR:-} ]]; then
+        local BT_TESTS_BUILDDIR='@abs_top_builddir@/tests'
+    fi
+
+    local -r os_type=$(_bt_os_type)
+    local -r main_lib_path=$BT_TESTS_BUILDDIR/../src/lib/.libs
+
+    if [[ $os_type == mingw || $os_type == cygwin ]]; then
+        export PATH=$main_lib_path${PATH:+:}${PATH:-}
+    elif [[ $os_type == darwin ]]; then
+        export DYLD_LIBRARY_PATH=$main_lib_path${DYLD_LIBRARY_PATH:+:}${DYLD_LIBRARY_PATH:-}
+    else
+        export LD_LIBRARY_PATH=$main_lib_path${LD_LIBRARY_PATH:+:}${LD_LIBRARY_PATH:-}
+    fi
+}
+
+# Sets `PYTHONHOME` for Windows (MinGW).
+_bt_set_pythonhome() {
+    # Set from build configuration if not already set
+    if [[ -z ${BT_TESTS_PYTHON_CONFIG_BIN:-} ]]; then
+        local BT_TESTS_PYTHON_CONFIG_BIN='@PYTHON_CONFIG@'
+    fi
+
+    if [[ $(_bt_os_type) == mingw ]]; then
+        PYTHONHOME=$($BT_TESTS_PYTHON_CONFIG_BIN --prefix)
+        export PYTHONHOME
+    fi
+}
+
+# Sets up AddressSanitizer environment if enabled.
+_bt_set_asan() {
+    # Set from build configuration if not already set
+    if [[ -z ${BT_TESTS_ENABLE_ASAN:-} ]]; then
+        local BT_TESTS_ENABLE_ASAN='@ENABLE_ASAN@'
+    fi
+
+    if [[ -z ${BT_TESTS_CC_BIN:-} ]]; then
+        local BT_TESTS_CC_BIN='@CC@'
+    fi
+
+    if [[ -z ${BT_TESTS_GREP_BIN:-} ]]; then
+        local BT_TESTS_GREP_BIN='@GREP@'
+    fi
+
+    # If AddressSanitizer is used, we must preload `libasan.so` so that
+    # libasan doesn't complain about not being the first loaded library.
+    #
+    # Python and sed (executed as part of the Libtool wrapper) produce
+    # some leaks, so we must unfortunately disable leak detection.
+    #
+    # Append it to existing `ASAN_OPTIONS` variable, such that we
+    # override the user's value if it contains `detect_leaks=1`.
+    if [[ ${BT_TESTS_ENABLE_ASAN:-} == 1 ]]; then
+        if $BT_TESTS_CC_BIN --version | head -n 1 | $BT_TESTS_GREP_BIN -qi '^gcc'; then
+            local -r lib_asan=$($BT_TESTS_CC_BIN -print-file-name=libasan.so)
+            local -r lib_stdcxx=$($BT_TESTS_CC_BIN -print-file-name=libstdc++.so)
+            export LD_PRELOAD=$lib_asan:$lib_stdcxx${LD_PRELOAD:+:}${LD_PRELOAD:-}
+        fi
+
+        export ASAN_OPTIONS=${ASAN_OPTIONS:-}${ASAN_OPTIONS:+,}detect_leaks=0
+    fi
+}
+
+# Sets `PYTHONPATH` for in-tree pytest if enabled.
+_bt_set_vendor_pytest() {
+    if ((! @HAVE_VENDOR_PYTEST@)); then
+        return
+    fi
+
+    # Set from build configuration if not already set
+    if [[ -z ${BT_TESTS_SRCDIR:-} ]]; then
+        local BT_TESTS_SRCDIR='@abs_top_srcdir@/tests'
+    fi
+
+    if [[ -z ${BT_TESTS_PYTHON_BIN:-} ]]; then
+        local BT_TESTS_PYTHON_BIN='@PYTHON@'
+    fi
+
+    local pytest_dir
+
+    if (($($BT_TESTS_PYTHON_BIN -c 'import sys; print(sys.version_info.minor)') >= 7)); then
+        pytest_dir=pytest-7.4.3
+    else
+        pytest_dir=pytest-6.1.2
+    fi
+
+    local -r path_sep=$($BT_TESTS_PYTHON_BIN -c 'import os; print(os.pathsep, end="")')
+
+    export PYTHONPATH=$BT_TESTS_SRCDIR/utils/python/vendor/$pytest_dir${PYTHONPATH:+$path_sep}${PYTHONPATH:-}
+}
+
+# Setup
+{
+    # Set the library search path based on current OS
+    _bt_set_lib_search_path
+
+    # Set `PYTHONHOME` for Windows (MinGW)
+    _bt_set_pythonhome
+
+    # Set up AddressSanitizer environment if enabled
+    _bt_set_asan
+
+    # Set up in-tree pytest if enabled
+    _bt_set_vendor_pytest
+}
+
+# Clean up the local functions
+unset -f _bt_os_type
+unset -f _bt_set_lib_search_path
+unset -f _bt_set_pythonhome
+unset -f _bt_set_asan
+unset -f _bt_set_vendor_pytest
+
+# Wraps `pytest` with options that are suitable for both in-tree and
+# out-of-tree builds.
+bt-pytest() {
+    # Set from build configuration if not already set
+    if [[ -z ${BT_TESTS_BUILDDIR:-} ]]; then
+        local BT_TESTS_BUILDDIR='@abs_top_builddir@/tests'
+    fi
+
+    if [[ -z ${BT_TESTS_PYTHON_BIN:-} ]]; then
+        local BT_TESTS_PYTHON_BIN='@PYTHON@'
+    fi
+
+    $BT_TESTS_PYTHON_BIN -m pytest \
+        --build-dir="${BT_TESTS_BUILDDIR}/../" \
+        -o cache_dir="${BT_TESTS_BUILDDIR}/.pytest_cache" "$@"
+}
