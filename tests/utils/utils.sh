@@ -597,10 +597,9 @@ _bt_tests_check_coverage() {
 bt_run_in_py_utils_env() {
 	local our_pythonpath=$BT_TESTS_SRCDIR/utils/python:$BT_TESTS_SRCDIR/utils/python/vendor
 
-	if [[ $_bt_tests_py3_version =~ 3.[45] ]]; then
+	if [[ $_bt_tests_py3_version == 3.5 ]]; then
 		# Add a local directory containing a `typing.py` to `PYTHONPATH`
-		# for Python 3.4 and Python 3.5 which either don't offer the
-		# `typing` module at all, or offer a partial one.
+		# for Python 3.5 which offers a partial `typing` module.
 		our_pythonpath=$our_pythonpath:$BT_TESTS_SRCDIR/utils/python/vendor/typing
 	fi
 
