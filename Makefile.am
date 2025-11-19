@@ -7,8 +7,19 @@ ACLOCAL_AMFLAGS = -I m4
 SUBDIRS = \
 	include \
 	src \
-	doc \
-	tests
+	doc
+
+if ENABLE_TESTS
+SUBDIRS += tests
+else
+check-local:
+	@echo
+	@echo '╔─────────────────────────────────────────────────────────────────╗'
+	@echo "│ ⚠️ WARNING: Make won't build and run tests because they were    │"
+	@echo '│             disabled at configuration time (`--disable-tests`). │'
+	@echo '╚─────────────────────────────────────────────────────────────────╝'
+	@echo
+endif
 
 dist_doc_DATA = \
 	ChangeLog \
