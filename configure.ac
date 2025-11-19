@@ -456,6 +456,11 @@ AE_FEATURE([man-pages],[Do not build and install man pages (already built in a d
 AE_FEATURE_DEFAULT_ENABLE
 AE_FEATURE([tests],[Do not build tests])
 
+# Vendor pytest
+# Disabled by default
+AE_FEATURE_DEFAULT_DISABLE
+AE_FEATURE([vendor-pytest],[Use the in-tree pytest instead of an installed one])
+
 # When given, add -Werror to WARN_CFLAGS and WARN_CXXFLAGS.
 # Disabled by default
 AE_FEATURE_DEFAULT_DISABLE
@@ -578,10 +583,25 @@ AS_IF([test "x$have_python" = xyes], [
 
 AM_CONDITIONAL([HAVE_PYTHON_312_OR_GREATER], [test "x$have_python_312_or_greater" = xyes])
 
-# Tests require Python
+# Tests require Python and pytest >= 6.1.0
 AE_IF_FEATURE_ENABLED([tests], [
   AS_IF([test "x$have_python" = "xno"], [
     AC_MSG_ERROR([Python >= 3.5 is required to build tests. Use ‘--disable-tests’ to disable building tests.])
+  ])
+
+  AE_IF_FEATURE_ENABLED([vendor-pytest], [
+    # Use in-tree pytest
+    AC_MSG_NOTICE([using in-tree pytest])
+  ], [
+    # Check for pytest >= 6.1.0
+    AC_MSG_CHECKING([for pytest >= 6.1.0])
+    AS_IF(["$PYTHON" -c "import pytest; assert tuple(map(int, pytest.__version__.split('.'))) >= (6, 1, 0)" 2>/dev/null], [
+      pytest_version=`"$PYTHON" -c "import pytest; print(pytest.__version__)" 2>/dev/null`
+      AC_MSG_RESULT([yes ($pytest_version)])
+    ], [
+      AC_MSG_RESULT([no])
+      AC_MSG_ERROR([pytest >= 6.1.0 is required to build tests. Use ‘--disable-tests’  to disable building tests or use ‘--enable-vendor-pytest’ to use the in-tree pytest.])
+    ])
   ])
 ])
 
@@ -1010,6 +1030,8 @@ AS_ECHO
 AE_PPRINT_SUBTITLE([Testing])
 test \"x$enable_tests\" = \"xyes\" && value=1 || value=0
 AE_PPRINT_PROP_BOOL([Build tests], $value)
+test \"x$enable_vendor_pytest\" = \"xyes\" && value=1 || value=0
+AE_PPRINT_PROP_BOOL([Use in-tree pytest], $value)
 
 AS_ECHO
 AE_PPRINT_SUBTITLE([Special build modes])
