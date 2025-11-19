@@ -132,7 +132,6 @@ dist_check_SCRIPTS = \
 
 # `conds/test-conds.sh` needs to load standard plugins, so only build it
 # when shared libraries are enabled.
-if HAVE_PYTHON
 if DEV_MODE
 if ENABLE_SHARED
 
@@ -155,4 +154,3 @@ dist_check_SCRIPTS += conds/test-conds.sh conds/test.py
 
 endif # ENABLE_SHARED
 endif # DEV_MODE
-endif # HAVE_PYTHON
