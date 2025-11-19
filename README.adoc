@@ -126,6 +126,21 @@ _**If you need the `bt2` Python bindings documentation**_::
       Python{nbsp}3
       (Debian/Ubuntu/Fedora: `python3-sphinx`)
 
+_**If you need to build and run the tests**_:: {empty}
++
+--
+* https://www.python.org[Python]{nbsp}≥{nbsp}3.5 (development
+  libraries and `python3-config`)
+  (Debian/Ubuntu: `python3-dev`; Fedora: `python3-devel`)
+* https://docs.pytest.org/[pytest]{nbsp}≥{nbsp}6.1.0
+  (Debian/Ubuntu/Fedora: `python3-pytest`)
++
+Use an in-tree pytest with `--enable-vendor-pytest` if you can't
+install it.
+--
++
+Disable test building with `--disable-tests` at configuration time.
+
 [NOTE]
 ifdef::env-github[]
 .**Thanks for the code!**
@@ -205,6 +220,9 @@ with the `PYTHON` and `PYTHON_CONFIG` environment variable.
 
 `--enable-python-plugins`::
     Build support for {bt2} Python plugins.
+
+`--enable-vendor-pytest`::
+    Use an in-tree pytest instead of an installed one.
 
 The following environment variables can modify the build:
 

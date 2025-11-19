@@ -120,5 +120,84 @@ This applies to:
 	tests/utils/python/vendor/normand.py
 
 
+The pytest packages and some of their dependencies are provided under the
+terms of the MIT License:
+
+	SPDX-License-Identifier: MIT
+
+According with:
+
+	LICENSES/MIT
+
+They are only used when running the tests in the source tree. This applies
+to:
+
+	tests/utils/python/vendor/pytest-6.1.2/pytest/*
+	tests/utils/python/vendor/pytest-6.1.2/_pytest/*
+	tests/utils/python/vendor/pytest-6.1.2/attr/*
+	tests/utils/python/vendor/pytest-6.1.2/attrs/*
+	tests/utils/python/vendor/pytest-6.1.2/iniconfig/*
+	tests/utils/python/vendor/pytest-6.1.2/pluggy/*
+	tests/utils/python/vendor/pytest-6.1.2/py/*
+	tests/utils/python/vendor/pytest-6.1.2/toml/*
+	tests/utils/python/vendor/pytest-6.1.2/pathlib2/*
+	tests/utils/python/vendor/pytest-6.1.2/pyparsing.py
+	tests/utils/python/vendor/pytest-6.1.2/six.py
+	tests/utils/python/vendor/pytest-6.1.2/zipp.py
+	tests/utils/python/vendor/pytest-7.4.3/pytest/*
+	tests/utils/python/vendor/pytest-7.4.3/_pytest/*
+	tests/utils/python/vendor/pytest-7.4.3/exceptiongroup/*
+	tests/utils/python/vendor/pytest-7.4.3/iniconfig/*
+	tests/utils/python/vendor/pytest-7.4.3/pluggy/*
+	tests/utils/python/vendor/pytest-7.4.3/tomli/*
+	tests/utils/python/vendor/pytest-7.4.3/zipp/*
+	tests/utils/python/vendor/pytest-7.4.3/py.py
+
+
+The importlib-metadata package is provided under the terms of the
+Apache License 2.0:
+
+	SPDX-License-Identifier: Apache-2.0
+
+According with:
+
+	LICENSES/Apache-2.0
+
+It's only used when running the tests in the source tree. This applies to:
+
+	tests/utils/python/vendor/pytest-6.1.2/importlib_metadata/*
+	tests/utils/python/vendor/pytest-7.4.3/importlib_metadata/*
+
+
+The packaging package is provided under the terms of the
+BSD 2-Clause "Simplified" License or the Apache License 2.0:
+
+	SPDX-License-Identifier: BSD-2-Clause OR Apache-2.0
+
+According with:
+
+	LICENSES/BSD-2-Clause
+	LICENSES/Apache-2.0
+
+It's only used when running the tests in the source tree. This applies to:
+
+	tests/utils/python/vendor/pytest-6.1.2/packaging/*
+	tests/utils/python/vendor/pytest-7.4.3/packaging/*
+
+
+The typing_extensions module is provided under the terms of the
+Python Software Foundation License 2:
+
+	SPDX-License-Identifier: PSF-2.0
+
+According with:
+
+	LICENSES/PSF-2.0
+
+It's only used when running the tests in the source tree. This applies to:
+
+	tests/utils/python/vendor/pytest-7.4.3/typing_extensions.py
+
+
 In addition, other licenses may also apply, see SPDX-License-Identifier in
 individual files.
