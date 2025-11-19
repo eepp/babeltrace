@@ -60,7 +60,7 @@ According with:
 They are only used when running the tests in the source tree. This applies
 to:
 
-	tests/utils/python/vendor/tap/*
+	tests/utils/python/vendor/tappytap/tap/*
 	tests/utils/tap/tap.h
 	tests/utils/tap/tap.c
 

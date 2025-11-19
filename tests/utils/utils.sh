@@ -674,6 +674,10 @@ bt_run_py_test() {
 		python_exec=$BT_TESTS_PYTHON_BIN
 	fi
 
+	# Add `python/vendor/tappytap` to `PYTHONPATH` so that
+	# `python/testrunner.py` may import `tap`.
+	local -x PYTHONPATH=$BT_TESTS_SRCDIR/utils/python/vendor/tappytap${PYTHONPATH:+:}${PYTHONPATH:-}
+
 	bt_run_in_py_env \
 		"$python_exec" "$BT_TESTS_SRCDIR/utils/python/testrunner.py" \
 		--pattern "$test_pattern" "$test_dir"
