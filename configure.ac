@@ -451,6 +451,11 @@ AE_FEATURE([built-in-python-plugin-support],[Statically-link Python plugin suppo
 AE_FEATURE_DEFAULT_ENABLE
 AE_FEATURE([man-pages],[Do not build and install man pages (already built in a distributed tarball])
 
+# Tests
+# Enabled by default
+AE_FEATURE_DEFAULT_ENABLE
+AE_FEATURE([tests],[Do not build tests])
+
 # When given, add -Werror to WARN_CFLAGS and WARN_CXXFLAGS.
 # Disabled by default
 AE_FEATURE_DEFAULT_DISABLE
@@ -527,6 +532,7 @@ AM_CONDITIONAL([ENABLE_MAN_PAGES], AE_IS_FEATURE_ENABLED([man-pages]))
 AM_CONDITIONAL([ENABLE_PYTHON_COMMON_DEPS], AE_IS_FEATURE_ENABLED([python-bindings]) || AE_IS_FEATURE_ENABLED([python-plugins]))
 AM_CONDITIONAL([ENABLE_ASAN], AE_IS_FEATURE_ENABLED([asan]))
 AM_CONDITIONAL([ENABLE_SHARED], [test "x$enable_shared" = xyes])
+AM_CONDITIONAL([ENABLE_TESTS], AE_IS_FEATURE_ENABLED([tests]))
 
 
 ##                                                                    ##
@@ -992,6 +998,11 @@ AE_PPRINT_PROP_BOOL_CUSTOM([Python bindings documentation], $value, [To build th
 AS_ECHO
 AE_PPRINT_SUBTITLE([Logging])
 AE_PPRINT_PROP_STRING([Minimal log level], $BABELTRACE_MINIMAL_LOG_LEVEL)
+
+AS_ECHO
+AE_PPRINT_SUBTITLE([Testing])
+test \"x$enable_tests\" = \"xyes\" && value=1 || value=0
+AE_PPRINT_PROP_BOOL([Build tests], $value)
 
 AS_ECHO
 AE_PPRINT_SUBTITLE([Special build modes])

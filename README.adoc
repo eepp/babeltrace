@@ -5,7 +5,7 @@
 // Render with Asciidoctor
 
 = Babeltrace 2
-28 February 2025
+19 November 2025
 :btversion: 2.1
 :bt2: Babeltrace{nbsp}2
 ifdef::env-github[]
@@ -168,6 +168,12 @@ $ ./configure
 +
 --
 The following options can modify the build:
+
+`--disable-tests`::
+    Do _not_ build the tests at all.
++
+In that case, the `check` Make target still works, but it doesn't
+run any test and exits with status{nbsp}0.
 
 `--enable-api-doc`::
     Build the {bt2}{nbsp}C{nbsp}API HTML documentation.
