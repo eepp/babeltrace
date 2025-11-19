@@ -71,7 +71,7 @@ class ClockClassTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Big hack to make `_mip_version` known to static type checkers in a
-        # Python 3.4 compatible way.
+        # Python 3.5 compatible way.
         cls._mip_version = -1
         del cls._mip_version
 
