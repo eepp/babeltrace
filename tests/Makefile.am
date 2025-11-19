@@ -225,25 +225,20 @@ TESTS_PLUGINS += plugins/flt.utils.trimmer/test-trimming.sh \
 endif # ENABLE_PYTHON_PLUGINS
 endif # ENABLE_PYTHON_BINDINGS
 
-if HAVE_PYTHON
 TESTS_PLUGINS += plugins/src.ctf.lttng-live/test-live.sh
 endif
 
 # `lib/conds/test-conds.sh` needs:
 #
-# • Python for `test.py` (but no Babeltrace bindings).
-#
 # • The developer mode to enable all condition checks.
 #
 # • Shared libraries because it uses runIn() which needs to load
 #   the standard `utils` plugin.
-if HAVE_PYTHON
 if DEV_MODE
 if ENABLE_SHARED
 TESTS_LIB += lib/conds/test-conds.sh
 endif # ENABLE_SHARED
 endif # DEV_MODE
-endif # HAVE_PYTHON
 
 if ENABLE_PYTHON_PLUGINS
 TESTS_PYTHON_PLUGIN_PROVIDER += python-plugin-provider/test-python-plugin-provider.sh

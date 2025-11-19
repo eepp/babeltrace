@@ -578,6 +578,13 @@ AS_IF([test "x$have_python" = xyes], [
 
 AM_CONDITIONAL([HAVE_PYTHON_312_OR_GREATER], [test "x$have_python_312_or_greater" = xyes])
 
+# Tests require Python
+AE_IF_FEATURE_ENABLED([tests], [
+  AS_IF([test "x$have_python" = "xno"], [
+    AC_MSG_ERROR([Python >= 3.5 is required to build tests. Use ‘--disable-tests’ to disable building tests.])
+  ])
+])
+
 AS_IF([AE_IS_FEATURE_ENABLED([python-bindings]) || AE_IS_FEATURE_ENABLED([python-plugins])], [
   AS_IF([test "x$have_python_dev" = xno], [
     AC_MSG_ERROR([Cannot find a suitable ‘python-config’. You can override the ‘python-config’ path with the ‘PYTHON_CONFIG’ environment variable.])
