@@ -49,6 +49,7 @@ format_cpp() {
 		! -path '*/src/cpp-common/vendor/*' \
 		! -path '*/src/plugins/ctf/common/src/metadata/tsdl/lexer.*' \
 		! -path '*/src/plugins/ctf/common/src/metadata/tsdl/parser.*' \
+		! -path '*/tests/utils/catch.hpp' \
 		-print0 | xargs -P"$(nproc)" -n1 -t -0 "${formatter[@]}"
 }
 
