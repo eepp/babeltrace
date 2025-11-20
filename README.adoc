@@ -137,6 +137,8 @@ _**If you need to build and run the tests**_:: {empty}
 +
 Use an in-tree pytest with `--enable-vendor-pytest` if you can't
 install it.
+
+* http://www.swig.org[SWIG]{nbsp}≥{nbsp}3.0
 --
 +
 Disable test building with `--disable-tests` at configuration time.

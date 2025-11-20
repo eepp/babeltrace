@@ -9,6 +9,7 @@ noinst_LTLIBRARIES =
 COMMON_TEST_LDADD = \
 	$(top_builddir)/tests/utils/tap/libtap.la \
 	$(top_builddir)/tests/utils/libtestcommon.la \
+	utils/liblib-utils.la \
 	$(top_builddir)/src/common/libcommon.la \
 	$(top_builddir)/src/logging/liblogging.la
 
@@ -55,10 +56,6 @@ noinst_PROGRAMS = \
 	test-remove-destruction-listener-in-destruction-listener \
 	test-simple-sink \
 	test-trace-ir-ref
-
-# `test-fields.sh`, `test-plugins.sh`, and `test-plugin-init-fail-*.sh`
-# need to load shared library plugins.
-if ENABLE_SHARED
 
 noinst_PROGRAMS += test-fields-bin
 test_fields_bin_SOURCES = test-fields-bin.cpp
@@ -115,14 +112,10 @@ test_plugin_init_fail_plugin_plugin_init_fail_la_LDFLAGS = \
 test_plugin_init_fail_plugin_plugin_init_fail_la_LIBADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la
 
-# `liblib-utils.la` needs to load standard plugins, so only build it
-# when shared libraries are enabled.
 noinst_LTLIBRARIES += utils/liblib-utils.la
 utils_liblib_utils_la_SOURCES = \
 	utils/run-in.cpp \
 	utils/run-in.hpp
-
-endif # ENABLE_SHARED
 
 dist_check_SCRIPTS = \
 	test-plugins.sh \
@@ -130,10 +123,9 @@ dist_check_SCRIPTS = \
 	test-plugin-init-fail-yes.sh \
 	test-fields.sh
 
-# `conds/test-conds.sh` needs to load standard plugins, so only build it
-# when shared libraries are enabled.
+# `conds/test-conds.sh` needs the developer mode to enable all
+# condition checks.
 if DEV_MODE
-if ENABLE_SHARED
 
 noinst_PROGRAMS += conds/conds-triggers
 
@@ -152,5 +144,4 @@ conds_conds_triggers_LDADD = \
 
 dist_check_SCRIPTS += conds/test-conds.sh conds/test.py
 
-endif # ENABLE_SHARED
 endif # DEV_MODE

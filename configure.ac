@@ -407,9 +407,9 @@ AE_FEATURE_DEFAULT_ENABLE
 AE_FEATURE([git-version], [do not use git to generate the version string])
 
 # Python bindings
-# Disabled by default
-AE_FEATURE_DEFAULT_DISABLE
-AE_FEATURE([python-bindings],[build the Python bindings])
+# Enabled by default
+AE_FEATURE_DEFAULT_ENABLE
+AE_FEATURE([python-bindings],[do not build the Python bindings])
 
 # Python bindings documentation
 # Disabled by default
@@ -545,7 +545,6 @@ AM_CONDITIONAL([ENABLE_BUILT_IN_PYTHON_PLUGIN_SUPPORT], AE_IS_FEATURE_ENABLED([b
 AM_CONDITIONAL([ENABLE_MAN_PAGES], AE_IS_FEATURE_ENABLED([man-pages]))
 AM_CONDITIONAL([ENABLE_PYTHON_COMMON_DEPS], AE_IS_FEATURE_ENABLED([python-bindings]) || AE_IS_FEATURE_ENABLED([python-plugins]))
 AM_CONDITIONAL([ENABLE_ASAN], AE_IS_FEATURE_ENABLED([asan]))
-AM_CONDITIONAL([ENABLE_SHARED], [test "x$enable_shared" = xyes])
 AM_CONDITIONAL([ENABLE_TESTS], AE_IS_FEATURE_ENABLED([tests]))
 AM_CONDITIONAL([ENABLE_TEST_TAP_OUTPUT], AE_IS_FEATURE_ENABLED([test-tap-output]))
 
@@ -593,7 +592,7 @@ AS_IF([test "x$have_python" = xyes], [
 
 AM_CONDITIONAL([HAVE_PYTHON_312_OR_GREATER], [test "x$have_python_312_or_greater" = xyes])
 
-# Tests require Python and pytest >= 6.1.0
+# Tests require Python bindings and pytest >= 6.1.0
 AE_IF_FEATURE_ENABLED([tests], [
   AS_IF([test "x$have_python" = "xno"], [
     AC_MSG_ERROR([Python >= 3.5 is required to build tests. Use ‘--disable-tests’ to disable building tests.])
@@ -623,6 +622,11 @@ AE_IF_FEATURE_ENABLED([tests], [
       AC_MSG_RESULT([no])
       AC_MSG_ERROR([pytest-tap plugin is required to enable test TAP output. Do not use ‘--enable-test-tap-output’ to disable TAP output.])
     ])
+  ])
+
+  # Check for Python bindings
+  AE_IF_FEATURE_ENABLED([python-bindings], [], [
+    AC_MSG_ERROR([Python bindings are required to build tests. Use ‘--enable-python-bindings’ to build Python bindings or ‘--disable-tests’ to disable building tests.])
   ])
 ])
 

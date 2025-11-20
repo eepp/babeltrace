@@ -79,7 +79,7 @@ dist_check_SCRIPTS = \
 
 noinst_PROGRAMS =
 
-TESTS_BINDINGS =
+TESTS_BINDINGS = bindings/python/bt2/test-python-bt2.sh
 
 TESTS_CLI = \
 	cli/convert/test-convert-args.sh \
@@ -104,7 +104,11 @@ TESTS_LIB = \
 	lib/test-mip \
 	lib/test-remove-destruction-listener-in-destruction-listener \
 	lib/test-simple-sink \
-	lib/test-trace-ir-ref
+	lib/test-trace-ir-ref \
+	lib/test-fields.sh \
+	lib/test-plugin-init-fail-no.sh \
+	lib/test-plugin-init-fail-yes.sh \
+	lib/test-plugins.sh
 
 TESTS_PLUGINS = \
 	plugins/src.ctf.fs/fail/test-fail.sh \
@@ -112,7 +116,15 @@ TESTS_PLUGINS = \
 	plugins/src.ctf.fs/test-deterministic-ordering.sh \
 	plugins/sink.ctf.fs/succeed/test-succeed.sh \
 	plugins/sink.text.details/succeed/test-succeed.sh \
-	plugins/sink.text.pretty/test-pretty.sh
+	plugins/sink.text.pretty/test-pretty.sh \
+	plugins/sink.text.pretty/test-pretty-python.sh \
+	plugins/flt.utils.muxer/test-clock-compatibility.sh \
+	plugins/src.ctf.fs/query/test-query-support-info.sh \
+	plugins/src.ctf.fs/query/test-query-trace-info.sh \
+	plugins/src.ctf.fs/query/test-query-metadata-info.sh \
+	plugins/src.ctf.fs/query/test-query-metadata-info-py.sh \
+	plugins/src.ctf.lttng-live/test-query.sh \
+	plugins/src.ctf.lttng-live/test-live.sh
 
 TESTS_PYTHON_PLUGIN_PROVIDER =
 
@@ -124,10 +136,6 @@ TESTS_BITFIELD = \
 
 TESTS_CTF_WRITER = \
 	ctf-writer/test-ctf-writer.sh
-
-if ENABLE_PYTHON_BINDINGS
-TESTS_BINDINGS += bindings/python/bt2/test-python-bt2.sh
-endif
 
 noinst_PROGRAMS += \
 	cpp-common/test-c-string-view
@@ -160,18 +168,6 @@ cpp_common_test_unicode_conv_LDADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(COMMON_TEST_LDADD)
 
-# `lib/test-fields.sh`, `lib/test-plugin-init-fail-*.sh`, and
-# `lib/test-plugins.sh` need to load shared library plugins.
-if ENABLE_SHARED
-TESTS_LIB += lib/test-fields.sh
-TESTS_LIB += lib/test-plugin-init-fail-no.sh
-TESTS_LIB += lib/test-plugin-init-fail-yes.sh
-TESTS_LIB += lib/test-plugins.sh
-endif # ENABLE_SHARED
-
-# `plugins/flt.utils.muxer/test-clock-compatibility.sh` needs to load
-# standard plugins, so only build it when shared libraries are enabled.
-if ENABLE_SHARED
 noinst_PROGRAMS += plugins/flt.utils.muxer/test-clock-compatibility
 
 plugins_flt_utils_muxer_test_clock_compatibility_SOURCES = \
@@ -181,19 +177,6 @@ plugins_flt_utils_muxer_test_clock_compatibility_LDADD = \
 	$(COMMON_TEST_LDADD) \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
-
-TESTS_PLUGINS += plugins/flt.utils.muxer/test-clock-compatibility.sh
-endif # ENABLE_SHARED
-
-if ENABLE_PYTHON_BINDINGS
-TESTS_PLUGINS += plugins/src.ctf.fs/query/test-query-support-info.sh
-TESTS_PLUGINS += plugins/src.ctf.fs/query/test-query-trace-info.sh
-TESTS_PLUGINS += plugins/src.ctf.fs/query/test-query-metadata-info.sh
-TESTS_PLUGINS += plugins/src.ctf.fs/query/test-query-metadata-info-py.sh
-TESTS_PLUGINS += plugins/src.ctf.lttng-live/test-query.sh
-TESTS_PLUGINS += plugins/sink.ctf.fs/test-assume-single-trace.sh
-TESTS_PLUGINS += plugins/sink.ctf.fs/test-stream-names.sh
-endif # ENABLE_PYTHON_BINDINGS
 
 if ENABLE_DEBUG_INFO
 TESTS_PLUGINS += \
@@ -208,7 +191,6 @@ TESTS_PLUGINS += \
 endif # ENABLE_DEBUG_INFO
 
 if ENABLE_PYTHON_PLUGINS
-if ENABLE_PYTHON_BINDINGS
 TESTS_CLI += \
 	cli/convert/test-auto-source-discovery-grouping.sh \
 	cli/convert/test-auto-source-discovery-log-level.sh \
@@ -221,29 +203,18 @@ TESTS_CLI += \
 TESTS_PLUGINS += plugins/flt.utils.trimmer/test-trimming.sh \
 	plugins/flt.utils.muxer/succeed/test-succeed.sh \
 	plugins/sink.text.pretty/test-enum.sh \
-	plugins/src.ctf.fs/field/test-field.sh
-endif # ENABLE_PYTHON_PLUGINS
-endif # ENABLE_PYTHON_BINDINGS
+	plugins/src.ctf.fs/field/test-field.sh \
+	plugins/sink.ctf.fs/test-assume-single-trace.sh \
+	plugins/sink.ctf.fs/test-stream-names.sh
 
-TESTS_PLUGINS += plugins/src.ctf.lttng-live/test-live.sh
-endif
-
-# `lib/conds/test-conds.sh` needs:
-#
-# • The developer mode to enable all condition checks.
-#
-# • Shared libraries because it uses runIn() which needs to load
-#   the standard `utils` plugin.
-if DEV_MODE
-if ENABLE_SHARED
-TESTS_LIB += lib/conds/test-conds.sh
-endif # ENABLE_SHARED
-endif # DEV_MODE
-
-if ENABLE_PYTHON_PLUGINS
 TESTS_PYTHON_PLUGIN_PROVIDER += python-plugin-provider/test-python-plugin-provider.sh
-TESTS_PLUGINS += plugins/sink.text.pretty/test-pretty-python.sh
-endif
+endif # ENABLE_PYTHON_PLUGINS
+
+# `lib/conds/test-conds.sh` needs the developer mode to enable all
+# condition checks.
+if DEV_MODE
+TESTS_LIB += lib/conds/test-conds.sh
+endif # DEV_MODE
 
 if ENABLE_PYTHON_PLUGINS
 if ENABLE_DEBUG_INFO
