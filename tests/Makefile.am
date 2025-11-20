@@ -252,11 +252,18 @@ TESTS_PLUGINS += \
 endif # ENABLE_DEBUG_INFO
 endif # ENABLE_PYTHON_PLUGINS
 
+if ENABLE_TEST_TAP_OUTPUT
 LOG_DRIVER_FLAGS = --merge --comments
 LOG_DRIVER = env AM_TAP_AWK='$(AWK)' \
 	     BT_TESTS_SRCDIR='$(abs_top_srcdir)/tests' \
 	     BT_TESTS_BUILDDIR='$(abs_top_builddir)/tests' \
 	     $(SHELL) $(srcdir)/utils/tap-driver.sh
+else
+LOG_DRIVER = env \
+	     BT_TESTS_SRCDIR='$(abs_top_srcdir)/tests' \
+	     BT_TESTS_BUILDDIR='$(abs_top_builddir)/tests' \
+	     $(SHELL) $(top_srcdir)/config/test-driver
+endif
 
 TESTS_NO_BITFIELD = \
 	$(TESTS_BINDINGS) \
