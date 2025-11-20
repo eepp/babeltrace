@@ -461,6 +461,11 @@ AE_FEATURE([tests],[Do not build tests])
 AE_FEATURE_DEFAULT_DISABLE
 AE_FEATURE([vendor-pytest],[Use the in-tree pytest instead of an installed one])
 
+# Test TAP output
+# Disabled by default
+AE_FEATURE_DEFAULT_DISABLE
+AE_FEATURE([test-tap-output],[Enable TAP output for tests])
+
 # When given, add -Werror to WARN_CFLAGS and WARN_CXXFLAGS.
 # Disabled by default
 AE_FEATURE_DEFAULT_DISABLE
@@ -520,6 +525,10 @@ AE_IF_FEATURE_ENABLED([python-plugins], [
   ])
 ])
 
+AE_IF_FEATURE_ENABLED([test-tap-output], [
+  AE_IF_FEATURE_NOT_ENABLED([tests], [AC_MSG_ERROR([‘--enable-test-tap-output’ must not be used with ‘--disable-tests’])])
+])
+
 
 ##                                                                          ##
 ## Set automake variables for optional feature conditionnals in Makefile.am ##
@@ -538,6 +547,7 @@ AM_CONDITIONAL([ENABLE_PYTHON_COMMON_DEPS], AE_IS_FEATURE_ENABLED([python-bindin
 AM_CONDITIONAL([ENABLE_ASAN], AE_IS_FEATURE_ENABLED([asan]))
 AM_CONDITIONAL([ENABLE_SHARED], [test "x$enable_shared" = xyes])
 AM_CONDITIONAL([ENABLE_TESTS], AE_IS_FEATURE_ENABLED([tests]))
+AM_CONDITIONAL([ENABLE_TEST_TAP_OUTPUT], AE_IS_FEATURE_ENABLED([test-tap-output]))
 
 
 ##                                                                    ##
@@ -601,6 +611,17 @@ AE_IF_FEATURE_ENABLED([tests], [
     ], [
       AC_MSG_RESULT([no])
       AC_MSG_ERROR([pytest >= 6.1.0 is required to build tests. Use ‘--disable-tests’  to disable building tests or use ‘--enable-vendor-pytest’ to use the in-tree pytest.])
+    ])
+  ])
+
+  # Check for pytest-tap if TAP output is enabled
+  AE_IF_FEATURE_ENABLED([test-tap-output], [
+    AC_MSG_CHECKING([for pytest-tap plugin])
+    AS_IF(["$PYTHON" -c "import pytest_tap" 2>/dev/null], [
+      AC_MSG_RESULT([yes])
+    ], [
+      AC_MSG_RESULT([no])
+      AC_MSG_ERROR([pytest-tap plugin is required to enable test TAP output. Do not use ‘--enable-test-tap-output’ to disable TAP output.])
     ])
   ])
 ])
@@ -1032,6 +1053,8 @@ test \"x$enable_tests\" = \"xyes\" && value=1 || value=0
 AE_PPRINT_PROP_BOOL([Build tests], $value)
 test \"x$enable_vendor_pytest\" = \"xyes\" && value=1 || value=0
 AE_PPRINT_PROP_BOOL([Use in-tree pytest], $value)
+test \"x$enable_test_tap_output\" = \"xyes\" && value=1 || value=0
+AE_PPRINT_PROP_BOOL_CUSTOM([TAP output], $value, [To enable, use ‘--enable-test-tap-output’])
 
 AS_ECHO
 AE_PPRINT_SUBTITLE([Special build modes])

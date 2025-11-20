@@ -221,6 +221,10 @@ with the `PYTHON` and `PYTHON_CONFIG` environment variable.
 `--enable-python-plugins`::
     Build support for {bt2} Python plugins.
 
+`--enable-test-tap-output`::
+    Enable the https://testanything.org/[https://testanything.org/]
+    output format when running tests.
+
 `--enable-vendor-pytest`::
     Use an in-tree pytest instead of an installed one.
 
