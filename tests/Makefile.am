@@ -90,7 +90,14 @@ TESTS_CLI = \
 	cli/test-packet-seq-num.sh \
 	cli/test-trace-copy.sh \
 	cli/test-trace-read.sh \
-	cli/test-trimmer.sh
+	cli/test-trimmer.sh \
+	cli/convert/test-auto-source-discovery-grouping.sh \
+	cli/convert/test-auto-source-discovery-log-level.sh \
+	cli/convert/test-auto-source-discovery-params.sh \
+	cli/list-plugins/test-list-plugins.sh \
+	cli/params/test-params.sh \
+	cli/query/test-query.sh \
+	cli/test-exit-status.sh
 
 TESTS_CPP_COMMON = \
 	cpp-common/test-c-string-view \
@@ -124,9 +131,15 @@ TESTS_PLUGINS = \
 	plugins/src.ctf.fs/query/test-query-metadata-info.sh \
 	plugins/src.ctf.fs/query/test-query-metadata-info-py.sh \
 	plugins/src.ctf.lttng-live/test-query.sh \
-	plugins/src.ctf.lttng-live/test-live.sh
+	plugins/src.ctf.lttng-live/test-live.sh \
+	plugins/flt.utils.trimmer/test-trimming.sh \
+	plugins/flt.utils.muxer/succeed/test-succeed.sh \
+	plugins/sink.text.pretty/test-enum.sh \
+	plugins/src.ctf.fs/field/test-field.sh \
+	plugins/sink.ctf.fs/test-assume-single-trace.sh \
+	plugins/sink.ctf.fs/test-stream-names.sh
 
-TESTS_PYTHON_PLUGIN_PROVIDER =
+TESTS_PYTHON_PLUGIN_PROVIDER = python-plugin-provider/test-python-plugin-provider.sh
 
 TESTS_PARAM_VALIDATION = \
 	param-validation/test-param-validation
@@ -187,41 +200,15 @@ TESTS_PLUGINS += \
 	plugins/flt.lttng-utils.debug-info/test-bin-info-i386-linux-gnu.sh \
 	plugins/flt.lttng-utils.debug-info/test-bin-info-powerpc-linux-gnu.sh \
 	plugins/flt.lttng-utils.debug-info/test-bin-info-powerpc64le-linux-gnu.sh \
-	plugins/flt.lttng-utils.debug-info/test-bin-info-x86-64-linux-gnu.sh
+	plugins/flt.lttng-utils.debug-info/test-bin-info-x86-64-linux-gnu.sh \
+	plugins/flt.lttng-utils.debug-info/test-succeed.sh
 endif # ENABLE_DEBUG_INFO
-
-if ENABLE_PYTHON_PLUGINS
-TESTS_CLI += \
-	cli/convert/test-auto-source-discovery-grouping.sh \
-	cli/convert/test-auto-source-discovery-log-level.sh \
-	cli/convert/test-auto-source-discovery-params.sh \
-	cli/list-plugins/test-list-plugins.sh \
-	cli/params/test-params.sh \
-	cli/query/test-query.sh \
-	cli/test-exit-status.sh
-
-TESTS_PLUGINS += plugins/flt.utils.trimmer/test-trimming.sh \
-	plugins/flt.utils.muxer/succeed/test-succeed.sh \
-	plugins/sink.text.pretty/test-enum.sh \
-	plugins/src.ctf.fs/field/test-field.sh \
-	plugins/sink.ctf.fs/test-assume-single-trace.sh \
-	plugins/sink.ctf.fs/test-stream-names.sh
-
-TESTS_PYTHON_PLUGIN_PROVIDER += python-plugin-provider/test-python-plugin-provider.sh
-endif # ENABLE_PYTHON_PLUGINS
 
 # `lib/conds/test-conds.sh` needs the developer mode to enable all
 # condition checks.
 if DEV_MODE
 TESTS_LIB += lib/conds/test-conds.sh
 endif # DEV_MODE
-
-if ENABLE_PYTHON_PLUGINS
-if ENABLE_DEBUG_INFO
-TESTS_PLUGINS += \
-	plugins/flt.lttng-utils.debug-info/test-succeed.sh
-endif # ENABLE_DEBUG_INFO
-endif # ENABLE_PYTHON_PLUGINS
 
 if ENABLE_TEST_TAP_OUTPUT
 LOG_DRIVER_FLAGS = --merge --comments

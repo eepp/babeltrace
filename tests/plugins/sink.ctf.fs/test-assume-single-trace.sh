@@ -28,11 +28,6 @@ temp_output_dir=$(mktemp -d)
 
 trace_dir="$temp_output_dir/the-trace"
 
-if [ "$BT_TESTS_ENABLE_PYTHON_PLUGINS" != "1" ]; then
-	plan_skip_all "This test requires the Python plugin provider"
-	exit
-fi
-
 plan_tests 9
 
 bt_cli --stdout-file "$temp_stdout" --stderr-file "$temp_stderr" -- \
