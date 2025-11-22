@@ -417,9 +417,9 @@ AE_FEATURE_DEFAULT_DISABLE
 AE_FEATURE([python-bindings-doc],[build the Python bindings documentation])
 
 # Python plugins
-# Disabled by default
-AE_FEATURE_DEFAULT_DISABLE
-AE_FEATURE([python-plugins],[enable the Python plugins support for the library and converter])
+# Enabled by default
+AE_FEATURE_DEFAULT_ENABLE
+AE_FEATURE([python-plugins],[disable the Python plugins support for the library and converter])
 
 # Debug info
 # Enabled by default, except on some platforms
@@ -627,6 +627,11 @@ AE_IF_FEATURE_ENABLED([tests], [
   # Check for Python bindings
   AE_IF_FEATURE_ENABLED([python-bindings], [], [
     AC_MSG_ERROR([Python bindings are required to build tests. Use ‘--enable-python-bindings’ to build Python bindings or ‘--disable-tests’ to disable building tests.])
+  ])
+
+  # Check for Python plugin support
+  AE_IF_FEATURE_ENABLED([python-plugins], [], [
+    AC_MSG_ERROR([Python plugin support is required to build tests. Use ‘--enable-python-plugins’ to build Python plugins or ‘--disable-tests’ to disable building tests.])
   ])
 ])
 
@@ -987,7 +992,7 @@ AE_PPRINT_PROP_BOOL([Have Python development libraries], $value)
 test "x$enable_python_bindings" = "xyes" && value=1 || value=0
 AE_PPRINT_PROP_BOOL_CUSTOM([Python bindings], $value, [To enable, use ‘--enable-python-bindings’])
 test "x$enable_python_plugins" = "xyes" && value=1 || value=0
-AE_PPRINT_PROP_BOOL_CUSTOM([Python plugin support], $value, [To enable, use ‘--enable-python-plugins’])
+AE_PPRINT_PROP_BOOL([Python plugin support], $value)
 AS_IF([test "x$have_python" = "xyes"], [
   AE_PPRINT_PROP_STRING([Python interpreter path], [$PYTHON])
 ])

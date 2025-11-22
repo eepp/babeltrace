@@ -163,10 +163,6 @@ class TheSink(bt2._UserSinkComponent):
         )
 
 
-@unittest.skipUnless(
-    os.environ["BT_TESTS_ENABLE_PYTHON_PLUGINS"] == "1",
-    "Support for Python plugins is disabled",
-)
 class TestMIP1(unittest.TestCase):
     def test_all_fields(self):
         g = bt2.Graph(1)
