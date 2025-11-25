@@ -139,7 +139,6 @@ TESTS_PLUGINS = \
 	plugins/flt.utils.muxer/succeed/test-succeed.sh \
 	plugins/sink.text.pretty/test-enum.sh \
 	plugins/src.ctf.fs/field/test-field.sh \
-	plugins/sink.ctf.fs/test-assume-single-trace.sh \
 	plugins/sink.ctf.fs/test-stream-names.sh
 
 TESTS_PYTHON_PLUGIN_PROVIDER = python-plugin-provider/test-python-plugin-provider.sh

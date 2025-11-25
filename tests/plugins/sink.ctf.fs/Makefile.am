@@ -5,5 +5,6 @@
 SUBDIRS = succeed
 
 dist_check_SCRIPTS = \
-	test-assume-single-trace.sh \
 	test-stream-names.sh
+
+EXTRA_DIST = test_assume_single_trace.py
