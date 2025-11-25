@@ -885,3 +885,17 @@ def convert_sink_text_details_test(
 
         # Compare
         assert output == expected
+
+
+# Builds a `bt2.TraceCollectionMessageIterator` with `args` and
+# `kwargs`, collects all the event messages until the end, and returns
+# the list.
+def tcmi_events(*args: Any, **kwargs: Any) -> List[Any]:
+    import bt2
+
+    msgs = typing.cast(
+        Iterable[bt2._MessageConst],
+        bt2.TraceCollectionMessageIterator(*args, **kwargs),
+    )
+
+    return [m.event for m in msgs if isinstance(m, bt2._EventMessageConst)]
