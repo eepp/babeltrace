@@ -595,13 +595,13 @@ _bt_tests_check_coverage() {
 # Executes a command within an environment which can import the testing
 # Python modules (in `tests/utils/python`).
 bt_run_in_py_utils_env() {
-	local our_pythonpath=$BT_TESTS_SRCDIR/utils/python
+	local our_pythonpath=$BT_TESTS_SRCDIR/utils/python:$BT_TESTS_SRCDIR/utils/python/vendor
 
 	if [[ $_bt_tests_py3_version =~ 3.[45] ]]; then
 		# Add a local directory containing a `typing.py` to `PYTHONPATH`
 		# for Python 3.4 and Python 3.5 which either don't offer the
 		# `typing` module at all, or offer a partial one.
-		our_pythonpath=$our_pythonpath:$BT_TESTS_SRCDIR/utils/python/typing
+		our_pythonpath=$our_pythonpath:$BT_TESTS_SRCDIR/utils/python/vendor/typing
 	fi
 
 	PYTHONPATH=$our_pythonpath${PYTHONPATH:+:}${PYTHONPATH:-} "$@"

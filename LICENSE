@@ -60,7 +60,7 @@ According with:
 They are only used when running the tests in the source tree. This applies
 to:
 
-	tests/utils/python/tap/*
+	tests/utils/python/vendor/tap/*
 	tests/utils/tap/tap.h
 	tests/utils/tap/tap.c
 
@@ -104,7 +104,7 @@ According with:
 This applies to:
 
 	src/bindings/python/bt2/bt2/local_typing.py
-	tests/utils/python/typing/typing.py
+	tests/utils/python/vendor/typing/typing.py
 
 The Normand Python module is provided under the terms of the
 MIT License:
@@ -117,7 +117,7 @@ According with:
 
 This applies to:
 
-	tests/utils/python/normand.py
+	tests/utils/python/vendor/normand.py
 
 
 In addition, other licenses may also apply, see SPDX-License-Identifier in

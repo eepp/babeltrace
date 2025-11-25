@@ -10,18 +10,18 @@ repos:
       - id: black
         types: [file]
         files: \.(py|py.in)$
-        exclude: '(src/bindings/python/bt2/bt2/local_typing.py|tests/utils/python/normand.py|tests/utils/python/tap/.*|tests/utils/python/typing/.*)'
+        exclude: '(src/bindings/python/bt2/bt2/local_typing.py|tests/utils/python/vendor/.*)'
   - repo:  https://github.com/pycqa/flake8
     rev: 7.3.0
     hooks:
       - id: flake8
         types: [file]
         files: \.(py|py.in)$
-        exclude: '(src/bindings/python/bt2/bt2/local_typing.py|tests/utils/python/normand.py|tests/utils/python/tap/.*|tests/utils/python/typing/.*)'
+        exclude: '(src/bindings/python/bt2/bt2/local_typing.py|tests/utils/python/vendor/.*)'
   - repo: https://github.com/pycqa/isort
     rev: 7.0.0
     hooks:
       - id: isort
         types: [file]
         files: \.(py|py.in)$
-        exclude: '(src/bindings/python/bt2/bt2/local_typing.py|tests/utils/python/normand.py|tests/utils/python/tap/.*|tests/utils/python/typing/.*)'
+        exclude: '(src/bindings/python/bt2/bt2/local_typing.py|tests/utils/python/vendor/.*)'
