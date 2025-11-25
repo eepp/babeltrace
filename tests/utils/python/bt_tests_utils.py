@@ -7,6 +7,7 @@ import os
 import enum
 import shlex
 import types
+import typing
 import logging
 import pathlib
 import platform
@@ -303,3 +304,37 @@ def run(
 
     _logger.info("  Exit status: {}".format(res.returncode))
     return res
+
+
+# Formats `obj` as a `babeltrace2` CLI `--params` value string.
+#
+# `obj` may be `None`, a boolean, a number, a string, a list, or
+# a dictionary.
+#
+# This function doesn't escape special characters in strings.
+def cli_params_from_obj(obj: Any, is_root: bool = True) -> str:
+    if obj is None:
+        return "null"
+    elif isinstance(obj, bool):
+        return "yes" if obj else "no"
+    elif isinstance(obj, int):
+        return str(obj)
+    elif isinstance(obj, float):
+        return str(obj)
+    elif isinstance(obj, str):
+        return '"{}"'.format(obj)
+    elif isinstance(obj, list):
+        return "[{}]".format(
+            ", ".join(
+                cli_params_from_obj(item, False) for item in typing.cast(List[Any], obj)
+            )
+        )
+    elif isinstance(obj, dict):
+        items = ", ".join(
+            "{}={}".format(k, cli_params_from_obj(v, False))
+            for k, v in typing.cast(Dict[str, Any], obj).items()
+        )
+
+        return items if is_root else "{{{}}}".format(items)
+    else:
+        assert False
