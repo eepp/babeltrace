@@ -103,8 +103,7 @@ TESTS_CLI = \
 	cli/test-exit-status.sh
 
 TESTS_CPP_COMMON = \
-	cpp-common/test-c-string-view \
-	cpp-common/test-unicode-conv
+	cpp-common/test-c-string-view
 
 TESTS_LIB = \
 	lib/test-bt-uuid \
@@ -177,8 +176,8 @@ cpp_common_test_unicode_conv_SOURCES = \
 	cpp-common/test-unicode-conv.cpp
 
 cpp_common_test_unicode_conv_LDADD = \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la \
 	$(top_builddir)/src/cpp-common/libcpp-common.la \
+	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(COMMON_TEST_LDADD)
 
