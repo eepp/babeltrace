@@ -1,14 +1,17 @@
 # SPDX-FileCopyrightText: 2025 Philippe Proulx <pproulx@efficios.com>
 # SPDX-License-Identifier: MIT
 
-# pyright: strict
+# pyright: strict, reportTypeCommentUsage=false
 
+import os
 import enum
+import shlex
 import types
 import logging
 import pathlib
 import platform
-from typing import Any, Callable, Optional
+import subprocess
+from typing import Any, Dict, List, Callable, Optional
 
 import pytest
 
@@ -189,3 +192,114 @@ def exe_path(path: pathlib.Path) -> pathlib.Path:
         return path.with_suffix(path.suffix + ".exe")
 
     return path
+
+
+# Logs a command to be run.
+def _log_run_cmd(
+    env: Dict[str, str],
+    exec_path: pathlib.Path,
+    args: List[str],
+    extra_env: Optional[Dict[str, str]],
+) -> None:
+    env_vars_to_log = {
+        "ASAN_OPTIONS",
+        "BABELTRACE_PLUGIN_PATH",
+        "BT_TESTS_BUILDDIR",
+        "BT_TESTS_CC_BIN",
+        "BT_TESTS_PYTHON_BIN",
+        "BT_TESTS_PYTHON_CONFIG_BIN",
+        "BT_TESTS_SRCDIR",
+        "DYLD_LIBRARY_PATH",
+        "LD_LIBRARY_PATH",
+        "LD_PRELOAD",
+        "LIBBABELTRACE2_PLUGIN_PROVIDER_DIR",
+        "PYTHONPATH",
+    }
+
+    # Collect all environment variables to log
+    env_to_log = {}  # type: Dict[str, str]
+
+    for var_name in env_vars_to_log:
+        if var_name in env:
+            env_to_log[var_name] = env[var_name]
+
+    if extra_env is not None:
+        for var_name, var_val in extra_env.items():
+            if var_name not in env_vars_to_log:
+                env_to_log[var_name] = var_val
+
+    # Build command parts, sorting environment variables by name
+    cmd_parts = []  # type: List[str]
+
+    for var_name in sorted(env_to_log.keys()):
+        cmd_parts.append("{}={}".format(var_name, shlex.quote(env_to_log[var_name])))
+
+    cmd_parts.append(shlex.quote(str(exec_path)))
+    cmd_parts.extend(shlex.quote(arg) for arg in args)
+
+    # Log
+    _logger.info("Running: {}".format(" ".join(cmd_parts)))
+
+
+# Like subprocess.run(), but always captures the standard streams and
+# sets the `PYTHONPATH` environment variable to the directory containing
+# the built `bt2` package.
+#
+# `exec_path` is the path to the executable to use: don't include it in
+# `args`. This function automatically adds the `.exe` suffix on Windows
+# if `windows_safe` is `True`.
+#
+# `build_root_dir` is the build directory containing the
+# `tests` directory
+#
+# This function adds the `extra_env` environment dictionary to the
+# current environment before running the subprocess.
+#
+# `check`, `text`, and `timeout` are subprocess.run() parameters.
+def run(
+    build_root_dir: pathlib.Path,
+    exec_path: pathlib.Path,
+    args: List[str],
+    check: bool = False,
+    text: bool = True,
+    timeout: Optional[float] = None,
+    windows_safe: bool = True,
+    extra_env: Optional[Dict[str, str]] = None,
+) -> "subprocess.CompletedProcess[str]":
+    # Add `.exe` suffix on Windows (MinGW)
+    if windows_safe:
+        exec_path = exe_path(exec_path)
+
+    env = os.environ.copy()
+
+    # The `PYTHONPATH` environment variable must include:
+    #
+    # • The directory containing the built `bt2` package.
+    #
+    # • This directory (`tests/utils/python`) so that Babeltrace2
+    #   Python _plugins_ may import testing Python modules
+    #   (for example, `cli_params_to_string`).
+    env["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(bt2_package_dir(build_root_dir)),
+            str(pathlib.Path(__file__).resolve().parent),
+        ]
+    )
+
+    if extra_env is not None:
+        env.update(extra_env)
+
+    _log_run_cmd(env, exec_path, args, extra_env)
+
+    res = subprocess.run(  # type: subprocess.CompletedProcess[str]
+        [str(exec_path)] + args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=check,
+        env=env,
+        timeout=timeout,
+        universal_newlines=text,
+    )
+
+    _logger.info("  Exit status: {}".format(res.returncode))
+    return res
