@@ -800,6 +800,35 @@ def convert_sink_text_details_test(
         assert output == expected
 
 
+# Returns the build directory equivalent to the source directory
+# containing `source_file`.
+#
+# `build_root_dir` is the root build directory (the build directory
+# containing the `tests` directory).
+#
+# Typical usage examples:
+#
+#     build_dir_of_source_file(config.build_root_dir, __file__)
+#
+# For example, if `source_file` is
+# `/path/to/babeltrace/tests/meow/mix/test_lel.py`, then this function
+# returns `/path/to/build/tests/meow/mix`.
+def build_dir_of_source_file(
+    build_root_dir: pathlib.Path, source_file: Union[pathlib.Path, str]
+) -> pathlib.Path:
+    source_file = pathlib.Path(source_file).resolve()
+
+    # Find root source dir. by walking up until we find `pyproject.toml`
+    src_root_dir = source_file.parent
+
+    while not (src_root_dir / "pyproject.toml").exists():
+        assert src_root_dir.parent != src_root_dir
+        src_root_dir = src_root_dir.parent
+
+    # Equivalent path in the build directory
+    return build_root_dir / source_file.parent.relative_to(src_root_dir)
+
+
 # Builds a `bt2.TraceCollectionMessageIterator` with `args` and
 # `kwargs`, collects all the event messages until the end, and returns
 # the list.
