@@ -142,6 +142,6 @@ conds_conds_triggers_LDADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
-dist_check_SCRIPTS += conds/test-conds.sh conds/test.py
+EXTRA_DIST = conftest.py
 
 endif # DEV_MODE
