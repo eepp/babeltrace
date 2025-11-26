@@ -19,6 +19,7 @@ fi
 tests=(
     "$BT_TESTS_SRCDIR/cpp-common/"
     "$BT_TESTS_SRCDIR/data/test_temp.py"
+    "$BT_TESTS_SRCDIR/lib/conds/"
     "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs/test_assume_single_trace.py"
 )
 
