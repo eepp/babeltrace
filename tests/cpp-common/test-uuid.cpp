@@ -4,32 +4,35 @@
  * Copyright (C) 2024 EfficiOS, Inc.
  */
 
-#include "cpp-common/bt2c/fmt.hpp"
 #include "cpp-common/bt2c/uuid.hpp"
 #include "cpp-common/vendor/fmt/format.h"
 
-#include "tap/tap.h"
+#define CATCH_CONFIG_MAIN
+
+#include "catch.hpp"
 
 namespace {
 
-constexpr auto uuidStr = "c2281e4a-699b-4b78-903f-2f8407fe2b77";
-const bt2c::Uuid uuid {uuidStr};
-const bt2c::UuidView uuidView {uuid};
-
-void testFormatAs()
+class UuidFixture
 {
-    const auto resUuid = fmt::to_string(uuid);
-    const auto resUuidView = fmt::to_string(uuidView);
+protected:
+    static const char *_uuidStr() noexcept
+    {
+        return "c2281e4a-699b-4b78-903f-2f8407fe2b77";
+    }
 
-    ok(resUuid == uuidStr, "result of format_as() for `Uuid` is expected");
-    ok(resUuidView == uuidStr, "result of format_as() for `UuidView` is expected");
-}
+    bt2c::Uuid _mUuid {_uuidStr()};
+    bt2c::UuidView _mUuidView {_mUuid};
+};
 
 } /* namespace */
 
-int main()
+TEST_CASE_METHOD(UuidFixture, "fmt::to_string() works with `bt2c::Uuid`")
 {
-    plan_tests(2);
-    testFormatAs();
-    return exit_status();
+    CHECK(fmt::to_string(_mUuid) == this->_uuidStr());
+}
+
+TEST_CASE_METHOD(UuidFixture, "fmt::to_string() works with `bt2c::UuidView`")
+{
+    CHECK(fmt::to_string(_mUuidView) == this->_uuidStr());
 }
