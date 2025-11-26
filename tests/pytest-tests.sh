@@ -17,8 +17,7 @@ if ! type -t bt-pytest &>/dev/null; then
 fi
 
 tests=(
-    "$BT_TESTS_SRCDIR/cpp-common/test-unicode-conv.cpp"
-    "$BT_TESTS_SRCDIR/cpp-common/test-uuid.cpp"
+    "$BT_TESTS_SRCDIR/cpp-common/"
     "$BT_TESTS_SRCDIR/data/test_temp.py"
     "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs/test_assume_single_trace.py"
 )

@@ -8,92 +8,113 @@
 
 #include "cpp-common/bt2c/c-string-view.hpp"
 
-#include "tap/tap.h"
+#define CATCH_CONFIG_MAIN
+
+#include "catch.hpp"
 
 namespace {
 
-template <typename StrT>
-const char *asConstCharPtr(StrT&& val)
+class CStringViewFixture
 {
-    return val.data();
-}
-
-const char *asConstCharPtr(const char * const val)
-{
-    return val;
-}
-
-const char *typeName(bt2c::CStringView)
-{
-    return "bt2c::CStringView";
-}
-
-const char *typeName(const char *)
-{
-    return "const char *";
-}
-
-const char *typeName(const std::string&)
-{
-    return "std::string";
-}
-
-template <typename Str1T, typename Str2T>
-void testEq(Str1T&& lhs, Str2T&& rhs)
-{
-    BT_ASSERT(asConstCharPtr(lhs) != asConstCharPtr(rhs));
-    ok(lhs == rhs, "`%s` == `%s`", typeName(lhs), typeName(rhs));
-}
-
-template <typename Str1T, typename Str2T>
-void testNe(Str1T&& lhs, Str2T&& rhs)
-{
-    BT_ASSERT(asConstCharPtr(lhs) != asConstCharPtr(rhs));
-    ok(lhs != rhs, "`%s` != `%s`", typeName(lhs), typeName(rhs));
-}
-
-void testEquality()
-{
-    const std::string foo1 = "foo", foo2 = "foo";
-    const std::string bar = "bar";
-
-    /* `CStringView` vs `CStringView` */
-    testEq(bt2c::CStringView {foo1}, bt2c::CStringView {foo2});
-    testNe(bt2c::CStringView {foo1}, bt2c::CStringView {bar});
-
-    /* `CStringView` vs `const char *` */
-    testEq(bt2c::CStringView {foo1}, foo2.c_str());
-    testNe(bt2c::CStringView {foo1}, bar.c_str());
-    testEq(foo1.c_str(), bt2c::CStringView {foo2});
-    testNe(foo1.c_str(), bt2c::CStringView {bar});
-
-    /* `StringView` vs `std::string` */
-    testEq(bt2c::CStringView {foo1}, foo2);
-    testNe(bt2c::CStringView {foo1}, bar);
-    testEq(foo1, bt2c::CStringView {foo2});
-    testNe(foo1, bt2c::CStringView {bar});
-}
-
-void testStartsWith()
-{
-    ok(bt2c::CStringView {"Moutarde choux"}.startsWith("Moutarde"),
-       "\"Moutarde Choux\" starts with \"Moutarde\"");
-    ok(!bt2c::CStringView {"Moutarde choux"}.startsWith("Choux"),
-       "\"Moutarde Choux\" does not start with \"Choux\"");
-    ok(bt2c::CStringView {"Moutarde choux"}.startsWith(""), "\"Moutarde Choux\" starts with \"\"");
-    ok(bt2c::CStringView {"Moutarde choux"}.startsWith("Moutarde choux"),
-       "\"Moutarde Choux\" starts with \"Moutarde choux\"");
-    ok(!bt2c::CStringView {"Moutarde"}.startsWith("Moutarde choux"),
-       "\"Moutarde\" does not start with \"Moutarde choux\"");
-    ok(bt2c::CStringView {""}.startsWith(""), "\"\" starts with \"\"");
-}
+protected:
+    std::string _foo1 {"foo"};
+    std::string _foo2 {"foo"};
+    std::string _bar {"bar"};
+};
 
 } /* namespace */
 
-int main()
+TEST_CASE_METHOD(CStringViewFixture,
+                 "Equality operator of `bt2c::CStringView` with equal `bt2c::CStringView`")
 {
-    plan_tests(16);
-    testEquality();
-    testStartsWith();
-    return exit_status();
+    CHECK(_foo1.data() != _foo2.data());
+    CHECK(bt2c::CStringView {_foo1} == bt2c::CStringView {_foo2});
+}
+
+TEST_CASE_METHOD(CStringViewFixture,
+                 "Non-equality operator of `bt2c::CStringView` with different `bt2c::CStringView`")
+{
+    CHECK(bt2c::CStringView {_foo1} != bt2c::CStringView {_bar});
+}
+
+TEST_CASE_METHOD(CStringViewFixture,
+                 "Equality operator of `bt2c::CStringView` with equal `const char *`")
+{
+    CHECK(_foo1.data() != _foo2.c_str());
+    CHECK(bt2c::CStringView {_foo1} == _foo2.c_str());
+}
+
+TEST_CASE_METHOD(CStringViewFixture,
+                 "Non-equality operator of `bt2c::CStringView` with different `const char *`")
+{
+    CHECK(bt2c::CStringView {_foo1} != _bar.c_str());
+}
+
+TEST_CASE_METHOD(CStringViewFixture,
+                 "Equality operator of `const char *` with equal `bt2c::CStringView`")
+{
+    CHECK(_foo1.c_str() != _foo2.data());
+    CHECK(_foo1.c_str() == bt2c::CStringView {_foo2});
+}
+
+TEST_CASE_METHOD(CStringViewFixture,
+                 "Non-equality operator of `const char *` with different `bt2c::CStringView`")
+{
+    CHECK(_foo1.c_str() != bt2c::CStringView {_bar});
+}
+
+TEST_CASE_METHOD(CStringViewFixture,
+                 "Equality operator of `bt2c::CStringView` with equal `std::string`")
+{
+    CHECK(_foo1.data() != _foo2.data());
+    CHECK(bt2c::CStringView {_foo1} == _foo2);
+}
+
+TEST_CASE_METHOD(CStringViewFixture,
+                 "Non-equality operator of `bt2c::CStringView` with different `std::string`")
+{
+    CHECK(bt2c::CStringView {_foo1} != _bar);
+}
+
+TEST_CASE_METHOD(CStringViewFixture,
+                 "Equality operator of `std::string` with equal `bt2c::CStringView`")
+{
+    CHECK(_foo1.data() != _foo2.data());
+    CHECK(_foo1 == bt2c::CStringView {_foo2});
+}
+
+TEST_CASE_METHOD(CStringViewFixture,
+                 "Non-equality operator of `std::string` with different `bt2c::CStringView`")
+{
+    CHECK(_foo1 != bt2c::CStringView {_bar});
+}
+
+TEST_CASE("bt2c::CStringView::startsWith() with matching prefix")
+{
+    CHECK(bt2c::CStringView {"Moutarde choux"}.startsWith("Moutarde"));
+}
+
+TEST_CASE("bt2c::CStringView::startsWith() with non-matching prefix")
+{
+    CHECK_FALSE(bt2c::CStringView {"Moutarde choux"}.startsWith("Choux"));
+}
+
+TEST_CASE("bt2c::CStringView::startsWith() with empty prefix")
+{
+    CHECK(bt2c::CStringView {"Moutarde choux"}.startsWith(""));
+}
+
+TEST_CASE("bt2c::CStringView::startsWith() with full string as prefix")
+{
+    CHECK(bt2c::CStringView {"Moutarde choux"}.startsWith("Moutarde choux"));
+}
+
+TEST_CASE("bt2c::CStringView::startsWith() with prefix longer than string")
+{
+    CHECK_FALSE(bt2c::CStringView {"Moutarde"}.startsWith("Moutarde choux"));
+}
+
+TEST_CASE("bt2c::CStringView::startsWith() with empty string and empty prefix")
+{
+    CHECK(bt2c::CStringView {""}.startsWith(""));
 }

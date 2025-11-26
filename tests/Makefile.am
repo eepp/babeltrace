@@ -102,9 +102,6 @@ TESTS_CLI = \
 	cli/query/test-query.sh \
 	cli/test-exit-status.sh
 
-TESTS_CPP_COMMON = \
-	cpp-common/test-c-string-view
-
 TESTS_LIB = \
 	lib/test-bt-uuid \
 	lib/test-bt-values \
@@ -228,7 +225,6 @@ endif
 TESTS_NO_BITFIELD = \
 	$(TESTS_BINDINGS) \
 	$(TESTS_CLI) \
-	$(TESTS_CPP_COMMON) \
 	$(TESTS_CTF_WRITER) \
 	$(TESTS_LIB) \
 	$(TESTS_PARAM_VALIDATION) \
@@ -246,7 +242,6 @@ endef
 $(eval $(call check_target,bindings,$(TESTS_BINDINGS)))
 $(eval $(call check_target,bitfield,$(TESTS_BITFIELD)))
 $(eval $(call check_target,cli,$(TESTS_CLI)))
-$(eval $(call check_target,cpp-common,$(TESTS_CPP_COMMON)))
 $(eval $(call check_target,ctf-writer,$(TESTS_CTF_WRITER)))
 $(eval $(call check_target,lib,$(TESTS_LIB)))
 $(eval $(call check_target,plugins,$(TESTS_PLUGINS)))
