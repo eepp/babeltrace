@@ -17,6 +17,7 @@ if ! type -t bt-pytest &>/dev/null; then
 fi
 
 tests=(
+    "$BT_TESTS_SRCDIR"/bindings/python/bt2/pytest_*.py
     "$BT_TESTS_SRCDIR/cpp-common/"
     "$BT_TESTS_SRCDIR/data/test_temp.py"
     "$BT_TESTS_SRCDIR/lib/conds/"
