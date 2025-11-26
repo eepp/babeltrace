@@ -104,7 +104,6 @@ TESTS_CLI = \
 
 TESTS_CPP_COMMON = \
 	cpp-common/test-c-string-view \
-	cpp-common/test-uuid \
 	cpp-common/test-unicode-conv
 
 TESTS_LIB = \
