@@ -23,6 +23,7 @@ tests=(
     "$BT_TESTS_SRCDIR/lib/conds/"
     "$BT_TESTS_SRCDIR/lib/test-fields.cpp"
     "$BT_TESTS_SRCDIR/lib/test-plugin-init-fail.cpp"
+    "$BT_TESTS_SRCDIR/lib/test-remove-destruction-listener-in-destruction-listener.cpp"
     "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs/test_assume_single_trace.py"
 )
 
