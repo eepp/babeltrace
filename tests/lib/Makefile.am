@@ -17,11 +17,11 @@ test_bt_values_SOURCES = test-bt-values.c
 test_bt_values_LDADD = $(COMMON_TEST_LDADD) \
 	$(top_builddir)/src/lib/libbabeltrace2.la
 
-test_trace_ir_ref_SOURCES = test-trace-ir-ref.c
+test_trace_ir_ref_SOURCES = test-trace-ir-ref.cpp
 test_trace_ir_ref_LDADD = $(COMMON_TEST_LDADD) \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/ctf-writer/libbabeltrace2-ctf-writer.la
-nodist_EXTRA_test_trace_ir_ref_SOURCES = dummy.cpp
+	$(top_builddir)/src/ctf-writer/libbabeltrace2-ctf-writer.la \
+	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
 test_graph_topo_SOURCES = test-graph-topo.c
 test_graph_topo_LDADD = $(COMMON_TEST_LDADD) \
