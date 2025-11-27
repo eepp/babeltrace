@@ -10,7 +10,7 @@
 
 #include <babeltrace2/babeltrace.h>
 
-#include "common/assert.h"
+#include "cpp-common/bt2/exc.hpp"
 #include "cpp-common/bt2/graph.hpp"
 #include "cpp-common/bt2/plugin-load.hpp"
 #include "cpp-common/bt2/query-executor.hpp"
@@ -19,158 +19,155 @@
 #include "cpp-common/bt2c/fmt.hpp" /* IWYU pragma: keep */
 #include "cpp-common/vendor/fmt/core.h"
 
-#include "tap/tap.h"
+#define CATCH_CONFIG_MAIN
 
-#define NR_TESTS          36
+#include "catch.hpp"
+
 #define NON_EXISTING_PATH "/this/hopefully/does/not/exist/5bc75f8d-0dba-4043-a509-d7984b97e42b.so"
 
 namespace {
 
-/* Those symbols are written to by some test plugins */
-int getIntEnvVar(const char *name)
+int intEnvVar(const char * const name)
 {
-    const char *val = getenv(name);
-
-    if (!val) {
-        return -1;
+    if (const auto val = getenv(name)) {
+        return atoi(val);
     }
 
-    return atoi(val);
+    return -1;
 }
 
-void resetTestPluginEnvVars()
+std::string testPluginPath(const char * const plugin_name)
 {
-    g_setenv("BT_TEST_PLUGIN_INITIALIZE_CALLED", "0", 1);
-    g_setenv("BT_TEST_PLUGIN_FINALIZE_CALLED", "0", 1);
-}
-
-std::string getTestPluginPath(const char *plugin_dir, const char *plugin_name)
-{
-    return fmt::format("{}" G_DIR_SEPARATOR_S "plugin-{}." G_MODULE_SUFFIX, plugin_dir,
+    return fmt::format("{}" G_DIR_SEPARATOR_S "plugin-{}." G_MODULE_SUFFIX, PLUGINS_DIR,
                        plugin_name);
 }
 
-void testMinimal(const char *pluginDir)
-{
-    diag("minimal plugin test below");
-    resetTestPluginEnvVars();
+} /* namespace */
 
-    const auto minimalPath = getTestPluginPath(pluginDir, "minimal");
+TEST_CASE("Minimal plugin")
+{
+    g_setenv("BT_TEST_PLUGIN_INITIALIZE_CALLED", "0", 1);
+    g_setenv("BT_TEST_PLUGIN_FINALIZE_CALLED", "0", 1);
 
     {
+        const auto minimalPath = testPluginPath("minimal");
         const auto plugins = bt2::findAllPluginsFromFile(minimalPath, false);
-        ok(plugins, "bt_plugin_find_all_from_file() returns a plugin set");
-        ok(getIntEnvVar("BT_TEST_PLUGIN_INITIALIZE_CALLED") == 1,
-           "plugin's initialization function is called during bt_plugin_find_all_from_file()");
-        ok(plugins->length() == 1,
-           "bt_plugin_find_all_from_file() returns the expected number of plugins");
+
+        REQUIRE(plugins);
+        CHECK(intEnvVar("BT_TEST_PLUGIN_INITIALIZE_CALLED") == 1);
+        REQUIRE(plugins->length() == 1);
 
         const auto plugin = (*plugins)[0];
-        ok(plugin->name() == "test_minimal", "bt_plugin_get_name() returns the expected name");
-        ok(plugin->description() == "Minimal Babeltrace plugin with no component classes",
-           "bt_plugin_get_description() returns the expected description");
-        ok(!plugin->version().has_value(), "bt_plugin_get_version() fails when there's no version");
-        ok(plugin->author() == "Janine Sutto",
-           "bt_plugin_get_author() returns the expected author");
-        ok(plugin->license() == "Beerware", "bt_plugin_get_license() returns the expected license");
-        ok(plugin->path() == minimalPath, "bt_plugin_get_path() returns the expected path");
-        ok(plugin->sourceComponentClasses().length() == 0,
-           "bt_plugin_get_source_component_class_count() returns the expected value");
-        ok(plugin->filterComponentClasses().length() == 0,
-           "bt_plugin_get_filter_component_class_count() returns the expected value");
-        ok(plugin->sinkComponentClasses().length() == 0,
-           "bt_plugin_get_sink_component_class_count() returns the expected value");
-        ok(getIntEnvVar("BT_TEST_PLUGIN_FINALIZE_CALLED") == 0,
-           "plugin's finalize function is not yet called");
+
+        CHECK(plugin->name() == "test_minimal");
+        CHECK(plugin->description() == "Minimal Babeltrace plugin with no component classes");
+        CHECK_FALSE(plugin->version().has_value());
+        CHECK(plugin->author() == "Janine Sutto");
+        CHECK(plugin->license() == "Beerware");
+        CHECK(plugin->path() == minimalPath);
+        CHECK(plugin->sourceComponentClasses().length() == 0);
+        CHECK(plugin->filterComponentClasses().length() == 0);
+        CHECK(plugin->sinkComponentClasses().length() == 0);
+        CHECK(intEnvVar("BT_TEST_PLUGIN_FINALIZE_CALLED") == 0);
     }
 
-    ok(getIntEnvVar("BT_TEST_PLUGIN_FINALIZE_CALLED") == 1,
-       "plugin's finalize function is called when the plugin is destroyed");
+    CHECK(intEnvVar("BT_TEST_PLUGIN_FINALIZE_CALLED") == 1);
 }
 
-void testSfs(const char *plugin_dir)
+class SfsPluginFixture
 {
-    diag("sfs plugin test below");
+protected:
+    bt2::ConstPlugin _plugin()
+    {
+        REQUIRE((_mPlugins && _mPlugins->length() == 1));
+        return *(*_mPlugins)[0];
+    }
 
-    const auto sfsPath = getTestPluginPath(plugin_dir, "sfs");
-    auto plugins = bt2::findAllPluginsFromFile(sfsPath, false);
+    bt2::ConstPluginSet::Shared _mPlugins =
+        bt2::findAllPluginsFromFile(testPluginPath("sfs"), false);
+};
 
-    BT_ASSERT(plugins);
-    BT_ASSERT(plugins->length() == 1);
+TEST_CASE_METHOD(SfsPluginFixture, "sfs plugin: plugin set contains one plugin")
+{
+    REQUIRE(_mPlugins);
+    CHECK(_mPlugins->length() == 1);
+}
 
-    const auto plugin = (*plugins)[0];
-    const auto version = plugin->version();
+TEST_CASE_METHOD(SfsPluginFixture, "sfs plugin: expected version")
+{
+    const auto version = this->_plugin().version();
 
-    ok(version.has_value(), "bt_plugin_get_version() succeeds when there's a version");
-    ok(version->major() == 1, "bt_plugin_get_version() returns the expected major version");
-    ok(version->minor() == 2, "bt_plugin_get_version() returns the expected minor version");
-    ok(version->patch() == 3, "bt_plugin_get_version() returns the expected patch version");
-    ok(version->extra() == "yes", "bt_plugin_get_version() returns the expected extra version");
-    ok(plugin->sourceComponentClasses().length() == 1,
-       "bt_plugin_get_source_component_class_count() returns the expected value");
-    ok(plugin->filterComponentClasses().length() == 1,
-       "bt_plugin_get_filter_component_class_count() returns the expected value");
-    ok(plugin->sinkComponentClasses().length() == 1,
-       "bt_plugin_get_sink_component_class_count() returns the expected value");
+    REQUIRE(version.has_value());
+    CHECK(version->major() == 1);
+    CHECK(version->minor() == 2);
+    CHECK(version->patch() == 3);
+    CHECK(version->extra() == "yes");
+}
 
-    const auto sourceCompCls = plugin->sourceComponentClasses()["source"];
+TEST_CASE_METHOD(SfsPluginFixture, "sfs plugin: expected component class counts")
+{
+    CHECK(this->_plugin().sourceComponentClasses().length() == 1);
+    CHECK(this->_plugin().filterComponentClasses().length() == 1);
+    CHECK(this->_plugin().sinkComponentClasses().length() == 1);
+}
 
-    ok(sourceCompCls,
-       "bt_plugin_borrow_source_component_class_by_name_const() finds a source component class");
+TEST_CASE_METHOD(SfsPluginFixture, "sfs plugin: expected source component class")
+{
+    const auto sourceCompCls = this->_plugin().sourceComponentClasses()["source"];
 
-    const auto sinkCompCls = plugin->sinkComponentClasses()["sink"];
+    CHECK(sourceCompCls);
+}
 
-    ok(sinkCompCls,
-       "bt_plugin_borrow_sink_component_class_by_name_const() finds a sink component class");
-    ok(sinkCompCls->help() ==
-           "Bacon ipsum dolor amet strip steak cupim pastrami venison shoulder.\n"
-           "Prosciutto beef ribs flank meatloaf pancetta brisket kielbasa drumstick\n"
-           "venison tenderloin cow tail. Beef short loin shoulder meatball, sirloin\n"
-           "ground round brisket salami cupim pork bresaola turkey bacon boudin.\n",
-       "bt_component_class_get_help() returns the expected help text");
+TEST_CASE_METHOD(SfsPluginFixture, "sfs plugin: expected sink component class help")
+{
+    const auto sinkCompCls = this->_plugin().sinkComponentClasses()["sink"];
 
-    const auto filterCompCls = plugin->filterComponentClasses()["filter"];
+    REQUIRE(sinkCompCls);
+    CHECK(sinkCompCls->help() ==
+          "Bacon ipsum dolor amet strip steak cupim pastrami venison shoulder.\n"
+          "Prosciutto beef ribs flank meatloaf pancetta brisket kielbasa drumstick\n"
+          "venison tenderloin cow tail. Beef short loin shoulder meatball, sirloin\n"
+          "ground round brisket salami cupim pork bresaola turkey bacon boudin.\n");
+}
 
-    ok(filterCompCls,
-       "bt_plugin_borrow_filter_component_class_by_name_const() finds a filter component class");
+TEST_CASE_METHOD(SfsPluginFixture, "sfs plugin: expected filter component class")
+{
+    CHECK(this->_plugin().filterComponentClasses()["filter"]);
+}
+
+TEST_CASE_METHOD(SfsPluginFixture, "sfs plugin: expected query object")
+{
+    const auto filterCompCls = this->_plugin().filterComponentClasses()["filter"];
+
+    REQUIRE(filterCompCls);
 
     const auto params = bt2::createValue(INT64_C(23));
-    const auto queryExec = bt2::QueryExecutor::create(*filterCompCls, "get-something", *params);
+    const auto results =
+        bt2::QueryExecutor::create(*filterCompCls, "get-something", *params)->query();
 
-    BT_ASSERT(queryExec);
+    REQUIRE(results);
+    REQUIRE(results->isArray());
+    REQUIRE(results->asArray().length() == 2);
 
-    const auto results = queryExec->query();
-
-    ok(results, "bt_query_executor_query() succeeds");
-    BT_ASSERT(results->isArray());
-    BT_ASSERT(results->asArray().length() == 2);
-
-    const auto resObject = results->asArray()[0].asString().value();
-    const auto resParams = results->asArray()[1];
-
-    ok(resObject == "get-something",
-       "bt_component_class_query() receives the expected object name");
-    ok(resParams == *params, "bt_component_class_query() receives the expected parameters");
-
-    const auto sinkCompClsRef = sinkCompCls->shared();
-
-    plugins.reset();
-
-    const auto graph = bt2::Graph::create(0);
-
-    BT_ASSERT(graph);
-
-    const auto sinkComponent =
-        graph->addComponent(*sinkCompCls, "the-sink", {}, bt2::LoggingLevel::None);
-    ok(sinkComponent.name() == "the-sink",
-       "bt_graph_add_sink_component() still works after the plugin object is destroyed");
+    CHECK(results->asArray()[0].asString().value() == "get-something");
+    CHECK(results->asArray()[1] == *params);
 }
 
-void testCreateAllFromDir(const char *pluginDir)
+TEST_CASE_METHOD(SfsPluginFixture, "sfs plugin: add sink component to graph")
 {
-    diag("create from all test below");
+    const auto sinkCompCls = this->_plugin().sinkComponentClasses()["sink"];
 
-    const auto caughtError = bt2c::call([]() {
+    REQUIRE(sinkCompCls);
+
+    const auto graph = bt2::Graph::create(0);
+    const auto sinkComponent = graph->addComponent(*sinkCompCls, "the-sink");
+
+    CHECK(sinkComponent.name() == "the-sink");
+}
+
+TEST_CASE("bt2::findAllPluginsFromDir() with nonexistent path")
+{
+    CHECK(bt2c::call([] {
         try {
             bt2::findAllPluginsFromDir(NON_EXISTING_PATH, BT_FALSE, BT_FALSE);
             return false;
@@ -178,54 +175,38 @@ void testCreateAllFromDir(const char *pluginDir)
             bt_current_thread_clear_error();
             return true;
         }
-    });
-
-    ok(caughtError, "bt_plugin_find_all_from_dir() fails with an invalid path");
-
-    const auto plugins = bt2::findAllPluginsFromDir(pluginDir, BT_FALSE, BT_FALSE);
-    ok(plugins, "bt_plugin_find_all_from_dir() returns a plugin set with a valid path");
-
-    /* 2 or 4, if `.la` files are considered or not */
-    ok(plugins->length() == 2 || plugins->length() == 4,
-       "bt_plugin_find_all_from_dir() returns the expected number of plugin objects");
+    }));
 }
 
-void testFind(const char *pluginDir)
+TEST_CASE("bt2::findAllPluginsFromDir() with valid path")
 {
-    ok(!bt2::findPlugin(NON_EXISTING_PATH, true, false, false, false, false),
-       "bt_plugin_find() returns BT_PLUGIN_STATUS_NOT_FOUND with an unknown plugin name");
+    const auto plugins = bt2::findAllPluginsFromDir(PLUGINS_DIR, BT_FALSE, BT_FALSE);
 
-    const auto pluginPath = fmt::format(
-        "{}" G_SEARCHPATH_SEPARATOR_S G_DIR_SEPARATOR_S
-        "ec1d09e5-696c-442e-b1c3-f9c6cf7f5958" G_SEARCHPATH_SEPARATOR_S
-            G_SEARCHPATH_SEPARATOR_S G_SEARCHPATH_SEPARATOR_S "{}" G_SEARCHPATH_SEPARATOR_S
-        "8db46494-a398-466a-9649-c765ae077629" G_SEARCHPATH_SEPARATOR_S,
-        NON_EXISTING_PATH, pluginDir);
+    REQUIRE(plugins);
 
-    g_setenv("BABELTRACE_PLUGIN_PATH", pluginPath.c_str(), 1);
+    /* 2 or 4, if `.la` files are considered or not */
+    CHECK((plugins->length() == 2 || plugins->length() == 4));
+}
+
+TEST_CASE("bt2::findPlugin() with unknown plugin name")
+{
+    CHECK_FALSE(bt2::findPlugin(NON_EXISTING_PATH, true, false, false, false, false));
+}
+
+TEST_CASE("bt2::findPlugin() finds a plugin using `BABELTRACE_PLUGIN_PATH`")
+{
+    g_setenv("BABELTRACE_PLUGIN_PATH",
+             fmt::format("{}" G_SEARCHPATH_SEPARATOR_S G_DIR_SEPARATOR_S
+                         "ec1d09e5-696c-442e-b1c3-f9c6cf7f5958" G_SEARCHPATH_SEPARATOR_S
+                             G_SEARCHPATH_SEPARATOR_S G_SEARCHPATH_SEPARATOR_S
+                         "{}" G_SEARCHPATH_SEPARATOR_S
+                         "8db46494-a398-466a-9649-c765ae077629" G_SEARCHPATH_SEPARATOR_S,
+                         NON_EXISTING_PATH, PLUGINS_DIR)
+                 .c_str(),
+             1);
 
     const auto plugin = bt2::findPlugin("test_minimal", true, false, false, false, false);
 
-    ok(plugin, "bt_plugin_find() returns a plugin object");
-    ok(plugin->author() == "Janine Sutto",
-       "bt_plugin_find() finds the correct plugin for a given name");
-}
-
-} /* namespace */
-
-int main(int argc, char **argv)
-{
-    if (argc != 2) {
-        fmt::println(stderr, "Usage: test_plugin plugin_directory");
-        return 1;
-    }
-
-    const auto pluginDir = argv[1];
-
-    plan_tests(NR_TESTS);
-    testMinimal(pluginDir);
-    testSfs(pluginDir);
-    testCreateAllFromDir(pluginDir);
-    testFind(pluginDir);
-    return exit_status();
+    REQUIRE(plugin);
+    CHECK(plugin->author() == "Janine Sutto");
 }

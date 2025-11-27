@@ -107,8 +107,7 @@ TESTS_LIB = \
 	lib/test-graph-topo \
 	lib/test-mip \
 	lib/test-simple-sink \
-	lib/test-trace-ir-ref \
-	lib/test-plugins.sh
+	lib/test-trace-ir-ref
 
 TESTS_PLUGINS = \
 	plugins/src.ctf.fs/fail/test-fail.sh \
