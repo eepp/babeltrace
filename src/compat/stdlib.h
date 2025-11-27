@@ -33,18 +33,18 @@
 #ifdef HAVE_MKDTEMP
 
 static inline
-char *bt_mkdtemp(char *template)
+char *bt_mkdtemp(char *templ)
 {
-	return mkdtemp(template);
+	return mkdtemp(templ);
 }
 
 #elif GLIB_CHECK_VERSION(2,30,0)
 
 #include <glib/gstdio.h>
 static inline
-char *bt_mkdtemp(char *template)
+char *bt_mkdtemp(char *templ)
 {
-	return g_mkdtemp(template);
+	return g_mkdtemp(templ);
 }
 
 #else
@@ -55,28 +55,28 @@ char *bt_mkdtemp(char *template)
 
 See \bt_ext_man{mkdtemp,3,3}.
 
-@param[in] template
+@param[in] templ
     See \bt_ext_man{mkdtemp,3,3}.
 
 @returns
     See \bt_ext_man{mkdtemp,3,3}.
 */
 static inline
-char *bt_mkdtemp(char *template)
+char *bt_mkdtemp(char *templ)
 {
 	char *ret;
 
-	ret = mktemp(template);
+	ret = mktemp(templ);
 	if (!ret) {
 		goto end;
 	}
 
-	if(mkdir(template, 0700)) {
+	if(mkdir(templ, 0700)) {
 		ret = NULL;
 		goto end;
 	}
 
-	ret = template;
+	ret = templ;
 end:
 	return ret;
 }
