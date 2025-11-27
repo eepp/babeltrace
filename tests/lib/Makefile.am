@@ -17,9 +17,6 @@ test_bt_values_SOURCES = test-bt-values.c
 test_bt_values_LDADD = $(COMMON_TEST_LDADD) \
 	$(top_builddir)/src/lib/libbabeltrace2.la
 
-test_bt_uuid_SOURCES = test-bt-uuid.c
-test_bt_uuid_LDADD = $(COMMON_TEST_LDADD)
-
 test_trace_ir_ref_SOURCES = test-trace-ir-ref.c
 test_trace_ir_ref_LDADD = $(COMMON_TEST_LDADD) \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
@@ -49,7 +46,6 @@ test_mip_LDADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la
 
 noinst_PROGRAMS = \
-	test-bt-uuid \
 	test-bt-values \
 	test-graph-topo \
 	test-mip \
