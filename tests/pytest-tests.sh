@@ -25,6 +25,7 @@ tests=(
     "$BT_TESTS_SRCDIR/lib/test-plugin-init-fail.cpp"
     "$BT_TESTS_SRCDIR/lib/test-plugins.cpp"
     "$BT_TESTS_SRCDIR/lib/test-remove-destruction-listener-in-destruction-listener.cpp"
+    "$BT_TESTS_SRCDIR/lib/test-simple-sink.cpp"
     "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs/test_assume_single_trace.py"
 )
 

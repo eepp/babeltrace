@@ -28,10 +28,10 @@ test_graph_topo_LDADD = $(COMMON_TEST_LDADD) \
 	$(top_builddir)/src/lib/libbabeltrace2.la
 nodist_EXTRA_test_graph_topo_SOURCES = dummy.cpp
 
-test_simple_sink_SOURCES = test-simple-sink.c
+test_simple_sink_SOURCES = test-simple-sink.cpp
 test_simple_sink_LDADD = $(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la
-nodist_EXTRA_test_simple_sink_SOURCES = dummy.cpp
+	$(top_builddir)/src/lib/libbabeltrace2.la \
+	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
 test_remove_destruction_listener_in_destruction_listener_SOURCES = \
 	test-remove-destruction-listener-in-destruction-listener.cpp

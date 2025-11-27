@@ -106,7 +106,6 @@ TESTS_LIB = \
 	lib/test-bt-values \
 	lib/test-graph-topo \
 	lib/test-mip \
-	lib/test-simple-sink \
 	lib/test-trace-ir-ref
 
 TESTS_PLUGINS = \
