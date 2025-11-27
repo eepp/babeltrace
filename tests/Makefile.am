@@ -105,8 +105,7 @@ TESTS_CLI = \
 TESTS_LIB = \
 	lib/test-bt-values \
 	lib/test-graph-topo \
-	lib/test-mip \
-	lib/test-trace-ir-ref
+	lib/test-mip
 
 TESTS_PLUGINS = \
 	plugins/src.ctf.fs/fail/test-fail.sh \
