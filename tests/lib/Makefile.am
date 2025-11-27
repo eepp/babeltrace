@@ -53,9 +53,9 @@ noinst_PROGRAMS = \
 	test-simple-sink \
 	test-trace-ir-ref
 
-noinst_PROGRAMS += test-fields-bin
-test_fields_bin_SOURCES = test-fields-bin.cpp
-test_fields_bin_LDADD = $(COMMON_TEST_LDADD) \
+noinst_PROGRAMS += test-fields
+test_fields_SOURCES = test-fields.cpp
+test_fields_LDADD = $(COMMON_TEST_LDADD) \
 	utils/liblib-utils.la \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
@@ -116,8 +116,7 @@ utils_liblib_utils_la_SOURCES = \
 dist_check_SCRIPTS = \
 	test-plugins.sh \
 	test-plugin-init-fail-no.sh \
-	test-plugin-init-fail-yes.sh \
-	test-fields.sh
+	test-plugin-init-fail-yes.sh
 
 # `conds/test-conds.sh` needs the developer mode to enable all
 # condition checks.
