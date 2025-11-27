@@ -34,11 +34,11 @@ test_simple_sink_LDADD = $(COMMON_TEST_LDADD) \
 nodist_EXTRA_test_simple_sink_SOURCES = dummy.cpp
 
 test_remove_destruction_listener_in_destruction_listener_SOURCES = \
-	test-remove-destruction-listener-in-destruction-listener.c
+	test-remove-destruction-listener-in-destruction-listener.cpp
 test_remove_destruction_listener_in_destruction_listener_LDADD = \
 	$(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la
-nodist_EXTRA_test_remove_destruction_listener_in_destruction_listener_SOURCES = dummy.cpp
+	$(top_builddir)/src/lib/libbabeltrace2.la \
+	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
 test_mip_SOURCES = test-mip.c
 test_mip_LDADD = \
