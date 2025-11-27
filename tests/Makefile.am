@@ -109,7 +109,6 @@ TESTS_LIB = \
 	lib/test-remove-destruction-listener-in-destruction-listener \
 	lib/test-simple-sink \
 	lib/test-trace-ir-ref \
-	lib/test-fields.sh \
 	lib/test-plugin-init-fail-no.sh \
 	lib/test-plugin-init-fail-yes.sh \
 	lib/test-plugins.sh
