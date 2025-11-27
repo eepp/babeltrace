@@ -66,6 +66,9 @@ test_plugins_LDADD = \
 	$(COMMON_TEST_LDADD) \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
+test_plugins_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	-DPLUGINS_DIR=\"$(abs_builddir)/test-plugins-plugins/.libs\"
 
 noinst_LTLIBRARIES += test-plugins-plugins/plugin-minimal.la
 test_plugins_plugins_plugin_minimal_la_SOURCES = \
@@ -115,9 +118,6 @@ noinst_LTLIBRARIES += utils/liblib-utils.la
 utils_liblib_utils_la_SOURCES = \
 	utils/run-in.cpp \
 	utils/run-in.hpp
-
-dist_check_SCRIPTS = \
-	test-plugins.sh
 
 # `conds/test-conds.sh` needs the developer mode to enable all
 # condition checks.
