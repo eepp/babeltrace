@@ -96,16 +96,19 @@ test_plugin_init_fail_LDADD = \
 	$(COMMON_TEST_LDADD) \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la \
 	$(top_builddir)/src/lib/libbabeltrace2.la
+test_plugin_init_fail_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	-DPLUGIN_DIR=\"$(abs_builddir)/test-plugin-init-fail-plugin/.libs\"
 
-noinst_LTLIBRARIES += test-plugin-init-fail-plugin/plugin-init-fail.la
+noinst_LTLIBRARIES += test-plugin-init-fail-plugin/plugin.la
 
-test_plugin_init_fail_plugin_plugin_init_fail_la_SOURCES = \
-	test-plugin-init-fail-plugin/plugin-init-fail.cpp
-test_plugin_init_fail_plugin_plugin_init_fail_la_LDFLAGS = \
+test_plugin_init_fail_plugin_plugin_la_SOURCES = \
+	test-plugin-init-fail-plugin/plugin.cpp
+test_plugin_init_fail_plugin_plugin_la_LDFLAGS = \
 	$(AM_LDFLAGS) \
 	$(LT_NO_UNDEFINED) \
 	-rpath / -avoid-version -module $(LD_NOTEXT)
-test_plugin_init_fail_plugin_plugin_init_fail_la_LIBADD = \
+test_plugin_init_fail_plugin_plugin_la_LIBADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la
 
 noinst_LTLIBRARIES += utils/liblib-utils.la
@@ -114,9 +117,7 @@ utils_liblib_utils_la_SOURCES = \
 	utils/run-in.hpp
 
 dist_check_SCRIPTS = \
-	test-plugins.sh \
-	test-plugin-init-fail-no.sh \
-	test-plugin-init-fail-yes.sh
+	test-plugins.sh
 
 # `conds/test-conds.sh` needs the developer mode to enable all
 # condition checks.
