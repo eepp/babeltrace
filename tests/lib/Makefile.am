@@ -13,9 +13,10 @@ COMMON_TEST_LDADD = \
 	$(top_builddir)/src/common/libcommon.la \
 	$(top_builddir)/src/logging/liblogging.la
 
-test_bt_values_SOURCES = test-bt-values.c
+test_bt_values_SOURCES = test-bt-values.cpp
 test_bt_values_LDADD = $(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la
+	$(top_builddir)/src/lib/libbabeltrace2.la \
+	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
 test_trace_ir_ref_SOURCES = test-trace-ir-ref.cpp
 test_trace_ir_ref_LDADD = $(COMMON_TEST_LDADD) \

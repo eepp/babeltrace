@@ -20,15 +20,7 @@ tests=(
     "$BT_TESTS_SRCDIR"/bindings/python/bt2/pytest_*.py
     "$BT_TESTS_SRCDIR/cpp-common/"
     "$BT_TESTS_SRCDIR/data/test_temp.py"
-    "$BT_TESTS_SRCDIR/lib/conds/"
-    "$BT_TESTS_SRCDIR/lib/test-fields.cpp"
-    "$BT_TESTS_SRCDIR/lib/test-graph-topo.cpp"
-    "$BT_TESTS_SRCDIR/lib/test-mip.cpp"
-    "$BT_TESTS_SRCDIR/lib/test-plugin-init-fail.cpp"
-    "$BT_TESTS_SRCDIR/lib/test-plugins.cpp"
-    "$BT_TESTS_SRCDIR/lib/test-remove-destruction-listener-in-destruction-listener.cpp"
-    "$BT_TESTS_SRCDIR/lib/test-simple-sink.cpp"
-    "$BT_TESTS_SRCDIR/lib/test-trace-ir-ref.cpp"
+    "$BT_TESTS_SRCDIR/lib/"
     "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs/test_assume_single_trace.py"
 )
 
