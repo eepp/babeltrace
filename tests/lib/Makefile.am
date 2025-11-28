@@ -11,41 +11,36 @@ COMMON_TEST_LDADD = \
 	$(top_builddir)/tests/utils/libtestcommon.la \
 	utils/liblib-utils.la \
 	$(top_builddir)/src/common/libcommon.la \
-	$(top_builddir)/src/logging/liblogging.la
+	$(top_builddir)/src/logging/liblogging.la \
+	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
 test_bt_values_SOURCES = test-bt-values.cpp
 test_bt_values_LDADD = $(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
+	$(top_builddir)/src/lib/libbabeltrace2.la
 
 test_trace_ir_ref_SOURCES = test-trace-ir-ref.cpp
 test_trace_ir_ref_LDADD = $(COMMON_TEST_LDADD) \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/ctf-writer/libbabeltrace2-ctf-writer.la \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
+	$(top_builddir)/src/ctf-writer/libbabeltrace2-ctf-writer.la
 
 test_graph_topo_SOURCES = test-graph-topo.cpp
 test_graph_topo_LDADD = $(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
+	$(top_builddir)/src/lib/libbabeltrace2.la
 
 test_simple_sink_SOURCES = test-simple-sink.cpp
 test_simple_sink_LDADD = $(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
+	$(top_builddir)/src/lib/libbabeltrace2.la
 
 test_remove_destruction_listener_in_destruction_listener_SOURCES = \
 	test-remove-destruction-listener-in-destruction-listener.cpp
 test_remove_destruction_listener_in_destruction_listener_LDADD = \
 	$(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
+	$(top_builddir)/src/lib/libbabeltrace2.la
 
 test_mip_SOURCES = test-mip.cpp
 test_mip_LDADD = \
 	$(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
+	$(top_builddir)/src/lib/libbabeltrace2.la
 
 noinst_PROGRAMS = \
 	test-bt-values \
@@ -58,16 +53,13 @@ noinst_PROGRAMS = \
 noinst_PROGRAMS += test-fields
 test_fields_SOURCES = test-fields.cpp
 test_fields_LDADD = $(COMMON_TEST_LDADD) \
-	utils/liblib-utils.la \
-	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
+	$(top_builddir)/src/lib/libbabeltrace2.la
 
 noinst_PROGRAMS += test-plugins
 test_plugins_SOURCES = test-plugins.cpp
 test_plugins_LDADD = \
 	$(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
+	$(top_builddir)/src/lib/libbabeltrace2.la
 test_plugins_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
 	-DPLUGINS_DIR=\"$(abs_builddir)/test-plugins-plugins/.libs\"
@@ -99,7 +91,6 @@ noinst_PROGRAMS +=  test-plugin-init-fail
 test_plugin_init_fail_SOURCES = test-plugin-init-fail.cpp
 test_plugin_init_fail_LDADD = \
 	$(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la \
 	$(top_builddir)/src/lib/libbabeltrace2.la
 test_plugin_init_fail_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
@@ -136,9 +127,7 @@ conds_conds_triggers_SOURCES = \
 
 conds_conds_triggers_LDADD = \
 	$(COMMON_TEST_LDADD) \
-	utils/liblib-utils.la \
-	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
+	$(top_builddir)/src/lib/libbabeltrace2.la
 
 EXTRA_DIST = conftest.py
 
