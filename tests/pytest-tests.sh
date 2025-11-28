@@ -25,6 +25,10 @@ tests=(
     "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs/test_assume_single_trace.py"
 )
 
+if [[ ${BT_TESTS_NO_BITFIELD:-} != 1 ]]; then
+    tests+=("$BT_TESTS_SRCDIR/bitfield/")
+fi
+
 # shellcheck disable=SC2086
 bt-pytest ${BT_TESTS_PYTEST_EXTRA_ARGS:-} \
     -vv -rA --capture=tee-sys --log-cli-level=INFO \
