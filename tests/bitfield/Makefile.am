@@ -4,9 +4,6 @@
 
 AM_CPPFLAGS += -I$(top_srcdir)/tests/utils
 
-test_bitfield_SOURCES = test-bitfield.c
-test_bitfield_LDADD = \
-	$(top_builddir)/tests/utils/tap/libtap.la \
-	$(top_builddir)/tests/utils/libtestcommon.la
+test_bitfield_SOURCES = test-bitfield.cpp
 
 noinst_PROGRAMS = test-bitfield

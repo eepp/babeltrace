@@ -125,9 +125,6 @@ TESTS_PLUGINS = \
 
 TESTS_PYTHON_PLUGIN_PROVIDER = python-plugin-provider/test-python-plugin-provider.sh
 
-TESTS_BITFIELD = \
-	bitfield/test-bitfield
-
 TESTS_CTF_WRITER = \
 	ctf-writer/test-ctf-writer.sh
 
@@ -200,7 +197,7 @@ LOG_DRIVER = env \
 TESTS_PYTEST = pytest-tests.sh
 endif
 
-TESTS_NO_BITFIELD = \
+TESTS = \
 	$(TESTS_BINDINGS) \
 	$(TESTS_CLI) \
 	$(TESTS_CTF_WRITER) \
@@ -208,15 +205,12 @@ TESTS_NO_BITFIELD = \
 	$(TESTS_PYTHON_PLUGIN_PROVIDER) \
 	$(TESTS_PYTEST)
 
-TESTS = $(TESTS_NO_BITFIELD) $(TESTS_BITFIELD)
-
 define check_target
 check-$(1):
 	$(MAKE) $(AM_MAKEFLAGS) TESTS="$2" check
 endef
 
 $(eval $(call check_target,bindings,$(TESTS_BINDINGS)))
-$(eval $(call check_target,bitfield,$(TESTS_BITFIELD)))
 $(eval $(call check_target,cli,$(TESTS_CLI)))
 $(eval $(call check_target,ctf-writer,$(TESTS_CTF_WRITER)))
 $(eval $(call check_target,plugins,$(TESTS_PLUGINS)))
@@ -224,4 +218,4 @@ $(eval $(call check_target,python-plugin-provider,$(TESTS_PYTHON_PLUGIN_PROVIDER
 $(eval $(call check_target,pytest,$(TESTS_PYTEST)))
 
 check-no-bitfield:
-	$(MAKE) $(AM_MAKEFLAGS) TESTS="$(TESTS_NO_BITFIELD)" check
+	$(MAKE) $(AM_MAKEFLAGS) BT_TESTS_NO_BITFIELD=1 check
