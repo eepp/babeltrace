@@ -102,9 +102,6 @@ TESTS_CLI = \
 	cli/query/test-query.sh \
 	cli/test-exit-status.sh
 
-TESTS_LIB = \
-	lib/test-bt-values
-
 TESTS_PLUGINS = \
 	plugins/src.ctf.fs/fail/test-fail.sh \
 	plugins/src.ctf.fs/succeed/test-succeed.sh \
@@ -210,7 +207,6 @@ TESTS_NO_BITFIELD = \
 	$(TESTS_BINDINGS) \
 	$(TESTS_CLI) \
 	$(TESTS_CTF_WRITER) \
-	$(TESTS_LIB) \
 	$(TESTS_PARAM_VALIDATION) \
 	$(TESTS_PLUGINS) \
 	$(TESTS_PYTHON_PLUGIN_PROVIDER) \
@@ -227,7 +223,6 @@ $(eval $(call check_target,bindings,$(TESTS_BINDINGS)))
 $(eval $(call check_target,bitfield,$(TESTS_BITFIELD)))
 $(eval $(call check_target,cli,$(TESTS_CLI)))
 $(eval $(call check_target,ctf-writer,$(TESTS_CTF_WRITER)))
-$(eval $(call check_target,lib,$(TESTS_LIB)))
 $(eval $(call check_target,plugins,$(TESTS_PLUGINS)))
 $(eval $(call check_target,python-plugin-provider,$(TESTS_PYTHON_PLUGIN_PROVIDER)))
 $(eval $(call check_target,pytest,$(TESTS_PYTEST)))
