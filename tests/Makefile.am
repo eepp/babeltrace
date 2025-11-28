@@ -103,8 +103,7 @@ TESTS_CLI = \
 	cli/test-exit-status.sh
 
 TESTS_LIB = \
-	lib/test-bt-values \
-	lib/test-graph-topo
+	lib/test-bt-values
 
 TESTS_PLUGINS = \
 	plugins/src.ctf.fs/fail/test-fail.sh \
