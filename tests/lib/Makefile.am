@@ -40,10 +40,11 @@ test_remove_destruction_listener_in_destruction_listener_LDADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
-test_mip_SOURCES = test-mip.c
+test_mip_SOURCES = test-mip.cpp
 test_mip_LDADD = \
 	$(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la
+	$(top_builddir)/src/lib/libbabeltrace2.la \
+	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
 noinst_PROGRAMS = \
 	test-bt-values \

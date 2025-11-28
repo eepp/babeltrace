@@ -22,6 +22,7 @@ tests=(
     "$BT_TESTS_SRCDIR/data/test_temp.py"
     "$BT_TESTS_SRCDIR/lib/conds/"
     "$BT_TESTS_SRCDIR/lib/test-fields.cpp"
+    "$BT_TESTS_SRCDIR/lib/test-mip.cpp"
     "$BT_TESTS_SRCDIR/lib/test-plugin-init-fail.cpp"
     "$BT_TESTS_SRCDIR/lib/test-plugins.cpp"
     "$BT_TESTS_SRCDIR/lib/test-remove-destruction-listener-in-destruction-listener.cpp"
