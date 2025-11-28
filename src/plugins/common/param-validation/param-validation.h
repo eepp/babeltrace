@@ -87,6 +87,24 @@ struct bt_param_validation_value_descr {
 		return bt_param_validation_value_descr {BT_VALUE_TYPE_BOOL};
 	}
 
+	static bt_param_validation_value_descr makeMap(
+			const bt_param_validation_map_value_entry_descr * const entries)
+	{
+		bt_param_validation_value_descr descr {BT_VALUE_TYPE_MAP};
+
+		descr.map.entries = entries;
+		return descr;
+	}
+
+	static bt_param_validation_value_descr makeCustom(
+			bt_param_validation_func * const func)
+	{
+		bt_param_validation_value_descr descr {BT_VALUE_TYPE_NULL};
+
+		descr.validation_func = func;
+		return descr;
+	}
+
 private:
 	bt_param_validation_value_descr(bt_value_type type_)
 		: type {type_}
