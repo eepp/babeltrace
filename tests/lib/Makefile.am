@@ -23,10 +23,10 @@ test_trace_ir_ref_LDADD = $(COMMON_TEST_LDADD) \
 	$(top_builddir)/src/ctf-writer/libbabeltrace2-ctf-writer.la \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
-test_graph_topo_SOURCES = test-graph-topo.c
+test_graph_topo_SOURCES = test-graph-topo.cpp
 test_graph_topo_LDADD = $(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la
-nodist_EXTRA_test_graph_topo_SOURCES = dummy.cpp
+	$(top_builddir)/src/lib/libbabeltrace2.la \
+	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
 test_simple_sink_SOURCES = test-simple-sink.cpp
 test_simple_sink_LDADD = $(COMMON_TEST_LDADD) \
