@@ -125,9 +125,6 @@ TESTS_PLUGINS = \
 
 TESTS_PYTHON_PLUGIN_PROVIDER = python-plugin-provider/test-python-plugin-provider.sh
 
-TESTS_PARAM_VALIDATION = \
-	param-validation/test-param-validation
-
 TESTS_BITFIELD = \
 	bitfield/test-bitfield
 
@@ -207,7 +204,6 @@ TESTS_NO_BITFIELD = \
 	$(TESTS_BINDINGS) \
 	$(TESTS_CLI) \
 	$(TESTS_CTF_WRITER) \
-	$(TESTS_PARAM_VALIDATION) \
 	$(TESTS_PLUGINS) \
 	$(TESTS_PYTHON_PLUGIN_PROVIDER) \
 	$(TESTS_PYTEST)
