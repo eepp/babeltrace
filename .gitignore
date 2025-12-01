@@ -83,7 +83,6 @@ pytestdebug.log
 !/tests/**/test-*.sh
 !/tests/**/test-*.[hc]
 !/tests/**/test-*.[hc]pp
-/tests/ctf-writer/ctf-writer
 /tests/lib/conds/conds-triggers
 /tests/lib/plugin
 /tests/plugins/sink.ctf.fs/succeed/gen-trace-double
