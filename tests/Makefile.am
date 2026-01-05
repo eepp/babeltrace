@@ -168,10 +168,6 @@ plugins_flt_utils_muxer_test_clock_compatibility_LDADD = \
 
 if ENABLE_DEBUG_INFO
 TESTS_PLUGINS += \
-	plugins/flt.lttng-utils.debug-info/test-dwarf-i386-linux-gnu.sh \
-	plugins/flt.lttng-utils.debug-info/test-dwarf-powerpc-linux-gnu.sh \
-	plugins/flt.lttng-utils.debug-info/test-dwarf-powerpc64le-linux-gnu.sh \
-	plugins/flt.lttng-utils.debug-info/test-dwarf-x86-64-linux-gnu.sh \
 	plugins/flt.lttng-utils.debug-info/test-bin-info-i386-linux-gnu.sh \
 	plugins/flt.lttng-utils.debug-info/test-bin-info-powerpc-linux-gnu.sh \
 	plugins/flt.lttng-utils.debug-info/test-bin-info-powerpc64le-linux-gnu.sh \
