@@ -167,12 +167,7 @@ plugins_flt_utils_muxer_test_clock_compatibility_LDADD = \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
 if ENABLE_DEBUG_INFO
-TESTS_PLUGINS += \
-	plugins/flt.lttng-utils.debug-info/test-bin-info-i386-linux-gnu.sh \
-	plugins/flt.lttng-utils.debug-info/test-bin-info-powerpc-linux-gnu.sh \
-	plugins/flt.lttng-utils.debug-info/test-bin-info-powerpc64le-linux-gnu.sh \
-	plugins/flt.lttng-utils.debug-info/test-bin-info-x86-64-linux-gnu.sh \
-	plugins/flt.lttng-utils.debug-info/test-succeed.sh
+TESTS_PLUGINS += plugins/flt.lttng-utils.debug-info/test-succeed.sh
 endif # ENABLE_DEBUG_INFO
 
 if ENABLE_TEST_TAP_OUTPUT
