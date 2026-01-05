@@ -65,7 +65,6 @@ dist_check_SCRIPTS = \
 	cli/test-trace-copy.sh \
 	cli/test-trace-read.sh \
 	cli/test-trimmer.sh \
-	plugins/flt.utils.muxer/test-clock-compatibility.sh \
 	plugins/sink.text.details/succeed/test-succeed.sh \
 	plugins/sink.text.pretty/test-enum.sh \
 	plugins/sink.text.pretty/test_pretty.py \
@@ -110,7 +109,6 @@ TESTS_PLUGINS = \
 	plugins/sink.text.details/succeed/test-succeed.sh \
 	plugins/sink.text.pretty/test-pretty.sh \
 	plugins/sink.text.pretty/test-pretty-python.sh \
-	plugins/flt.utils.muxer/test-clock-compatibility.sh \
 	plugins/src.ctf.fs/query/test-query-support-info.sh \
 	plugins/src.ctf.fs/query/test-query-trace-info.sh \
 	plugins/src.ctf.fs/query/test-query-metadata-info.sh \
@@ -155,16 +153,6 @@ cpp_common_test_unicode_conv_LDADD = \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(COMMON_TEST_LDADD)
-
-noinst_PROGRAMS += plugins/flt.utils.muxer/test-clock-compatibility
-
-plugins_flt_utils_muxer_test_clock_compatibility_SOURCES = \
-	plugins/flt.utils.muxer/test-clock-compatibility.cpp
-
-plugins_flt_utils_muxer_test_clock_compatibility_LDADD = \
-	$(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
 if ENABLE_TEST_TAP_OUTPUT
 LOG_DRIVER_FLAGS = --merge --comments

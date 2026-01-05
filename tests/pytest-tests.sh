@@ -24,6 +24,7 @@ tests=(
     "$BT_TESTS_SRCDIR/lib/"
     "$BT_TESTS_SRCDIR/param-validation/"
     "$BT_TESTS_SRCDIR/plugins/flt.lttng-utils.debug-info"
+    "$BT_TESTS_SRCDIR/plugins/flt.utils.muxer/test_clock_compat.py"
     "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs/test_assume_single_trace.py"
 )
 

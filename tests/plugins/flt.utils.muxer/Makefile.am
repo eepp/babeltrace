@@ -3,3 +3,5 @@
 # SPDX-License-Identifier: MIT
 
 SUBDIRS = succeed
+
+EXTRA_DIST = test_clock_compat.py
