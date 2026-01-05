@@ -4,7 +4,6 @@
 
 AM_CPPFLAGS += -I$(top_srcdir)/tests/utils -I$(top_srcdir)/src/plugins
 
-dist_check_SCRIPTS = test-succeed.sh
 
 noinst_PROGRAMS =
 
@@ -31,5 +30,7 @@ bin_info_test_LDADD = \
 endif # ENABLE_DEBUG_INFO
 
 EXTRA_DIST = \
+	conftest.py \
 	test_bin_info.py \
-	test_dwarf.py
+	test_dwarf.py \
+	test_succeed_debug_info.py

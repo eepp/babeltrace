@@ -23,8 +23,7 @@ tests=(
     "$BT_TESTS_SRCDIR/data/test_temp.py"
     "$BT_TESTS_SRCDIR/lib/"
     "$BT_TESTS_SRCDIR/param-validation/"
-    "$BT_TESTS_SRCDIR/plugins/flt.lttng-utils.debug-info/test_bin_info.py"
-    "$BT_TESTS_SRCDIR/plugins/flt.lttng-utils.debug-info/test_dwarf.py"
+    "$BT_TESTS_SRCDIR/plugins/flt.lttng-utils.debug-info"
     "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs/test_assume_single_trace.py"
 )
 
