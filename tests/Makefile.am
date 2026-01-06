@@ -68,7 +68,6 @@ dist_check_SCRIPTS = \
 	plugins/sink.text.details/succeed/test-succeed.sh \
 	plugins/sink.text.pretty/test_pretty.py \
 	plugins/sink.text.pretty/test-pretty.sh \
-	plugins/sink.text.pretty/test-pretty-python.sh \
 	plugins/src.ctf.lttng-live/test-live.sh \
 	plugins/src.ctf.lttng-live/test-query.sh \
 	plugins/src.ctf.lttng-live/test_query.py \
@@ -106,7 +105,6 @@ TESTS_PLUGINS = \
 	plugins/src.ctf.fs/test-deterministic-ordering.sh \
 	plugins/sink.text.details/succeed/test-succeed.sh \
 	plugins/sink.text.pretty/test-pretty.sh \
-	plugins/sink.text.pretty/test-pretty-python.sh \
 	plugins/src.ctf.fs/query/test-query-support-info.sh \
 	plugins/src.ctf.fs/query/test-query-trace-info.sh \
 	plugins/src.ctf.fs/query/test-query-metadata-info.sh \

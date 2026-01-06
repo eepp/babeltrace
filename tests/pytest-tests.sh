@@ -27,7 +27,7 @@ tests=(
     "$BT_TESTS_SRCDIR/plugins/flt.utils.muxer"
     "$BT_TESTS_SRCDIR/plugins/flt.utils.trimmer"
     "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs"
-    "$BT_TESTS_SRCDIR/plugins/sink.text.pretty/test_enum.py"
+    "$BT_TESTS_SRCDIR/plugins/sink.text.pretty"
 )
 
 if [[ ${BT_TESTS_NO_BITFIELD:-} != 1 ]]; then

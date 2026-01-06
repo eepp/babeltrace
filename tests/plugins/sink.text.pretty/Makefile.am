@@ -2,6 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-dist_check_SCRIPTS = test-pretty-python.sh
-
-EXTRA_DIST = test_enum.py
+EXTRA_DIST = \
+	test_enum.py \
+	test_pretty.py
