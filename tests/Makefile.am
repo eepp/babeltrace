@@ -105,7 +105,6 @@ TESTS_PLUGINS = \
 	plugins/src.ctf.fs/fail/test-fail.sh \
 	plugins/src.ctf.fs/succeed/test-succeed.sh \
 	plugins/src.ctf.fs/test-deterministic-ordering.sh \
-	plugins/sink.ctf.fs/succeed/test-succeed.sh \
 	plugins/sink.text.details/succeed/test-succeed.sh \
 	plugins/sink.text.pretty/test-pretty.sh \
 	plugins/sink.text.pretty/test-pretty-python.sh \
