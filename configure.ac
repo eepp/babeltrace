@@ -922,6 +922,7 @@ AC_CONFIG_FILES([
   src/cli/Makefile
   src/Makefile
   tests/bitfield/Makefile
+  tests/cli/Makefile
   tests/ctf-writer/Makefile
   tests/lib/Makefile
   tests/Makefile
