@@ -6,6 +6,7 @@
 import typing
 import logging
 import pathlib
+import textwrap
 import subprocess
 from typing import Any, Dict, List, Union, Optional
 
@@ -102,3 +103,52 @@ def run_cli(
         timeout=timeout,
         extra_env=extra_env,
     )
+
+
+# Runs a graph with `sink.text.details` and compares the output to the
+# expectation `expect` (a string or the path of an expectation file
+# to open).
+#
+# `cli_args` is a list of arguments to pass to the CLI before the
+# `sink.text.details` component. See the `args` parameter of run_cli().
+#
+# `details_params` is a dictionary of initialization parameters to pass
+# to the `sink.text.details` component.
+#
+# `expect` is the expected output, either:
+#
+# • A `pathlib.Path` object (expectation file path).
+# • A string (dedented before comparison).
+#
+# `plugin_paths` is an optional list of plugin paths to pass to the CLI.
+#
+# This function asserts that the CLI output matches the expectation
+# (both stripped of leading/trailing whitespace).
+#
+# Returns the `subprocess.CompletedProcess` result.
+def run_cli_sink_text_details_test(
+    build_root_dir: pathlib.Path,
+    cli_args: List[Union[str, CliParams]],
+    details_params: Dict[str, Any],
+    expect: Union[pathlib.Path, str],
+    plugin_paths: Optional[List[pathlib.Path]] = None,
+) -> "subprocess.CompletedProcess[str]":
+    full_cli_args = list(cli_args) + ["-c", "sink.text.details"]
+
+    if details_params:
+        full_cli_args.append(CliParams(details_params))
+
+    result = run_cli(
+        build_root_dir,
+        full_cli_args,
+        plugin_paths=plugin_paths,
+        check=True,
+    )
+
+    if isinstance(expect, pathlib.Path):
+        expected = expect.read_text().strip()
+    else:
+        expected = textwrap.dedent(expect).strip()
+
+    assert result.stdout.strip() == expected
+    return result
