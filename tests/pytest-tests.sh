@@ -26,8 +26,7 @@ tests=(
     "$BT_TESTS_SRCDIR/plugins/flt.lttng-utils.debug-info"
     "$BT_TESTS_SRCDIR/plugins/flt.utils.muxer"
     "$BT_TESTS_SRCDIR/plugins/flt.utils.trimmer"
-    "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs/test_assume_single_trace.py"
-    "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs/test_stream_names.py"
+    "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs"
 )
 
 if [[ ${BT_TESTS_NO_BITFIELD:-} != 1 ]]; then
