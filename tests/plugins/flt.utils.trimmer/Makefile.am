@@ -2,5 +2,4 @@
 #
 # SPDX-License-Identifier: MIT
 
-dist_check_SCRIPTS = \
-	test-trimming.sh
+EXTRA_DIST = test_succeed_trimmer.py
