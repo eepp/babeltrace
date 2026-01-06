@@ -934,6 +934,7 @@ AC_CONFIG_FILES([
   tests/plugins/flt.lttng-utils.debug-info/Makefile
   tests/plugins/flt.utils.muxer/Makefile
   tests/plugins/flt.utils.trimmer/Makefile
+  tests/plugins/sink.text.details/Makefile
   tests/plugins/sink.text.pretty/Makefile
   tests/utils/env.sh
   tests/utils/pytest-env.sh

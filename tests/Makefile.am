@@ -65,7 +65,6 @@ dist_check_SCRIPTS = \
 	cli/test-trace-copy.sh \
 	cli/test-trace-read.sh \
 	cli/test-trimmer.sh \
-	plugins/sink.text.details/succeed/test-succeed.sh \
 	plugins/src.ctf.lttng-live/test-live.sh \
 	plugins/src.ctf.lttng-live/test-query.sh \
 	plugins/src.ctf.lttng-live/test_query.py \
@@ -101,7 +100,6 @@ TESTS_PLUGINS = \
 	plugins/src.ctf.fs/fail/test-fail.sh \
 	plugins/src.ctf.fs/succeed/test-succeed.sh \
 	plugins/src.ctf.fs/test-deterministic-ordering.sh \
-	plugins/sink.text.details/succeed/test-succeed.sh \
 	plugins/src.ctf.fs/query/test-query-support-info.sh \
 	plugins/src.ctf.fs/query/test-query-trace-info.sh \
 	plugins/src.ctf.fs/query/test-query-metadata-info.sh \

@@ -4,6 +4,7 @@
 
 SUBDIRS = \
 	sink.ctf.fs \
+	sink.text.details \
 	src.ctf.fs \
 	flt.lttng-utils.debug-info \
 	flt.utils.muxer \
