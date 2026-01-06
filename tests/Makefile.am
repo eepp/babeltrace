@@ -66,7 +66,6 @@ dist_check_SCRIPTS = \
 	cli/test-trace-read.sh \
 	cli/test-trimmer.sh \
 	plugins/sink.text.details/succeed/test-succeed.sh \
-	plugins/sink.text.pretty/test-enum.sh \
 	plugins/sink.text.pretty/test_pretty.py \
 	plugins/sink.text.pretty/test-pretty.sh \
 	plugins/sink.text.pretty/test-pretty-python.sh \
@@ -114,7 +113,6 @@ TESTS_PLUGINS = \
 	plugins/src.ctf.fs/query/test-query-metadata-info-py.sh \
 	plugins/src.ctf.lttng-live/test-query.sh \
 	plugins/src.ctf.lttng-live/test-live.sh \
-	plugins/sink.text.pretty/test-enum.sh \
 	plugins/src.ctf.fs/field/test-field.sh
 
 TESTS_PYTHON_PLUGIN_PROVIDER = python-plugin-provider/test-python-plugin-provider.sh
