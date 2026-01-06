@@ -116,8 +116,7 @@ TESTS_PLUGINS = \
 	plugins/src.ctf.lttng-live/test-query.sh \
 	plugins/src.ctf.lttng-live/test-live.sh \
 	plugins/sink.text.pretty/test-enum.sh \
-	plugins/src.ctf.fs/field/test-field.sh \
-	plugins/sink.ctf.fs/test-stream-names.sh
+	plugins/src.ctf.fs/field/test-field.sh
 
 TESTS_PYTHON_PLUGIN_PROVIDER = python-plugin-provider/test-python-plugin-provider.sh
 
