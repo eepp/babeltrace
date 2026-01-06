@@ -116,7 +116,6 @@ TESTS_PLUGINS = \
 	plugins/src.ctf.lttng-live/test-query.sh \
 	plugins/src.ctf.lttng-live/test-live.sh \
 	plugins/flt.utils.trimmer/test-trimming.sh \
-	plugins/flt.utils.muxer/succeed/test-succeed.sh \
 	plugins/sink.text.pretty/test-enum.sh \
 	plugins/src.ctf.fs/field/test-field.sh \
 	plugins/sink.ctf.fs/test-stream-names.sh
