@@ -926,6 +926,7 @@ AC_CONFIG_FILES([
   tests/lib/Makefile
   tests/Makefile
   tests/param-validation/Makefile
+  tests/python-plugin-provider/Makefile
   tests/plugins/Makefile
   tests/plugins/src.ctf.fs/Makefile
   tests/plugins/src.ctf.fs/succeed/Makefile

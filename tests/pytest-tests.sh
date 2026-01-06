@@ -29,6 +29,7 @@ tests=(
     "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs"
     "$BT_TESTS_SRCDIR/plugins/sink.text.details"
     "$BT_TESTS_SRCDIR/plugins/sink.text.pretty"
+    "$BT_TESTS_SRCDIR/python-plugin-provider"
 )
 
 if [[ ${BT_TESTS_NO_BITFIELD:-} != 1 ]]; then
