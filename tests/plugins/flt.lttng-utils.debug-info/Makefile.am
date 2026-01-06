@@ -30,7 +30,6 @@ bin_info_test_LDADD = \
 endif # ENABLE_DEBUG_INFO
 
 EXTRA_DIST = \
-	conftest.py \
 	test_bin_info.py \
 	test_dwarf.py \
 	test_succeed_debug_info.py
