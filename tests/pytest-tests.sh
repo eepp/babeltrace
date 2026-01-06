@@ -18,6 +18,7 @@ fi
 
 tests=(
     "$BT_TESTS_SRCDIR"/bindings/python/bt2/pytest_*.py
+    "$BT_TESTS_SRCDIR/cli/"
     "$BT_TESTS_SRCDIR/cpp-common/"
     "$BT_TESTS_SRCDIR/ctf-writer/"
     "$BT_TESTS_SRCDIR/data/test_temp.py"
