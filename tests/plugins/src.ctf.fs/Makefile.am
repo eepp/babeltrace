@@ -5,7 +5,6 @@
 SUBDIRS = succeed
 
 dist_check_SCRIPTS = \
-	fail/test-fail.sh \
 	query/test-query-metadata-info.sh \
 	query/test-query-metadata-info-py.sh \
 	query/test_query_metadata_info.py \
@@ -15,4 +14,6 @@ dist_check_SCRIPTS = \
 	query/test_query_trace_info.py \
 	field/test-field.sh
 
-EXTRA_DIST = test_deterministic_ordering.py
+EXTRA_DIST = \
+	test_deterministic_ordering.py \
+	test_fail_src_ctf.py
