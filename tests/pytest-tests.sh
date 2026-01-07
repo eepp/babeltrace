@@ -30,6 +30,7 @@ tests=(
     "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs"
     "$BT_TESTS_SRCDIR/plugins/sink.text.details"
     "$BT_TESTS_SRCDIR/plugins/sink.text.pretty"
+    "$BT_TESTS_SRCDIR/plugins/src.ctf.fs/test_deterministic_ordering.py"
     "$BT_TESTS_SRCDIR/python-plugin-provider"
 )
 
