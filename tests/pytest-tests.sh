@@ -30,12 +30,7 @@ tests=(
     "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs"
     "$BT_TESTS_SRCDIR/plugins/sink.text.details"
     "$BT_TESTS_SRCDIR/plugins/sink.text.pretty"
-    "$BT_TESTS_SRCDIR/plugins/src.ctf.fs/succeed/"
-    "$BT_TESTS_SRCDIR/plugins/src.ctf.fs/test_deterministic_ordering.py"
-    "$BT_TESTS_SRCDIR/plugins/src.ctf.fs/test_fail_src_ctf.py"
-    "$BT_TESTS_SRCDIR/plugins/src.ctf.fs/test_query_metadata_info.py"
-    "$BT_TESTS_SRCDIR/plugins/src.ctf.fs/test_query_support_info.py"
-    "$BT_TESTS_SRCDIR/plugins/src.ctf.fs/test_query_trace_info.py"
+    "$BT_TESTS_SRCDIR/plugins/src.ctf.fs/"
     "$BT_TESTS_SRCDIR/plugins/src.ctf.lttng-live/test_query_live.py"
     "$BT_TESTS_SRCDIR/python-plugin-provider"
 )

@@ -59,8 +59,7 @@ noinst_PROGRAMS =
 TESTS_BINDINGS = bindings/python/bt2/test-python-bt2.sh
 
 TESTS_PLUGINS = \
-	plugins/src.ctf.lttng-live/test-live.sh \
-	plugins/src.ctf.fs/field/test-field.sh
+	plugins/src.ctf.lttng-live/test-live.sh
 
 noinst_PROGRAMS += \
 	cpp-common/test-c-string-view
