@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-dist_check_SCRIPTS = test-succeed.sh
+EXTRA_DIST = test_succeed_src_ctf.py
 
 # CTF trace generators
 GEN_TRACE_LDADD = \
