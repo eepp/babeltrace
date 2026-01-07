@@ -1,5 +1,4 @@
-is-packetized: no
-text: /* CTF 1.8 */
+/* CTF 1.8 */
 
 typealias integer { size = 8; align = 8; signed = false; } := uint8_t;
 typealias integer { size = 16; align = 8; signed = false; } := uint16_t;
@@ -111,6 +110,3 @@ event {
 		integer { size = 8; align = 8; signed = 1; encoding = UTF8; base = 10; } _msg[ __msg_length ];
 	};
 };
-
-
-
