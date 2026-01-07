@@ -931,6 +931,7 @@ AC_CONFIG_FILES([
   tests/plugins/Makefile
   tests/plugins/src.ctf.fs/Makefile
   tests/plugins/src.ctf.fs/succeed/Makefile
+  tests/plugins/src.ctf.lttng-live/Makefile
   tests/plugins/sink.ctf.fs/Makefile
   tests/plugins/sink.ctf.fs/succeed/Makefile
   tests/plugins/flt.lttng-utils.debug-info/Makefile

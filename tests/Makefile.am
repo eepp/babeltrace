@@ -51,8 +51,6 @@ dist_check_SCRIPTS = \
 	bindings/python/bt2/test_value.py \
 	bindings/python/bt2/utils.py \
 	plugins/src.ctf.lttng-live/test-live.sh \
-	plugins/src.ctf.lttng-live/test-query.sh \
-	plugins/src.ctf.lttng-live/test_query.py \
 	pytest-tests.sh \
 	pytest-tests-tap.sh
 
@@ -63,7 +61,6 @@ TESTS_BINDINGS = bindings/python/bt2/test-python-bt2.sh
 TESTS_PLUGINS = \
 	plugins/src.ctf.fs/succeed/test-succeed.sh \
 	plugins/src.ctf.fs/query/test-query-trace-info.sh \
-	plugins/src.ctf.lttng-live/test-query.sh \
 	plugins/src.ctf.lttng-live/test-live.sh \
 	plugins/src.ctf.fs/field/test-field.sh
 
