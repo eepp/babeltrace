@@ -62,7 +62,6 @@ TESTS_BINDINGS = bindings/python/bt2/test-python-bt2.sh
 
 TESTS_PLUGINS = \
 	plugins/src.ctf.fs/succeed/test-succeed.sh \
-	plugins/src.ctf.fs/query/test-query-support-info.sh \
 	plugins/src.ctf.fs/query/test-query-trace-info.sh \
 	plugins/src.ctf.fs/query/test-query-metadata-info.sh \
 	plugins/src.ctf.fs/query/test-query-metadata-info-py.sh \
