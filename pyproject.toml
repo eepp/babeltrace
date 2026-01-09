@@ -43,3 +43,6 @@ norecursedirs = [
     "venv",
     "__py*",
 ]
+markers = [
+    "needs_lttng_utils_plugin: skip test if the `lttng-utils` plugin isn't available",
+]
