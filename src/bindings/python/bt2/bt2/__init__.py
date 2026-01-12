@@ -149,8 +149,12 @@ from bt2.message import (
 )
 from bt2.version import __version__
 from bt2.component import (
+    _ComponentConst,
+    _ComponentParams,
+    _UserComponentType,
     _UserSinkComponent,
     _SinkComponentConst,
+    _ComponentClassConst,
     _IncompleteUserClass,
     _UserFilterComponent,
     _UserSourceComponent,
@@ -158,7 +162,10 @@ from bt2.component import (
     _SourceComponentConst,
     _SinkComponentClassConst,
     _FilterComponentClassConst,
+    _GenericSinkComponentConst,
     _SourceComponentClassConst,
+    _GenericFilterComponentConst,
+    _GenericSourceComponentConst,
     _UserSinkComponentConfiguration,
     _UserFilterComponentConfiguration,
     _UserSourceComponentConfiguration,
