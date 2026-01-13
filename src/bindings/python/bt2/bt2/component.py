@@ -21,7 +21,7 @@ from bt2 import integer_range_set as bt2_integer_range_set
 typing = typing_mod._typing_mod
 
 # The types a user can pass as `params` when creating a component.
-_ComponentParams = typing.Optional[bt2_value._ConvertibleToMapValue]
+_ComponentParams = typing.Optional[bt2_value._ConvertibleToValue]
 
 
 class _IncompleteUserClass(Exception):
