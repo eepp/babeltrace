@@ -21,6 +21,7 @@
 
 #define IN_PORT_NAME "in"
 #define COLOR_PARAM_NAME "color"
+#define PATH_PARAM_NAME "path"
 #define WITH_METADATA_PARAM_NAME "with-metadata"
 #define WITH_DATA_PARAM_NAME "with-data"
 #define WITH_TIME_PARAM_NAME "with-time"
@@ -147,6 +148,20 @@ void destroy_details_comp(struct details_comp *details_comp)
 		details_comp->str = NULL;
 	}
 
+	if (details_comp->out && details_comp->out != stdout) {
+		int ret;
+
+		ret = fclose(details_comp->out);
+		if (ret) {
+			BT_COMP_LOGE_ERRNO("Failed to close output file",
+				": path=\"%s\", ret=%d", details_comp->cfg.path->str, ret);
+		}
+	}
+
+	if (details_comp->cfg.path) {
+		g_string_free(details_comp->cfg.path, TRUE);
+	}
+
 	BT_MESSAGE_ITERATOR_PUT_REF_AND_RESET(
 		details_comp->msg_iter);
 	g_free(details_comp);
@@ -189,6 +204,8 @@ struct details_comp *create_details_comp(
 		goto error;
 	}
 
+	details_comp->out = stdout;
+
 	goto end;
 
 error:
@@ -223,12 +240,36 @@ void configure_bool_opt(const bt_value *params, const char *param_name,
 	}
 }
 
+static
+int open_output_file(struct details_comp *details_comp)
+{
+	int ret = 0;
+
+	if (!details_comp->cfg.path) {
+		goto end;
+	}
+
+	details_comp->out = fopen(details_comp->cfg.path->str, "w");
+	if (!details_comp->out) {
+		goto error;
+	}
+
+	goto end;
+
+error:
+	ret = -1;
+
+end:
+	return ret;
+}
+
 static const char *color_choices[] = { "never", "auto", "always", NULL };
 
 static const struct bt_param_validation_map_value_entry_descr details_params[] = {
 	{ COLOR_PARAM_NAME, BT_PARAM_VALIDATION_MAP_VALUE_ENTRY_OPTIONAL, { BT_VALUE_TYPE_STRING, .string = {
 		.choices = color_choices,
 	} } },
+	{ PATH_PARAM_NAME, BT_PARAM_VALIDATION_MAP_VALUE_ENTRY_OPTIONAL, { .type = BT_VALUE_TYPE_STRING } },
 	{ WITH_METADATA_PARAM_NAME, BT_PARAM_VALIDATION_MAP_VALUE_ENTRY_OPTIONAL, { .type = BT_VALUE_TYPE_BOOL } },
 	{ WITH_DATA_PARAM_NAME, BT_PARAM_VALIDATION_MAP_VALUE_ENTRY_OPTIONAL, { .type = BT_VALUE_TYPE_BOOL } },
 	{ COMPACT_PARAM_NAME, BT_PARAM_VALIDATION_MAP_VALUE_ENTRY_OPTIONAL, { .type = BT_VALUE_TYPE_BOOL } },
@@ -280,6 +321,20 @@ bt_component_class_initialize_method_status configure_details_comp(
 			BT_ASSERT(strcmp(str, "always") == 0);
 
 			details_comp->cfg.with_color = true;
+		}
+	}
+
+	/* Output path? */
+	value = bt_value_map_borrow_entry_value_const(params, PATH_PARAM_NAME);
+	if (value) {
+		details_comp->cfg.path = g_string_new(bt_value_string_get(value));
+
+		if (open_output_file(details_comp)) {
+			BT_COMP_LOGE_APPEND_CAUSE(details_comp->self_comp,
+				"Failed to open output file: path=\"%s\"",
+				details_comp->cfg.path->str);
+			status = BT_COMPONENT_CLASS_INITIALIZE_METHOD_STATUS_ERROR;
+			goto end;
 		}
 	}
 
@@ -339,6 +394,13 @@ void log_configuration(bt_self_component_sink *comp,
 	BT_COMP_LOGI("Configuration for `sink.text.details` component `%s`:",
 		bt_component_get_name(bt_self_component_as_component(
 			bt_self_component_sink_as_self_component(comp))));
+
+	if (details_comp->cfg.path) {
+		BT_COMP_LOGI("  Output: `%s`", details_comp->cfg.path->str);
+	} else {
+		BT_COMP_LOGI_STR("  Output: Standard output");
+	}
+
 	BT_COMP_LOGI("  Colorize output: %d", details_comp->cfg.with_color);
 	BT_COMP_LOGI("  Compact: %d", details_comp->cfg.compact);
 	BT_COMP_LOGI("  With metadata: %d", details_comp->cfg.with_meta);
@@ -487,10 +549,10 @@ details_consume(bt_self_component_sink *comp)
 			goto end;
 		}
 
-		/* Print output buffer to standard output and flush */
+		/* Print output buffer to output file and flush */
 		if (details_comp->str->len > 0) {
-			printf("%s", details_comp->str->str);
-			fflush(stdout);
+			fprintf(details_comp->out, "%s", details_comp->str->str);
+			fflush(details_comp->out);
 			details_comp->printed_something = true;
 		}
 
