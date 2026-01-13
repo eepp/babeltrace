@@ -1,10 +1,11 @@
 # SPDX-FileCopyrightText: 2025 Philippe Proulx <pproulx@efficios.com>
 # SPDX-License-Identifier: MIT
 
-# pyright: strict, reportTypeCommentUsage=false
+# pyright: strict, reportTypeCommentUsage=false, reportMissingTypeStubs=false, reportPrivateUsage=false
 
 import os
 import enum
+import time
 import shlex
 import types
 import typing
@@ -12,8 +13,9 @@ import logging
 import pathlib
 import platform
 import textwrap
+import itertools
 import subprocess
-from typing import Any, Dict, List, Union, Callable, Optional
+from typing import Any, Dict, List, Type, Tuple, Union, Callable, Iterable, Optional
 
 import pytest
 
@@ -432,3 +434,369 @@ def run_cli_sink_text_details_test(
 
     assert result.stdout.strip() == expected
     return result
+
+
+if typing.TYPE_CHECKING:
+    import bt2
+
+    # Any component type
+    _AnyCompT = Union[
+        bt2._GenericSourceComponentConst,
+        bt2._GenericFilterComponentConst,
+        bt2._GenericSinkComponentConst,
+    ]
+
+    # Any component class type (user class or wrapper)
+    _AnyCompClsT = Union[
+        bt2._SourceComponentClassConst,
+        bt2._FilterComponentClassConst,
+        bt2._SinkComponentClassConst,
+        Type[bt2._UserSourceComponent],
+        Type[bt2._UserFilterComponent],
+        Type[bt2._UserSinkComponent],
+    ]
+
+
+# Sink component specification to be used with convert().
+#
+# Similar to `bt2.ComponentSpec` but for sink component classes.
+class SinkComponentSpec:
+    def __init__(
+        self,
+        component_class: Union[
+            "bt2._SinkComponentClassConst",
+            Type["bt2._UserSinkComponent"],
+        ],
+        params: "bt2._ComponentParams" = None,
+        logging_level: Optional["bt2.LoggingLevel"] = None,
+    ):
+        import bt2
+
+        self._component_class = component_class
+        self._params = bt2.create_value(params)
+        self._logging_level = (
+            logging_level if logging_level is not None else bt2.LoggingLevel.NONE
+        )
+
+    @property
+    def component_class(
+        self,
+    ) -> Union[
+        "bt2._SinkComponentClassConst",
+        Type["bt2._UserSinkComponent"],
+    ]:
+        return self._component_class
+
+    @property
+    def params(self) -> Optional["bt2._Value"]:
+        return self._params
+
+    @property
+    def logging_level(self) -> "bt2.LoggingLevel":
+        return self._logging_level
+
+
+# Returns a string representation of a component class spec for logging.
+def _fmt_comp_cls_spec(comp_cls: "_AnyCompClsT") -> str:
+    import bt2
+
+    # Determine the component type prefix
+    if isinstance(comp_cls, bt2._SourceComponentClassConst) or (
+        isinstance(comp_cls, type) and issubclass(comp_cls, bt2._UserSourceComponent)
+    ):
+        type_prefix = "src"
+    elif isinstance(comp_cls, bt2._FilterComponentClassConst) or (
+        isinstance(comp_cls, type) and issubclass(comp_cls, bt2._UserFilterComponent)
+    ):
+        type_prefix = "flt"
+    else:
+        assert isinstance(comp_cls, bt2._SinkComponentClassConst) or (
+            isinstance(comp_cls, type) and issubclass(comp_cls, bt2._UserSinkComponent)
+        )
+        type_prefix = "sink"
+
+    # Get the plugin name if available
+    plugin_name = getattr(comp_cls, "plugin_name", None) or "<none>"
+
+    # Create string
+    return "{}.{}.{}".format(type_prefix, plugin_name, comp_cls.name)
+
+
+# Returns a string representation of a component spec for logging.
+def _fmt_comp_spec(
+    comp_spec: Union["bt2.ComponentSpec", SinkComponentSpec], indent: int
+) -> str:
+    return "{ind}`{cc_spec}`:\n{ind}  Params: {params}".format(
+        ind=" " * indent,
+        cc_spec=_fmt_comp_cls_spec(comp_spec.component_class),
+        params=repr(comp_spec.params),
+    )
+
+
+# Returns a unique component name for a component class and the updated
+# next suffix.
+#
+# `all_comps` is a list of all components created so far.
+#
+# `next_suffix` is the next suffix to use if a name collision occurs.
+def _get_unique_comp_name(
+    comp_cls: "_AnyCompClsT",
+    all_comps: List["_AnyCompT"],
+    next_suffix: int,
+) -> Tuple[str, int]:
+    name = comp_cls.name
+
+    if name in [comp.name for comp in all_comps]:
+        name += "-{}".format(next_suffix)
+        next_suffix += 1
+
+    return name, next_suffix
+
+
+# Creates a component from a component spec.
+#
+# `all_comps` is a list of all components created so far.
+#
+# `next_suffix` is the next suffix to use if a name collision occurs.
+#
+# Returns the created component and the updated next suffix.
+def _create_comp(
+    graph: "bt2.Graph",
+    comp_spec: Union["bt2.ComponentSpec", SinkComponentSpec],
+    all_comps: List["_AnyCompT"],
+    next_suffix: int,
+) -> Tuple["_AnyCompT", int]:
+    import bt2
+
+    comp_cls = comp_spec.component_class
+    comp_name, next_suffix = _get_unique_comp_name(comp_cls, all_comps, next_suffix)
+    _logger.info(
+        "  Instantiating `{}` as component `{}`".format(
+            _fmt_comp_cls_spec(comp_cls), comp_name
+        )
+    )
+    comp = graph.add_component(
+        comp_cls,
+        comp_name,
+        typing.cast(bt2._ComponentParams, comp_spec.params),
+        None,
+        (
+            bt2.LoggingLevel.NONE
+            if comp_spec.logging_level is None
+            else comp_spec.logging_level
+        ),
+    )
+    all_comps.append(comp)
+    return comp, next_suffix
+
+
+# Returns the next free input port of an `flt.utils.muxer` component.
+def _get_free_muxer_input_port(
+    muxer_comp: "bt2._GenericFilterComponentConst",
+) -> Optional["bt2._InputPortConst"]:
+    for port in muxer_comp.input_ports.values():
+        if not port.is_connected:
+            return port
+
+    return
+
+
+# Logs and connects ports.
+def _connect_ports(
+    graph: "bt2.Graph",
+    out_port: "bt2._OutputPortConst",
+    out_comp: "_AnyCompT",
+    in_port: "bt2._InputPortConst",
+    in_comp: "_AnyCompT",
+) -> None:
+    _logger.info(
+        "  Connecting ports: `{}` of `{}` → `{}` of `{}`".format(
+            out_port.name, out_comp.name, in_port.name, in_comp.name
+        )
+    )
+    graph.connect_ports(out_port, in_port)
+
+
+# Runs a graph to completion with the given component specifications.
+#
+# Similar to `bt2.TraceCollectionMessageIterator`, but:
+#
+# • Not an iterator (runs to completion).
+# • Accepts a single sink component spec.
+# • No stream intersection feature.
+# • No `flt.utils.trimmer` feature.
+# • No custom plugin set.
+#
+# `src_component_specs` and `flt_component_specs` are like
+# their bt2.TraceCollectionMessageIterator.__init__() equivalent.
+def convert(
+    src_component_specs: Union[
+        str,
+        pathlib.Path,
+        "bt2.AutoSourceComponentSpec",
+        "bt2.ComponentSpec",
+        Iterable[
+            Union[str, pathlib.Path, "bt2.AutoSourceComponentSpec", "bt2.ComponentSpec"]
+        ],
+    ],
+    sink_component_spec: SinkComponentSpec,
+    flt_component_specs: Optional[
+        Union["bt2.ComponentSpec", Iterable["bt2.ComponentSpec"]]
+    ] = None,
+    mip_version: Optional[int] = None,
+) -> None:
+    import bt2
+
+    _logger.info("btu.convert():")
+
+    # Normalize `src_component_specs` to a list
+    if isinstance(
+        src_component_specs,
+        (str, pathlib.Path, bt2.AutoSourceComponentSpec, bt2.ComponentSpec),
+    ):
+        src_component_specs = [src_component_specs]
+
+    # Convert strings to `AutoSourceComponentSpec`
+    src_component_specs = [
+        (
+            bt2.AutoSourceComponentSpec(str(spec))
+            if isinstance(spec, (str, pathlib.Path))
+            else spec
+        )
+        for spec in src_component_specs
+    ]
+
+    # Normalize `flt_component_specs` to a list
+    if isinstance(flt_component_specs, bt2.ComponentSpec):
+        flt_component_specs = [flt_component_specs]
+
+    if flt_component_specs is None:
+        flt_component_specs = []
+
+    # Combine all source component specs
+    all_src_component_specs = [
+        spec for spec in src_component_specs if type(spec) is bt2.ComponentSpec
+    ] + bt2.source_component_specs_from_auto_source_component_specs(
+        [
+            spec
+            for spec in src_component_specs
+            if type(spec) is bt2.AutoSourceComponentSpec
+        ]
+    )
+
+    # Validate filter component specs and convert to list
+    flt_component_specs = list(flt_component_specs)
+
+    for comp_spec in flt_component_specs:
+        assert isinstance(comp_spec, bt2.ComponentSpec)
+
+    # Log source component specs
+    _logger.info("  Source component specs ({})".format(len(all_src_component_specs)))
+
+    for comp_spec in all_src_component_specs:
+        _logger.info(_fmt_comp_spec(comp_spec, 4))
+
+    # Log filter component specs
+    _logger.info("  Filter component specs ({})".format(len(flt_component_specs)))
+
+    for comp_spec in flt_component_specs:
+        _logger.info(_fmt_comp_spec(comp_spec, 4))
+
+    # Log sink component spec
+    _logger.info("  Sink component spec:")
+    _logger.info(_fmt_comp_spec(sink_component_spec, 4))
+
+    # State for unique component naming
+    next_suffix = 1
+    all_comps = []  # type: List[_AnyCompT]
+
+    # Compute greatest operative MIP version if not provided
+    if mip_version is None:
+        _logger.info("  Computing greatest operative MIP version")
+        descriptors = []  # type: List[bt2.ComponentDescriptor]
+
+        for comp_spec in itertools.chain(
+            all_src_component_specs, flt_component_specs, [sink_component_spec]
+        ):
+            descriptors.append(
+                bt2.ComponentDescriptor(
+                    comp_spec.component_class,
+                    typing.cast(bt2._ComponentParams, comp_spec.params),
+                )
+            )
+
+        mip_version = bt2.get_greatest_operative_mip_version(descriptors)
+
+        if mip_version is None:
+            raise RuntimeError("failed to find an operative MIP version")
+
+    # Build graph
+    _logger.info("  Creating graph with MIP {}".format(mip_version))
+    graph = bt2.Graph(mip_version)
+
+    # Create muxer
+    plugin = bt2.find_plugin("utils")
+
+    if plugin is None:
+        raise RuntimeError(
+            "cannot find `utils` plugin (needed for the `flt.utils.muxer`)"
+        )
+
+    if "muxer" not in plugin.filter_component_classes:
+        raise RuntimeError("cannot find `flt.utils.muxer` within the `utils` plugin")
+
+    _logger.info("  Creating component `muxer` (utils.muxer)")
+    muxer_comp = graph.add_component(plugin.filter_component_classes["muxer"], "muxer")
+    all_comps.append(muxer_comp)
+
+    # Track the last output port and its component in the chain
+    last_out_port = muxer_comp.output_ports["out"]
+    last_out_comp = muxer_comp
+
+    # Create filter components (chained)
+    for comp_spec in flt_component_specs:
+        flt_comp, next_suffix = _create_comp(graph, comp_spec, all_comps, next_suffix)
+        flt_comp = typing.cast(bt2._GenericFilterComponentConst, flt_comp)
+        out_port = list(flt_comp.output_ports.values())[0]
+        in_port = list(flt_comp.input_ports.values())[0]
+        _connect_ports(graph, last_out_port, last_out_comp, in_port, flt_comp)
+        last_out_port = out_port
+        last_out_comp = flt_comp
+
+    # Create source components
+    src_comps = []  # type: List[_AnyCompT]
+
+    for comp_spec in all_src_component_specs:
+        src_comp, next_suffix = _create_comp(graph, comp_spec, all_comps, next_suffix)
+        src_comps.append(src_comp)
+
+    # Connect source output ports to muxer input ports
+    for src_comp in src_comps:
+        src_comp = typing.cast(bt2._GenericSourceComponentConst, src_comp)
+
+        for out_port in src_comp.output_ports.values():
+            muxer_in_port = _get_free_muxer_input_port(muxer_comp)
+            assert muxer_in_port is not None
+            _connect_ports(graph, out_port, src_comp, muxer_in_port, muxer_comp)
+
+    # Create sink component and connect it
+    sink_comp, next_suffix = _create_comp(
+        graph, sink_component_spec, all_comps, next_suffix
+    )
+    sink_comp = typing.cast(bt2._GenericSinkComponentConst, sink_comp)
+    sink_in_port = list(sink_comp.input_ports.values())[0]
+    _connect_ports(graph, last_out_port, last_out_comp, sink_in_port, sink_comp)
+
+    # Run graph to completion, retrying on `bt2.TryAgain` (like the
+    # CLI does).
+    _logger.info("  Running graph")
+
+    while True:
+        try:
+            graph.run()
+            break
+        except bt2.TryAgain:
+            _logger.debug("  Got `bt2.TryAgain`: sleeping 0.1 s")
+            time.sleep(0.1)
+
+    _logger.info("  Graph completed")
