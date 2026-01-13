@@ -12,6 +12,7 @@ import typing
 import logging
 import pathlib
 import platform
+import tempfile
 import textwrap
 import itertools
 import subprocess
@@ -800,3 +801,87 @@ def convert(
             time.sleep(0.1)
 
     _logger.info("  Graph completed")
+
+
+# Runs a graph with `sink.text.details` using convert() and compares
+# the output to the expectation `expect` (a string or the path of an
+# expectation file to open).
+#
+# `src_component_specs` and `flt_component_specs` are like
+# their convert() equivalent.
+#
+# `expect` is the expected output, either:
+#
+# • A `pathlib.Path` object (expectation file path).
+# • A string (dedented before comparison).
+#
+# `details_params` is an optional dictionary of initialization
+# parameters to pass to the `sink.text.details` component.
+#
+# `mip_version` is like its convert() equivalent.
+#
+# This function asserts that the output matches the expectation
+# (both stripped of leading/trailing whitespace).
+def convert_sink_text_details_test(
+    src_component_specs: Union[
+        str,
+        pathlib.Path,
+        "bt2.AutoSourceComponentSpec",
+        "bt2.ComponentSpec",
+        Iterable[
+            Union[str, pathlib.Path, "bt2.AutoSourceComponentSpec", "bt2.ComponentSpec"]
+        ],
+    ],
+    expect: Union[pathlib.Path, str],
+    flt_component_specs: Optional[
+        Union["bt2.ComponentSpec", Iterable["bt2.ComponentSpec"]]
+    ] = None,
+    details_params: Optional[Dict[str, Any]] = None,
+    mip_version: Optional[int] = None,
+) -> None:
+    import bt2
+
+    if details_params is None:
+        details_params = {}
+
+    # Find the `text` plugin and get `details` sink component class
+    plugin = bt2.find_plugin("text")
+
+    if plugin is None:
+        raise RuntimeError("cannot find `text` plugin")
+
+    if "details" not in plugin.sink_component_classes:
+        raise RuntimeError("cannot find `sink.text.details` within the `text` plugin")
+
+    with tempfile.TemporaryDirectory(prefix="bt-test-sink.text.details-") as temp_dir:
+        # Output file path
+        temp_path = pathlib.Path(temp_dir) / "output.txt"
+
+        # Add the path to the details params
+        full_params = dict(details_params)
+        full_params["path"] = str(temp_path)
+
+        # Create sink component spec
+        sink_spec = SinkComponentSpec(
+            plugin.sink_component_classes["details"], full_params
+        )
+
+        # Run the conversion
+        convert(
+            src_component_specs,
+            sink_spec,
+            flt_component_specs,
+            mip_version=mip_version,
+        )
+
+        # Read the output
+        output = temp_path.read_text().strip()
+
+        # Get expected output
+        if isinstance(expect, pathlib.Path):
+            expected = expect.read_text().strip()
+        else:
+            expected = textwrap.dedent(expect).strip()
+
+        # Compare
+        assert output == expected
