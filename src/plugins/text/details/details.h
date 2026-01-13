@@ -10,6 +10,7 @@
 #include <glib.h>
 #include <babeltrace2/babeltrace.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 /*
  * This structure contains a hash table which maps trace IR stream class
@@ -102,7 +103,13 @@ struct details_comp {
 
 		/* Write UID */
 		bool with_uid;
+
+		/* Output path (`NULL` for standard output) */
+		GString *path;
 	} cfg;
+
+	/* Output file (standard output if `cfg.path` is `NULL`) */
+	FILE *out;
 
 	/*
 	 * `const bt_trace_class *` (weak) ->

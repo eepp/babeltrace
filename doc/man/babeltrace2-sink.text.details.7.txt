@@ -4,7 +4,7 @@
 
 = babeltrace2-sink.text.details(7)
 :manpagetype: component class
-:revdate: 15 January 2025
+:revdate: 13 January 2026
 
 
 == NAME
@@ -17,7 +17,8 @@ component class
 
 A Babeltrace~2 compcls:sink.text.details component
 deterministically prints the messages it consumes, with all the possible
-details, to the standard output.
+details, to the standard output. You can use the param:path parameter
+to make the component write to a file instead.
 
 ----
             +-------------------+
@@ -129,6 +130,10 @@ In compact mode, the component still prints the full metadata blocks.
 You can remove such blocks with the param:with-metadata parameter.
 +
 Default: false.
+
+param:path='PATH' vtype:[optional string]::
+    Print the text output to the file 'PATH' instead of the standard
+    output.
 
 param:with-metadata='VAL' vtype:[optional boolean]::
     If 'VAL' is false, then don't print metadata blocks.
