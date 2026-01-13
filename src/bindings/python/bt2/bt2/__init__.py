@@ -321,6 +321,7 @@ from bt2.trace_collection_message_iterator import (
     ComponentSpec,
     AutoSourceComponentSpec,
     TraceCollectionMessageIterator,
+    source_component_specs_from_auto_source_component_specs,
 )
 
 if (sys.version_info.major, sys.version_info.minor) != (3, 4):

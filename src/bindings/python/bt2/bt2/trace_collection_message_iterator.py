@@ -155,9 +155,16 @@ class AutoSourceComponentSpec(_BaseComponentSpec):
         return self._input
 
 
-def _auto_discover_source_component_specs(auto_source_comp_specs, plugin_set):
-    # Transform a list of `AutoSourceComponentSpec` in a list of `ComponentSpec`
-    # using the automatic source discovery mechanism.
+# Transform a list of `AutoSourceComponentSpec` into a list of
+# `ComponentSpec` using the automatic source component
+# discovery mechanism.
+def source_component_specs_from_auto_source_component_specs(
+    auto_source_comp_specs: typing.Sequence["AutoSourceComponentSpec"],
+    plugin_set: typing.Optional[bt2_plugin._PluginSet] = None,
+) -> typing.List["ComponentSpec"]:
+    for spec in auto_source_comp_specs:
+        bt2_utils._check_type(spec, AutoSourceComponentSpec)
+
     inputs = bt2_value.ArrayValue([spec.input for spec in auto_source_comp_specs])
 
     if plugin_set is None:
@@ -208,13 +215,13 @@ def _auto_discover_source_component_specs(auto_source_comp_specs, plugin_set):
         logging_level = bt2_logging.LoggingLevel.NONE
         obj = None
 
-        # Compute `params` for this component by piling up params given to all
-        # AutoSourceComponentSpec objects that contributed in the instantiation
-        # of this component.
+        # Compute `params` for this component by piling up params given
+        # to all `AutoSourceComponentSpec` objects that contributed in
+        # the instantiation of this component.
         #
-        # The effective log level for a component is the last one specified
-        # across the AutoSourceComponentSpec that contributed in its
-        # instantiation.
+        # The effective log level for a component is the last one
+        # specified across the `AutoSourceComponentSpec` that
+        # contributed in its instantiation.
         for idx in comp_orig_indices:
             orig_spec = auto_source_comp_specs[idx]
 
@@ -340,7 +347,7 @@ class TraceCollectionMessageIterator(bt2_message_iterator._MessageIterator):
             for spec in source_component_specs
             if type(spec) is AutoSourceComponentSpec
         ]
-        self._src_comp_specs += _auto_discover_source_component_specs(
+        self._src_comp_specs += source_component_specs_from_auto_source_component_specs(
             auto_src_comp_specs, plugin_set
         )
 
