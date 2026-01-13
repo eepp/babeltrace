@@ -928,3 +928,56 @@ def tcmi_events(*args: Any, **kwargs: Any) -> List[Any]:
     )
 
     return [m.event for m in msgs if isinstance(m, bt2._EventMessageConst)]
+
+
+# Component class type for find_comp_cls_in_path().
+class CompClsType(enum.Enum):
+    SOURCE = "src"
+    FILTER = "flt"
+    SINK = "sink"
+
+
+# Finds and returns a component class named `comp_cls_name` of type
+# `comp_cls_type` within a plugin named `plugin_name` found by searching
+# `plugin_path`.
+#
+# Raises `RuntimeError` if no such plugin or component class exists.
+def find_comp_cls_in_path(
+    plugin_path: pathlib.Path,
+    plugin_name: str,
+    comp_cls_type: CompClsType,
+    comp_cls_name: str,
+) -> "_AnyCompClsT":
+    import bt2
+
+    _logger.info(
+        "Finding `{}.{}.{}` in `{}`".format(
+            comp_cls_type.value, plugin_name, comp_cls_name, plugin_path
+        )
+    )
+    plugins = bt2.find_plugins_in_path(str(plugin_path))
+
+    if plugins is None:
+        raise RuntimeError("Cannot find any plugin in path `{}`".format(plugin_path))
+
+    for plugin in typing.cast(Iterable[Any], plugins):
+        if plugin.name == plugin_name:
+            if comp_cls_type == CompClsType.SOURCE:
+                comp_classes = plugin.source_component_classes
+            elif comp_cls_type == CompClsType.FILTER:
+                comp_classes = plugin.filter_component_classes
+            else:
+                comp_classes = plugin.sink_component_classes
+
+            if comp_cls_name not in comp_classes:
+                raise RuntimeError(
+                    "Cannot find component class `{}` in plugin `{}` from `{}`".format(
+                        comp_cls_name, plugin_name, plugin_path
+                    )
+                )
+
+            return typing.cast("_AnyCompClsT", comp_classes[comp_cls_name])
+
+    raise RuntimeError(
+        "Cannot find plugin `{}` in path `{}`".format(plugin_name, plugin_path)
+    )
