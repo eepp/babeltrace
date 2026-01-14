@@ -1795,33 +1795,23 @@ class _LttngLiveViewerSession:
 
 # An LTTng live TCP server.
 #
-# On creation, it binds to `localhost` on the TCP port `port` if not `None`, or
-# on an OS-assigned TCP port otherwise. It writes the decimal TCP port number
-# to a temporary port file.  It renames the temporary port file to
-# `port_filename`.
-#
-# `tracing_session_descriptors` is a list of tracing session descriptors
-# (`LttngTracingSessionDescriptor`) to serve.
+# On creation, it binds to `localhost` on a given TCP port, or on an
+# OS-assigned TCP port, and starts listening.
 #
 # This server accepts a single viewer (client).
 #
-# When the viewer closes the connection, the server's constructor
-# returns.
+# Call `serve()` to accept and handle a client connection (blocking).
+# The `port` property is available immediately after construction.
 class LttngLiveServer:
     def __init__(
         self,
-        port: Optional[int],
-        port_filename: Optional[str],
         tracing_session_descriptors: Iterable[LttngTracingSessionDescriptor],
-        max_query_data_response_size: Optional[int],
-        max_minor_version: int,
+        max_query_data_response_size: Optional[int] = None,
+        max_minor_version: int = 10,
+        port: Optional[int] = None,
     ):
         _logger.info("Server configuration:")
-
         _logger.info("  Maximum minor version: {}".format(max_minor_version))
-
-        if port_filename is not None:
-            _logger.info("  Port file name: `{}`".format(port_filename))
 
         if max_query_data_response_size is not None:
             _logger.info(
@@ -1848,37 +1838,34 @@ class LttngLiveServer:
             for trace in ts_descr.traces:
                 _logger.info('    Trace: path="{}"'.format(trace.path))
 
-        self._max_minor_version = max_minor_version
-        self._ts_descriptors = tracing_session_descriptors
+        self._ts_descriptors = list(tracing_session_descriptors)
         self._max_query_data_response_size = max_query_data_response_size
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._max_minor_version = max_minor_version
         self._codec = _LttngLiveViewerProtocolCodec()
 
-        # Port 0: OS assigns an unused port
-        serv_addr = ("localhost", port if port is not None else 0)
-        self._sock.bind(serv_addr)
+        # Bind and listen now so port is immediately available and
+        # connections can be accepted as soon as serve() is called.
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock.bind(("localhost", port if port is not None else 0))
 
-        if port_filename is not None:
-            self._write_port_to_file(port_filename)
-
-        print("Listening on port {}".format(self._server_port))
-
-        for ts_descr in tracing_session_descriptors:
-            info = ts_descr.info
-            print(
-                "net://localhost:{}/host/{}/{}".format(
-                    self._server_port, info.hostname, info.name
-                )
-            )
-
-        try:
-            self._listen()
-        finally:
-            self._sock.close()
-            _logger.info("Closed connection and socket.")
+        # Backlog must be present for Python version < 3.5.
+        #
+        # 128 is an arbitrary number since we expect only one
+        # connection anyway.
+        #
+        # Call listen() here in the constructor, not in serve(), to
+        # avoid a race condition when used with
+        # `LttngLiveServerProcess`: the child process creates this
+        # server and then signals the port to the parent process before
+        # calling serve(). If we don't call listen() before signaling,
+        # the parent (or its client) could attempt to connect before
+        # serve() calls listen(), causing the connection to be refused.
+        self._sock.listen(128)
+        _logger.info("LttngLiveServer: listening on port {}".format(self.port))
 
     @property
-    def _server_port(self):
+    def port(self) -> int:
         return self._sock.getsockname()[1]
 
     def _recv_command(self):
@@ -1973,10 +1960,7 @@ class LttngLiveServer:
             self._send_reply(viewer_session.handle_command(cmd))
 
     def _listen(self):
-        _logger.info("Listening: port={}".format(self._server_port))
-        # Backlog must be present for Python version < 3.5.
-        # 128 is an arbitrary number since we expect only 1 connection anyway.
-        self._sock.listen(128)
+        _logger.info("Waiting for viewer connection: port={}".format(self.port))
         self._conn, viewer_addr = self._sock.accept()
         _logger.info(
             "Accepted viewer: addr={}:{}".format(viewer_addr[0], viewer_addr[1])
@@ -1987,48 +1971,79 @@ class LttngLiveServer:
         finally:
             self._conn.close()
 
-    def _write_port_to_file(self, port_filename: str):
-        # Write the port number to a temporary file.
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False, dir=os.path.dirname(port_filename)
-        ) as tmp_port_file:
-            print(self._server_port, end="", file=tmp_port_file)
+    # Accepts and handles a single client connection, blocking
+    # until done.
+    def serve(self):
+        try:
+            self._listen()
+        finally:
+            self.close()
+            _logger.info("Server closed socket")
 
-        # Rename temporary file to real file.
-        #
-        # For unknown reasons, on Windows, moving the port file from its
-        # temporary location to its final location (where the user of
-        # the server expects it to appear) may raise a `PermissionError`
-        # exception.
-        #
-        # We suppose it's possible that something in the Windows kernel
-        # hasn't completely finished using the file when we try to move
-        # it.
-        #
-        # Use a wait-and-retry scheme as a (bad) workaround.
-        num_attempts = 5
-        retry_delay_s = 1
+    # Closes the server socket.
+    def close(self):
+        _logger.info("Server closing socket")
+        self._sock.close()
 
-        for attempt in reversed(range(num_attempts)):
-            try:
-                os.replace(tmp_port_file.name, port_filename)
-                _logger.info(
-                    'Renamed port file: src-path="{}", dst-path="{}"'.format(
-                        tmp_port_file.name, port_filename
-                    )
+    # Creates a server from the JSON session configuration file
+    # `sessions_filename`.
+    #
+    # This function prepends `trace_path_prefix` to relative trace
+    # paths in the configuration.
+    #
+    # Other parameters are forwarded to LttngLiveServer.__init__().
+    @classmethod
+    def from_config_file(
+        cls,
+        sessions_filename: str,
+        trace_path_prefix: Optional[str] = None,
+        max_query_data_response_size: Optional[int] = None,
+        max_minor_version: int = 10,
+        port: Optional[int] = None,
+    ) -> "LttngLiveServer":
+        descriptors = _session_descriptors_from_path(
+            sessions_filename, trace_path_prefix
+        )
+        return cls(
+            descriptors,
+            max_query_data_response_size=max_query_data_response_size,
+            max_minor_version=max_minor_version,
+            port=port,
+        )
+
+
+# Writes a port number to a file atomically.
+#
+# Uses a temporary file and rename for atomicity. Includes retry logic
+# for Windows where the rename may fail with `PermissionError`.
+def _write_port_to_file(port: int, port_filename: str):
+    with tempfile.NamedTemporaryFile(
+        mode="w", delete=False, dir=os.path.dirname(port_filename)
+    ) as tmp_port_file:
+        print(port, end="", file=tmp_port_file)
+
+    retry_delay_s = 1
+
+    for attempt in reversed(range(5)):
+        try:
+            os.replace(tmp_port_file.name, port_filename)
+            _logger.info(
+                'Renamed port file: src-path="{}", dst-path="{}"'.format(
+                    tmp_port_file.name, port_filename
                 )
-                return
-            except PermissionError:
-                _logger.info(
-                    'Permission error while attempting to rename port file; retrying in {} second: src-path="{}", dst-path="{}"'.format(
-                        retry_delay_s, tmp_port_file.name, port_filename
-                    )
+            )
+            return
+        except PermissionError:
+            _logger.info(
+                'Permission error while attempting to rename port file; retrying in {} s: src-path="{}", dst-path="{}"'.format(
+                    retry_delay_s, tmp_port_file.name, port_filename
                 )
+            )
 
-                if attempt == 0:
-                    raise
+            if attempt == 0:
+                raise
 
-                time.sleep(retry_delay_s)
+            time.sleep(retry_delay_s)
 
 
 def _session_descriptors_from_path(
@@ -2183,21 +2198,18 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args(args=remaining_args)
-    sessions_filename = args.sessions_filename  # type: str
-    trace_path_prefix = args.trace_path_prefix  # type: str | None
-    sessions = _session_descriptors_from_path(
-        sessions_filename,
-        trace_path_prefix,
+
+    server = LttngLiveServer.from_config_file(
+        args.sessions_filename,
+        args.trace_path_prefix,
+        args.max_query_data_response_size,
+        args.server_max_minor_version,
+        args.port,
     )
 
-    port = args.port  # type: int | None
-    port_filename = args.port_filename  # type: str | None
-    max_query_data_response_size = args.max_query_data_response_size  # type: int | None
-    server_max_minor_version = args.server_max_minor_version  # type: int
-    LttngLiveServer(
-        port,
-        port_filename,
-        sessions,
-        max_query_data_response_size,
-        server_max_minor_version,
-    )
+    if args.port_filename is not None:
+        _write_port_to_file(server.port, args.port_filename)
+
+    print("Listening on port: {}".format(server.port))
+
+    server.serve()
