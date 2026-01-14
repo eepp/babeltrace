@@ -25,6 +25,8 @@ from typing import Any, Callable  # noqa: F401
 
 # isort: on
 
+_logger = logging.getLogger("LTTng live server")
+
 
 # An entry within the index of an LTTng data stream.
 class _LttngDataStreamIndexEntry:
@@ -541,7 +543,7 @@ class _LttngLiveViewerProtocolCodec:
         payload_size, cmd_type, version = self._unpack(
             self._COMMAND_HEADER_STRUCT_FMT, data
         )
-        logging.info(
+        _logger.info(
             "Decoded command header: payload-size={}, cmd-type={}, version={}".format(
                 payload_size, cmd_type, version
             )
@@ -744,7 +746,7 @@ class _LttngDataStreamIndex(Sequence[_LttngIndexEntryT]):
 
             self._add_beacons(beacons_list)
 
-        logging.info(
+        _logger.info(
             'Built data stream index entries: path="{}", count={}'.format(
                 path, len(self._entries)
             )
@@ -767,7 +769,7 @@ class _LttngDataStreamIndex(Sequence[_LttngIndexEntryT]):
             size = struct.calcsize(fmt)
 
             while True:
-                logging.debug(
+                _logger.debug(
                     'Decoding data stream index entry: path="{}", offset={}'.format(
                         self._path, f.tell()
                     )
@@ -869,7 +871,7 @@ class _LttngDataStream(_LttngStream):
         self._index = _LttngDataStreamIndex(index_path, beacons_json)
         assert os.path.isfile(path)
         self._file = open(path, "rb")
-        logging.info(
+        _logger.info(
             'Built data stream: path="{}", channel-name="{}"'.format(
                 path, self._channel_name
             )
@@ -896,7 +898,7 @@ class _LttngMetadataStreamSection:
     def __init__(self, timestamp: int, data: bytes):
         self._timestamp = timestamp
         self._data = data
-        logging.info(
+        _logger.info(
             "Built metadata stream section: ts={}, data-len={}".format(
                 self._timestamp, len(self._data)
             )
@@ -922,7 +924,7 @@ class _LttngMetadataStream(_LttngStream):
         super().__init__(creation_timestamp)
         self._path = metadata_file_path
         self._sections = config_sections
-        logging.info(
+        _logger.info(
             "Built metadata stream: path={}, section-len={}".format(
                 self._path, len(self._sections)
             )
@@ -1085,7 +1087,7 @@ class LttngTrace(Sequence[_LttngDataStream]):
         self._creation_timestamp = creation_timestamp
         self._create_metadata_stream(trace_dir, metadata_sections_json)
         self._create_data_streams(trace_dir, beacons_json)
-        logging.info('Built trace: path="{}"'.format(trace_dir))
+        _logger.info('Built trace: path="{}"'.format(trace_dir))
 
     def _create_data_streams(
         self, trace_dir: str, beacons_json: Optional[tjson.ObjVal]
@@ -1208,7 +1210,7 @@ class _LttngLiveViewerSessionDataStreamState(_LttngLiveViewerSessionStreamState)
         self._metadata_stream_id = metadata_stream_id
         self._cur_index_entry_index = 0
         fmt = 'Built data stream state: id={}, ts-id={}, ts-name="{}", path="{}"'
-        logging.info(
+        _logger.info(
             fmt.format(
                 info.id,
                 ts_state.tracing_session_descriptor.info.tracing_session_id,
@@ -1266,7 +1268,7 @@ class _LttngLiveViewerSessionMetadataStreamState(_LttngLiveViewerSessionStreamSt
 
         self._all_data_is_sent = False
         fmt = 'Built metadata stream state: id={}, ts-id={}, ts-name="{}", path="{}"'
-        logging.info(
+        _logger.info(
             fmt.format(
                 info.id,
                 ts_state.tracing_session_descriptor.info.tracing_session_id,
@@ -1294,7 +1296,7 @@ class _LttngLiveViewerSessionMetadataStreamState(_LttngLiveViewerSessionStreamSt
     @property
     def cur_section(self):
         fmt = "Get current metadata section: section-idx={}"
-        logging.info(fmt.format(self._cur_metadata_stream_section_index))
+        _logger.info(fmt.format(self._cur_metadata_stream_section_index))
         if self._cur_metadata_stream_section_index == len(
             self._metadata_stream.sections
         ):
@@ -1417,7 +1419,7 @@ class _LttngLiveViewerSessionTracingSessionState:
 
         self._is_attached = False
         fmt = 'Built tracing session state: id={}, name="{}"'
-        logging.info(fmt.format(tc_descr.info.tracing_session_id, tc_descr.info.name))
+        _logger.info(fmt.format(tc_descr.info.tracing_session_id, tc_descr.info.name))
 
     @property
     def tracing_session_descriptor(self):
@@ -1541,7 +1543,7 @@ class _LttngLiveViewerSession:
         return stream
 
     def handle_command(self, cmd: _LttngLiveViewerCommand):
-        logging.info(
+        _logger.info(
             "Handling command in viewer session: cmd-cls-name={}".format(
                 cmd.__class__.__name__
             )
@@ -1559,7 +1561,7 @@ class _LttngLiveViewerSession:
         self, cmd: _LttngLiveViewerAttachToTracingSessionCommand
     ):
         fmt = 'Handling "attach to tracing session" command: ts-id={}, offset={}, seek-type={}'
-        logging.info(fmt.format(cmd.tracing_session_id, cmd.offset, cmd.seek_type))
+        _logger.info(fmt.format(cmd.tracing_session_id, cmd.offset, cmd.seek_type))
         ts_state = self._get_tracing_session_state(cmd.tracing_session_id)
         info = ts_state.tracing_session_descriptor.info
 
@@ -1590,7 +1592,7 @@ class _LttngLiveViewerSession:
         self, cmd: _LttngLiveViewerDetachFromTracingSessionCommand
     ):
         fmt = 'Handling "detach from tracing session" command: ts-id={}'
-        logging.info(fmt.format(cmd.tracing_session_id))
+        _logger.info(fmt.format(cmd.tracing_session_id))
         ts_state = self._get_tracing_session_state(cmd.tracing_session_id)
         info = ts_state.tracing_session_descriptor.info
 
@@ -1624,7 +1626,7 @@ class _LttngLiveViewerSession:
         self, cmd: _LttngLiveViewerGetNextDataStreamIndexEntryCommand
     ):
         fmt = 'Handling "get next data stream index entry" command: stream-id={}'
-        logging.info(fmt.format(cmd.stream_id))
+        _logger.info(fmt.format(cmd.stream_id))
         stream_state = self._get_data_stream_state(cmd.stream_id)
         metadata_stream_state = self._get_metadata_stream_state(
             stream_state.metadata_stream_id
@@ -1670,7 +1672,7 @@ class _LttngLiveViewerSession:
         self, cmd: _LttngLiveViewerGetDataStreamPacketDataCommand
     ):
         fmt = 'Handling "get data stream packet data" command: stream-id={}, offset={}, req-length={}'
-        logging.info(fmt.format(cmd.stream_id, cmd.offset, cmd.req_length))
+        _logger.info(fmt.format(cmd.stream_id, cmd.offset, cmd.req_length))
         stream_state = self._get_data_stream_state(cmd.stream_id)
         data_response_length = cmd.req_length
 
@@ -1688,7 +1690,7 @@ class _LttngLiveViewerSession:
                 cmd.req_length, self._max_query_data_response_size
             )
             fmt = 'Limiting "get data stream packet data" command: req-length={} actual response size={}'
-            logging.info(fmt.format(cmd.req_length, data_response_length))
+            _logger.info(fmt.format(cmd.req_length, data_response_length))
 
         data = stream_state.stream.get_data(cmd.offset, data_response_length)
         status = _LttngLiveViewerGetDataStreamPacketDataReply.Status.OK
@@ -1698,7 +1700,7 @@ class _LttngLiveViewerSession:
         self, cmd: _LttngLiveViewerGetMetadataStreamDataCommand
     ):
         fmt = 'Handling "get metadata stream data" command: stream-id={}'
-        logging.info(fmt.format(cmd.stream_id))
+        _logger.info(fmt.format(cmd.stream_id))
         metadata_stream_state = self._get_metadata_stream_state(cmd.stream_id)
 
         if metadata_stream_state.all_data_is_sent:
@@ -1716,7 +1718,7 @@ class _LttngLiveViewerSession:
             metadata_stream_state.goto_next_section()
 
         fmt = 'Replying to "get metadata stream data" command: metadata-size={}'
-        logging.info(fmt.format(len(metadata_section.data)))
+        _logger.info(fmt.format(len(metadata_section.data)))
         return _LttngLiveViewerGetMetadataStreamDataContentReply(
             status, metadata_section.data
         )
@@ -1743,7 +1745,7 @@ class _LttngLiveViewerSession:
         self, cmd: _LttngLiveViewerGetNewStreamInfosCommand
     ):
         fmt = 'Handling "get new stream infos" command: ts-id={}'
-        logging.info(fmt.format(cmd.tracing_session_id))
+        _logger.info(fmt.format(cmd.tracing_session_id))
         newly_announced_stream_infos = self._get_stream_infos_ready_for_announcement()
 
         # Mark stream infos transmitted as part of the reply as
@@ -1773,7 +1775,7 @@ class _LttngLiveViewerSession:
     def _handle_get_tracing_session_infos_command(
         self, cmd: _LttngLiveViewerGetTracingSessionInfosCommand
     ):
-        logging.info('Handling "get tracing session infos" command.')
+        _logger.info('Handling "get tracing session infos" command.')
         infos = [
             tss.tracing_session_descriptor.info for tss in self._ts_states.values()
         ]
@@ -1783,7 +1785,7 @@ class _LttngLiveViewerSession:
     def _handle_create_viewer_session_command(
         self, cmd: _LttngLiveViewerCreateViewerSessionCommand
     ):
-        logging.info('Handling "create viewer session" command.')
+        _logger.info('Handling "create viewer session" command.')
         status = _LttngLiveViewerCreateViewerSessionReply.Status.OK
 
         # This does nothing here. In the LTTng relay daemon, it
@@ -1814,15 +1816,15 @@ class LttngLiveServer:
         max_query_data_response_size: Optional[int],
         max_minor_version: int,
     ):
-        logging.info("Server configuration:")
+        _logger.info("Server configuration:")
 
-        logging.info("  Maximum minor version: {}".format(max_minor_version))
+        _logger.info("  Maximum minor version: {}".format(max_minor_version))
 
         if port_filename is not None:
-            logging.info("  Port file name: `{}`".format(port_filename))
+            _logger.info("  Port file name: `{}`".format(port_filename))
 
         if max_query_data_response_size is not None:
-            logging.info(
+            _logger.info(
                 "  Maximum response data query size: `{}`".format(
                     max_query_data_response_size
                 )
@@ -1831,7 +1833,7 @@ class LttngLiveServer:
         for ts_descr in tracing_session_descriptors:
             info = ts_descr.info
             fmt = '  TS descriptor: name="{}", id={}, hostname="{}", live-timer-freq={}, client-count={}, stream-count={}, trace-format={}:'
-            logging.info(
+            _logger.info(
                 fmt.format(
                     info.name,
                     info.tracing_session_id,
@@ -1844,7 +1846,7 @@ class LttngLiveServer:
             )
 
             for trace in ts_descr.traces:
-                logging.info('    Trace: path="{}"'.format(trace.path))
+                _logger.info('    Trace: path="{}"'.format(trace.path))
 
         self._max_minor_version = max_minor_version
         self._ts_descriptors = tracing_session_descriptors
@@ -1873,7 +1875,7 @@ class LttngLiveServer:
             self._listen()
         finally:
             self._sock.close()
-            logging.info("Closed connection and socket.")
+            _logger.info("Closed connection and socket.")
 
     @property
     def _server_port(self):
@@ -1883,11 +1885,11 @@ class LttngLiveServer:
         data = bytes()
 
         while True:
-            logging.info("Waiting for viewer command.")
+            _logger.info("Waiting for viewer command.")
             buf = self._conn.recv(128)
 
             if not buf:
-                logging.info("Client closed connection.")
+                _logger.info("Client closed connection.")
 
                 if data:
                     raise RuntimeError(
@@ -1898,7 +1900,7 @@ class LttngLiveServer:
 
                 return
 
-            logging.info("Received data from viewer: length={}".format(len(buf)))
+            _logger.info("Received data from viewer: length={}".format(len(buf)))
 
             data += buf
 
@@ -1908,7 +1910,7 @@ class LttngLiveServer:
                 raise RuntimeError("Malformed command: {}".format(exc)) from exc
 
             if cmd is not None:
-                logging.info(
+                _logger.info(
                     "Received command from viewer: cmd-cls-name={}".format(
                         cmd.__class__.__name__
                     )
@@ -1917,7 +1919,7 @@ class LttngLiveServer:
 
     def _send_reply(self, reply: _LttngLiveViewerReply):
         data = self._codec.encode(reply)
-        logging.info(
+        _logger.info(
             "Sending reply to viewer: reply-cls-name={}, length={}".format(
                 reply.__class__.__name__, len(data)
             )
@@ -1936,7 +1938,7 @@ class LttngLiveServer:
             )
 
         # Create viewer session (arbitrary ID 23)
-        logging.info(
+        _logger.info(
             "LTTng live viewer connected: version={}.{}".format(cmd.major, cmd.minor)
         )
         viewer_session = _LttngLiveViewerSession(
@@ -1945,7 +1947,7 @@ class LttngLiveServer:
 
         # Set our effective minor version
         self._minor_version = min([self._max_minor_version, cmd.minor])
-        logging.info(
+        _logger.info(
             "Effective server version is available: version={}.{}".format(
                 2, self._minor_version
             )
@@ -1971,12 +1973,12 @@ class LttngLiveServer:
             self._send_reply(viewer_session.handle_command(cmd))
 
     def _listen(self):
-        logging.info("Listening: port={}".format(self._server_port))
+        _logger.info("Listening: port={}".format(self._server_port))
         # Backlog must be present for Python version < 3.5.
         # 128 is an arbitrary number since we expect only 1 connection anyway.
         self._sock.listen(128)
         self._conn, viewer_addr = self._sock.accept()
-        logging.info(
+        _logger.info(
             "Accepted viewer: addr={}:{}".format(viewer_addr[0], viewer_addr[1])
         )
 
@@ -2010,14 +2012,14 @@ class LttngLiveServer:
         for attempt in reversed(range(num_attempts)):
             try:
                 os.replace(tmp_port_file.name, port_filename)
-                logging.info(
+                _logger.info(
                     'Renamed port file: src-path="{}", dst-path="{}"'.format(
                         tmp_port_file.name, port_filename
                     )
                 )
                 return
             except PermissionError:
-                logging.info(
+                _logger.info(
                     'Permission error while attempting to rename port file; retrying in {} second: src-path="{}", dst-path="{}"'.format(
                         retry_delay_s, tmp_port_file.name, port_filename
                     )
