@@ -15,6 +15,7 @@ import logging
 import os.path
 import argparse
 import tempfile
+import multiprocessing
 from abc import ABC, abstractmethod
 from typing import Dict, Union, Iterable, Optional, Sequence, overload
 
@@ -2076,6 +2077,162 @@ def _write_port_to_file(port: int, port_filename: str):
                 raise
 
             time.sleep(retry_delay_s)
+
+
+def _lttng_live_server_process_target(
+    sessions_filename: str,
+    trace_path_prefix: Optional[str],
+    max_query_data_response_size: Optional[int],
+    max_minor_version: int,
+    port: Optional[int],
+    info_queue: "multiprocessing.Queue[tuple[int, Dict[str, str]]]",
+):
+    # Create the server in the child process
+    server = LttngLiveServer.from_config_file(
+        sessions_filename,
+        trace_path_prefix,
+        max_query_data_response_size,
+        max_minor_version,
+        port,
+    )
+
+    # Send server info back to parent
+    info_queue.put((server.port, server.session_urls))
+
+    # Serve (blocks until client disconnects or socket is closed)
+    server.serve()
+
+
+# Background process version of `LttngLiveServer`.
+#
+# This class takes configuration parameters rather than wrapping an
+# existing server instance because sockets cannot be "pickled" across
+# process boundaries.
+#
+# Offers wait() to wait for the completion of the server (when the
+# viewer client disconnects) and stop() to terminate the process.
+#
+# The `port`, `base_url`, `session_urls`, and `url` properties and
+# the session_url() method are available once start() returns.
+#
+# Use as a context manager to automatically handle waiting and stopping.
+class LttngLiveServerProcess:
+    def __init__(
+        self,
+        sessions_filename: str,
+        trace_path_prefix: Optional[str] = None,
+        max_query_data_response_size: Optional[int] = None,
+        max_minor_version: int = 10,
+        port: Optional[int] = None,
+    ):
+        self._sessions_filename = sessions_filename
+        self._trace_path_prefix = trace_path_prefix
+        self._max_query_data_response_size = max_query_data_response_size
+        self._max_minor_version = max_minor_version
+        self._port = port
+        self._process = None  # type: Optional[multiprocessing.Process]
+        self._server_port = None  # type: Optional[int]
+        self._session_urls = None  # type: Optional[Dict[str, str]]
+
+    @property
+    def port(self) -> int:
+        if self._server_port is None:
+            raise RuntimeError("Server not started")
+
+        return self._server_port
+
+    @property
+    def base_url(self) -> str:
+        return "net://localhost:{}".format(self.port)
+
+    @property
+    def session_urls(self) -> Dict[str, str]:
+        if self._session_urls is None:
+            raise RuntimeError("Background server process not started")
+
+        return self._session_urls
+
+    def session_url(self, session_name: str) -> str:
+        return self.session_urls[session_name]
+
+    @property
+    def url(self) -> str:
+        urls = list(self.session_urls.values())
+        assert len(urls) == 1
+        return urls[0]
+
+    @property
+    def is_alive(self) -> bool:
+        return self._process is not None and self._process.is_alive()
+
+    # Starts the server process.
+    #
+    # Blocks until the server is ready to accept connections (port is
+    # available).
+    def start(self):
+        info_queue = (
+            multiprocessing.Queue()
+        )  # type: multiprocessing.Queue[tuple[int, Dict[str, str]]]
+
+        self._process = multiprocessing.Process(
+            target=_lttng_live_server_process_target,
+            args=(
+                self._sessions_filename,
+                self._trace_path_prefix,
+                self._max_query_data_response_size,
+                self._max_minor_version,
+                self._port,
+                info_queue,
+            ),
+            daemon=True,
+        )
+
+        _logger.info("Starting background server process")
+        self._process.start()
+
+        # Wait for the server to send its info
+        self._server_port, self._session_urls = info_queue.get()
+        _logger.info("Background server ready on port {}".format(self._server_port))
+
+    # Waits for the server process to finish.
+    def wait(self, timeout: Optional[float] = None):
+        assert self._process is not None
+        self._process.join(timeout=timeout)
+
+        if timeout is not None and self._process.is_alive():
+            _logger.warning(
+                "Background server process still running after {} s timeout".format(
+                    timeout
+                )
+            )
+
+    # Terminates the server process and waits for it to finish.
+    def close(self):
+        if self._process is not None and self._process.is_alive():
+            self._process.terminate()
+
+        self.wait()
+
+    # Creates an `LttngLiveServerProcess` instance from a
+    # configuration file.
+    #
+    # This is provided for API symmetry with `LttngLiveServer`.
+    @classmethod
+    def from_config_file(
+        cls,
+        sessions_filename: str,
+        trace_path_prefix: Optional[str] = None,
+        max_query_data_response_size: Optional[int] = None,
+        max_minor_version: int = 10,
+        port: Optional[int] = None,
+    ) -> "LttngLiveServerProcess":
+        return cls(
+            sessions_filename,
+            trace_path_prefix,
+            max_query_data_response_size,
+            max_minor_version,
+            port,
+        )
 
 
 def _session_descriptors_from_path(
