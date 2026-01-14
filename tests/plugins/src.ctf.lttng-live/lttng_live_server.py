@@ -1868,6 +1868,38 @@ class LttngLiveServer:
     def port(self) -> int:
         return self._sock.getsockname()[1]
 
+    # URL for listing sessions.
+    @property
+    def base_url(self) -> str:
+        return "net://localhost:{}".format(self.port)
+
+    # Dictionary mapping session name to full session URL.
+    @property
+    def session_urls(self) -> Dict[str, str]:
+        urls = {}
+
+        for descr in self._ts_descriptors:
+            info = descr.info
+            urls[info.name] = "net://localhost:{}/host/{}/{}".format(
+                self.port, info.hostname, info.name
+            )
+
+        return urls
+
+    # Returns the URL for a specific session by name.
+    def session_url(self, session_name: str) -> str:
+        return self.session_urls[session_name]
+
+    # URL for the single session.
+    #
+    # Convenience property for the common case where there's only one
+    # session (a precondition).
+    @property
+    def url(self) -> str:
+        urls = list(self.session_urls.values())
+        assert len(urls) == 1
+        return urls[0]
+
     def _recv_command(self):
         data = bytes()
 
@@ -2211,5 +2243,10 @@ if __name__ == "__main__":
         _write_port_to_file(server.port, args.port_filename)
 
     print("Listening on port: {}".format(server.port))
+    print("Listing URL: `{}`".format(server.base_url))
+    print("Available session URLs:")
+
+    for url in server.session_urls.values():
+        print("  - `{}`".format(url))
 
     server.serve()
