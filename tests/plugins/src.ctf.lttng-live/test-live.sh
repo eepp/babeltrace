@@ -73,7 +73,7 @@ lttng_live_server() {
 	shift 2
 	local server_args=("$@")
 
-	local server_script="$test_data_dir/lttng_live_server.py"
+	local server_script="$BT_TESTS_SRCDIR/$this_dir_relative/lttng_live_server.py"
 
 	# start server
 	diag "$BT_TESTS_PYTHON_BIN $server_script ${server_args[*]}"
