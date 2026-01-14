@@ -24,14 +24,7 @@ tests=(
     "$BT_TESTS_SRCDIR/data/test_temp.py"
     "$BT_TESTS_SRCDIR/lib/"
     "$BT_TESTS_SRCDIR/param-validation/"
-    "$BT_TESTS_SRCDIR/plugins/flt.lttng-utils.debug-info"
-    "$BT_TESTS_SRCDIR/plugins/flt.utils.muxer"
-    "$BT_TESTS_SRCDIR/plugins/flt.utils.trimmer"
-    "$BT_TESTS_SRCDIR/plugins/sink.ctf.fs"
-    "$BT_TESTS_SRCDIR/plugins/sink.text.details"
-    "$BT_TESTS_SRCDIR/plugins/sink.text.pretty"
-    "$BT_TESTS_SRCDIR/plugins/src.ctf.fs/"
-    "$BT_TESTS_SRCDIR/plugins/src.ctf.lttng-live/test_query_live.py"
+    "$BT_TESTS_SRCDIR/plugins/"
     "$BT_TESTS_SRCDIR/python-plugin-provider"
 )
 
