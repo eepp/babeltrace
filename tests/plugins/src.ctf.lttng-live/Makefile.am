@@ -2,4 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-EXTRA_DIST = test_query_live.py
+EXTRA_DIST = \
+	lttng_live_server.py \
+	test_query_live.py
