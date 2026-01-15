@@ -66,6 +66,7 @@ dist_check_SCRIPTS = \
 	cli/test-trace-copy.sh \
 	cli/test-trace-read.sh \
 	cli/test-trimmer.sh \
+	plugins/flt.utils.muxer/test-clock-compatibility.sh \
 	plugins/sink.text.details/succeed/test-succeed.sh \
 	plugins/sink.text.pretty/test-enum.sh \
 	plugins/sink.text.pretty/test_pretty.py \
@@ -164,8 +165,6 @@ plugins_flt_utils_muxer_test_clock_compatibility_LDADD = \
 	$(COMMON_TEST_LDADD) \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
-
-dist_check_SCRIPTS += plugins/flt.utils.muxer/test-clock-compatibility.sh
 
 if ENABLE_BUILT_IN_PLUGINS
 plugins_flt_utils_muxer_test_clock_compatibility_LDFLAGS = $(call pluginarchive,utils)
