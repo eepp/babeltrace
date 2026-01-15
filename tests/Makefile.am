@@ -195,8 +195,8 @@ TESTS_PLUGINS += plugins/src.ctf.fs/query/test-query-metadata-info-py.sh
 TESTS_PLUGINS += plugins/src.ctf.lttng-live/test-query.sh
 TESTS_PLUGINS += plugins/sink.ctf.fs/test-assume-single-trace.sh
 TESTS_PLUGINS += plugins/sink.ctf.fs/test-stream-names.sh
-endif
-endif
+endif # !ENABLE_BUILT_IN_PLUGINS
+endif # ENABLE_PYTHON_BINDINGS
 
 if ENABLE_DEBUG_INFO
 TESTS_PLUGINS += \
@@ -208,7 +208,7 @@ TESTS_PLUGINS += \
 	plugins/flt.lttng-utils.debug-info/test-bin-info-powerpc-linux-gnu.sh \
 	plugins/flt.lttng-utils.debug-info/test-bin-info-powerpc64le-linux-gnu.sh \
 	plugins/flt.lttng-utils.debug-info/test-bin-info-x86-64-linux-gnu.sh
-endif
+endif # ENABLE_DEBUG_INFO
 
 if ENABLE_PYTHON_PLUGINS
 if ENABLE_PYTHON_BINDINGS
@@ -225,25 +225,30 @@ TESTS_PLUGINS += plugins/flt.utils.trimmer/test-trimming.sh \
 	plugins/flt.utils.muxer/succeed/test-succeed.sh \
 	plugins/sink.text.pretty/test-enum.sh \
 	plugins/src.ctf.fs/field/test-field.sh
-endif
-endif
+endif # ENABLE_PYTHON_PLUGINS
+endif # ENABLE_PYTHON_BINDINGS
 
 if HAVE_PYTHON
 TESTS_PLUGINS += plugins/src.ctf.lttng-live/test-live.sh
+endif
 
+if HAVE_PYTHON
 if DEV_MODE
 TESTS_LIB += lib/conds/test-conds.sh
-endif
-endif
+endif # DEV_MODE
+endif # HAVE_PYTHON
 
 if ENABLE_PYTHON_PLUGINS
 TESTS_PYTHON_PLUGIN_PROVIDER += python-plugin-provider/test-python-plugin-provider.sh
 TESTS_PLUGINS += plugins/sink.text.pretty/test-pretty-python.sh
+endif
+
+if ENABLE_PYTHON_PLUGINS
 if ENABLE_DEBUG_INFO
 TESTS_PLUGINS += \
 	plugins/flt.lttng-utils.debug-info/test-succeed.sh
-endif
-endif
+endif # ENABLE_DEBUG_INFO
+endif # ENABLE_PYTHON_PLUGINS
 
 LOG_DRIVER_FLAGS = --merge --comments
 LOG_DRIVER = env AM_TAP_AWK='$(AWK)' \
