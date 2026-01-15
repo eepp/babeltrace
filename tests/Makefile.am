@@ -83,10 +83,6 @@ noinst_PROGRAMS =
 
 TESTS_BINDINGS =
 
-if ENABLE_PYTHON_BINDINGS
-TESTS_BINDINGS += bindings/python/bt2/test-python-bt2.sh
-endif
-
 TESTS_CLI = \
 	cli/convert/test-convert-args.sh \
 	cli/test-help.sh \
@@ -97,6 +93,45 @@ TESTS_CLI = \
 	cli/test-trace-copy.sh \
 	cli/test-trace-read.sh \
 	cli/test-trimmer.sh
+
+TESTS_CPP_COMMON = \
+	cpp-common/test-c-string-view \
+	cpp-common/test-uuid \
+	cpp-common/test-unicode-conv
+
+TESTS_LIB = \
+	lib/test-bt-uuid \
+	lib/test-bt-values \
+	lib/test-fields.sh \
+	lib/test-graph-topo \
+	lib/test-mip \
+	lib/test-remove-destruction-listener-in-destruction-listener \
+	lib/test-simple-sink \
+	lib/test-trace-ir-ref
+
+TESTS_PLUGINS = \
+	plugins/src.ctf.fs/fail/test-fail.sh \
+	plugins/src.ctf.fs/succeed/test-succeed.sh \
+	plugins/src.ctf.fs/test-deterministic-ordering.sh \
+	plugins/sink.ctf.fs/succeed/test-succeed.sh \
+	plugins/sink.text.details/succeed/test-succeed.sh \
+	plugins/flt.utils.muxer/test-clock-compatibility.sh \
+	plugins/sink.text.pretty/test-pretty.sh
+
+TESTS_PYTHON_PLUGIN_PROVIDER =
+
+TESTS_PARAM_VALIDATION = \
+	param-validation/test-param-validation
+
+TESTS_BITFIELD = \
+	bitfield/test-bitfield
+
+TESTS_CTF_WRITER = \
+	ctf-writer/test-ctf-writer.sh
+
+if ENABLE_PYTHON_BINDINGS
+TESTS_BINDINGS += bindings/python/bt2/test-python-bt2.sh
+endif
 
 noinst_PROGRAMS += \
 	cpp-common/test-c-string-view
@@ -129,27 +164,6 @@ cpp_common_test_unicode_conv_LDADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(COMMON_TEST_LDADD)
 
-TESTS_CPP_COMMON = \
-	cpp-common/test-c-string-view \
-	cpp-common/test-uuid \
-	cpp-common/test-unicode-conv
-
-TESTS_LIB = \
-	lib/test-bt-uuid \
-	lib/test-bt-values \
-	lib/test-fields.sh \
-	lib/test-graph-topo \
-	lib/test-mip \
-	lib/test-remove-destruction-listener-in-destruction-listener \
-	lib/test-simple-sink \
-	lib/test-trace-ir-ref
-
-TESTS_BITFIELD = \
-	bitfield/test-bitfield
-
-TESTS_CTF_WRITER = \
-	ctf-writer/test-ctf-writer.sh
-
 if !ENABLE_BUILT_IN_PLUGINS
 TESTS_LIB += lib/test-plugins.sh
 endif
@@ -171,15 +185,6 @@ plugins_flt_utils_muxer_test_clock_compatibility_LDFLAGS = $(call pluginarchive,
 plugins_flt_utils_muxer_test_clock_compatibility_LDADD += \
 	$(top_builddir)/src/plugins/common/param-validation/libparam-validation.la
 endif # ENABLE_BUILT_IN_PLUGINS
-
-TESTS_PLUGINS = \
-	plugins/src.ctf.fs/fail/test-fail.sh \
-	plugins/src.ctf.fs/succeed/test-succeed.sh \
-	plugins/src.ctf.fs/test-deterministic-ordering.sh \
-	plugins/sink.ctf.fs/succeed/test-succeed.sh \
-	plugins/sink.text.details/succeed/test-succeed.sh \
-	plugins/flt.utils.muxer/test-clock-compatibility.sh \
-	plugins/sink.text.pretty/test-pretty.sh
 
 if !ENABLE_BUILT_IN_PLUGINS
 if ENABLE_PYTHON_BINDINGS
@@ -231,8 +236,6 @@ TESTS_LIB += lib/conds/test-conds.sh
 endif
 endif
 
-TESTS_PYTHON_PLUGIN_PROVIDER =
-
 if ENABLE_PYTHON_PLUGINS
 TESTS_PYTHON_PLUGIN_PROVIDER += python-plugin-provider/test-python-plugin-provider.sh
 TESTS_PLUGINS += plugins/sink.text.pretty/test-pretty-python.sh
@@ -241,9 +244,6 @@ TESTS_PLUGINS += \
 	plugins/flt.lttng-utils.debug-info/test-succeed.sh
 endif
 endif
-
-TESTS_PARAM_VALIDATION = \
-	param-validation/test-param-validation
 
 LOG_DRIVER_FLAGS = --merge --comments
 LOG_DRIVER = env AM_TAP_AWK='$(AWK)' \
