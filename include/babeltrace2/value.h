@@ -77,8 +77,8 @@ bt_value_type_is() function. Get whether or not a value has a specific
 type with one of the <code>bt_value_is_*()</code> inline helpers.
 
 The \em null value is special in that it's a singleton variable,
-#bt_value_null. You can directly compare any value pointer to
-#bt_value_null to check if it's a null value. Like other types of
+#bt_value_null. You can check if any value is the null value with
+bt_value_is_null(). Like other types of
 values, the null value is a shared object: if you get a new null value
 reference, then you must eventually put it.
 
@@ -379,10 +379,10 @@ bt_bool bt_value_type_is(const bt_value_type type,
 @brief
     Returns whether or not the value \bt_p{value} is a null value.
 
-@note
-    Because all null values point to the same null value singleton, you
-    can also directly compare \bt_p{value} to the #bt_value_null
-    variable.
+@important
+    Prefer this function over direct pointer comparison with
+    #bt_value_null, which may fail with statically linked library
+    configurations.
 
 @param[in] value
     Value to check.
@@ -595,8 +595,10 @@ eventually put it with bt_value_put_ref(). The reference count of the
 null value singleton must never reach&nbsp;0: libbabeltrace2 logs a
 warning message when this programming error occurs.
 
-Because all null values point to the same null value singleton, you can
-directly compare a value to the \c bt_value_null variable.
+@important
+    Prefer bt_value_is_null() over direct pointer comparison with
+    #bt_value_null, which may fail with statically linked library
+    configurations.
 
 @attention
     @parblock
@@ -2335,9 +2337,10 @@ extern bt_value_copy_status bt_value_copy(const bt_value *value,
     Returns whether or not the value \bt_p{a_value} is equal,
     recursively, to \bt_p{b_value}.
 
-@note
-    If you want to know whether or not a value is a null value, you can
-    also directly compare its pointer to the #bt_value_null variable.
+@important
+    Prefer bt_value_is_null() over direct pointer comparison with
+    #bt_value_null, which may fail with statically linked library
+    configurations.
 
 @param[in] a_value
     Value A.

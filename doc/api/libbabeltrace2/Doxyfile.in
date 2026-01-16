@@ -113,7 +113,7 @@ ALIASES                += bt_pre_is_var_wuis_field{1}="@pre \bt_p{\1} is a \link
 ALIASES                += bt_pre_is_var_wsis_field{1}="@pre \bt_p{\1} is a \link api-tir-field-var variant field\endlink (instances with a linked signed integer selector field)."
 
 # Aliases: preconditions: value object type
-ALIASES                += bt_pre_is_null_val{1}="@pre \bt_p{\1} is a null \link api-val value\endlink (\bt_p{\1} is equal to #bt_value_null)."
+ALIASES                += bt_pre_is_null_val{1}="@pre \bt_p{\1} is a null \link api-val value\endlink (bt_value_is_null() returns #BT_TRUE)."
 ALIASES                += bt_pre_is_bool_val{1}="@pre \bt_p{\1} is a boolean \link api-val value\endlink (bt_value_is_bool() returns #BT_TRUE)."
 ALIASES                += bt_pre_is_sint_val{1}="@pre \bt_p{\1} is a signed integer \link api-val value\endlink (bt_value_is_signed_integer() returns #BT_TRUE)."
 ALIASES                += bt_pre_is_uint_val{1}="@pre \bt_p{\1} is an unsigned integer \link api-val value\endlink (bt_value_is_unsigned_integer() returns #BT_TRUE)."

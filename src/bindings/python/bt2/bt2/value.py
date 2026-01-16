@@ -23,11 +23,13 @@ def _create_from_ptr_template(ptr, object_map):
     # bt_value_null is translated to None.  However, we are given a reference
     # to it that we are not going to manage anymore, since we don't create a
     # Python wrapper for it.  Therefore put that reference immediately.
-    if ptr == native_bt.value_null:
+    typeid = native_bt.value_get_type(ptr)
+
+    if typeid == native_bt.VALUE_TYPE_NULL:
         _Value._put_ref(ptr)
         return
 
-    return object_map[native_bt.value_get_type(ptr)]._create_from_ptr(ptr)
+    return object_map[typeid]._create_from_ptr(ptr)
 
 
 def _create_from_ptr(ptr):
@@ -39,10 +41,14 @@ def _create_from_const_ptr(ptr):
 
 
 def _create_from_ptr_and_get_ref_template(ptr, object_map):
-    if ptr is None or ptr == native_bt.value_null:
+    if ptr is None:
         return
 
     typeid = native_bt.value_get_type(ptr)
+
+    if typeid == native_bt.VALUE_TYPE_NULL:
+        return
+
     return object_map[typeid]._create_from_ptr_and_get_ref(ptr)
 
 
