@@ -605,13 +605,16 @@ pkgconfig_DATA = \
 # Python plugin provider
 #
 
+python_plugin_provider_sources = \
+	python-plugin-provider/python-plugin-provider.c \
+	python-plugin-provider/python-plugin-provider.h
+
 if ENABLE_PYTHON_PLUGINS
 pluginproviderdir = "$(BABELTRACE_PLUGIN_PROVIDERS_DIR)"
 pluginprovider_LTLIBRARIES = python-plugin-provider/babeltrace2-python-plugin-provider.la
 
 python_plugin_provider_babeltrace2_python_plugin_provider_la_SOURCES = \
-	python-plugin-provider/python-plugin-provider.c \
-	python-plugin-provider/python-plugin-provider.h
+	$(python_plugin_provider_sources)
 
 nodist_EXTRA_python_plugin_provider_babeltrace2_python_plugin_provider_la_SOURCES = dummy.cpp
 
@@ -625,18 +628,42 @@ python_plugin_provider_babeltrace2_python_plugin_provider_la_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
 	$(PYTHON_INCLUDE)
 
-python_plugin_provider_babeltrace2_python_plugin_provider_la_LIBADD =
-
-# Link the Python plugin provider library with libbabeltrace2
-# when it's not built-in the babeltrace2 executable.
-if !ENABLE_BUILT_IN_PLUGINS
-python_plugin_provider_babeltrace2_python_plugin_provider_la_LIBADD += \
+python_plugin_provider_babeltrace2_python_plugin_provider_la_LIBADD = \
 	logging/liblogging.la \
 	common/libcommon.la \
 	py-common/libpy-common.la \
 	lib/libbabeltrace2.la
-endif
 endif # ENABLE_PYTHON_PLUGINS
+
+#
+# Built-in Python plugin provider convenience library
+#
+# When --enable-built-in-python-plugin-support is used, this convenience
+# library is linked into libbabeltrace2 so that Python plugin support is
+# available without needing to dlopen() the plugin provider
+# shared object.
+#
+
+if ENABLE_BUILT_IN_PYTHON_PLUGIN_SUPPORT
+
+noinst_LTLIBRARIES += python-plugin-provider/libpython-plugin-provider-builtin.la
+
+python_plugin_provider_libpython_plugin_provider_builtin_la_SOURCES = \
+	$(python_plugin_provider_sources)
+
+python_plugin_provider_libpython_plugin_provider_builtin_la_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(PYTHON_INCLUDE)
+
+python_plugin_provider_libpython_plugin_provider_builtin_la_LIBADD = \
+	py-common/libpy-common.la \
+	$(PYTHON_LDFLAGS)
+
+# Add the built-in Python plugin provider to libbabeltrace2.
+lib_libbabeltrace2_la_LIBADD += \
+	python-plugin-provider/libpython-plugin-provider-builtin.la
+
+endif # ENABLE_BUILT_IN_PYTHON_PLUGIN_SUPPORT
 
 #
 # Plugins
