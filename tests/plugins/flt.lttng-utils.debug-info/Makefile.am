@@ -19,10 +19,6 @@ dist_check_SCRIPTS = \
 
 noinst_PROGRAMS =
 
-if !ENABLE_BUILT_IN_PLUGINS
-# plugin tests here
-endif # !ENABLE_BUILT_IN_PLUGINS
-
 if ENABLE_DEBUG_INFO
 noinst_PROGRAMS += test-dwarf test-bin-info
 

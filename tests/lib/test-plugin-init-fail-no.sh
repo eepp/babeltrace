@@ -14,9 +14,4 @@ fi
 # shellcheck source=../utils/utils.sh
 source "$UTILSSH"
 
-ret=0
-
-"${BT_TESTS_BUILDDIR}/lib/test-plugin-init-fail" "${BT_TESTS_BUILDDIR}/lib/test-plugin-init-fail-plugin/.libs" yes || ret=1
-"${BT_TESTS_BUILDDIR}/lib/test-plugin-init-fail" "${BT_TESTS_BUILDDIR}/lib/test-plugin-init-fail-plugin/.libs" no || ret=1
-
-exit $ret
+"${BT_TESTS_BUILDDIR}/lib/test-plugin-init-fail" "${BT_TESTS_BUILDDIR}/lib/test-plugin-init-fail-plugin/.libs" no

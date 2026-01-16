@@ -650,7 +650,7 @@ plugin_LTLIBRARIES = \
 
 
 # utils plugin
-plugins_utils_babeltrace_plugin_utils_la_SOURCES = \
+plugin_utils_sources = \
 	plugins/utils/counter/counter.c \
 	plugins/utils/counter/counter.h \
 	plugins/utils/dummy/dummy.c \
@@ -665,26 +665,24 @@ plugins_utils_babeltrace_plugin_utils_la_SOURCES = \
 	plugins/utils/trimmer/trimmer.h \
 	plugins/utils/plugin.cpp
 
+plugins_utils_babeltrace_plugin_utils_la_SOURCES = $(plugin_utils_sources)
+
 plugins_utils_babeltrace_plugin_utils_la_LDFLAGS = \
 	$(AM_LDFLAGS) \
 	$(LT_NO_UNDEFINED) \
 	-avoid-version -module $(LD_NOTEXT)
 
 plugins_utils_babeltrace_plugin_utils_la_LIBADD = \
-	plugins/common/muxing/libmuxing.la
-
-if !ENABLE_BUILT_IN_PLUGINS
-plugins_utils_babeltrace_plugin_utils_la_LIBADD += \
+	plugins/common/muxing/libmuxing.la \
 	lib/libbabeltrace2.la \
 	common/libcommon.la \
 	cpp-common/vendor/fmt/libfmt.la \
 	logging/liblogging.la \
 	plugins/common/param-validation/libparam-validation.la \
 	clock-correlation-validator/libclock-correlation-validator.la
-endif
 
 # ctf plugin
-plugins_ctf_babeltrace_plugin_ctf_la_SOURCES = \
+plugin_ctf_sources = \
 	plugins/ctf/common/metadata/ctf-ir.hpp \
 	plugins/ctf/common/metadata/ctf-ir.cpp \
 	plugins/ctf/common/metadata/int-range.hpp \
@@ -771,6 +769,8 @@ plugins_ctf_babeltrace_plugin_ctf_la_SOURCES = \
 	plugins/ctf/lttng-live/viewer-connection.hpp \
 	plugins/ctf/plugin.cpp
 
+plugins_ctf_babeltrace_plugin_ctf_la_SOURCES = $(plugin_ctf_sources)
+
 plugins_ctf_babeltrace_plugin_ctf_la_LDFLAGS = \
 	$(AM_LDFLAGS) \
 	$(LT_NO_UNDEFINED) \
@@ -780,24 +780,20 @@ plugins_ctf_babeltrace_plugin_ctf_la_LIBADD = \
 	plugins/ctf/common/metadata/libctf-parser.la \
 	plugins/ctf/common/metadata/libctf-ast.la \
 	plugins/common/param-validation/libparam-validation.la \
-	cpp-common/libcpp-common.la
-
-if BABELTRACE_BUILD_WITH_MINGW
-plugins_ctf_babeltrace_plugin_ctf_la_LIBADD += -lws2_32
-endif
-
-if !ENABLE_BUILT_IN_PLUGINS
-plugins_ctf_babeltrace_plugin_ctf_la_LIBADD += \
+	cpp-common/libcpp-common.la \
 	lib/libbabeltrace2.la \
 	logging/liblogging.la \
 	plugins/common/muxing/libmuxing.la \
 	common/libcommon.la \
 	ctfser/libctfser.la \
 	cpp-common/vendor/fmt/libfmt.la
+
+if BABELTRACE_BUILD_WITH_MINGW
+plugins_ctf_babeltrace_plugin_ctf_la_LIBADD += -lws2_32
 endif
 
 # text plugin
-plugins_text_babeltrace_plugin_text_la_SOURCES = \
+plugin_text_sources = \
 	plugins/text/details/colors.h \
 	plugins/text/details/details.c \
 	plugins/text/details/details.h \
@@ -812,29 +808,29 @@ plugins_text_babeltrace_plugin_text_la_SOURCES = \
 	plugins/text/pretty/print.c \
 	plugins/text/plugin.c
 
+plugins_text_babeltrace_plugin_text_la_SOURCES = $(plugin_text_sources)
+
 plugins_text_babeltrace_plugin_text_la_LDFLAGS = \
 	$(AM_LDFLAGS) \
 	$(LT_NO_UNDEFINED) \
 	-avoid-version -module $(LD_NOTEXT)
 
-plugins_text_babeltrace_plugin_text_la_LIBADD =
-
-if !ENABLE_BUILT_IN_PLUGINS
-plugins_text_babeltrace_plugin_text_la_LIBADD += \
+plugins_text_babeltrace_plugin_text_la_LIBADD = \
 	lib/libbabeltrace2.la \
 	common/libcommon.la \
 	logging/liblogging.la \
 	compat/libcompat.la \
 	plugins/common/param-validation/libparam-validation.la
-endif
 
 # lttng-utils plugin
+plugin_lttng_utils_sources = \
+	plugins/lttng-utils/plugin.cpp
+
 if ENABLE_DEBUG_INFO
 plugin_LTLIBRARIES += \
 	plugins/lttng-utils/babeltrace-plugin-lttng-utils.la
 
-plugins_lttng_utils_babeltrace_plugin_lttng_utils_la_SOURCES = \
-	plugins/lttng-utils/plugin.cpp
+plugins_lttng_utils_babeltrace_plugin_lttng_utils_la_SOURCES = $(plugin_lttng_utils_sources)
 
 plugins_lttng_utils_babeltrace_plugin_lttng_utils_la_LDFLAGS = \
 	$(AM_LDFLAGS) \
@@ -843,16 +839,82 @@ plugins_lttng_utils_babeltrace_plugin_lttng_utils_la_LDFLAGS = \
 	$(ELFUTILS_LIBS)
 
 plugins_lttng_utils_babeltrace_plugin_lttng_utils_la_LIBADD = \
-	plugins/lttng-utils/debug-info/libdebug-info.la
-
-if !ENABLE_BUILT_IN_PLUGINS
-plugins_lttng_utils_babeltrace_plugin_lttng_utils_la_LIBADD += \
+	plugins/lttng-utils/debug-info/libdebug-info.la \
 	lib/libbabeltrace2.la \
 	common/libcommon.la \
 	logging/liblogging.la \
 	plugins/common/param-validation/libparam-validation.la
-endif # !ENABLE_BUILT_IN_PLUGINS
 endif # ENABLE_DEBUG_INFO
+
+#
+# Built-in plugin convenience libraries
+#
+# These are separate convenience libraries that are compiled with
+# -DBT_BUILT_IN_PLUGINS so that they skip BT_PLUGIN_MODULE(). They are
+# linked into the CLI with --whole-archive when
+# --enable-built-in-plugins is used. The regular .so plugins above are
+# always built the same way and remain loadable regardless of
+# --enable-built-in-plugins.
+#
+
+if ENABLE_BUILT_IN_PLUGINS
+
+noinst_LTLIBRARIES += \
+	plugins/ctf/libbabeltrace-plugin-ctf-builtin.la \
+	plugins/text/libbabeltrace-plugin-text-builtin.la \
+	plugins/utils/libbabeltrace-plugin-utils-builtin.la
+
+# ctf builtin
+plugins_ctf_libbabeltrace_plugin_ctf_builtin_la_SOURCES = $(plugin_ctf_sources)
+plugins_ctf_libbabeltrace_plugin_ctf_builtin_la_CPPFLAGS = \
+	$(AM_CPPFLAGS) -DBT_BUILT_IN_PLUGINS
+plugins_ctf_libbabeltrace_plugin_ctf_builtin_la_LIBADD = \
+	plugins/ctf/common/metadata/libctf-parser.la \
+	plugins/ctf/common/metadata/libctf-ast.la
+
+# text builtin
+plugins_text_libbabeltrace_plugin_text_builtin_la_SOURCES = $(plugin_text_sources)
+plugins_text_libbabeltrace_plugin_text_builtin_la_CPPFLAGS = \
+	$(AM_CPPFLAGS) -DBT_BUILT_IN_PLUGINS
+
+# utils builtin
+plugins_utils_libbabeltrace_plugin_utils_builtin_la_SOURCES = $(plugin_utils_sources)
+plugins_utils_libbabeltrace_plugin_utils_builtin_la_CPPFLAGS = \
+	$(AM_CPPFLAGS) -DBT_BUILT_IN_PLUGINS
+
+if ENABLE_DEBUG_INFO
+noinst_LTLIBRARIES += \
+	plugins/lttng-utils/libbabeltrace-plugin-lttng-utils-builtin.la
+
+# lttng-utils builtin
+plugins_lttng_utils_libbabeltrace_plugin_lttng_utils_builtin_la_SOURCES = $(plugin_lttng_utils_sources)
+plugins_lttng_utils_libbabeltrace_plugin_lttng_utils_builtin_la_CPPFLAGS = \
+	$(AM_CPPFLAGS) -DBT_BUILT_IN_PLUGINS
+plugins_lttng_utils_libbabeltrace_plugin_lttng_utils_builtin_la_LIBADD = \
+	plugins/lttng-utils/debug-info/libdebug-info.la
+endif # ENABLE_DEBUG_INFO
+
+endif # ENABLE_BUILT_IN_PLUGINS
+
+#
+# Built-in libbabeltrace2 convenience library
+#
+# This is a convenience library version of libbabeltrace2, with the same
+# sources as the shared library. When --enable-built-in-plugins is used,
+# the CLI links against this instead of the shared library so that the
+# BT_PLUGIN_MODULE() accessor functions defined in the library can see
+# the plugin descriptor sections from the statically linked builtin
+# plugin libraries.
+#
+
+if ENABLE_BUILT_IN_PLUGINS
+noinst_LTLIBRARIES += lib/libbabeltrace2-builtin.la
+
+lib_libbabeltrace2_builtin_la_SOURCES = $(lib_libbabeltrace2_la_SOURCES)
+lib_libbabeltrace2_builtin_la_CPPFLAGS = $(lib_libbabeltrace2_la_CPPFLAGS)
+lib_libbabeltrace2_builtin_la_LIBADD = $(lib_libbabeltrace2_la_LIBADD)
+nodist_EXTRA_lib_libbabeltrace2_builtin_la_SOURCES = dummy.cpp
+endif # ENABLE_BUILT_IN_PLUGINS
 
 EXTRA_DIST = \
 	cpp-common/vendor/optional-lite/optional.hpp.license \

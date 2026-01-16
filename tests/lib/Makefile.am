@@ -2,8 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-include $(top_srcdir)/src/Makefile.common.inc
-
 AM_CPPFLAGS += -I$(top_srcdir)/tests/utils
 
 noinst_LTLIBRARIES =
@@ -11,26 +9,12 @@ noinst_LTLIBRARIES =
 COMMON_TEST_LDADD = \
 	$(top_builddir)/tests/utils/tap/libtap.la \
 	$(top_builddir)/tests/utils/libtestcommon.la \
-	utils/liblib-utils.la \
 	$(top_builddir)/src/common/libcommon.la \
 	$(top_builddir)/src/logging/liblogging.la
 
 test_bt_values_SOURCES = test-bt-values.c
 test_bt_values_LDADD = $(COMMON_TEST_LDADD) \
 	$(top_builddir)/src/lib/libbabeltrace2.la
-
-test_fields_bin_SOURCES = test-fields-bin.cpp
-test_fields_bin_LDADD = $(COMMON_TEST_LDADD) \
-	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
-
-if ENABLE_BUILT_IN_PLUGINS
-
-test_fields_bin_LDFLAGS = $(call pluginarchive,utils)
-test_fields_bin_LDADD += \
-	$(top_builddir)/src/plugins/common/param-validation/libparam-validation.la
-
-endif # ENABLE_BUILT_IN_PLUGINS
 
 test_bt_uuid_SOURCES = test-bt-uuid.c
 test_bt_uuid_LDADD = $(COMMON_TEST_LDADD)
@@ -67,15 +51,21 @@ noinst_PROGRAMS = \
 	test-bt-uuid \
 	test-bt-values \
 	test-graph-topo \
-	test-fields-bin \
 	test-mip \
 	test-remove-destruction-listener-in-destruction-listener \
 	test-simple-sink \
 	test-trace-ir-ref
 
-if !ENABLE_BUILT_IN_PLUGINS
+# `test-fields.sh`, `test-plugins.sh`, and `test-plugin-init-fail-*.sh`
+# need to load shared library plugins.
+if ENABLE_SHARED
 
-# test-plugins
+noinst_PROGRAMS += test-fields-bin
+test_fields_bin_SOURCES = test-fields-bin.cpp
+test_fields_bin_LDADD = $(COMMON_TEST_LDADD) \
+	utils/liblib-utils.la \
+	$(top_builddir)/src/lib/libbabeltrace2.la \
+	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
 noinst_PROGRAMS += test-plugins
 test_plugins_SOURCES = test-plugins.cpp
@@ -107,8 +97,6 @@ test_plugins_plugins_plugin_sfs_la_LIBADD = \
 	$(top_builddir)/src/common/libcommon.la \
 	$(top_builddir)/src/logging/liblogging.la
 
-# test-plugin-init-fail
-
 noinst_PROGRAMS +=  test-plugin-init-fail
 test_plugin_init_fail_SOURCES = test-plugin-init-fail.cpp
 test_plugin_init_fail_LDADD = \
@@ -127,21 +115,26 @@ test_plugin_init_fail_plugin_plugin_init_fail_la_LDFLAGS = \
 test_plugin_init_fail_plugin_plugin_init_fail_la_LIBADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la
 
-endif
-
-dist_check_SCRIPTS = test-plugins.sh test-fields.sh
-
-# utils
-
+# `liblib-utils.la` needs to load standard plugins, so only build it
+# when shared libraries are enabled.
 noinst_LTLIBRARIES += utils/liblib-utils.la
 utils_liblib_utils_la_SOURCES = \
 	utils/run-in.cpp \
 	utils/run-in.hpp
 
+endif # ENABLE_SHARED
+
+dist_check_SCRIPTS = \
+	test-plugins.sh \
+	test-plugin-init-fail-no.sh \
+	test-plugin-init-fail-yes.sh \
+	test-fields.sh
+
+# `conds/test-conds.sh` needs to load standard plugins, so only build it
+# when shared libraries are enabled.
 if HAVE_PYTHON
 if DEV_MODE
-
-# conds
+if ENABLE_SHARED
 
 noinst_PROGRAMS += conds/conds-triggers
 
@@ -154,18 +147,12 @@ conds_conds_triggers_SOURCES = \
 
 conds_conds_triggers_LDADD = \
 	$(COMMON_TEST_LDADD) \
+	utils/liblib-utils.la \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
-if ENABLE_BUILT_IN_PLUGINS
-
-conds_conds_triggers_LDFLAGS = $(call pluginarchive,utils)
-conds_conds_triggers_LDADD += \
-	$(top_builddir)/src/plugins/common/param-validation/libparam-validation.la
-
-endif # ENABLE_BUILT_IN_PLUGINS
-
 dist_check_SCRIPTS += conds/test-conds.sh conds/test.py
 
-endif
-endif
+endif # ENABLE_SHARED
+endif # DEV_MODE
+endif # HAVE_PYTHON

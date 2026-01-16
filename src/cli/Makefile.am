@@ -2,7 +2,24 @@
 #
 # SPDX-License-Identifier: MIT
 
-include $(top_srcdir)/src/Makefile.common.inc
+# Path to the plugins build directory.
+PLUGINS_PATH = $(abs_top_builddir)/src/plugins
+
+# Takes a plugin name and outputs the needed LDFLAGS to embed it.
+#
+# The --whole-archive option is important here. From the GNU linker's
+# documentation:
+#
+#     For each archive mentioned on the command line after the
+#     --whole-archive option, include every object file in the archive in
+#     the link, rather than searching the archive for the required object
+#     files.
+#
+# In our case, we find the plugins thanks to special sections in the
+# binary that are filled by plugin objects. If the linker discards those
+# symbols because the CLI does not use them directly, the CLI reports
+# no plugins found (plugins are effectively not embedded).
+plugin_archive_builtin = $(LD_WHOLE_ARCHIVE)$(PLUGINS_PATH)/$(1)/.libs/libbabeltrace-plugin-$(1)-builtin.a$(LD_NO_WHOLE_ARCHIVE)
 
 LTTNG_UTILS_PLUGIN_PATH =
 
@@ -51,45 +68,62 @@ babeltrace2_bin_LDFLAGS = $(AM_LDFLAGS) $(LD_NO_AS_NEEDED)
 
 EXTRA_babeltrace2_bin_DEPENDENCIES =
 
-# Add all the convenience libraries used by Babeltrace plugins and the
-# library. They will be used when embedding plugins (--enable-built-in-plugins),
-# otherwise we're looking after multiple definitions of the same symbols if
-# a plugin's archive (.a) includes the convenience library because
-# we're using --whole-archive below (needed to make sure the linker does
-# not discard the plugins since the CLI does not use their symbols
-# directly).
+# Libraries needed by the CLI itself.
 babeltrace2_bin_LDADD = \
 	$(top_builddir)/src/argpar/libargpar.la \
 	$(top_builddir)/src/autodisc/libautodisc.la \
 	$(top_builddir)/src/param-parse/libparam-parse.la \
 	$(top_builddir)/src/string-format/libstring-format.la \
-	$(top_builddir)/src/lib/libbabeltrace2.la \
-	$(top_builddir)/src/compat/libcompat.la \
 	$(top_builddir)/src/common/libcommon.la \
-	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la \
-	$(top_builddir)/src/logging/liblogging.la \
-	$(top_builddir)/src/ctfser/libctfser.la
+	$(top_builddir)/src/logging/liblogging.la
+
+if ENABLE_BUILT_IN_PLUGINS
+# Use the convenience library version of libbabeltrace2 so that its
+# BT_PLUGIN_MODULE() accessor functions can see the plugin descriptor
+# sections from the statically linked builtin plugin libraries.
+babeltrace2_bin_LDADD += $(top_builddir)/src/lib/libbabeltrace2-builtin.la
+else
+babeltrace2_bin_LDADD += $(top_builddir)/src/lib/libbabeltrace2.la
+endif
 
 if ENABLE_BUILT_IN_PLUGINS
 
-# Built-in plugins
-babeltrace2_bin_LDFLAGS += $(call pluginarchive,ctf)
-babeltrace2_bin_LDFLAGS += $(call pluginarchive,text)
-babeltrace2_bin_LDFLAGS += $(call pluginarchive,utils)
-
-EXTRA_babeltrace2_bin_DEPENDENCIES += \
-	$(PLUGINS_PATH)/ctf/babeltrace-plugin-ctf.la \
-	$(PLUGINS_PATH)/text/babeltrace-plugin-text.la \
-	$(PLUGINS_PATH)/utils/babeltrace-plugin-utils.la
+# Built-in plugins (using the -builtin convenience libraries)
+babeltrace2_bin_LDFLAGS += $(call plugin_archive_builtin,ctf)
+babeltrace2_bin_LDFLAGS += $(call plugin_archive_builtin,text)
+babeltrace2_bin_LDFLAGS += $(call plugin_archive_builtin,utils)
 
 if ENABLE_DEBUG_INFO
-babeltrace2_bin_LDFLAGS += $(call pluginarchive,lttng-utils)
+babeltrace2_bin_LDFLAGS += $(call plugin_archive_builtin,lttng-utils)
+endif
+
+# Shared convenience libraries used by plugins and libbabeltrace2 (for static
+# linking). These are added here (instead of in each builtin plugin's LIBADD)
+# to avoid duplicate symbols when linking multiple builtin plugins with
+# --whole-archive.
+babeltrace2_bin_LDADD += \
+	$(top_builddir)/src/plugins/common/param-validation/libparam-validation.la \
+	$(top_builddir)/src/plugins/common/muxing/libmuxing.la \
+	$(top_builddir)/src/clock-correlation-validator/libclock-correlation-validator.la \
+	$(top_builddir)/src/cpp-common/libcpp-common.la \
+	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la \
+	$(top_builddir)/src/ctfser/libctfser.la \
+	$(top_builddir)/src/compat/libcompat.la
+
+if ENABLE_DEBUG_INFO
 babeltrace2_bin_LDADD += $(ELFUTILS_LIBS)
+endif
 
 EXTRA_babeltrace2_bin_DEPENDENCIES += \
-	$(PLUGINS_PATH)/lttng-utils/babeltrace-plugin-lttng-utils.la
-endif
-endif
+	$(PLUGINS_PATH)/ctf/libbabeltrace-plugin-ctf-builtin.la \
+	$(PLUGINS_PATH)/text/libbabeltrace-plugin-text-builtin.la \
+	$(PLUGINS_PATH)/utils/libbabeltrace-plugin-utils-builtin.la
+
+if ENABLE_DEBUG_INFO
+EXTRA_babeltrace2_bin_DEPENDENCIES += \
+	$(PLUGINS_PATH)/lttng-utils/libbabeltrace-plugin-lttng-utils-builtin.la
+endif # ENABLE_DEBUG_INFO
+endif # ENABLE_BUILT_IN_PLUGINS
 
 if BABELTRACE_BUILD_WITH_MINGW
 babeltrace2_bin_LDADD += -lws2_32 -lrpcrt4 -lintl -liconv -lole32 -lpthread
