@@ -491,10 +491,15 @@ AS_IF([test "x$enable_shared" = xno && ! AE_IS_FEATURE_ENABLED([built-in-plugins
 # Check for conflicting optional features user choices
 
 AE_IF_FEATURE_ENABLED([built-in-python-plugin-support], [
-  AE_IF_FEATURE_NOT_ENABLED([python-plugins], [AC_MSG_ERROR([‘--enable-python-plugins’ must be used to bundle Python plugin support in the ‘babeltrace2’ executable])])
-  # Built-in plug-ins are only available when the --disable-shared --enable-static options are used.
-  AE_IF_FEATURE_NOT_ENABLED([static], [AC_MSG_ERROR(‘--enable-static’ must be used to bundle Python plugin support in the ‘babeltrace2’ executable)])
-  AE_IF_FEATURE_ENABLED([shared], [AC_MSG_ERROR(‘--disable-shared’ must be used to bundle Python plugin support in the ‘babeltrace2’ executable)])
+  AE_IF_FEATURE_NOT_ENABLED([python-plugins], [AC_MSG_ERROR([‘--enable-python-plugins’ must be used to bundle Python plugin support in the library])])
+])
+
+# Python plugins require either shared libraries (to dlopen() the
+# provider) OR built-in Python plugin support.
+AE_IF_FEATURE_ENABLED([python-plugins], [
+  AS_IF([test "x$enable_shared" = xno && ! AE_IS_FEATURE_ENABLED([built-in-python-plugin-support])], [
+    AC_MSG_ERROR([Python plugins require either shared libraries (‘--enable-shared’) or built-in Python plugin support (‘--enable-built-in-python-plugin-support’)])
+  ])
 ])
 
 

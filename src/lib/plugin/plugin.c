@@ -48,7 +48,7 @@ typedef int (*create_all_from_file_sym_type)(
 		struct bt_plugin_set **plugin_set_out);
 
 #ifdef BT_BUILT_IN_PYTHON_PLUGIN_SUPPORT
-#include <plugin/python-plugin-provider.h>
+#include "python-plugin-provider/python-plugin-provider.h"
 
 static
 create_all_from_file_sym_type
@@ -58,6 +58,7 @@ create_all_from_file_sym_type
 static
 int init_python_plugin_provider(void)
 {
+	return BT_FUNC_STATUS_OK;
 }
 #else /* BT_BUILT_IN_PYTHON_PLUGIN_SUPPORT */
 static GModule *python_plugin_provider_module;
