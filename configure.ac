@@ -482,6 +482,14 @@ AE_IF_FEATURE_ENABLED([python-plugins], [
   ])
 ])
 
+# Python bindings require shared libraries because the `bt2` package
+# needs to dynamically load libbabeltrace2.
+AE_IF_FEATURE_ENABLED([python-bindings], [
+  AS_IF([test "x$enable_shared" = xno], [
+    AC_MSG_ERROR([Python bindings require shared libraries (‘--enable-shared’)])
+  ])
+])
+
 # Either shared libraries OR built-in plugins must be enabled,
 # otherwise the CLI has no "standard" plugins.
 AS_IF([test "x$enable_shared" = xno && ! AE_IS_FEATURE_ENABLED([built-in-plugins])], [
