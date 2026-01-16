@@ -24,8 +24,6 @@ void testFailOnLoadErrorTrue(const char * const pluginDir)
         bt2::findAllPluginsFromDir(pluginDir, false, true);
         bt_common_abort();
     } catch (const bt2::Error& exc) {
-        fmt::print("{}\n", exc.what());
-
         const auto error = bt_current_thread_take_error();
 
         /*
