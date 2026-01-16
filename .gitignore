@@ -65,9 +65,8 @@ __pycache__
 /src/common/version.i.tmp
 
 # Generated CLI binaries
-/src/cli/*.bin
 /src/cli/babeltrace2
-/src/cli/babeltrace2-log
+/src/cli/babeltrace2-for-tests
 
 # Generated `ctf` plugin lexer/parser files
 /src/plugins/ctf/common/src/metadata/tsdl/lexer.cpp

@@ -39,10 +39,10 @@ if ENABLE_PYTHON_PLUGINS
 AM_CPPFLAGS += '-DCONFIG_IN_TREE_PROVIDER_DIR="$(abs_top_builddir)/src/python-plugin-provider/.libs"'
 endif
 
-bin_PROGRAMS = babeltrace2.bin
-noinst_PROGRAMS = babeltrace2
+bin_PROGRAMS = babeltrace2
+noinst_PROGRAMS = babeltrace2-for-tests
 
-babeltrace2_bin_SOURCES = \
+babeltrace2_SOURCES = \
 	babeltrace2.c \
 	babeltrace2-cfg.c \
 	babeltrace2-cfg.h \
@@ -64,12 +64,12 @@ babeltrace2_bin_SOURCES = \
 # -Wl,--no-as-needed is needed for recent gold linker who seems to think
 # it knows better and considers libraries with constructors having
 # side-effects as dead code.
-babeltrace2_bin_LDFLAGS = $(AM_LDFLAGS) $(LD_NO_AS_NEEDED)
+babeltrace2_LDFLAGS = $(AM_LDFLAGS) $(LD_NO_AS_NEEDED)
 
-EXTRA_babeltrace2_bin_DEPENDENCIES =
+EXTRA_babeltrace2_DEPENDENCIES =
 
 # Libraries needed by the CLI itself.
-babeltrace2_bin_LDADD = \
+babeltrace2_LDADD = \
 	$(top_builddir)/src/argpar/libargpar.la \
 	$(top_builddir)/src/autodisc/libautodisc.la \
 	$(top_builddir)/src/param-parse/libparam-parse.la \
@@ -81,27 +81,27 @@ if ENABLE_BUILT_IN_PLUGINS
 # Use the convenience library version of libbabeltrace2 so that its
 # BT_PLUGIN_MODULE() accessor functions can see the plugin descriptor
 # sections from the statically linked builtin plugin libraries.
-babeltrace2_bin_LDADD += $(top_builddir)/src/lib/libbabeltrace2-builtin.la
+babeltrace2_LDADD += $(top_builddir)/src/lib/libbabeltrace2-builtin.la
 else
-babeltrace2_bin_LDADD += $(top_builddir)/src/lib/libbabeltrace2.la
+babeltrace2_LDADD += $(top_builddir)/src/lib/libbabeltrace2.la
 endif
 
 if ENABLE_BUILT_IN_PLUGINS
 
 # Built-in plugins (using the -builtin convenience libraries)
-babeltrace2_bin_LDFLAGS += $(call plugin_archive_builtin,ctf)
-babeltrace2_bin_LDFLAGS += $(call plugin_archive_builtin,text)
-babeltrace2_bin_LDFLAGS += $(call plugin_archive_builtin,utils)
+babeltrace2_LDFLAGS += $(call plugin_archive_builtin,ctf)
+babeltrace2_LDFLAGS += $(call plugin_archive_builtin,text)
+babeltrace2_LDFLAGS += $(call plugin_archive_builtin,utils)
 
 if ENABLE_DEBUG_INFO
-babeltrace2_bin_LDFLAGS += $(call plugin_archive_builtin,lttng-utils)
+babeltrace2_LDFLAGS += $(call plugin_archive_builtin,lttng-utils)
 endif
 
 # Shared convenience libraries used by plugins and libbabeltrace2 (for static
 # linking). These are added here (instead of in each builtin plugin's LIBADD)
 # to avoid duplicate symbols when linking multiple builtin plugins with
 # --whole-archive.
-babeltrace2_bin_LDADD += \
+babeltrace2_LDADD += \
 	$(top_builddir)/src/plugins/common/param-validation/libparam-validation.la \
 	$(top_builddir)/src/plugins/common/muxing/libmuxing.la \
 	$(top_builddir)/src/clock-correlation-validator/libclock-correlation-validator.la \
@@ -111,27 +111,27 @@ babeltrace2_bin_LDADD += \
 	$(top_builddir)/src/compat/libcompat.la
 
 if ENABLE_DEBUG_INFO
-babeltrace2_bin_LDADD += $(ELFUTILS_LIBS)
+babeltrace2_LDADD += $(ELFUTILS_LIBS)
 endif
 
-EXTRA_babeltrace2_bin_DEPENDENCIES += \
+EXTRA_babeltrace2_DEPENDENCIES += \
 	$(PLUGINS_PATH)/ctf/libbabeltrace-plugin-ctf-builtin.la \
 	$(PLUGINS_PATH)/text/libbabeltrace-plugin-text-builtin.la \
 	$(PLUGINS_PATH)/utils/libbabeltrace-plugin-utils-builtin.la
 
 if ENABLE_DEBUG_INFO
-EXTRA_babeltrace2_bin_DEPENDENCIES += \
+EXTRA_babeltrace2_DEPENDENCIES += \
 	$(PLUGINS_PATH)/lttng-utils/libbabeltrace-plugin-lttng-utils-builtin.la
 endif # ENABLE_DEBUG_INFO
 endif # ENABLE_BUILT_IN_PLUGINS
 
 if BABELTRACE_BUILD_WITH_MINGW
-babeltrace2_bin_LDADD += -lws2_32 -lrpcrt4 -lintl -liconv -lole32 -lpthread
+babeltrace2_LDADD += -lws2_32 -lrpcrt4 -lintl -liconv -lole32 -lpthread
 endif
 
 # Only used for in-tree execution and tests
-babeltrace2_SOURCES = $(babeltrace2_bin_SOURCES)
-babeltrace2_LDFLAGS = $(babeltrace2_bin_LDFLAGS)
-babeltrace2_LDADD = $(babeltrace2_bin_LDADD)
-babeltrace2_CFLAGS = $(AM_CFLAGS) -DBT_SET_DEFAULT_IN_TREE_CONFIGURATION
-EXTRA_babeltrace2_DEPENDENCIES = $(EXTRA_babeltrace2_bin_DEPENDENCIES)
+babeltrace2_for_tests_SOURCES = $(babeltrace2_SOURCES)
+babeltrace2_for_tests_LDFLAGS = $(babeltrace2_LDFLAGS)
+babeltrace2_for_tests_LDADD = $(babeltrace2_LDADD)
+babeltrace2_for_tests_CFLAGS = $(AM_CFLAGS) -DBT_SET_DEFAULT_IN_TREE_CONFIGURATION
+EXTRA_babeltrace2_for_tests_DEPENDENCIES = $(EXTRA_babeltrace2_DEPENDENCIES)

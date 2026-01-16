@@ -128,9 +128,9 @@ _source_env_sh() {
 _source_env_sh
 unset -f _source_env_sh
 
-# Path to the `babeltrace2` command, if not set
+# Path to the `babeltrace2-for-tests` command, if not set
 if [[ -z ${BT_TESTS_BT2_BIN:-} ]]; then
-	BT_TESTS_BT2_BIN=$BT_TESTS_BUILDDIR/../src/cli/babeltrace2
+	BT_TESTS_BT2_BIN=$BT_TESTS_BUILDDIR/../src/cli/babeltrace2-for-tests
 
 	if [[ $BT_TESTS_OS_TYPE == mingw ]]; then
 		BT_TESTS_BT2_BIN+=.exe
