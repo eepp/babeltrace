@@ -204,15 +204,21 @@ int require_loaded_plugins(const bt_value *plugin_paths)
 
 	loaded = true;
 
-	if (load_dynamic_plugins(plugin_paths)) {
+#ifdef BT_SET_DEFAULT_IN_TREE_CONFIGURATION
+	/*
+	 * For in-tree execution and testing, load static (built-in)
+	 * plugins first so that they take precedence.
+	 */
+	if (load_static_plugins() || load_dynamic_plugins(plugin_paths)) {
 		ret = -1;
 		goto end;
 	}
-
-	if (load_static_plugins()) {
+#else
+	if (load_dynamic_plugins(plugin_paths) || load_static_plugins()) {
 		ret = -1;
 		goto end;
 	}
+#endif
 
 	BT_LOGI("Loaded all plugins: count=%u", loaded_plugins->len);
 

@@ -482,12 +482,13 @@ AE_IF_FEATURE_ENABLED([python-plugins], [
   ])
 ])
 
-# Check for conflicting optional features user choices
-AE_IF_FEATURE_ENABLED([built-in-plugins], [
-  # Built-in plug-ins are only available when the --disable-shared --enable-static options are used.
-  AE_IF_FEATURE_NOT_ENABLED([static], [AC_MSG_ERROR(‘--enable-static’ must be used to bundle plug-ins in the ‘babeltrace2’ executable)])
-  AE_IF_FEATURE_ENABLED([shared], [AC_MSG_ERROR(‘--disable-shared’ must be used to bundle plug-ins in the ‘babeltrace2’ executable)])
+# Either shared libraries OR built-in plugins must be enabled,
+# otherwise the CLI has no "standard" plugins.
+AS_IF([test "x$enable_shared" = xno && ! AE_IS_FEATURE_ENABLED([built-in-plugins])], [
+  AC_MSG_ERROR([You must enable either shared libraries (‘--enable-shared’) or built-in plugins (‘--enable-built-in-plugins’)])
 ])
+
+# Check for conflicting optional features user choices
 
 AE_IF_FEATURE_ENABLED([built-in-python-plugin-support], [
   AE_IF_FEATURE_NOT_ENABLED([python-plugins], [AC_MSG_ERROR([‘--enable-python-plugins’ must be used to bundle Python plugin support in the ‘babeltrace2’ executable])])
@@ -512,6 +513,7 @@ AM_CONDITIONAL([ENABLE_BUILT_IN_PYTHON_PLUGIN_SUPPORT], AE_IS_FEATURE_ENABLED([b
 AM_CONDITIONAL([ENABLE_MAN_PAGES], AE_IS_FEATURE_ENABLED([man-pages]))
 AM_CONDITIONAL([ENABLE_PYTHON_COMMON_DEPS], AE_IS_FEATURE_ENABLED([python-bindings]) || AE_IS_FEATURE_ENABLED([python-plugins]))
 AM_CONDITIONAL([ENABLE_ASAN], AE_IS_FEATURE_ENABLED([asan]))
+AM_CONDITIONAL([ENABLE_SHARED], [test "x$enable_shared" = xyes])
 
 
 ##                                                                    ##
@@ -520,10 +522,6 @@ AM_CONDITIONAL([ENABLE_ASAN], AE_IS_FEATURE_ENABLED([asan]))
 
 AE_IF_FEATURE_ENABLED([git-version], [ENABLE_GIT_VERSION=1], [ENABLE_GIT_VERSION=0])
 AC_SUBST([ENABLE_GIT_VERSION])
-
-AE_IF_FEATURE_ENABLED([built-in-plugins],
-  [AC_DEFINE([BT_BUILT_IN_PLUGINS], [1], [Define to ‘1’ to register plug-in attributes in static executable sections])]
-)
 
 AE_IF_FEATURE_ENABLED([built-in-python-plugin-support],
   [AC_DEFINE([BT_BUILT_IN_PYTHON_PLUGIN_SUPPORT], [1], [Define to ‘1’ to register plug-in attributes in static executable sections])]

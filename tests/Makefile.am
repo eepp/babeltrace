@@ -2,8 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-include $(top_srcdir)/src/Makefile.common.inc
-
 SUBDIRS = \
 	utils \
 	lib \
@@ -102,7 +100,6 @@ TESTS_CPP_COMMON = \
 TESTS_LIB = \
 	lib/test-bt-uuid \
 	lib/test-bt-values \
-	lib/test-fields.sh \
 	lib/test-graph-topo \
 	lib/test-mip \
 	lib/test-remove-destruction-listener-in-destruction-listener \
@@ -115,7 +112,6 @@ TESTS_PLUGINS = \
 	plugins/src.ctf.fs/test-deterministic-ordering.sh \
 	plugins/sink.ctf.fs/succeed/test-succeed.sh \
 	plugins/sink.text.details/succeed/test-succeed.sh \
-	plugins/flt.utils.muxer/test-clock-compatibility.sh \
 	plugins/sink.text.pretty/test-pretty.sh
 
 TESTS_PYTHON_PLUGIN_PROVIDER =
@@ -164,12 +160,18 @@ cpp_common_test_unicode_conv_LDADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(COMMON_TEST_LDADD)
 
-if !ENABLE_BUILT_IN_PLUGINS
+# `lib/test-fields.sh`, `lib/test-plugin-init-fail-*.sh`, and
+# `lib/test-plugins.sh` need to load shared library plugins.
+if ENABLE_SHARED
+TESTS_LIB += lib/test-fields.sh
+TESTS_LIB += lib/test-plugin-init-fail-no.sh
+TESTS_LIB += lib/test-plugin-init-fail-yes.sh
 TESTS_LIB += lib/test-plugins.sh
-endif
+endif # ENABLE_SHARED
 
-# plugins/flt.utils.muxer
-
+# `plugins/flt.utils.muxer/test-clock-compatibility.sh` needs to load
+# standard plugins, so only build it when shared libraries are enabled.
+if ENABLE_SHARED
 noinst_PROGRAMS += plugins/flt.utils.muxer/test-clock-compatibility
 
 plugins_flt_utils_muxer_test_clock_compatibility_SOURCES = \
@@ -180,13 +182,9 @@ plugins_flt_utils_muxer_test_clock_compatibility_LDADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
-if ENABLE_BUILT_IN_PLUGINS
-plugins_flt_utils_muxer_test_clock_compatibility_LDFLAGS = $(call pluginarchive,utils)
-plugins_flt_utils_muxer_test_clock_compatibility_LDADD += \
-	$(top_builddir)/src/plugins/common/param-validation/libparam-validation.la
-endif # ENABLE_BUILT_IN_PLUGINS
+TESTS_PLUGINS += plugins/flt.utils.muxer/test-clock-compatibility.sh
+endif # ENABLE_SHARED
 
-if !ENABLE_BUILT_IN_PLUGINS
 if ENABLE_PYTHON_BINDINGS
 TESTS_PLUGINS += plugins/src.ctf.fs/query/test-query-support-info.sh
 TESTS_PLUGINS += plugins/src.ctf.fs/query/test-query-trace-info.sh
@@ -195,7 +193,6 @@ TESTS_PLUGINS += plugins/src.ctf.fs/query/test-query-metadata-info-py.sh
 TESTS_PLUGINS += plugins/src.ctf.lttng-live/test-query.sh
 TESTS_PLUGINS += plugins/sink.ctf.fs/test-assume-single-trace.sh
 TESTS_PLUGINS += plugins/sink.ctf.fs/test-stream-names.sh
-endif # !ENABLE_BUILT_IN_PLUGINS
 endif # ENABLE_PYTHON_BINDINGS
 
 if ENABLE_DEBUG_INFO
@@ -232,9 +229,19 @@ if HAVE_PYTHON
 TESTS_PLUGINS += plugins/src.ctf.lttng-live/test-live.sh
 endif
 
+# `lib/conds/test-conds.sh` needs:
+#
+# • Python for `test.py` (but no Babeltrace bindings).
+#
+# • The developer mode to enable all condition checks.
+#
+# • Shared libraries because it uses runIn() which needs to load
+#   the standard `utils` plugin.
 if HAVE_PYTHON
 if DEV_MODE
+if ENABLE_SHARED
 TESTS_LIB += lib/conds/test-conds.sh
+endif # ENABLE_SHARED
 endif # DEV_MODE
 endif # HAVE_PYTHON
 
