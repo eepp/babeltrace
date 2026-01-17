@@ -9,6 +9,8 @@
 
 #include <stdint.h>
 
+#include <babeltrace2-ctf-writer/types.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
