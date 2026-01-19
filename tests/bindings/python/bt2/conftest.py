@@ -63,3 +63,11 @@ def const_ev_msg() -> "bt2._EventMessageConst":
     import utils
 
     return utils.get_const_event_message()
+
+
+# Fresh, default trace class.
+@pytest.fixture
+def def_tc() -> "bt2._TraceClass":
+    import utils
+
+    return utils.get_default_trace_class()
