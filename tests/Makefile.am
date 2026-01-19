@@ -22,7 +22,8 @@ COMMON_TEST_LDADD = \
 EXTRA_DIST = $(srcdir)/data \
 	     bindings/python/bt2/.coveragerc \
 	     conftest.py \
-	     bindings/python/bt2/pytest_interrupter.py
+	     bindings/python/bt2/pytest_interrupter.py \
+	     bindings/python/bt2/pytest_component_descriptor.py
 
 dist_check_SCRIPTS = \
 	bindings/python/bt2/test-python-bt2.sh \
