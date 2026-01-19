@@ -33,7 +33,8 @@ EXTRA_DIST = $(srcdir)/data \
 	     bindings/python/bt2/pytest_mip1.py \
 	     bindings/python/bt2/pytest_component.py \
 	     bindings/python/bt2/pytest_event_class.py \
-	     bindings/python/bt2/pytest_package.py
+	     bindings/python/bt2/pytest_package.py \
+	     bindings/python/bt2/pytest_error.py
 
 dist_check_SCRIPTS = \
 	bindings/python/bt2/test-python-bt2.sh \
