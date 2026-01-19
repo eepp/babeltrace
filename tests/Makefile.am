@@ -34,7 +34,8 @@ EXTRA_DIST = $(srcdir)/data \
 	     bindings/python/bt2/pytest_component.py \
 	     bindings/python/bt2/pytest_event_class.py \
 	     bindings/python/bt2/pytest_package.py \
-	     bindings/python/bt2/pytest_error.py
+	     bindings/python/bt2/pytest_error.py \
+	     bindings/python/bt2/pytest_trace.py
 
 dist_check_SCRIPTS = \
 	bindings/python/bt2/test-python-bt2.sh \
@@ -50,7 +51,6 @@ dist_check_SCRIPTS = \
 	bindings/python/bt2/test_port.py \
 	bindings/python/bt2/test_query_executor.py \
 	bindings/python/bt2/test_stream_class.py \
-	bindings/python/bt2/test_trace.py \
 	bindings/python/bt2/test_trace_collection_message_iterator.py \
 	bindings/python/bt2/test_value.py \
 	bindings/python/bt2/utils.py \
