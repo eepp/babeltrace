@@ -30,12 +30,12 @@ EXTRA_DIST = $(srcdir)/data \
 	     bindings/python/bt2/pytest_stream.py \
 	     bindings/python/bt2/pytest_mip.py \
 	     bindings/python/bt2/pytest_plugin.py \
-	     bindings/python/bt2/pytest_mip1.py
+	     bindings/python/bt2/pytest_mip1.py \
+	     bindings/python/bt2/pytest_component.py
 
 dist_check_SCRIPTS = \
 	bindings/python/bt2/test-python-bt2.sh \
 	bindings/python/bt2/test_clock_class.py \
-	bindings/python/bt2/test_component.py \
 	bindings/python/bt2/test_component_class.py \
 	bindings/python/bt2/test_event.py \
 	bindings/python/bt2/test_event_class.py \
