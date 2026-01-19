@@ -38,12 +38,12 @@ EXTRA_DIST = $(srcdir)/data \
 	     bindings/python/bt2/pytest_trace.py \
 	     bindings/python/bt2/pytest_trace_class.py \
 	     bindings/python/bt2/pytest_query_executor.py \
-	     bindings/python/bt2/pytest_integer_range_set.py
+	     bindings/python/bt2/pytest_integer_range_set.py \
+	     bindings/python/bt2/pytest_component_class.py
 
 dist_check_SCRIPTS = \
 	bindings/python/bt2/test-python-bt2.sh \
 	bindings/python/bt2/test_clock_class.py \
-	bindings/python/bt2/test_component_class.py \
 	bindings/python/bt2/test_event.py \
 	bindings/python/bt2/test_field.py \
 	bindings/python/bt2/test_field_class.py \

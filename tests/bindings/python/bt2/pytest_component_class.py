@@ -1,25 +1,23 @@
 # SPDX-License-Identifier: GPL-2.0-only
-#
-# Copyright (C) 2019 EfficiOS Inc.
-#
-
-import unittest
+# Copyright (C) 2019-2026 EfficiOS Inc.
 
 import bt2
+import pytest
 
 
-class UserComponentClassTestCase(unittest.TestCase):
-    def _test_no_init(self, cls):
-        with self.assertRaises(RuntimeError):
+class TestClassDef:
+    @staticmethod
+    def _test_no_init(cls):
+        with pytest.raises(RuntimeError):
             cls()
 
-    def test_no_init_source(self):
-        class MySource(
+    def test_no_init_src(self):
+        class MySrc(
             bt2._UserSourceComponent, message_iterator_class=bt2._UserMessageIterator
         ):
             pass
 
-        self._test_no_init(MySource)
+        self._test_no_init(MySrc)
 
     def test_no_init_filter(self):
         class MyFilter(
@@ -36,37 +34,37 @@ class UserComponentClassTestCase(unittest.TestCase):
 
         self._test_no_init(MySink)
 
-    def test_incomplete_source_no_msg_iter_cls(self):
-        with self.assertRaises(bt2._IncompleteUserClass):
+    def test_incomplete_src_no_msg_iter_cls(self):
+        with pytest.raises(bt2._IncompleteUserClass):
 
-            class MySource(bt2._UserSourceComponent):
+            class MySrc(bt2._UserSourceComponent):
                 pass
 
-    def test_incomplete_source_wrong_msg_iter_cls_type(self):
-        with self.assertRaises(bt2._IncompleteUserClass):
+    def test_incomplete_src_wrong_msg_iter_cls_type(self):
+        with pytest.raises(bt2._IncompleteUserClass):
 
-            class MySource(bt2._UserSourceComponent, message_iterator_class=int):
+            class MySrc(bt2._UserSourceComponent, message_iterator_class=int):
                 pass
 
-    def test_incomplete_filter_no_msg_iter_cls(self):
-        with self.assertRaises(bt2._IncompleteUserClass):
+    def test_incomplete_flt_no_msg_iter_cls(self):
+        with pytest.raises(bt2._IncompleteUserClass):
 
-            class MyFilter(bt2._UserFilterComponent):
+            class MyFlt(bt2._UserFilterComponent):
                 pass
 
     def test_incomplete_sink_no_consume_method(self):
-        with self.assertRaises(bt2._IncompleteUserClass):
+        with pytest.raises(bt2._IncompleteUserClass):
 
             class MySink(bt2._UserSinkComponent):
                 pass
 
-    def test_minimal_source(self):
-        class MySource(
+    def test_minimal_src(self):
+        class MySrc(
             bt2._UserSourceComponent, message_iterator_class=bt2._UserMessageIterator
         ):
             pass
 
-    def test_minimal_filter(self):
+    def test_minimal_flt(self):
         class MyFilter(
             bt2._UserFilterComponent, message_iterator_class=bt2._UserMessageIterator
         ):
@@ -77,28 +75,30 @@ class UserComponentClassTestCase(unittest.TestCase):
             def _user_consume(self):
                 pass
 
+
+class TestUser:
     def test_default_name(self):
         class MySink(bt2._UserSinkComponent):
             def _user_consume(self):
                 pass
 
-        self.assertEqual(MySink.name, "MySink")
+        assert MySink.name == "MySink"
 
     def test_custom_name(self):
         class MySink(bt2._UserSinkComponent, name="salut"):
             def _user_consume(self):
                 pass
 
-        self.assertEqual(MySink.name, "salut")
+        assert MySink.name == "salut"
 
     def test_invalid_custom_name(self):
-        with self.assertRaises(TypeError):
+        with pytest.raises(TypeError):
 
             class MySink(bt2._UserSinkComponent, name=23):
                 def _user_consume(self):
                     pass
 
-    def test_description(self):
+    def test_descr(self):
         class MySink(bt2._UserSinkComponent):
             """
             The description.
@@ -113,20 +113,18 @@ class UserComponentClassTestCase(unittest.TestCase):
             def _user_consume(self):
                 pass
 
-        self.assertEqual(MySink.description, "The description.")
+        assert MySink.description == "The description."
 
-    def test_empty_description_no_lines(self):
+    def test_empty_descr_no_lines(self):
         class MySink(bt2._UserSinkComponent):
-            # fmt: off
             """"""
-            # fmt: on
 
             def _user_consume(self):
                 pass
 
-        self.assertIsNone(MySink.description)
+        assert MySink.description is None
 
-    def test_empty_description_no_contents(self):
+    def test_empty_descr_no_contents(self):
         class MySink(bt2._UserSinkComponent):
             # fmt: off
             """
@@ -136,16 +134,16 @@ class UserComponentClassTestCase(unittest.TestCase):
             def _user_consume(self):
                 pass
 
-        self.assertIsNone(MySink.description)
+        assert MySink.description is None
 
-    def test_empty_description_single_line(self):
+    def test_empty_descr_single_line(self):
         class MySink(bt2._UserSinkComponent):
             """my description"""
 
             def _user_consume(self):
                 pass
 
-        self.assertEqual(MySink.description, "my description")
+        assert MySink.description == "my description"
 
     def test_help(self):
         class MySink(bt2._UserSinkComponent):
@@ -160,25 +158,34 @@ class UserComponentClassTestCase(unittest.TestCase):
             def _user_consume(self):
                 pass
 
-        self.assertEqual(MySink.help, "The help\ntext is\nhere.")
+        assert MySink.help == "The help\ntext is\nhere."
 
     def test_addr(self):
         class MySink(bt2._UserSinkComponent):
             def _user_consume(self):
                 pass
 
-        self.assertIsInstance(MySink.addr, int)
-        self.assertNotEqual(MySink.addr, 0)
+        assert isinstance(MySink.addr, int)
+        assert MySink.addr != 0
 
-    def test_query_not_implemented(self):
+    def test_eq(self):
         class MySink(bt2._UserSinkComponent):
             def _user_consume(self):
                 pass
 
-        with self.assertRaises(bt2.UnknownObject):
+        assert MySink == MySink
+
+
+class TestUserQuery:
+    def test_not_implemented(self):
+        class MySink(bt2._UserSinkComponent):
+            def _user_consume(self):
+                pass
+
+        with pytest.raises(bt2.UnknownObject):
             bt2.QueryExecutor(MySink, "obj", 23).query()
 
-    def test_query_raises(self):
+    def test_raises(self):
         class MySink(bt2._UserSinkComponent):
             def _user_consume(self):
                 pass
@@ -187,10 +194,10 @@ class UserComponentClassTestCase(unittest.TestCase):
             def _user_query(cls, priv_query_exec, obj, params):
                 raise ValueError
 
-        with self.assertRaises(bt2._Error):
+        with pytest.raises(bt2._Error):
             bt2.QueryExecutor(MySink, "obj", 23).query()
 
-    def test_query_wrong_return_type(self):
+    def test_wrong_return_type(self):
         class MySink(bt2._UserSinkComponent):
             def _user_consume(self):
                 pass
@@ -199,45 +206,45 @@ class UserComponentClassTestCase(unittest.TestCase):
             def _user_query(cls, priv_query_exec, obj, params, method_obj):
                 return ...
 
-        with self.assertRaises(bt2._Error):
+        with pytest.raises(bt2._Error):
             bt2.QueryExecutor(MySink, "obj", 23).query()
 
-    def test_query_params_none(self):
+    def test_params_none(self):
         class MySink(bt2._UserSinkComponent):
             def _user_consume(self):
                 pass
 
             @classmethod
             def _user_query(cls, priv_query_exec, obj, params, method_obj):
-                nonlocal query_params
-                query_params = params
-                return None
+                nonlocal called
 
-        query_params = None
-        params = None
-        res = bt2.QueryExecutor(MySink, "obj", params).query()
-        self.assertEqual(query_params, params)
-        self.assertIsNone(res)
-        del query_params
+                called = True
+                assert params is None
 
-    def test_query_logging_level(self):
+        called = False
+        res = bt2.QueryExecutor(MySink, "obj", None).query()
+        assert called
+        assert res is None
+
+    def test_log_level(self):
         class MySink(bt2._UserSinkComponent):
             def _user_consume(self):
                 pass
 
             @classmethod
             def _user_query(cls, priv_query_exec, obj, params, method_obj):
-                nonlocal query_log_level
-                query_log_level = priv_query_exec.logging_level
+                nonlocal called
 
-        query_log_level = None
+                called = True
+                assert priv_query_exec.logging_level == bt2.LoggingLevel.WARNING
+
         query_exec = bt2.QueryExecutor(MySink, "obj", None)
         query_exec.logging_level = bt2.LoggingLevel.WARNING
+        called = False
         query_exec.query()
-        self.assertEqual(query_log_level, bt2.LoggingLevel.WARNING)
-        del query_log_level
+        assert called
 
-    def test_query_returns_none(self):
+    def test_returns_none(self):
         class MySink(bt2._UserSinkComponent):
             def _user_consume(self):
                 pass
@@ -247,59 +254,54 @@ class UserComponentClassTestCase(unittest.TestCase):
                 return
 
         res = bt2.QueryExecutor(MySink, "obj", None).query()
-        self.assertIsNone(res)
+        assert res is None
 
-    def test_query_simple(self):
+    def test_simple(self):
         class MySink(bt2._UserSinkComponent):
             def _user_consume(self):
                 pass
 
             @classmethod
             def _user_query(cls, priv_query_exec, obj, params, method_obj):
-                nonlocal query_params
-                query_params = params
+                nonlocal called
+
+                called = True
+                assert params == test_params
                 return 17.5
 
-        query_params = None
-        params = ["coucou", 23, None]
-        res = bt2.QueryExecutor(MySink, "obj", params).query()
-        self.assertEqual(query_params, params)
-        self.assertEqual(res, 17.5)
-        del query_params
+        test_params = ["coucou", 23, None]
+        called = False
+        assert bt2.QueryExecutor(MySink, "obj", test_params).query() == 17.5
+        assert called
 
-    def test_query_complex(self):
+    def test_complex(self):
         class MySink(bt2._UserSinkComponent):
             def _user_consume(self):
                 pass
 
             @classmethod
             def _user_query(cls, priv_query_exec, obj, params, method_obj):
-                nonlocal query_params
-                query_params = params
-                return {"null": None, "bt2": "BT2"}
+                nonlocal called
 
-        query_params = None
-        params = {
+                called = True
+                assert params == test_params
+                return test_ret
+
+        test_params = {
             "array": ["coucou", 23, None],
             "other_map": {"yes": "yeah", "19": 19, "minus 1.5": -1.5},
             "null": None,
         }
-
-        res = bt2.QueryExecutor(MySink, "obj", params).query()
-        self.assertEqual(query_params, params)
-        self.assertEqual(res, {"null": None, "bt2": "BT2"})
-        del query_params
-
-    def test_eq(self):
-        class MySink(bt2._UserSinkComponent):
-            def _user_consume(self):
-                pass
-
-        self.assertEqual(MySink, MySink)
+        test_ret = {"null": None, "bt2": "BT2"}
+        called = False
+        res = bt2.QueryExecutor(MySink, "obj", test_params).query()
+        assert called
+        assert res == test_ret
 
 
-class ComponentClassTestCase(unittest.TestCase):
-    def setUp(self):
+class TestConst:
+    @pytest.fixture(scope="class")
+    def py_comp_cls_and_comp_cls(self):
         class MySink(bt2._UserSinkComponent):
             """
             The description.
@@ -314,43 +316,46 @@ class ComponentClassTestCase(unittest.TestCase):
             def _user_query(cls, priv_query_exec, obj, params, method_obj):
                 return [obj, params, 23]
 
-        self._py_comp_cls = MySink
+        py_comp_cls = MySink
         graph = bt2.Graph()
         comp = graph.add_component(MySink, "salut")
-        self._comp_cls = comp.cls
-        self.assertIs(type(self._comp_cls), bt2._SinkComponentClassConst)
+        comp_cls = comp.cls
+        assert type(comp_cls) is bt2._SinkComponentClassConst
+        return py_comp_cls, comp_cls
 
-    def tearDown(self):
-        del self._py_comp_cls
-        del self._comp_cls
+    @pytest.fixture(scope="class")
+    def py_comp_cls(self, py_comp_cls_and_comp_cls):
+        return py_comp_cls_and_comp_cls[0]
 
-    def test_description(self):
-        self.assertEqual(self._comp_cls.description, "The description.")
+    @pytest.fixture(scope="class")
+    def comp_cls(self, py_comp_cls_and_comp_cls):
+        return py_comp_cls_and_comp_cls[1]
 
-    def test_help(self):
-        self.assertEqual(self._comp_cls.help, "The help.")
+    def test_description(self, comp_cls):
+        assert comp_cls.description == "The description."
 
-    def test_name(self):
-        self.assertEqual(self._comp_cls.name, "MySink")
+    def test_help(self, comp_cls):
+        assert comp_cls.help == "The help."
 
-    def test_addr(self):
-        self.assertIsInstance(self._comp_cls.addr, int)
-        self.assertNotEqual(self._comp_cls.addr, 0)
+    def test_name(self, comp_cls):
+        assert comp_cls.name == "MySink"
 
-    def test_eq_invalid(self):
-        self.assertFalse(self._comp_cls == 23)
+    def test_addr(self, comp_cls):
+        assert isinstance(comp_cls.addr, int)
+        assert comp_cls.addr != 0
 
-    def test_eq(self):
-        self.assertEqual(self._comp_cls, self._comp_cls)
-        self.assertEqual(self._py_comp_cls, self._comp_cls)
+    def test_eq_invalid(self, comp_cls):
+        assert not (comp_cls == 23)
 
-    def test_query(self):
-        res = bt2.QueryExecutor(
-            self._comp_cls, "an object", {"yes": "no", "book": -17}
-        ).query()
-        expected = ["an object", {"yes": "no", "book": -17}, 23]
-        self.assertEqual(res, expected)
+    def test_eq(self, py_comp_cls, comp_cls):
+        assert comp_cls == comp_cls
+        assert py_comp_cls == comp_cls
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_query(self, comp_cls):
+        test_params = {"yes": "no", "book": -17}
+        expected = [
+            "an object",
+            test_params,
+            23,
+        ]
+        assert bt2.QueryExecutor(comp_cls, "an object", test_params).query() == expected
