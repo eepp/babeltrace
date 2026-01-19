@@ -23,14 +23,14 @@ EXTRA_DIST = $(srcdir)/data \
 	     bindings/python/bt2/.coveragerc \
 	     conftest.py \
 	     bindings/python/bt2/pytest_interrupter.py \
-	     bindings/python/bt2/pytest_component_descriptor.py
+	     bindings/python/bt2/pytest_component_descriptor.py \
+	     bindings/python/bt2/pytest_connection.py
 
 dist_check_SCRIPTS = \
 	bindings/python/bt2/test-python-bt2.sh \
 	bindings/python/bt2/test_clock_class.py \
 	bindings/python/bt2/test_component.py \
 	bindings/python/bt2/test_component_class.py \
-	bindings/python/bt2/test_connection.py \
 	bindings/python/bt2/test_event.py \
 	bindings/python/bt2/test_event_class.py \
 	bindings/python/bt2/test_field.py \
