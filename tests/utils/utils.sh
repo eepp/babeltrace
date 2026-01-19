@@ -139,15 +139,9 @@ fi
 
 export BT_TESTS_BT2_BIN
 
-# This doesn't need to be exported, but it needs to remain set for
-# bt_run_in_py_env() to use it.
-#
-# TODO: Remove when `tests/bindings/python/bt2/test_plugin.py` is fixed.
-_bt_tests_plugins_path=$BT_TESTS_BUILDDIR/../src/plugins
-
 # Colon-separated list of project plugin paths, if not set
 _bt_tests_set_var_def BT_TESTS_BABELTRACE_PLUGIN_PATH \
-	"$BT_TESTS_SRCDIR/utils/python:$_bt_tests_plugins_path/ctf:$_bt_tests_plugins_path/utils:$_bt_tests_plugins_path/text:$_bt_tests_plugins_path/lttng-utils"
+	"$BT_TESTS_SRCDIR/utils/python:$BT_TESTS_BUILDDIR/../src/plugins/ctf:$BT_TESTS_BUILDDIR/../src/plugins/utils:$BT_TESTS_BUILDDIR/../src/plugins/text:$BT_TESTS_BUILDDIR/../src/plugins/lttng-utils"
 
 # Directory containing the Python plugin provider library, if not set
 _bt_tests_set_var_def BT_TESTS_PROVIDER_DIR "$BT_TESTS_BUILDDIR/../src/python-plugin-provider/.libs"
@@ -613,7 +607,6 @@ bt_run_in_py_env() {
 	local -x LIBBABELTRACE2_PLUGIN_PROVIDER_DIR=$BT_TESTS_PROVIDER_DIR
 	local -x BT_TESTS_DATADIR=$BT_TESTS_DATADIR
 	local -x BT_CTF_TRACES_PATH=$BT_CTF_TRACES_PATH
-	local -x BT_PLUGINS_PATH=$_bt_tests_plugins_path
 	local -x PYTHONPATH=$BT_TESTS_PYTHONPATH${PYTHONPATH:+:}${PYTHONPATH:-}
 	local -r main_lib_path=$BT_TESTS_BUILDDIR/../src/lib/.libs
 
