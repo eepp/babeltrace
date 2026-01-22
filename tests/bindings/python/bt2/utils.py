@@ -341,6 +341,61 @@ def create_const_field(tc, field_class, field_value_setter_fn):
     return packet_beg_msg.packet.context_field[field_name]
 
 
+# Creates and returns a const field class from the field class `fc`.
+#
+# This function creates a dummy graph with a source component that
+# produces messages containing a field of class `fc`. By iterating
+# through the messages as a downstream component, the field class
+# becomes const.
+#
+# `tc` is the trace class used to create the stream class and trace.
+#
+# `fc` is the field class to convert to a const field class.
+#
+# `field_value_setter_fn` is a callable that receives the created
+# field and sets its value. This is necessary because the field must
+# have a value before being part of a message.
+def create_const_fc(tc, fc, field_value_setter_fn):
+    field_name = "const field"
+
+    class MyIter(bt2._UserMessageIterator):
+        def __init__(self, config, self_port_output):
+            sc = tc.create_stream_class(
+                packet_context_field_class=tc.create_structure_field_class(
+                    members=((field_name, fc),)
+                ),
+                supports_packets=True,
+            )
+            stream = tc().create_stream(sc)
+            pkt = stream.create_packet()
+            field_value_setter_fn(pkt.context_field[field_name])
+
+            self._msgs = [
+                self._create_stream_beginning_message(stream),
+                self._create_packet_beginning_message(pkt),
+            ]
+
+        def __next__(self):
+            if len(self._msgs) == 0:
+                raise StopIteration
+
+            return self._msgs.pop(0)
+
+    class MySrc(bt2._UserSourceComponent, message_iterator_class=MyIter):
+        def __init__(self, config, params, obj):
+            self._add_output_port("out", params)
+
+    graph = bt2.Graph()
+    src_comp = graph.add_component(MySrc, "my_source", None)
+    msg_iter = TestOutputPortMessageIterator(graph, src_comp.output_ports["out"])
+
+    # Ignore first message, stream beginning
+    _ = next(msg_iter)
+    packet_beg_msg = next(msg_iter)
+
+    return packet_beg_msg.packet.context_field[field_name].cls
+
+
 # Run `msg_iter_next_func` in a bt2._UserMessageIterator.__next__ context.
 #
 # For convenience, a trace and a stream are created.  To allow the caller to
