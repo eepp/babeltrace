@@ -44,11 +44,13 @@ EXTRA_DIST = $(srcdir)/data \
 	     bindings/python/bt2/pytest_stream_class.py \
 	     bindings/python/bt2/pytest_port.py \
 	     bindings/python/bt2/pytest_graph.py \
-	     bindings/python/bt2/pytest_message.py
+	     bindings/python/bt2/pytest_message.py \
+	     bindings/python/bt2/pytest_clock_class.py \
+	     bindings/python/bt2/pytest_clock_snapshot.py \
+	     bindings/python/bt2/pytest_clock_offset.py
 
 dist_check_SCRIPTS = \
 	bindings/python/bt2/test-python-bt2.sh \
-	bindings/python/bt2/test_clock_class.py \
 	bindings/python/bt2/test_field.py \
 	bindings/python/bt2/test_field_class.py \
 	bindings/python/bt2/test_message_iterator.py \
