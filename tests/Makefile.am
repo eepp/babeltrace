@@ -50,12 +50,12 @@ EXTRA_DIST = $(srcdir)/data \
 	     bindings/python/bt2/pytest_clock_offset.py \
 	     bindings/python/bt2/pytest_trace_collection_message_iterator.py \
 	     bindings/python/bt2/pytest_message_iterator.py \
-	     bindings/python/bt2/pytest_field_class.py
+	     bindings/python/bt2/pytest_field_class.py \
+	     bindings/python/bt2/pytest_value.py
 
 dist_check_SCRIPTS = \
 	bindings/python/bt2/test-python-bt2.sh \
 	bindings/python/bt2/test_field.py \
-	bindings/python/bt2/test_value.py \
 	bindings/python/bt2/utils.py \
 	pytest-tests.sh \
 	pytest-tests-tap.sh
