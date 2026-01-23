@@ -196,7 +196,7 @@ def test_destruction_listener():
     num_destruct_calls = 0
 
     # Add destruction listeners
-    tc = utils.get_default_trace_class()
+    tc = utils.def_tc()
     handle_1 = tc.add_destruction_listener(on_tc_destruction)
     assert type(handle_1) is bt2_utils._ListenerHandle
     handle_2 = tc.add_destruction_listener(on_tc_destruction)
@@ -221,8 +221,8 @@ def test_remove_destruction_listener_wrong_obj():
     def on_tc_destruction(trace_class):
         pass
 
-    tc_1 = utils.get_default_trace_class()
-    tc_2 = utils.get_default_trace_class()
+    tc_1 = utils.def_tc()
+    tc_2 = utils.def_tc()
     handle_1 = tc_1.add_destruction_listener(on_tc_destruction)
 
     with pytest.raises(

@@ -13,56 +13,56 @@ if typing.TYPE_CHECKING:
 def stream_beginning_msg() -> "bt2._StreamBeginningMessage":
     import utils
 
-    return utils.get_stream_beginning_message()
+    return utils.stream_beginning_msg()
 
 
 @pytest.fixture
 def const_stream_beginning_msg() -> "bt2._StreamBeginningMessageConst":
     import utils
 
-    return utils.get_const_stream_beginning_message()
+    return utils.const_stream_beginning_msg()
 
 
 @pytest.fixture
 def stream_end_msg() -> "bt2._StreamEndMessage":
     import utils
 
-    return utils.get_stream_end_message()
+    return utils.stream_end_msg()
 
 
 @pytest.fixture
 def pkt_beginning_msg() -> "bt2._PacketBeginningMessage":
     import utils
 
-    return utils.get_packet_beginning_message()
+    return utils.pkt_beginning_msg()
 
 
 @pytest.fixture
 def const_pkt_beginning_msg() -> "bt2._PacketBeginningMessageConst":
     import utils
 
-    return utils.get_const_packet_beginning_message()
+    return utils.const_pkt_beginning_msg()
 
 
 @pytest.fixture
 def pkt_end_msg() -> "bt2._PacketEndMessage":
     import utils
 
-    return utils.get_packet_end_message()
+    return utils.pkt_end_msg()
 
 
 @pytest.fixture
 def ev_msg() -> "bt2._EventMessage":
     import utils
 
-    return utils.get_event_message()
+    return utils.ev_msg()
 
 
 @pytest.fixture
 def const_ev_msg() -> "bt2._EventMessageConst":
     import utils
 
-    return utils.get_const_event_message()
+    return utils.const_ev_msg()
 
 
 # Fresh, default trace class.
@@ -70,4 +70,4 @@ def const_ev_msg() -> "bt2._EventMessageConst":
 def def_tc() -> "bt2._TraceClass":
     import utils
 
-    return utils.get_default_trace_class()
+    return utils.def_tc()

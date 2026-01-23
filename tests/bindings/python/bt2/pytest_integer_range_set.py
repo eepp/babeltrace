@@ -12,7 +12,7 @@ def _const_sint_range(int_ranges):
     def range_setter(field):
         field.value = 12
 
-    tc = utils.get_default_trace_class()
+    tc = utils.def_tc()
 
     return (
         utils.create_const_field(
@@ -34,7 +34,7 @@ def _const_uint_range(int_ranges):
     def range_setter(field):
         field.value = 12
 
-    tc = utils.get_default_trace_class()
+    tc = utils.def_tc()
 
     return (
         utils.create_const_field(

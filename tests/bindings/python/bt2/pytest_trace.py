@@ -159,7 +159,7 @@ def test_destruction_listener():
 
     num_tc_destroyed_calls = 0
     num_trace_destroyed_calls = 0
-    tc = utils.get_default_trace_class()
+    tc = utils.def_tc()
     sc = tc.create_stream_class()
     trace = tc()
     stream = trace.create_stream(sc)
@@ -213,9 +213,9 @@ def test_remove_destruction_listener_wrong_object():
     def on_trace_destruction(trace):
         pass
 
-    tc_1 = utils.get_default_trace_class()
+    tc_1 = utils.def_tc()
     trace_1 = tc_1()
-    tc_2 = utils.get_default_trace_class()
+    tc_2 = utils.def_tc()
     trace_2 = tc_2()
     handle_1 = trace_1.add_destruction_listener(on_trace_destruction)
 
