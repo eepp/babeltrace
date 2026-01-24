@@ -5,7 +5,7 @@
 // Render with Asciidoctor
 
 = Babeltrace 2
-19 November 2025
+23 January 2026
 :btversion: 2.1
 :bt2: Babeltrace{nbsp}2
 ifdef::env-github[]
@@ -201,8 +201,7 @@ run any test and exits with status{nbsp}0.
     `babeltrace2` executable.
 
 `--enable-built-in-python-plugin-support`::
-    Statically link the Python plugin provider into the
-    `babeltrace2` executable.
+    Statically link the Python plugin provider into libbabeltrace2.
 
 `--enable-debug-info`::
     Build the https://lttng.org/[LTTng] debug information filter
@@ -223,10 +222,6 @@ with the `PYTHON` and `PYTHON_CONFIG` environment variable.
 
 `--enable-python-plugins`::
     Build support for {bt2} Python plugins.
-
-`--enable-test-tap-output`::
-    Enable the https://testanything.org/[https://testanything.org/]
-    output format when running tests.
 
 `--enable-vendor-pytest`::
     Use an in-tree pytest instead of an installed one.

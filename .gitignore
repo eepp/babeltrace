@@ -89,7 +89,6 @@ pytestdebug.log
 /tests/plugins/sink.ctf.fs/succeed/gen-trace-float
 /tests/plugins/src.ctf.fs/succeed/gen-trace-simple
 /tests/utils/env.sh
-/tests/utils/pytest-env.sh
 
 # Version extra information
 /version

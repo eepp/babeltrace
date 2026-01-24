@@ -7,7 +7,6 @@ AM_CPPFLAGS += -I$(top_srcdir)/tests/utils
 noinst_LTLIBRARIES =
 
 COMMON_TEST_LDADD = \
-	$(top_builddir)/tests/utils/tap/libtap.la \
 	$(top_builddir)/tests/utils/libtestcommon.la \
 	utils/liblib-utils.la \
 	$(top_builddir)/src/common/libcommon.la \

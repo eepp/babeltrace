@@ -35,7 +35,6 @@ reportPrivateUsage = false
 [tool.pytest.ini_options]
 python_files = [
     "test_*.py",
-    "pytest_*.py",
 ]
 norecursedirs = [
     "*.egg",

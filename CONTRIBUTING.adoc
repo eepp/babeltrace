@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2017-2024 Philippe Proulx <pproulx@efficios.com>
+// SPDX-FileCopyrightText: 2017-2026 Philippe Proulx <pproulx@efficios.com>
 //
 // SPDX-License-Identifier: CC-BY-SA-4.0
 
@@ -20,7 +20,7 @@ endif::env-github[]
 
 = Babeltrace{nbsp}2 contributor's guide
 Jérémie Galarneau, Simon Marchi, Philippe Proulx
-23 October 2024
+23 Janary 2026
 :toclevels: 3
 :icons: font
 :nofooter:
@@ -1294,131 +1294,270 @@ backtrace when Valgrind shows errors.
 
 == Testing
 
-[[test-env]]
-=== Environment
+All {bt2} tests use https://docs.pytest.org/[pytest].
 
-Running `make check` in the build directory (regardless of whether the build is
-in-tree or out-of-tree) automatically sets up the appropriate environment for
-tests to run in, so nothing more is needed.
+With `--enable-vendor-pytest` at project configuration time, the tests
+use `tests/utils/python/vendor/pytest-6.1.2` for Python{nbsp}3.5 and
+Python{nbsp}3.6 or `tests/utils/python/vendor/pytest-7.4.3` for
+Python{nbsp}3.7+.
 
-If building in-tree, you can run single tests from the tree directly:
+Running the {bt2} tests requires Python, the `bt2` Python bindings, and
+{bt2} Python plugin support.
 
-----
-$ ./tests/plugins/sink.text.pretty/test-enum.sh
-----
+=== Run tests with Make
 
-If building out-of-tree, you can get the appropriate environment by sourcing
-the `tests/utils/env.sh` file residing in the build directory against which you
-want to run tests.
+The easiest way to run all the available {bt2} tests is:
 
 ----
-$ source /path/to/my/build/tests/utils/env.sh
-$ ./tests/plugins/sink.text.pretty/test-enum.sh
+$ make check
 ----
 
-==== Python
-
-You can use the `tests/utils/run-in-py-env.sh` script to run any command
-within an environment making the build's `bt2` Python package available,
-as well as the testing utility Python modules.
-
-`run-in-py-env.sh` uses <<test-env,`utils.sh`>> which needs to know the
-build directory, so make sure you set the `BT_TESTS_BUILDDIR`
-environment variable correctly _if you build out of tree_, for example:
+You may pass extra pytest arguments with the
+`BT_TESTS_PYTEST_EXTRA_ARGS` environment variable, for example to
+run them in parallel using
+https://pypi.org/project/pytest-xdist/[pytest-xdist] and get a TAP
+output using https://pypi.org/project/pytest-tap/[pytest-tap]:
 
 ----
-$ export BT_TESTS_BUILDDIR=/path/to/build/babeltrace/tests
+$ make check BT_TESTS_PYTEST_EXTRA_ARGS='-nauto --tap'
 ----
 
-You can run any command which needs the `bt2` Python package through
-`run-in-py-env.sh`, for example:
+=== Running tests with pytest
 
-----
-$ ./tests/utils/run-in-py-env.sh ipython3
-----
+To use pytest directly:
 
-=== Report format
-
-All test scripts output the test results following the
-https://testanything.org/[Test Anything Protocol] (TAP) format.
-
-The TAP format has two mechanisms to print additional information about
-a test:
-
-* Print a line starting with `#` to the standard output.
+. Source `tests/utils/env.sh`, generated in your build directory.
 +
-This is usually done with the `diag()` C function or the `diag` shell
-function.
+This script sets up the required environment variables (library search
+paths, AddressSanitizer options, in-tree pytest path if applicable, and
+more).
++
+It also defines the `bt-pytest` shell function which wraps `pytest` with
+the `--build-dir` option and a cache directory within the build
+directory.
 
-* Print to the standard error.
+. Run `bt-pytest` or `pytest` in the _source_ directory (that's where
+  all the test files are).
++
+Use `bt-pytest` for any build. For in-tree builds, you may use `pytest`
+as is.
 
-=== Python bindings
-
-The `bt2` Python package tests are located in
-`tests/bindings/python/bt2`.
-
-==== Python test runner
-
-`tests/utils/python/testrunner.py` is {bt2}'s Python test runner
-which loads Python files containing unit tests, finds all the test
-cases, and runs the tests, producing a TAP report.
-
-You can see the test runner command's help with:
+For example, with an out-of-tree build:
 
 ----
-$ python3 ./tests/utils/python/testrunner.py --help
+$ source /path/to/build/tests/utils/env.sh
+$ cd /path/to/source
+$ bt-pytest tests/
 ----
 
-By default, the test runner reports failing tests (TAP's `not{nbsp}ok`
-line), but continues to run other tests. You can use the `--failfast`
-option to make the test runner fail as soon as a test fails.
+For an in-tree build:
 
-==== Guides
+----
+$ source tests/utils/env.sh
+$ pytest tests/
+----
 
-To run all the `bt2` Python package tests:
+See the https://docs.pytest.org/en/latest/how-to/usage.html[pytest documentation]
+to learn about the various ways to run specific tests. Here are a few
+examples:
 
-* Run:
+Run all the tests of a test file:: {empty}
 +
 ----
-$ ./tests/utils/run-in-py-env.sh ./tests/bindings/python/bt2/test-python-bt2.sh
-----
-+
-or:
-+
-----
-$ ./tests/utils/run-in-py-env.sh python3 ./tests/utils/python/testrunner.py \
-  ./tests/bindings/python/bt2/ -p '*.py'
+$ bt-pytest tests/bindings/python/bt2/test_value.py
 ----
 
-To run **all the tests** in a test module (for example,
-`test_value.py`):
-
-* Run:
+Run a specific test class:: {empty}
 +
 ----
-$ ./tests/utils/run-in-py-env.sh python3 ./tests/utils/python/testrunner.py \
-  ./tests/bindings/python/bt2 -t test_value
+$ bt-pytest tests/bindings/python/bt2/test_value.py::TestRealValue
 ----
 
-To run a **specific test case** (for example, `RealValueTestCase` within
-`test_value.py`):
-
-* Run:
+Run a specific tests:: {empty}
 +
 ----
-$ ./tests/utils/run-in-py-env.sh python3 ./tests/utils/python/testrunner.py \
-  ./tests/bindings/python/bt2/ -t test_value.RealValueTestCase
+$ bt-pytest tests/plugins/sink.ctf.fs/test_stream_names.py::test_metadata_file_exists
+$ bt-pytest tests/cpp-common/test-uuid.cpp::test_bt2c_uuid_size_returns_16
 ----
 
-To run a **specific test** (for example,
-`RealValueTestCase.test_assign_pos_int` within `test_value.py`):
+=== Main `conftest.py`
 
-* Run:
+`tests/conftest.py` is the main pytest configuration file.
+
+Its role is to:
+
+* Add the `--build-dir` command-line option.
+* Set configuration attributes (paths).
+* Collect and run {cpp} tests using
+  https://github.com/catchorg/Catch2[Catch2].
+* Define common fixtures and markers.
+
+==== Catch2 test collection
+
+`conftest.py` implements a custom pytest collector for {cpp} tests.
+
+pytest collects any `test-*.cpp` file under `tests/` as a Catch2 test
+file. The collector:
+
+. Finds the corresponding compiled test binary in the build directory.
+
+. Runs it with `--list-test-names-only` to discover individual Catch2
+  test cases.
+
+. Creates a pytest item for each Catch2 test case.
+
+This makes it possible to run, filter, and report {cpp} tests like any
+other pytest test.
+
+==== Configuration attributes
+
+`conftest.py` sets the following attributes on the pytest configuration
+object (`request.config`) and may be accessed by tests or fixtures:
+
+`build_root_dir` (`pathlib.Path`)::
+    Root build directory.
+
+`build_tests_dir` (`pathlib.Path`)::
+    `tests` build directory.
+
+`src_tests_dir` (`pathlib.Path`)::
+    `tests` source directory.
+
+`ctf_traces_dir` (`pathlib.Path`)::
+    CTF test traces directory (`tests/data/ctf-traces`).
+
+==== Common fixtures
+
+The following session-scoped fixtures are available to all tests
+and fixtures:
+
+Path fixtures::
+    `src_root_dir`, `src_tests_dir`, `build_root_dir`,
+    `build_tests_dir`, `data_dir`, and `ctf_traces_dir`.
+
+Component class fixtures::
+    `muxer_comp_cls`, `sink_ctf_comp_cls`, `src_ctf_comp_cls`,
+    `trimmer_comp_cls`, `details_comp_cls`, `pretty_comp_cls`,
+    `dmesg_comp_cls`, and `dummy_comp_cls`.
+
+Other::
+    `os_type`: current OS type.
+
+==== Markers
+
+`needs_lttng_utils_plugin`::
+    Skip the test if the `lttng-utils` plugin isn't available.
 +
+`tests/plugins/flt.lttng-utils.debug-info/conftest.py`
+automatically adds this marker to all its test items.
+
+=== `bt_tests_utils` module
+
+`tests/utils/python/bt_tests_utils.py` is a common testing utilities
+module. Any test or `conftest.py` file may import it; our convention is
+to import it as `btu`:
+
+[source,python]
 ----
-$ ./tests/utils/run-in-py-env.sh python3 ./tests/utils/python/testrunner.py \
-  ./tests/bindings/python/bt2/ -t test_value.RealValueTestCase.test_assign_pos_int
+import bt_tests_utils as btu
 ----
+
+The module contains:
+
+OS type::
+    `OsType` enumeration and `os_type()` function.
+
+Subprocess execution::
+    `run()` runs a subprocess with proper environment setup
+    (`PYTHONPATH` and the rest).
+
+CLI parameter formatting::
+    `cli_params_from_obj()` formats a Python object as a `babeltrace2`
+    CLI `--params` value string.
+
+Graph execution::
+    `SinkComponentSpec` (sink component specification) and `convert()`
+    (runs a graph to completion with source, filter, and sink component
+    specifications, like `bt2.TraceCollectionMessageIterator`).
+
+Output comparison test::
+    `convert_sink_text_details_test()` runs a graph with
+    `sink.text.details` and compares the output to an expectation.
+
+Path resolution::
+    `build_dir_of_source_file()` returns the build directory equivalent
+    of a source file path.
+
+Event collection::
+    `tcmi_events()` collects and returns all event messages from a
+    `bt2.TraceCollectionMessageIterator`.
+
+Component class lookup::
+    `CompClsType` enumeration and `find_comp_cls_in_path()` finds a
+    component class within a plugin found by searching a given path.
+
+pytest{nbsp}6/7 compatibility::
+    `PytestFile`, `PytestItem`, and `install_pytest_collect_file()`
+    provide a consistent API across pytest versions for custom
+    collectors.
+
+=== `bt_tests_cli_utils` module
+
+`tests/utils/python/bt_tests_cli_utils.py` is a common CLI testing
+utilities module. Any test or `conftest.py` file may import it; our
+convention is to import it as `btu_cli`:
+
+[source,python]
+----
+import bt_tests_cli_utils as btu_cli
+----
+
+The module contains:
+
+`CliParams`::
+    Component initialization or query parameters as a Python dictionary.
+
+`cli_params_from_obj()`::
+    Formats a Python object as a `babeltrace2` CLI `--params` option
+    value string.
+
+`run_cli()`::
+    Runs the built `babeltrace2-for-tests` CLI with custom
+    arguments `args`, which can contain both strings and `CliParams`
+    instances, considering specific plugin paths.
+
+`run_cli_sink_text_details_test()`::
+    Runs a graph with `sink.text.details` and compares the output to
+    some expectation string/path.
+
+In general, prefer `btu.convert()` and
+`btu.convert_sink_text_details_test()` over `btu_cli.run_cli()` and
+`btu_cli.run_cli_sink_text_details_test()`.
+
+=== Write tests
+
+Follow standard pytest best practices, for example (for Python tests):
+
+* Name test files `test_*.py`, test classes `Test*`, and test
+  functions/methods `test_*()`.
+
+* Use test classes to group related tests if needed; otherwise use
+  free functions within the test file.
+
+* Use fixtures for setup/teardown and shared resources.
++
+Make sure to correctly scope your fixtures.
+
+* Use `pytest.raises()` to test expected exceptions.
+
+* Use `@pytest.mark.parametrize()` to run a test with different inputs.
+
+* Use `@pytest.mark.skip()` or `pytest.mark.skipif()` to skip tests.
+
+* Keep tests focused: one logical assertion per test when practical.
+
+Refer to existing tests in the `tests` directory for examples and
+patterns specific to the {bt2} project.
 
 == {cpp} usage
 

@@ -169,7 +169,7 @@ def pytest_configure(config: "pytest.Config") -> None:
         import bt2  # noqa: F401  # pyright: ignore[reportUnusedImport]
     except ImportError as exc:
         raise RuntimeError(
-            "Failed to import the `bt2` package: make sure to source `tests/utils/pytest-env.sh` before you run pytest."
+            "Failed to import the `bt2` package: make sure to source `tests/utils/env.sh` before you run pytest."
         ) from exc
 
 
