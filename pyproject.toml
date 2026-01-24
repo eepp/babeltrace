@@ -45,3 +45,31 @@ norecursedirs = [
 markers = [
     "needs_lttng_utils_plugin: skip test if the `lttng-utils` plugin isn't available",
 ]
+
+[tool.coverage.run]
+include = ["**/src/bindings/python/bt2/build/build_lib/bt2/*.py"]
+omit = [
+    "native_*.py",
+    "object.py",
+    "utils.py",
+    "logging.py",
+    "py_plugin.py",
+    "typing_mod.py",
+    "test_*.py",
+    "conftest.py",
+    "bt_tests_utils.py",
+    "bt_plugin_*.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "def __repr__",
+    "raise bt2\\.CreationError",
+    "raise NotImplementedError",
+    "return NotImplemented",
+    "pass",
+    "raise \\w+Error\\(['\"][Uu]nexpected",
+    "if (self|other)\\.addr == (self|other)\\.addr",
+    "if not _NO_PRINT_TRACEBACK",
+    "class _PluginVersion:",
+]

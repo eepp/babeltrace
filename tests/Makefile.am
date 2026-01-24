@@ -18,7 +18,6 @@ COMMON_TEST_LDADD = \
 	$(top_builddir)/src/logging/liblogging.la
 
 EXTRA_DIST = $(srcdir)/data \
-	     bindings/python/bt2/.coveragerc \
 	     bindings/python/bt2/conftest.py \
 	     bindings/python/bt2/test_clock_class.py \
 	     bindings/python/bt2/test_clock_offset.py \
