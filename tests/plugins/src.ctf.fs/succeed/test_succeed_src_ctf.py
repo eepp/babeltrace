@@ -42,9 +42,9 @@ _CTF_MIP_COMBOS = [
 ]
 
 
-@pytest.fixture
-def expect_dir(data_dir):
-    return data_dir / "plugins/src.ctf.fs/succeed"
+@pytest.fixture(scope="module")
+def expect_dir():
+    return btu.this_src_dir(__file__)
 
 
 # Test for generated trace using the `gen-trace-simple` binary.

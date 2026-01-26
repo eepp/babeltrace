@@ -3,6 +3,12 @@
 # SPDX-License-Identifier: MIT
 
 EXTRA_DIST = \
+	bt_plugin_list_plugins.py \
+	bt_plugin_params.py \
+	bt_plugin_query.py \
+	bt_plugin_test_cli_exit_status.py \
+	convert-auto-src-comp-discovery-grouping.expect \
+	test-output-ctf-metadata.expect \
 	test_auto_src_comp_discovery_grouping.py \
 	test_auto_src_comp_discovery_log_level.py \
 	test_auto_src_comp_discovery_params.py \

@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2025 EfficiOS Inc.
 # SPDX-License-Identifier: GPL-2.0-only
 
+import pathlib
+
 import pytest
 import bt_tests_utils as btu
 
@@ -32,7 +34,7 @@ _ARCH_PARAMS = {
 }
 
 
-def _run_bin_info_test(data_dir, build_root_dir, arch, test_name):
+def _run_bin_info_test(build_root_dir, arch, test_name):
     binary = btu.exe_path(
         btu.build_dir_of_source_file(build_root_dir, __file__) / "bin-info-test"
     )
@@ -46,9 +48,7 @@ def _run_bin_info_test(data_dir, build_root_dir, arch, test_name):
         binary,
         [test_name],
         extra_env={
-            "BIN_INFO_DATA_DIR": str(
-                data_dir / "plugins/flt.lttng-utils.debug-info" / arch
-            ),
+            "BIN_INFO_DATA_DIR": str(btu.this_src_dir(__file__) / "bins" / arch),
             "BIN_INFO_FOO_ADDR": params["foo_addr"],
             "BIN_INFO_PRINTF_OFFSET": params["printf_offset"],
             "BIN_INFO_PRINTF_LINENO": "36",
@@ -65,20 +65,20 @@ _ARCHS = list(_ARCH_PARAMS.keys())
 
 
 @pytest.mark.parametrize("arch", _ARCHS)
-def test_bin_info_elf_only(data_dir, build_root_dir, arch):
-    _run_bin_info_test(data_dir, build_root_dir, arch, "ELF only")
+def test_bin_info_elf_only(build_root_dir, arch):
+    _run_bin_info_test(build_root_dir, arch, "ELF only")
 
 
 @pytest.mark.parametrize("arch", _ARCHS)
-def test_bin_info_dwarf_bundled(data_dir, build_root_dir, arch):
-    _run_bin_info_test(data_dir, build_root_dir, arch, "DWARF bundled in SO file")
+def test_bin_info_dwarf_bundled(build_root_dir, arch):
+    _run_bin_info_test(build_root_dir, arch, "DWARF bundled in SO file")
 
 
 @pytest.mark.parametrize("arch", _ARCHS)
-def test_bin_info_build_id(data_dir, build_root_dir, arch):
-    _run_bin_info_test(data_dir, build_root_dir, arch, "Separate DWARF via build ID")
+def test_bin_info_build_id(build_root_dir, arch):
+    _run_bin_info_test(build_root_dir, arch, "Separate DWARF via build ID")
 
 
 @pytest.mark.parametrize("arch", _ARCHS)
-def test_bin_info_debug_link(data_dir, build_root_dir, arch):
-    _run_bin_info_test(data_dir, build_root_dir, arch, "Separate DWARF via debug link")
+def test_bin_info_debug_link(build_root_dir, arch):
+    _run_bin_info_test(build_root_dir, arch, "Separate DWARF via debug link")

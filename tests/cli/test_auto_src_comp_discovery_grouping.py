@@ -2,24 +2,25 @@
 # SPDX-FileCopyrightText: 2025 EfficiOS Inc.
 # SPDX-License-Identifier: GPL-2.0-only
 
+import bt_tests_utils as btu
 import bt_tests_cli_utils as btu_cli
 
 
 # Tests the automatic source component discovery mechanism of the CLI.
-def test_grouping(data_dir, build_root_dir):
-    plugin_data_dir = data_dir / "auto-source-discovery" / "grouping"
+def test_grouping(build_root_dir, common_data_dir):
+    plugin_dir = common_data_dir / "auto-src-comp-discovery/grouping"
 
     result = btu_cli.run_cli_sink_text_details_test(
         build_root_dir,
         [
             "convert",
             "ABCDE",
-            str(plugin_data_dir / "traces"),
+            str(plugin_dir / "traces"),
             "some_other_non_opt",
         ],
         {"with-metadata": False},
-        data_dir / "cli" / "convert" / "auto-source-discovery-grouping.expect",
-        plugin_paths=[plugin_data_dir],
+        btu.this_src_dir(__file__) / "convert-auto-src-comp-discovery-grouping.expect",
+        plugin_paths=[plugin_dir],
     )
 
     # Check that the expected warning is printed

@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: 2025 EfficiOS Inc.
 # SPDX-License-Identifier: GPL-2.0-only
 
+import pathlib
+
 import bt2
 import pytest
 import bt_tests_utils as btu
@@ -45,7 +47,6 @@ def test_sink_ctf_fs_succeed(
     ctf_version,
     is_generated,
     build_root_dir,
-    data_dir,
     ctf_traces_dir,
     tmp_path,
     sink_ctf_comp_cls,
@@ -82,11 +83,7 @@ def test_sink_ctf_fs_succeed(
     # Read back the converted trace using `sink.text.details` and compare
     btu.convert_sink_text_details_test(
         out_trace_dir,
-        (
-            data_dir
-            / "plugins/sink.ctf.fs/succeed"
-            / "trace-{}-ctf{}.expect".format(name, ctf_version)
-        ),
+        btu.this_src_dir(__file__) / "trace-{}-ctf{}.expect".format(name, ctf_version),
         details_params={
             "with-uuid": False,
             "with-uid": False,

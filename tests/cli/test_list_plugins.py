@@ -5,23 +5,18 @@ import re
 import textwrap
 
 import pytest
+import bt_tests_utils as btu
 import bt_tests_cli_utils as btu_cli
 
 
 @pytest.fixture(scope="module")
-def plugin_dir(data_dir):
-    return data_dir / "cli/list-plugins"
-
-
-@pytest.fixture(scope="module")
-def cli_run(build_root_dir, plugin_dir):
-    result = btu_cli.run_cli(
+def cli_run(build_root_dir):
+    return btu_cli.run_cli(
         build_root_dir,
         ["list-plugins"],
-        plugin_paths=[plugin_dir],
+        plugin_paths=[btu.this_src_dir(__file__)],
         check=True,
     )
-    return result
 
 
 # Extract the section for a specific plugin from the `list-plugins`
@@ -44,14 +39,14 @@ def test_plugin_entry_present(cli_run):
     ), "Entry for `this-is-a-plugin` not found in output"
 
 
-def test_plugin_entry_content(cli_run, plugin_dir):
+def test_plugin_entry_content(cli_run):
     section = _extract_plugin_section(cli_run.stdout, "this-is-a-plugin")
     assert section is not None, "Entry for `this-is-a-plugin` not found in output"
 
     expected = textwrap.dedent(
         """
         this-is-a-plugin:
-          Path: {plugin_dir}/bt_plugin_list_plugins.py
+          Path: {this_dir}/bt_plugin_list_plugins.py
           Version: 1.2.3bob
           Description: A plugin
           Author: Jorge Mario Bergoglio
@@ -63,7 +58,7 @@ def test_plugin_entry_content(cli_run, plugin_dir):
           Sink component classes:
             'sink.this-is-a-plugin.ThisIsASink'
         """.format(
-            plugin_dir=plugin_dir
+            this_dir=btu.this_src_dir(__file__)
         )
     ).strip()
 

@@ -2,6 +2,7 @@
 # Copyright (C) 2019-2026 EfficiOS Inc.
 
 import os
+import pathlib
 import datetime
 
 import bt2
@@ -416,8 +417,8 @@ def test_auto_src_comp_non_existent(sequence_trace_dir):
 
 
 @pytest.fixture(scope="session")
-def ascd_grouping_dir(data_dir):
-    return data_dir / "auto-source-discovery/grouping"
+def ascd_grouping_dir(common_data_dir):
+    return common_data_dir / "auto-src-comp-discovery/grouping"
 
 
 @pytest.fixture
@@ -452,8 +453,8 @@ def test_ascd_grouping(ascd_grouping_env, ascd_grouping_dir):
 
 
 @pytest.fixture(scope="session")
-def ascd_params_log_level_dir(data_dir):
-    return data_dir / "auto-source-discovery/params-log-level"
+def ascd_params_log_level_dir(common_data_dir):
+    return common_data_dir / "auto-src-comp-discovery/params-log-level"
 
 
 @pytest.fixture

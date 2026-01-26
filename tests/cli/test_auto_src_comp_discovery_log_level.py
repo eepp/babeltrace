@@ -3,12 +3,13 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 import pytest
+import bt_tests_utils as btu
 import bt_tests_cli_utils as btu_cli
 
 
-@pytest.fixture
-def plugin_dir(data_dir):
-    return data_dir / "auto-source-discovery" / "params-log-level"
+@pytest.fixture(scope="module")
+def plugin_dir(common_data_dir):
+    return common_data_dir / "auto-src-comp-discovery/params-log-level"
 
 
 def _run_log_level_test(build_root_dir, plugin_dir, cli_args, expected):

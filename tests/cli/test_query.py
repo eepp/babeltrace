@@ -3,12 +3,13 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 import pytest
+import bt_tests_utils as btu
 import bt_tests_cli_utils as btu_cli
 
 
-@pytest.fixture
-def plugin_dir(data_dir):
-    return data_dir / "cli" / "query"
+@pytest.fixture(scope="module")
+def plugin_dir():
+    return btu.this_src_dir(__file__)
 
 
 @pytest.mark.parametrize(
@@ -34,7 +35,7 @@ def plugin_dir(data_dir):
     ],
 )
 def test_query_success(
-    plugin_dir, build_root_dir, object_name, params, expected_output
+    build_root_dir, plugin_dir, object_name, params, expected_output
 ):
     result = btu_cli.run_cli(
         build_root_dir,
@@ -76,7 +77,7 @@ def test_query_success(
     ],
 )
 def test_query_failure(
-    plugin_dir, build_root_dir, component_class, object_name, params, expected_stderr
+    build_root_dir, plugin_dir, component_class, object_name, params, expected_stderr
 ):
     result = btu_cli.run_cli(
         build_root_dir,

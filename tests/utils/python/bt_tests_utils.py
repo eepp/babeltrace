@@ -56,6 +56,15 @@ def os_type() -> OsType:
         return OsType.UNSUPPORTED
 
 
+# Returns the directory containing the source file `source_file`.
+#
+# Typical usage:
+#
+#     this_src_dir(__file__)
+def this_src_dir(source_file: Union[pathlib.Path, str]) -> pathlib.Path:
+    return pathlib.Path(source_file).resolve().parent
+
+
 # Directory containing the `bt2` Python package considering the root
 # build directory `build_root_dir` (the build directory containing the
 # `tests` directory).

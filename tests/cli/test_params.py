@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 import pytest
+import bt_tests_utils as btu
 import bt_tests_cli_utils as btu_cli
 
 
@@ -56,7 +57,7 @@ import bt_tests_cli_utils as btu_cli
         ),
     ],
 )
-def test_params(data_dir, build_root_dir, src_tests_dir, params_str, expected_output):
+def test_params(build_root_dir, params_str, expected_output):
     res = btu_cli.run_cli(
         build_root_dir,
         [
@@ -67,7 +68,7 @@ def test_params(data_dir, build_root_dir, src_tests_dir, params_str, expected_ou
             "--params",
             params_str,
         ],
-        plugin_paths=[data_dir / "cli/params"],
+        plugin_paths=[btu.this_src_dir(__file__)],
         check=True,
     )
 

@@ -50,21 +50,16 @@ _MIP_VERSIONS = [pytest.param(0, id="mip-0"), pytest.param(1, id="mip-1")]
 # Test that the `flt.lttng-utils.debug-info` filter component produces
 # expected output on a trace containing LTTng debug info fields.
 @pytest.mark.parametrize("mip_version", _MIP_VERSIONS)
-def test_debug_info_trace(data_dir, ctf_traces_dir, mip_version, debug_info_comp_cls):
+def test_debug_info_trace(ctf_traces_dir, mip_version, debug_info_comp_cls):
+    this_src_dir = btu.this_src_dir(__file__)
+
     btu.convert_sink_text_details_test(
         ctf_traces_dir / "1/succeed/debug-info",
-        (
-            data_dir
-            / "plugins/flt.lttng-utils.debug-info"
-            / "trace-debug-info-mip{}.expect".format(mip_version)
-        ),
+        this_src_dir / "trace-debug-info-mip{}.expect".format(mip_version),
         bt2.ComponentSpec(
             debug_info_comp_cls,
             params={
-                "target-prefix": str(
-                    data_dir
-                    / "plugins/flt.lttng-utils.debug-info/x86-64-linux-gnu/dwarf-full"
-                )
+                "target-prefix": str(this_src_dir / "bins/x86-64-linux-gnu/dwarf-full")
             },
         ),
         details_params={"with-trace-name": False, "with-stream-name": False},

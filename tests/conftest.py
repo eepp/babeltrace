@@ -161,7 +161,7 @@ def pytest_configure(config: "pytest.Config") -> None:
     _set_config_build_root_tests_dirs(config)
     _setup_bt2_python_path(config)
     setattr(config, "src_tests_dir", _src_tests_dir())
-    setattr(config, "ctf_traces_dir", _src_tests_dir() / "data/ctf-traces")
+    setattr(config, "ctf_traces_dir", _src_tests_dir() / "common-data/ctf-traces")
     _setup_babeltrace_plugins_env_vars(config)
 
     # Sanity check
@@ -225,13 +225,13 @@ def build_tests_dir(request: "pytest.FixtureRequest") -> pathlib.Path:
 
 
 @pytest.fixture(scope="session")
-def data_dir() -> pathlib.Path:
-    return _src_tests_dir() / "data"
+def common_data_dir() -> pathlib.Path:
+    return _src_tests_dir() / "common-data"
 
 
 @pytest.fixture(scope="session")
-def ctf_traces_dir(data_dir: pathlib.Path) -> pathlib.Path:
-    return data_dir / "ctf-traces"
+def ctf_traces_dir() -> pathlib.Path:
+    return _src_tests_dir() / "common-data/ctf-traces"
 
 
 @pytest.fixture(scope="session")

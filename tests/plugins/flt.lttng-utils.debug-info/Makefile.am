@@ -30,6 +30,39 @@ bin_info_test_LDADD = \
 endif # ENABLE_DEBUG_INFO
 
 EXTRA_DIST = \
+	bins/i386-linux-gnu/build-id/.build-id/cd/d98cdd87f7fe64c13b6daad553987eafd40cbb.debug \
+	bins/i386-linux-gnu/build-id/libhello-so \
+	bins/i386-linux-gnu/debug-link/libhello-so \
+	bins/i386-linux-gnu/debug-link/libhello-so.debug \
+	bins/i386-linux-gnu/dwarf-full/libhello-so \
+	bins/i386-linux-gnu/elf-only/libhello-so \
+	bins/libhello.c \
+	bins/libhello.h \
+	bins/main.c \
+	bins/Makefile \
+	bins/powerpc-linux-gnu/build-id/.build-id/cd/d98cdd87f7fe64c13b6daad553987eafd40cbb.debug \
+	bins/powerpc-linux-gnu/build-id/libhello-so \
+	bins/powerpc-linux-gnu/debug-link/libhello-so \
+	bins/powerpc-linux-gnu/debug-link/libhello-so.debug \
+	bins/powerpc-linux-gnu/dwarf-full/libhello-so \
+	bins/powerpc-linux-gnu/elf-only/libhello-so \
+	bins/powerpc64le-linux-gnu/build-id/.build-id/cd/d98cdd87f7fe64c13b6daad553987eafd40cbb.debug \
+	bins/powerpc64le-linux-gnu/build-id/libhello-so \
+	bins/powerpc64le-linux-gnu/debug-link/libhello-so \
+	bins/powerpc64le-linux-gnu/debug-link/libhello-so.debug \
+	bins/powerpc64le-linux-gnu/dwarf-full/libhello-so \
+	bins/powerpc64le-linux-gnu/elf-only/libhello-so \
+	bins/README.md \
+	bins/tp.c \
+	bins/tp.h \
+	bins/x86-64-linux-gnu/build-id/.build-id/cd/d98cdd87f7fe64c13b6daad553987eafd40cbb.debug \
+	bins/x86-64-linux-gnu/build-id/libhello-so \
+	bins/x86-64-linux-gnu/debug-link/libhello-so \
+	bins/x86-64-linux-gnu/debug-link/libhello-so.debug \
+	bins/x86-64-linux-gnu/dwarf-full/libhello-so \
+	bins/x86-64-linux-gnu/elf-only/libhello-so \
 	test_bin_info.py \
 	test_dwarf.py \
-	test_succeed_debug_info.py
+	test_succeed_debug_info.py \
+	trace-debug-info-mip0.expect \
+	trace-debug-info-mip1.expect

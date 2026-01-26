@@ -1,10 +1,12 @@
 # SPDX-FileCopyrightText: 2019-2025 Efficios, Inc.
 # SPDX-License-Identifier: GPL-2.0-only
 
+import pathlib
 import tempfile
 
 import bt2
 import pytest
+import bt_tests_utils as btu
 
 
 @pytest.fixture(scope="module")
@@ -20,7 +22,7 @@ def test_non_map_params(ctf_fs_comp_cls):
 
 
 @pytest.mark.parametrize("trace_name", ["succeed1", "lf-metadata", "crlf-metadata"])
-def test_query_metadata_info(ctf_fs_comp_cls, ctf_traces_dir, data_dir, trace_name):
+def test_query_metadata_info(ctf_fs_comp_cls, ctf_traces_dir, trace_name):
     result = bt2.QueryExecutor(
         ctf_fs_comp_cls,
         "metadata-info",
@@ -29,10 +31,8 @@ def test_query_metadata_info(ctf_fs_comp_cls, ctf_traces_dir, data_dir, trace_na
 
     assert not result["is-packetized"]
 
-    expect_file = (
-        data_dir
-        / "plugins/src.ctf.fs/query"
-        / "metadata-info-{}.expect".format(trace_name)
+    expect_file = btu.this_src_dir(__file__) / "metadata-info-{}.expect".format(
+        trace_name
     )
 
     assert (

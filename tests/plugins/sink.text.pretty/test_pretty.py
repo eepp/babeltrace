@@ -24,7 +24,7 @@ def test_unconnected_port_raises(pretty_comp_cls):
     )
 
 
-def test_basic_bit_array_fields_with_flags(ctf_traces_dir, data_dir, pretty_comp_cls):
+def test_basic_bit_array_fields_with_flags(ctf_traces_dir, pretty_comp_cls):
     with tempfile.TemporaryDirectory(prefix="bt-test-pretty-") as temp_dir:
         temp_path = pathlib.Path(temp_dir) / "output.txt"
 
@@ -36,5 +36,5 @@ def test_basic_bit_array_fields_with_flags(ctf_traces_dir, data_dir, pretty_comp
             ),
         )
 
-        expected = (data_dir / "plugins/sink.text.pretty/fl-bm-ctf2.expect").read_text()
+        expected = (btu.this_src_dir(__file__) / "fl-bm-ctf2.expect").read_text()
         assert temp_path.read_text() == expected

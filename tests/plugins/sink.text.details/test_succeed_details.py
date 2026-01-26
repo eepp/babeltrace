@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: 2025 EfficiOS Inc.
 # SPDX-License-Identifier: GPL-2.0-only
 
+import pathlib
+
 import bt2
 import pytest
 import bt_tests_utils as btu
@@ -77,7 +79,6 @@ def _find_expect_file(expect_dir, test_name, ctf_version, mip_version):
 )
 def test_details_succeed(
     ctf_traces_dir,
-    data_dir,
     test_name,
     trace_name,
     details_params,
@@ -94,7 +95,7 @@ def test_details_succeed(
             params={"trace-name": "the-trace"},
         ),
         _find_expect_file(
-            data_dir / "plugins/sink.text.details/succeed",
+            btu.this_src_dir(__file__),
             test_name,
             ctf_version,
             mip_version,

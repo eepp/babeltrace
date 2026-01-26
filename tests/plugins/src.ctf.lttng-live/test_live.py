@@ -14,8 +14,8 @@ from lttng_live_server import LttngLiveServerProcess
 
 
 @pytest.fixture(scope="module")
-def test_data_dir(data_dir):
-    return data_dir / "plugins/src.ctf.lttng-live"
+def test_data_dir():
+    return btu.this_src_dir(__file__)
 
 
 # Context manager that creates and starts a faux LTTng live server

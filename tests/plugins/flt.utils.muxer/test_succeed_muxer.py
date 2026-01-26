@@ -435,9 +435,9 @@ _TEST_CASES = [
     ["test_name", "src_comp_cls"],
     [pytest.param(name, comp_cls, id=name) for name, comp_cls in _TEST_CASES],
 )
-def test_muxer_succeed(data_dir, test_name, src_comp_cls):
+def test_muxer_succeed(test_name, src_comp_cls):
     btu.convert_sink_text_details_test(
         bt2.ComponentSpec(src_comp_cls),
-        data_dir / "plugins/flt.utils.muxer/succeed" / "{}.expect".format(test_name),
+        btu.this_src_dir(__file__) / "{}.expect".format(test_name),
         details_params={"compact": False, "with-metadata": False},
     )

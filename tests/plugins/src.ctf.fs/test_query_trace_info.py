@@ -5,6 +5,7 @@ import re
 
 import bt2
 import pytest
+import bt_tests_utils as btu
 
 _QUERY_OBJECT = "babeltrace.trace-infos"
 
@@ -108,7 +109,7 @@ def test_port_name_trace_uuid_stream_class_id_no_stream_id(
     for i, stream in enumerate(streams):
         assert re.match(
             r"^\{{name: ``, uid: `7afe8fbe-79b8-4f6a-bbc7-d0c782e7ddaf`}} \| 0 \| "
-            r".*[/\\]tests[/\\]data[/\\]ctf-traces[/\\]{ctf_v}[/\\]intersection[/\\]3eventsintersect[/\\]test_stream_{i}$".format(
+            r".*[/\\]tests[/\\]common-data[/\\]ctf-traces[/\\]{ctf_v}[/\\]intersection[/\\]3eventsintersect[/\\]test_stream_{i}$".format(
                 ctf_v=ctf_version, i=i
             ),
             str(stream["port-name"]),
@@ -130,7 +131,7 @@ def test_port_name_trace_uuid_no_stream_class_id_no_stream_id(
     assert len(streams) == 1
     assert re.match(
         r"^\{name: ``, uid: `2a6422d0-6cee-11e0-8c08-cb07d7b3a564`} \| "
-        r".*[/\\]tests[/\\]data[/\\]ctf-traces[/\\]1[/\\]succeed[/\\]succeed1[/\\]dummystream$",
+        r".*[/\\]tests[/\\]common-data[/\\]ctf-traces[/\\]1[/\\]succeed[/\\]succeed1[/\\]dummystream$",
         str(streams[0]["port-name"]),
     )
 
