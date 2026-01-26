@@ -900,26 +900,8 @@ AC_CONFIG_FILES([
   src/bindings/python/bt2/setup.py
   src/cli/Makefile
   src/Makefile
-  tests/bitfield/Makefile
-  tests/cli/Makefile
-  tests/ctf-writer/Makefile
-  tests/lib/Makefile
   tests/Makefile
-  tests/param-validation/Makefile
-  tests/python-plugin-provider/Makefile
-  tests/plugins/Makefile
-  tests/plugins/src.ctf.fs/Makefile
-  tests/plugins/src.ctf.fs/succeed/Makefile
-  tests/plugins/src.ctf.lttng-live/Makefile
-  tests/plugins/sink.ctf.fs/Makefile
-  tests/plugins/sink.ctf.fs/succeed/Makefile
-  tests/plugins/flt.lttng-utils.debug-info/Makefile
-  tests/plugins/flt.utils.muxer/Makefile
-  tests/plugins/flt.utils.trimmer/Makefile
-  tests/plugins/sink.text.details/Makefile
-  tests/plugins/sink.text.pretty/Makefile
   tests/utils/env.sh
-  tests/utils/Makefile
 ])
 
 AC_OUTPUT
