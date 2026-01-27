@@ -60,7 +60,7 @@ def test_sink_ctf_fs_succeed(
             build_root_dir,
             (
                 btu.build_dir_of_source_file(build_root_dir, __file__)
-                / "gen-trace-{}".format(name)
+                / "gen-trace-{}.bin".format(name)
             ),
             [str(gen_trace_dir)],
             check=True,

@@ -52,10 +52,10 @@ def test_generated_trace_simple(build_root_dir, expect_dir, tmp_path):
     trace_dir = tmp_path / "trace"
     trace_dir.mkdir()
 
-    # Generate trace using `gen-trace-simple`
+    # Generate trace using `gen-trace-simple.bin`
     btu.run(
         build_root_dir,
-        btu.build_dir_of_source_file(build_root_dir, __file__) / "gen-trace-simple",
+        btu.build_dir_of_source_file(build_root_dir, __file__) / "gen-trace-simple.bin",
         [str(trace_dir)],
         check=True,
     )

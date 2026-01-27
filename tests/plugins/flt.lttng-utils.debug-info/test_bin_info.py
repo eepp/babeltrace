@@ -36,11 +36,11 @@ _ARCH_PARAMS = {
 
 def _run_bin_info_test(build_root_dir, arch, test_name):
     binary = btu.exe_path(
-        btu.build_dir_of_source_file(build_root_dir, __file__) / "bin-info-test"
+        btu.build_dir_of_source_file(build_root_dir, __file__) / "bin-info-test.bin"
     )
 
     if not binary.exists():
-        pytest.skip("`bin-info-test` Catch2 binary doesn't exist")
+        pytest.skip("`bin-info-test.bin` Catch2 binary doesn't exist")
 
     params = _ARCH_PARAMS[arch]
     btu.run(

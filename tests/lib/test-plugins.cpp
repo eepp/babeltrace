@@ -38,7 +38,7 @@ int intEnvVar(const char * const name)
 
 std::string testPluginPath(const char * const plugin_name)
 {
-    return fmt::format("{}" G_DIR_SEPARATOR_S "plugin-{}." G_MODULE_SUFFIX, PLUGINS_DIR,
+    return fmt::format("{}" G_DIR_SEPARATOR_S "bt-plugin-{}." G_MODULE_SUFFIX, PLUGINS_DIR,
                        plugin_name);
 }
 

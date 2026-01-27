@@ -212,7 +212,7 @@ class _CondTriggersTestFile(btu.PytestFile):
         # it exists.
         conds_triggers_bin = btu.exe_path(
             btu.build_dir_of_source_file(_config_build_root_dir(self.config), __file__)
-            / "conds-triggers"
+            / "conds-triggers.bin"
         )
 
         # Skip if the binary doesn't exist

@@ -343,24 +343,24 @@ lib_test_plugins_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
 	-DPLUGINS_DIR=\"$(abs_builddir)/lib/test-plugins-plugins/.libs\"
 
-noinst_LTLIBRARIES += lib/test-plugins-plugins/plugin-minimal.la
-lib_test_plugins_plugins_plugin_minimal_la_SOURCES = lib/test-plugins-plugins/minimal.c
-lib_test_plugins_plugins_plugin_minimal_la_LDFLAGS = \
+noinst_LTLIBRARIES += lib/test-plugins-plugins/bt-plugin-minimal.la
+lib_test_plugins_plugins_bt_plugin_minimal_la_SOURCES = lib/test-plugins-plugins/minimal.c
+lib_test_plugins_plugins_bt_plugin_minimal_la_LDFLAGS = \
 	$(AM_LDFLAGS) \
 	$(LT_NO_UNDEFINED) \
 	-rpath / -avoid-version -module $(LD_NOTEXT)
-lib_test_plugins_plugins_plugin_minimal_la_LIBADD = \
+lib_test_plugins_plugins_bt_plugin_minimal_la_LIBADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(top_builddir)/src/common/libcommon.la \
 	$(top_builddir)/src/logging/liblogging.la
 
-noinst_LTLIBRARIES += lib/test-plugins-plugins/plugin-sfs.la
-lib_test_plugins_plugins_plugin_sfs_la_SOURCES = lib/test-plugins-plugins/sfs.c
-lib_test_plugins_plugins_plugin_sfs_la_LDFLAGS = \
+noinst_LTLIBRARIES += lib/test-plugins-plugins/bt-plugin-sfs.la
+lib_test_plugins_plugins_bt_plugin_sfs_la_SOURCES = lib/test-plugins-plugins/sfs.c
+lib_test_plugins_plugins_bt_plugin_sfs_la_LDFLAGS = \
 	$(AM_LDFLAGS) \
 	$(LT_NO_UNDEFINED) \
 	-rpath / -avoid-version -module $(LD_NOTEXT)
-lib_test_plugins_plugins_plugin_sfs_la_LIBADD = \
+lib_test_plugins_plugins_bt_plugin_sfs_la_LIBADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la \
 	$(top_builddir)/src/common/libcommon.la \
 	$(top_builddir)/src/logging/liblogging.la
@@ -374,25 +374,25 @@ lib_test_plugin_init_fail_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
 	-DPLUGIN_DIR=\"$(abs_builddir)/lib/test-plugin-init-fail-plugin/.libs\"
 
-noinst_LTLIBRARIES += lib/test-plugin-init-fail-plugin/plugin.la
-lib_test_plugin_init_fail_plugin_plugin_la_SOURCES = lib/test-plugin-init-fail-plugin/plugin.cpp
-lib_test_plugin_init_fail_plugin_plugin_la_LDFLAGS = \
+noinst_LTLIBRARIES += lib/test-plugin-init-fail-plugin/bt-plugin.la
+lib_test_plugin_init_fail_plugin_bt_plugin_la_SOURCES = lib/test-plugin-init-fail-plugin/plugin.cpp
+lib_test_plugin_init_fail_plugin_bt_plugin_la_LDFLAGS = \
 	$(AM_LDFLAGS) \
 	$(LT_NO_UNDEFINED) \
 	-rpath / -avoid-version -module $(LD_NOTEXT)
-lib_test_plugin_init_fail_plugin_plugin_la_LIBADD = \
+lib_test_plugin_init_fail_plugin_bt_plugin_la_LIBADD = \
 	$(top_builddir)/src/lib/libbabeltrace2.la
 
 if DEV_MODE
 
-noinst_PROGRAMS += lib/conds/conds-triggers
-lib_conds_conds_triggers_SOURCES = \
+noinst_PROGRAMS += lib/conds/conds-triggers.bin
+lib_conds_conds_triggers_bin_SOURCES = \
 	lib/conds/conds-triggers.cpp \
 	lib/conds/utils.cpp \
 	lib/conds/utils.hpp \
 	lib/conds/clk-cls-compat-postconds-triggers.cpp \
 	lib/conds/clk-cls-compat-postconds-triggers.hpp
-lib_conds_conds_triggers_LDADD = \
+lib_conds_conds_triggers_bin_LDADD = \
 	$(LIB_COMMON_TEST_LDADD) \
 	$(top_builddir)/src/lib/libbabeltrace2.la
 
@@ -419,38 +419,38 @@ param_validation_test_param_validation_LDADD = \
 	$(top_builddir)/src/logging/liblogging.la \
 	$(top_builddir)/src/cpp-common/vendor/fmt/libfmt.la
 
-noinst_PROGRAMS += plugins/src.ctf.fs/succeed/gen-trace-simple
-plugins_src_ctf_fs_succeed_gen_trace_simple_SOURCES = plugins/src.ctf.fs/succeed/gen-trace-simple.c
-plugins_src_ctf_fs_succeed_gen_trace_simple_LDADD = $(GEN_TRACE_LDADD)
+noinst_PROGRAMS += plugins/src.ctf.fs/succeed/gen-trace-simple.bin
+plugins_src_ctf_fs_succeed_gen_trace_simple_bin_SOURCES = plugins/src.ctf.fs/succeed/gen-trace-simple.c
+plugins_src_ctf_fs_succeed_gen_trace_simple_bin_LDADD = $(GEN_TRACE_LDADD)
 
-noinst_PROGRAMS += plugins/sink.ctf.fs/succeed/gen-trace-float
-plugins_sink_ctf_fs_succeed_gen_trace_float_SOURCES = plugins/sink.ctf.fs/succeed/gen-trace-float.c
-plugins_sink_ctf_fs_succeed_gen_trace_float_LDADD = $(GEN_TRACE_LDADD)
+noinst_PROGRAMS += plugins/sink.ctf.fs/succeed/gen-trace-float.bin
+plugins_sink_ctf_fs_succeed_gen_trace_float_bin_SOURCES = plugins/sink.ctf.fs/succeed/gen-trace-float.c
+plugins_sink_ctf_fs_succeed_gen_trace_float_bin_LDADD = $(GEN_TRACE_LDADD)
 
-noinst_PROGRAMS += plugins/sink.ctf.fs/succeed/gen-trace-double
-plugins_sink_ctf_fs_succeed_gen_trace_double_SOURCES = plugins/sink.ctf.fs/succeed/gen-trace-double.c
-plugins_sink_ctf_fs_succeed_gen_trace_double_LDADD = $(GEN_TRACE_LDADD)
+noinst_PROGRAMS += plugins/sink.ctf.fs/succeed/gen-trace-double.bin
+plugins_sink_ctf_fs_succeed_gen_trace_double_bin_SOURCES = plugins/sink.ctf.fs/succeed/gen-trace-double.c
+plugins_sink_ctf_fs_succeed_gen_trace_double_bin_LDADD = $(GEN_TRACE_LDADD)
 
 if ENABLE_DEBUG_INFO
 
-noinst_PROGRAMS += plugins/flt.lttng-utils.debug-info/dwarf-test
-plugins_flt_lttng_utils_debug_info_dwarf_test_SOURCES = plugins/flt.lttng-utils.debug-info/dwarf-test.cpp
-plugins_flt_lttng_utils_debug_info_dwarf_test_CPPFLAGS = \
+noinst_PROGRAMS += plugins/flt.lttng-utils.debug-info/dwarf-test.bin
+plugins_flt_lttng_utils_debug_info_dwarf_test_bin_SOURCES = plugins/flt.lttng-utils.debug-info/dwarf-test.cpp
+plugins_flt_lttng_utils_debug_info_dwarf_test_bin_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
 	-I$(top_srcdir)/src/plugins
-plugins_flt_lttng_utils_debug_info_dwarf_test_LDADD = \
+plugins_flt_lttng_utils_debug_info_dwarf_test_bin_LDADD = \
 	$(top_builddir)/src/plugins/lttng-utils/debug-info/libdebug-info.la \
 	$(top_builddir)/src/fd-cache/libfd-cache.la \
 	$(top_builddir)/src/logging/liblogging.la \
 	$(top_builddir)/src/common/libcommon.la \
 	$(ELFUTILS_LIBS)
 
-noinst_PROGRAMS += plugins/flt.lttng-utils.debug-info/bin-info-test
-plugins_flt_lttng_utils_debug_info_bin_info_test_SOURCES = plugins/flt.lttng-utils.debug-info/bin-info-test.cpp
-plugins_flt_lttng_utils_debug_info_bin_info_test_CPPFLAGS = \
+noinst_PROGRAMS += plugins/flt.lttng-utils.debug-info/bin-info-test.bin
+plugins_flt_lttng_utils_debug_info_bin_info_test_bin_SOURCES = plugins/flt.lttng-utils.debug-info/bin-info-test.cpp
+plugins_flt_lttng_utils_debug_info_bin_info_test_bin_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
 	-I$(top_srcdir)/src/plugins
-plugins_flt_lttng_utils_debug_info_bin_info_test_LDADD = \
+plugins_flt_lttng_utils_debug_info_bin_info_test_bin_LDADD = \
 	$(top_builddir)/src/plugins/lttng-utils/debug-info/libdebug-info.la \
 	$(top_builddir)/src/fd-cache/libfd-cache.la \
 	$(top_builddir)/src/logging/liblogging.la \

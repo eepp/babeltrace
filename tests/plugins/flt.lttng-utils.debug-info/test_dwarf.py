@@ -9,11 +9,11 @@ import bt_tests_utils as btu
 
 def _run_dwarf_test(build_root_dir, arch, test_name):
     binary = btu.exe_path(
-        btu.build_dir_of_source_file(build_root_dir, __file__) / "dwarf-test"
+        btu.build_dir_of_source_file(build_root_dir, __file__) / "dwarf-test.bin"
     )
 
     if not binary.exists():
-        pytest.skip("`dwarf-test` Catch2 binary doesn't exist")
+        pytest.skip("`dwarf-test.bin` Catch2 binary doesn't exist")
 
     btu.run(
         build_root_dir,
