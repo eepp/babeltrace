@@ -83,11 +83,8 @@ pytestdebug.log
 !/tests/**/test-*.sh
 !/tests/**/test-*.[hc]
 !/tests/**/test-*.[hc]pp
-/tests/lib/conds/conds-triggers
-/tests/lib/plugin
-/tests/plugins/sink.ctf.fs/succeed/gen-trace-double
-/tests/plugins/sink.ctf.fs/succeed/gen-trace-float
-/tests/plugins/src.ctf.fs/succeed/gen-trace-simple
+/tests/**/*.bin
+/tests/**/bt-plugin-*
 /tests/utils/env.sh
 
 # Version extra information
