@@ -180,3 +180,12 @@ def install_pytest_collect_file(
                 module.__name__
             )
         )
+
+
+# Returns the executable file path from `path`, appending `.exe`
+# on MinGW if not already present.
+def exe_path(path: pathlib.Path) -> pathlib.Path:
+    if os_type() == OsType.MINGW and not path.name.endswith(".exe"):
+        return path.with_suffix(path.suffix + ".exe")
+
+    return path
