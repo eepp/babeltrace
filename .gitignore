@@ -114,3 +114,6 @@ cscope*
 htmlcov/
 /install/
 TAGS
+.claude
+.codex
+.gemini
