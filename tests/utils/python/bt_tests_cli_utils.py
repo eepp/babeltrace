@@ -3,6 +3,7 @@
 
 # pyright: strict, reportTypeCommentUsage=false, reportMissingTypeStubs=false
 
+import os
 import typing
 import logging
 import pathlib
@@ -150,5 +151,17 @@ def run_cli_sink_text_details_test(
     else:
         expected = textwrap.dedent(expect).strip()
 
-    assert result.stdout.strip() == expected
+    output = result.stdout.strip()
+
+    if output != expected:
+        old_expected = expected
+
+        if (
+            isinstance(expect, pathlib.Path)
+            and os.environ.get("BT_TESTS_WRITE_EXPECTED") == "1"
+        ):
+            expect.write_text(output + "\n")
+
+        assert output == old_expected
+
     return result

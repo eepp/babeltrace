@@ -806,7 +806,16 @@ def convert_sink_text_details_test(
             expected = textwrap.dedent(expect).strip()
 
         # Compare
-        assert output == expected
+        if output != expected:
+            old_expected = expected
+
+            if (
+                isinstance(expect, pathlib.Path)
+                and os.environ.get("BT_TESTS_WRITE_EXPECTED") == "1"
+            ):
+                expect.write_text(output + "\n")
+
+            assert output == old_expected
 
 
 # Returns the build directory equivalent to the source directory

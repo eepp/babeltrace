@@ -1483,6 +1483,9 @@ Graph execution::
 Output comparison test::
     `convert_sink_text_details_test()` runs a graph with
     `sink.text.details` and compares the output to an expectation.
++
+Supports the `BT_TESTS_WRITE_EXPECTED` environment variable to write
+the expected file from the actual output.
 
 Path resolution::
     `build_dir_of_source_file()` returns the build directory equivalent
@@ -1529,6 +1532,9 @@ The module contains:
 `run_cli_sink_text_details_test()`::
     Runs a graph with `sink.text.details` and compares the output to
     some expectation string/path.
++
+Supports the `BT_TESTS_WRITE_EXPECTED` environment variable to write
+the expected file from the actual output.
 
 In general, prefer `btu.convert()` and
 `btu.convert_sink_text_details_test()` over `btu_cli.run_cli()` and
